@@ -126,6 +126,73 @@ TEST_F(Poe2GemcuttingTest, CategoriesFollowWeapons)
 	EXPECT_FALSE(GemInCategory(find(SkillSlot::ForPersistent(PersistentSkill::HeraldOfAsh)), GemCategory::Support));
 }
 
+// Pass 4 tier moves (Curtis 2026-11-07, Q30, Q31, Q35 and his Workshop layout): each gem sits at the lowest level of its
+// new tier, and the gem item's level, attribute need and price follow it.
+TEST_F(Poe2GemcuttingTest, PassFourTierMoves)
+{
+	const auto find = [](SkillSlot skill) -> const GemEntry * {
+		for (const GemEntry &gem : GemCatalog()) {
+			if (gem.skill == skill)
+				return &gem;
+		}
+		return nullptr;
+	};
+	const std::pair<SkillSlot, int> Tiers[] = {
+		{ SkillSlot::ForSpell(SpellID::Inferno), 3 },
+		{ SkillSlot::ForSpell(SpellID::Lightning), 3 },
+		{ SkillSlot::ForSpell(SpellID::LightningWall), 5 },
+		{ SkillSlot::ForSpell(SpellID::Fireball), 7 },
+		{ SkillSlot::ForSpell(SpellID::Teleport), 9 },
+		{ SkillSlot::ForSpell(SpellID::Elemental), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::GlacialSpike), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::Thunderstorm), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::FrozenOrb), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::Meteor), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::CorpseExplosion), 7 },
+		{ SkillSlot::ForAttack(WeaponSkill::IronMaiden), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::HexRupture), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::BoneSpear), 7 },
+		{ SkillSlot::ForAttack(WeaponSkill::Despair), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::Attract), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::LashingTailKick), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::Shockwave), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::DoubleThrow), 1 },
+		{ SkillSlot::ForAttack(WeaponSkill::CallOfTheAncients), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::Zeal), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::ArkainesWrath), 9 },
+		{ SkillSlot::ForAttack(WeaponSkill::FallingSword), 11 },
+		{ SkillSlot::ForAttack(WeaponSkill::ShieldBash), 1 },
+		{ SkillSlot::ForAttack(WeaponSkill::ShieldCharge), 3 },
+	};
+	constexpr int Lowest[] = { 0, 1, 0, 3, 0, 6, 0, 10, 0, 15, 0, 20, 0, 25 };
+	for (const auto &[skill, tier] : Tiers) {
+		const GemEntry *gem = find(skill);
+		ASSERT_NE(gem, nullptr) << SkillName(skill);
+		EXPECT_EQ(GemTier(gem->level), tier) << SkillName(skill);
+		EXPECT_EQ(gem->level, Lowest[tier]) << SkillName(skill);
+		const ItemData &data = AllItemsList[gem->itemIndex];
+		EXPECT_EQ(data.iValue, 450 + (130 * gem->level)) << SkillName(skill);
+		// A spell gem's Magic is its spell's; the others need 18 + 3 a level of the attribute they use.
+		if (skill.kind == SkillKind::Attack)
+			EXPECT_EQ(static_cast<int>(std::max({ data.iMinStr, data.iMinMag, data.iMinDex })), 18 + (3 * gem->level)) << SkillName(skill);
+	}
+}
+
+// Q30 (Curtis 2026-11-07): Nova shows under Elemental, the Elemental spell under Occult, Lower Resist under Elemental only.
+TEST_F(Poe2GemcuttingTest, PassFourSpellTabs)
+{
+	EXPECT_EQ(SpellGemCategory(SpellID::Nova), GemCategory::Elemental);
+	EXPECT_EQ(SpellGemCategory(SpellID::Elemental), GemCategory::Occult);
+	EXPECT_EQ(SpellGemCategory(SpellID::Fireball), GemCategory::Elemental);
+	EXPECT_EQ(SpellGemCategory(SpellID::BoneSpirit), GemCategory::Occult);
+	for (const GemEntry &gem : GemCatalog()) {
+		if (gem.skill != SkillSlot::ForAttack(WeaponSkill::LowerResist))
+			continue;
+		EXPECT_TRUE(GemInCategory(gem, GemCategory::Elemental));
+		EXPECT_FALSE(GemInCategory(gem, GemCategory::Occult));
+	}
+}
+
 TEST_F(Poe2GemcuttingTest, CrossbowSkillsMovedToBowsOrRetired)
 {
 	// Curtis 2026-10-27: crossbows left the game. The crossbow skills that make sense with a bow moved to bows.

@@ -388,11 +388,12 @@ TEST_F(Poe2PhysicalSpellsTest, BoneSpearRunsThroughEveryEnemy)
 	Player &player = *MyPlayer;
 	EnterDungeon();
 	const TableSkillData &data = Row(WeaponSkill::BoneSpear);
-	EXPECT_EQ(data.level, 7);
+	// Tier V to VII, 180% to 220% (Curtis 2026-11-07, Q31).
+	EXPECT_EQ(data.level, 10);
 	EXPECT_EQ(data.mana, 12);
 	EXPECT_EQ(data.shape, TableShape::Projectiles);
 	EXPECT_EQ(data.count, 1);
-	EXPECT_EQ(data.damagePercent, 180);
+	EXPECT_EQ(data.damagePercent, 220);
 	EXPECT_EQ(data.type, DamageType::Physical);
 	EXPECT_EQ(data.rider, GrantedRider::StunBuildup);
 	EXPECT_NE(data.flags & TF_Pierce, 0U);

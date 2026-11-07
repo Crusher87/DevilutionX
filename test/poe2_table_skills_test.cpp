@@ -241,23 +241,28 @@ TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 	const std::pair<WeaponSkill, int> Percents[] = {
 		{ WeaponSkill::Whirlwind, 85 },
 		{ WeaponSkill::Fissure, 65 },
-		{ WeaponSkill::Shockwave, 70 },
-		{ WeaponSkill::CallOfTheAncients, 60 },
-		{ WeaponSkill::FallingSword, 100 },
-		{ WeaponSkill::LashingTailKick, 65 },
+		// Tier moves keep each skill's score (Curtis 2026-11-07): Shockwave x1.35, Call of the Ancients x1.20, Falling
+		// Sword x1.35, Lashing Tail Kick x1.45.
+		{ WeaponSkill::Shockwave, 95 },
+		{ WeaponSkill::CallOfTheAncients, 72 },
+		{ WeaponSkill::FallingSword, 135 },
+		{ WeaponSkill::LashingTailKick, 94 },
 		{ WeaponSkill::WaveOfLight, 50 },
 		{ WeaponSkill::CycloneStrike, 50 },
 		{ WeaponSkill::BlessedHammer, 20 },
 		{ WeaponSkill::Condemn, 50 },
 		{ WeaponSkill::BlessedShield, 70 },
 		{ WeaponSkill::FistOfTheHeavens, 110 },
-		{ WeaponSkill::CorpseExplosion, 50 },
-		// Curtis 2026-10-28: 35 -> 400, a tier V area spike (audit-casters-v3.md); then 200 with Firebolt (Q27).
-		{ WeaponSkill::GlacialSpike, 200 },
+		// Q30 (Curtis 2026-11-07): Corpse Explosion V to VII (50 -> 60).
+		{ WeaponSkill::CorpseExplosion, 60 },
+		// Curtis 2026-10-28: 35 -> 400, a tier V area spike (audit-casters-v3.md); then 200 with Firebolt (Q27); then
+		// tier III to IX, 350 (Q30).
+		{ WeaponSkill::GlacialSpike, 350 },
 		{ WeaponSkill::Blizzard, 21 },
+		// Frozen Orb, Meteor and Thunderstorm moved to tier XI (Q30, Q35): 70, 150 -> 145, 100 -> 136.
 		{ WeaponSkill::FrozenOrb, 70 },
-		{ WeaponSkill::Meteor, 150 },
-		{ WeaponSkill::Thunderstorm, 100 },
+		{ WeaponSkill::Meteor, 145 },
+		{ WeaponSkill::Thunderstorm, 136 },
 		{ WeaponSkill::SpikeTrap, 75 },
 		{ WeaponSkill::BladeSentinel, 35 },
 		{ WeaponSkill::Sentry, 60 },
@@ -287,7 +292,8 @@ TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 	// Landing bursts: a set share of a base hit on top of the arrow; Fire Arrow keeps two thirds of its hit.
 	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::FreezingArrow)), 40);
 	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::ExplosiveBolt)), 45);
-	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::ClusterBolt)), 66);
+	// Fire Arrow's burst is 45% of its arrow (Curtis 2026-11-07, Q32).
+	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::ClusterBolt)), 45);
 }
 
 TEST_F(Poe2TableSkillsTest, TableSpellsGrowLikeDiabloSpells)

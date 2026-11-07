@@ -1,14 +1,14 @@
 kind	name	percent	hits	splash
 spell	Firebolt	80	1	25
 spell	HolyBolt	165	1	0
-spell	Lightning	135	1	0
+spell	Lightning	105	1	0
 spell	ChargedBolt	70	1	0
 spell	Flash	110	1	0
-spell	Fireball	120	1	0
+spell	Fireball	105	1	0
 spell	RuneOfFire	140	1	0
 spell	RuneOfNova	110	5	0
 spell	RuneOfImmolation	150	5	0
-spell	Elemental	220	2	0
+spell	Elemental	250	2	0
 spell	ChainLightning	400	2	0
 spell	FlameWave	280	6	0
 spell	Immolation	160	5	0

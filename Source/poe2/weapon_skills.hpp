@@ -71,14 +71,16 @@ constexpr int FlurryBackhandDamagePercent = 150;
  */
 constexpr int SmiteDamagePercent = 300;
 constexpr int FrenzyDamagePercent = 200;
-/** @brief Shield Bash hits this hard before the gem curve (Curtis 2026-10-28: 120 to 200). */
-constexpr int ShieldBashDamagePercent = 200;
-/** @brief Shield Charge hits the 3 tiles in front of its landing this hard (Curtis 2026-10-28, Q28: 100 to 150). */
-constexpr int ShieldChargeDamagePercent = 150;
+/** @brief Shield Bash hits this hard before the gem curve (Curtis 2026-10-28: 120 to 200; 11-07: tier III to I, x0.70). */
+constexpr int ShieldBashDamagePercent = 140;
+/** @brief Shield Charge hits the 3 tiles in front of its landing this hard (Curtis 2026-10-28, Q28: 100 to 150; 11-07: tier V to III, x0.80). */
+constexpr int ShieldChargeDamagePercent = 120;
 /** @brief Shadow Lunge's strike from behind (Curtis 2026-10-28, Q28: 150 to 220). */
 constexpr int ShadowStepDamagePercent = 220;
 /** @brief Each of Vault Shot's arrows hits for this percent of a bow shot (Curtis 2026-10-28, Q28: 100 to 140). */
 constexpr int VaultShotArrowDamagePercent = 140;
+/** @brief Each of Hail of Arrows' arrows hits for this percent of a bow shot (Curtis 2026-11-07, Q32). */
+constexpr int BarrageArrowDamagePercent = 80;
 
 /** @brief A swing skill's own percent of a weapon hit (Smite, Frenzy), 100 for the others and a plain attack. */
 [[nodiscard]] constexpr int SwingSkillDamagePercent(WeaponSkill skill)

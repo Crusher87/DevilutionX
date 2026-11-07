@@ -373,6 +373,8 @@ constexpr int IceSpikeTrackTiles = 4;
 /** @brief Freezing Arrow's and Explosive Arrow's landing bursts hit for this percent of a base hit, on top of the arrow. */
 constexpr int FreezingArrowBurstPercent = 40;
 constexpr int ExplosiveBoltBurstPercent = 45;
+/** @brief Fire Arrow's landing burst hits for this percent of the arrow's own percent (Curtis 2026-11-07, Q32). */
+constexpr int FireArrowBurstShare = 45;
 /**
  * @brief Wither from a granted skill (Withering Bolt, Withering Ray): a stack a hit, up to this many, for 4 seconds. Each
  * stack is the game's Wither (3% more damage taken), so ten make up to +30% (Curtis 2026-10-30: smaller steps, more stacks).

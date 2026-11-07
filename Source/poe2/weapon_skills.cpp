@@ -287,7 +287,7 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index, 
 		const Point aim = target + Displacement { Left(Left(dir)) } * Wobble[index % 7];
 		Missile *arrow = AddMissile(tile, aim, dir, type, TARGET_MONSTERS, player, damage, 0);
 		if (arrow != nullptr) {
-			arrow->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel));
+			arrow->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel) * BarrageArrowDamagePercent / 100);
 			SetMissileSkill(*arrow, player, slot);
 		}
 		PlaySfxLoc(index == 0 ? SfxID::ShootBow2 : SfxID::ShootBow, tile);

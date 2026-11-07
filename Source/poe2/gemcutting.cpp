@@ -131,12 +131,24 @@ bool GemInCategory(const GemEntry &gem, GemCategory category)
 		return category == GemCategory::Spirit;
 	case SkillKind::Attack:
 		return AttackInCategory(gem.skill.attack(), category);
-	case SkillKind::Spell: {
-		const MagicType type = GetSpellData(gem.skill.spell()).type();
-		return category == (type == MagicType::Magic ? GemCategory::Occult : GemCategory::Elemental);
-	}
+	case SkillKind::Spell:
+		return category == SpellGemCategory(gem.skill.spell());
 	default:
 		return false;
+	}
+}
+
+GemCategory SpellGemCategory(SpellID spell)
+{
+	switch (spell) {
+	case SpellID::Nova:
+		// A ring of lightning (Curtis 2026-11-07, Q30).
+		return GemCategory::Elemental;
+	case SpellID::Elemental:
+		// Moved to Occult at tier XI to spread the Elemental tab (Curtis 2026-11-07, Q30).
+		return GemCategory::Occult;
+	default:
+		return GetSpellData(spell).type() == MagicType::Magic ? GemCategory::Occult : GemCategory::Elemental;
 	}
 }
 

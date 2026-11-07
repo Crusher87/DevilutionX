@@ -1132,7 +1132,6 @@ TEST_F(Poe2GrantedSkillsTest, FreeSkillsDontBeatGemSpells)
 		// Still short with its poison counted: the burst's 30% and one 2-second poison (40% a second) a 0.8-second cast.
 		{ WeaponSkill::PoisonExplosion, Excused::Everything, "a corpse burst whose poison counts once on one target (about 50% a second on one, 73% of Staff Bolt); pack skill, reviewed: it needs a corpse and scores about 1.05 on a group" },
 		{ WeaponSkill::Condemn, Excused::StaffBoltAndSupported, "a delayed burst all around the hero (about 56% a second on one); a shield spell, it can't take Measured Ritual" },
-		{ WeaponSkill::CorpseExplosion, Excused::StaffBolt, "an area burst for each corpse, which it needs (about 62% a second on one)" },
 	};
 	Player &player = *MyPlayer;
 	player.poe2.clear();

@@ -273,6 +273,9 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	case WeaponSkill::EscapeShot:
 		AddWeaponHit(hit, player, skill, level, percent, VaultShotArrowDamagePercent);
 		return hit;
+	case WeaponSkill::Barrage:
+		AddWeaponHit(hit, player, skill, level, percent, BarrageArrowDamagePercent);
+		return hit;
 	case WeaponSkill::EmberFusillade:
 		// Each ember and spark rolls the spell base times its own row (poe2/spell_damage.hpp), then the gem's curve.
 		AddSpellBase(hit, player, level, DamageType::Fire, ScaleWhole(percent, SkillSpellDamagePercent(attack)));

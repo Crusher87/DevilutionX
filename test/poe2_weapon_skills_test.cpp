@@ -331,16 +331,21 @@ TEST(Poe2WeaponSkills, SingleTargetMeleeSkillsHitHarder)
 	// Curtis 2026-10-28: Smite 100 to 300, Frenzy 100 to 200, Shield Bash 120 to 200 (audit-damage-v2.md section 7).
 	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::Smite), 300);
 	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::Frenzy), 200);
-	EXPECT_EQ(ShieldBashDamagePercent, 200);
+	// Curtis 2026-11-07: Shield Bash tier III to I, x0.70.
+	EXPECT_EQ(ShieldBashDamagePercent, 140);
 	// A plain swing (and every swing outside POE2 Mashup, which has no active skill) keeps its weapon hit.
 	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::None), 100);
 	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::Flurry), 100);
 	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::GroundSlam), 100);
 	// Double Throw and Vengeance are table rows.
-	EXPECT_EQ(FindTableSkill(WeaponSkill::DoubleThrow)->damagePercent, 230);
+	// Double Throw tier V to I, x0.55 (Curtis 2026-11-07).
+	EXPECT_EQ(FindTableSkill(WeaponSkill::DoubleThrow)->damagePercent, 127);
 	EXPECT_EQ(FindTableSkill(WeaponSkill::Vengeance)->damagePercent, 260);
 	// Q28 (Curtis 2026-10-28, audit-damage-v3.md): the 7 weak skills raised.
-	EXPECT_EQ(ShieldChargeDamagePercent, 150);
+	// Then tier V to III, x0.80 (Curtis 2026-11-07).
+	EXPECT_EQ(ShieldChargeDamagePercent, 120);
+	// Hail of Arrows: each arrow 80% of a shot (Q32).
+	EXPECT_EQ(BarrageArrowDamagePercent, 80);
 	EXPECT_EQ(ShadowStepDamagePercent, 220);
 	EXPECT_EQ(VaultShotArrowDamagePercent, 140);
 	// Cobra Strike, under the 1-stack rule (Curtis 2026-11-03): 380%, and its poison is 60% of the hit a second for 2

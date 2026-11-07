@@ -159,6 +159,11 @@ int SpellFormulaLevel(const Player &player, int spellLevel)
 	return gbIsPoe2 ? spellLevel : player.getCharacterLevel();
 }
 
+int ScaleByPercent(int damage, int percent)
+{
+	return std::max(damage * percent / 100, 1);
+}
+
 int GenerateRndSum(int range, int iterations)
 {
 	int value = 0;
@@ -1247,14 +1252,15 @@ DamageRange GetDamageAmt(SpellID spell, int spellLevel)
 		case SpellID::BloodStar:
 			return Poe2SpellDamageRange(myPlayer, spell, spellLevel);
 		case SpellID::FireWall:
-		case SpellID::LightningWall:
 		case SpellID::RingOfFire:
 		case SpellID::RuneOfLight:
 			return { (2 * spellLevel) + 4, (2 * spellLevel) + 40 };
+		case SpellID::LightningWall:
+			return { ScaleByPercent((2 * spellLevel) + 4, LightningWallDamagePercent), ScaleByPercent((2 * spellLevel) + 40, LightningWallDamagePercent) };
 		case SpellID::Guardian:
 			return { (spellLevel / 2) + 1, (spellLevel / 2) + 10 };
 		case SpellID::Inferno:
-			return { 3, (spellLevel + 4) + ((spellLevel + 4) / 2) };
+			return { ScaleByPercent(3, InfernoDamagePercent), ScaleByPercent((spellLevel + 4) + ((spellLevel + 4) / 2), InfernoDamagePercent) };
 		default:
 			break;
 		}
@@ -3236,6 +3242,8 @@ void AddInferno(Missile &missile, AddMissileParameter &parameter)
 	if (missile._micaster == TARGET_MONSTERS) {
 		const int i = GenerateRnd(SpellFormulaLevel(Players[missile._misource], missile._mispllvl)) + GenerateRnd(2);
 		missile._midam = 8 * i + 16 + ((8 * i + 16) / 2);
+		if (gbIsPoe2)
+			missile._midam = ScaleByPercent(missile._midam, InfernoDamagePercent);
 	} else {
 		const Monster &monster = Monsters[missile._misource];
 		missile._midam = RandomIntBetween(monster.minDamage, monster.maxDamage);
@@ -4501,6 +4509,8 @@ void ProcessWallControl(Missile &missile)
 		type = MissileID::LightningWall;
 		lvl = !missile.IsTrap() ? SpellFormulaLevel(Players[sourceIdx], missile._mispllvl) : 0;
 		dmg = 16 * (GenerateRndSum(10, 2) + lvl + 2);
+		if (gbIsPoe2 && !missile.IsTrap())
+			dmg = ScaleByPercent(dmg, LightningWallDamagePercent);
 		break;
 	default:
 		app_fatal("ProcessWallControl: Invalid missile type for control missile");
