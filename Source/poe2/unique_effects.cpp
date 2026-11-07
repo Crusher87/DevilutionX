@@ -827,12 +827,13 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	// Fire converts first; a staff's lightning (Staff of the Storm Gods) takes what is left. Smite's blow is lightning,
 	// like POE2's (Curtis 2026-10-28): all of what the fire leaves.
 	// The draft gems' hits are their element, Wrath of the Skies' in part (TableSkillData::convertPercent): a swing's
-	// skill, or an arrow's own (the Bow batch's Cold, Shatter, Spark and Kindling arrows). A fire arrow's is fire.
+	// skill, or an arrow's own (the Bow batch's Cold, Shatter, Spark and Kindling arrows). A fire row's is fire, swing or
+	// arrow (balance re-score, batch2-fixes.md 4: Brimstone Rift, Cinder Strike and Pyre Blow had landed physical).
 	const TableSkillData *table = ranged ? arrowRow : FindTableSkill(CurrentWeaponSkill(player));
 	if (table != nullptr && table->convertPercent == 0)
 		table = nullptr;
 	int toFire = std::clamp(Rule(player, UniqueRule::PhysicalToFire), 0, 100);
-	if (table != nullptr && ranged && table->type == DamageType::Fire)
+	if (table != nullptr && table->type == DamageType::Fire)
 		toFire = std::max<int>(toFire, std::min<int>(table->convertPercent, 100));
 	int toLightning = staffHit ? std::clamp(Rule(player, UniqueRule::StaffToLightning), 0, 100 - toFire) : 0;
 	if (!ranged && IsLightningAttackSkill(player.poe2.activeSkill))

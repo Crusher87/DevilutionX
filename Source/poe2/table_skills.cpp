@@ -1586,15 +1586,29 @@ Missile *FireDraftBolt(Player &player, const TableSkillData &data, Point from, P
 	return missile;
 }
 
-/** @brief Projectiles in a narrow fan along the facing, from `from`: straight ahead, then a little to either side. */
+/**
+ * @brief Projectiles in a fan along the facing, from `from`: straight ahead, then a whole direction to either side, so no
+ * tile past the start takes two (balance re-score, batch2-fixes.md 1). A fourth and on go again the same three ways from
+ * DraftFanRowTiles further on (Magma Hurl's fourth shard straight on from two tiles out).
+ */
+constexpr int DraftFanRowTiles = 2;
+
 std::vector<Missile *> FireDraftFan(Player &player, const TableSkillData &data, Point from, Direction dir, int count, int percent, int tiles, bool skipStartTile = false)
 {
 	std::vector<Missile *> fired;
-	const Displacement side { Left(Left(dir)) };
-	const Point far = from + Displacement { dir } * 8;
 	for (int i = 0; i < count; i++) {
-		const int offset = (i + 1) / 2 * (i % 2 == 0 ? 1 : -1);
-		if (Missile *missile = FireDraftBolt(player, data, from, far + side * (offset * 2), percent, tiles, skipStartTile); missile != nullptr)
+		const int way = i % 3;
+		const Direction heading = way == 0 ? dir : (way == 1 ? Left(dir) : Right(dir));
+		Point start = from;
+		for (int step = 1; step <= DraftFanRowTiles * (i / 3); step++) {
+			const Point on = from + Displacement { dir } * step;
+			if (!InDungeonBounds(on) || IsTileSolid(on))
+				break;
+			start = on;
+		}
+		// Only the row that starts on the struck tile skips it; the next row's start is a tile it hasn't reached yet.
+		const bool skip = skipStartTile && start == from;
+		if (Missile *missile = FireDraftBolt(player, data, start, start + Displacement { heading } * 8, percent, tiles, skip); missile != nullptr)
 			fired.push_back(missile);
 	}
 	return fired;
@@ -2095,6 +2109,9 @@ bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target
 		if (end != tile)
 			vfx::Fissure(tile, end, vfx::Element::Physical);
 		const Fixed26_6 shockwave = ShareOf(FixedDamage(player, data), EarthsplitterBrokenPercent * EarthsplitterShockwavePercent / 100);
+		// Each enemy takes one shockwave a use, however many broken ones are beside it (the Shatterpalm rule; balance
+		// re-score, batch2-fixes.md 5).
+		std::vector<const Monster *> shaken;
 		for (Monster *monster : hit) {
 			const bool broken = monster->poe2.armourBreakTicks > 0;
 			if (!LandsHit(player, *monster, data, data.damagePercent * (broken ? EarthsplitterBrokenPercent : 100) / 100, result) || !broken)
@@ -2103,8 +2120,10 @@ bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target
 			vfx::Impact(at, vfx::Element::Physical, 1.2F);
 			EffectRingAround(at, EarthsplitterShockwaveRadius, MissileGraphicID::StoneCurseShatter, 1);
 			for (Monster *other : MonstersNear(at, EarthsplitterShockwaveRadius)) {
-				if (other != monster)
-					SpellHitMonster(player, *other, DamageType::Physical, shockwave, SourceOf(data));
+				if (other == monster || std::find(shaken.begin(), shaken.end(), other) != shaken.end())
+					continue;
+				shaken.push_back(other);
+				SpellHitMonster(player, *other, DamageType::Physical, shockwave, SourceOf(data));
 			}
 		}
 		return true;
@@ -2139,24 +2158,21 @@ bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target
 		AddZone(player, data, SlamLanding(player, target, HammerOfZakarumReachTiles), data.delay);
 		return true;
 	case WeaponSkill::MountainsFall: {
-		// Five spikes at once; each enemy takes the strongest spike over it, the one in the middle the most.
+		// Five spikes at once in a + as the screen shows it; each enemy on it is hit once, those in the middle the most.
 		const Point center = SlamLanding(player, target, MountainsFallReachTiles);
-		std::vector<std::pair<Monster *, int>> struck;
+		const int width = std::max<int>(data.radius, 1);
 		bool first = true;
 		for (const Point spike : MountainsFallSpikes(center)) {
-			const int percent = first ? data.damagePercent * MountainsFallCentrePercent / 100 : data.damagePercent;
 			vfx::IceSpike(spike, 0, first ? 1.6F : 1.0F);
 			AddVisualEffect(spike, data.effect, 0, first ? 6 : 4);
 			BreakObjectsInArea(player, spike, data.radius);
-			ForEachMonsterNear(spike, data.radius, [&](Monster &monster) {
-				const auto found = std::find_if(struck.begin(), struck.end(), [&](const auto &entry) { return entry.first == &monster; });
-				if (found == struck.end())
-					struck.emplace_back(&monster, percent);
-				else
-					found->second = std::max(found->second, percent);
-			});
 			first = false;
 		}
+		std::vector<std::pair<Monster *, int>> struck;
+		ForEachMonsterNear(center, 2 * (MountainsFallArmTiles + width), [&](Monster &monster) {
+			if (const int percent = MountainsFallPercentAt(center, monster.position.tile, width, data.damagePercent); percent > 0)
+				struck.emplace_back(&monster, percent);
+		});
 		for (const auto &[monster, percent] : struck)
 			WeaponHit(player, *monster, data, percent, result);
 		return true;
@@ -2300,6 +2316,8 @@ bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target
 				SpellHitMonster(player, *monster, type, third, SourceOf(data));
 			result.hit = true;
 		}
+		// An enemy takes at most HoradricMaxBursts bursts a pulse (balance re-score, batch2-fixes.md 5).
+		std::vector<std::pair<const Monster *, int>> burstCount;
 		for (const auto &[monster, type] : primed) {
 			Poe2MonsterState &state = monster->poe2;
 			if (type == DamageType::Cold) {
@@ -2316,8 +2334,15 @@ bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target
 			vfx::Impact(at, vfx::ElementOf(type, true), 1.3F);
 			const Fixed26_6 burst = ShareOf(hit, type == DamageType::Cold ? HoradricFrozenBurstPercent : HoradricBurstPercent);
 			for (Monster *other : MonstersNear(at, HoradricBurstRadius)) {
-				if (other != monster)
-					SpellHitMonster(player, *other, type, burst, SourceOf(data));
+				if (other == monster)
+					continue;
+				auto counted = std::find_if(burstCount.begin(), burstCount.end(), [other](const auto &entry) { return entry.first == other; });
+				if (counted == burstCount.end())
+					counted = burstCount.insert(burstCount.end(), { other, 0 });
+				if (counted->second >= HoradricMaxBursts)
+					continue;
+				counted->second++;
+				SpellHitMonster(player, *other, type, burst, SourceOf(data));
 			}
 		}
 		return true;
@@ -2607,6 +2632,15 @@ void OnDraftMissileHit(const Missile &missile, Player &player, Monster &monster,
 				SpellHitMonster(player, *other, DamageType::Fire, ShareOf(base, HephastosSplashPercent), SourceOf(data));
 		}
 		SkillZone lodged { data.skill, at, static_cast<int16_t>(std::max<int>(SupportDurationTicks(player, SkillSlot::ForAttack(data.skill), data.duration), 1)), 0, 0, ShareOf(base, HephastosLinePercent), 0 };
+		// One lodged hammer at a time: the newest replaces it (balance re-score, batch2-fixes.md 5).
+		for (auto old = Zones.begin(); old != Zones.end();) {
+			if (old->skill == WeaponSkill::HephastosHammer) {
+				vfx::EndKeyed(old->key);
+				old = Zones.erase(old);
+			} else {
+				++old;
+			}
+		}
 		NextZoneKey = NextZoneKey == UINT32_MAX ? 1 : NextZoneKey + 1;
 		lodged.key = NextZoneKey;
 		Zones.push_back(lodged);
@@ -2812,6 +2846,21 @@ std::vector<Point> MountainsFallSpikes(Point center)
 	return spikes;
 }
 
+int MountainsFallPercentAt(Point center, Point tile, int width, int percent)
+{
+	const Displacement offset = tile - center;
+	// Down the screen is the grid's diagonal (x + y), across it the other (x - y).
+	const int down = offset.deltaX + offset.deltaY;
+	const int across = offset.deltaX - offset.deltaY;
+	const int reach = 2 * (MountainsFallArmTiles + width - 1);
+	const bool onPlus = (std::abs(across) <= width && std::abs(down) <= reach) || (std::abs(down) <= width && std::abs(across) <= reach);
+	if (!onPlus)
+		return 0;
+	if (std::abs(offset.deltaX) + std::abs(offset.deltaY) <= width)
+		return percent * MountainsFallCentrePercent / 100;
+	return percent;
+}
+
 Point SlamLanding(const Player &player, Point target, int reach)
 {
 	const Point tile = player.position.tile;
@@ -2870,6 +2919,14 @@ Point TableSkillHitTarget(const Player &player, WeaponSkill skill, Point target)
 		return SlamLanding(player, target, MountainsFallReachTiles);
 	case WeaponSkill::HammerOfZakarum:
 		return SlamLanding(player, target, HammerOfZakarumReachTiles);
+	// Slams round the hero and at a charge's end land where he is; the line slams start on the tile in front, towards the
+	// aim (balance re-score, batch2-fixes.md 9).
+	case WeaponSkill::ZakarumsJudgement:
+	case WeaponSkill::MammothCharge:
+		return player.position.tile;
+	case WeaponSkill::Earthsplitter:
+	case WeaponSkill::BrimstoneRift:
+		return player.position.tile + (target == player.position.tile ? player._pdir : GetDirection(player.position.tile, target));
 	default:
 		return target;
 	}
@@ -2895,11 +2952,13 @@ void SendBulwarkWave(Player &player, Point target)
 	wave.flags = 0;
 	const Point tile = player.position.tile;
 	const Direction way = target == tile ? player._pdir : GetDirection(tile, target);
-	// A wave of holy light along the ground, a tile wide at first, then three; each enemy on it hit once.
+	// A wave of holy light along the ground, a tile wide, as the spec's line of 4 (balance re-score, batch2-fixes.md 3);
+	// each enemy on it hit once.
 	std::vector<Monster *> struck;
 	int step = 0;
 	for (const Point at : LineTiles(tile, way, BulwarkWaveTiles)) {
-		const int radius = step++ == 0 ? 0 : 1;
+		constexpr int radius = 0;
+		step++;
 		AddVisualEffect(at, data->effect, 2 * step, 0);
 		vfx::Impact(at, vfx::Element::Holy, 0.8F);
 		BreakObjectsInArea(player, at, radius);

@@ -20,6 +20,7 @@
 #include "monster.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/attack_speed.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/effect_primitives.hpp"
@@ -1455,6 +1456,12 @@ bool TableSupportFits(const SupportData &data, SkillSlot skill)
 	case SG::DeadlyVenom:
 		// Its more poison is a hit's: Locust Swarm and Thornvine Arrow poison with none (the poison skills plan).
 		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::LocustSwarm, WeaponSkill::ThornvineArrow);
+	case SG::Volley:
+	case SG::StoredVolley:
+	case SG::NovaProjectiles:
+		// Phantom Blade throws one ghost sword out and back: more projectiles would do nothing (balance re-score,
+		// batch2-fixes.md 8).
+		return skill.kind != SkillKind::Attack || skill.attack() != WeaponSkill::PhantomBlade;
 	default:
 		return true;
 	}
@@ -2229,6 +2236,16 @@ bool IsSupportRepeat()
 	return Repeating;
 }
 
+int CrySwingsOfUse(const Player &player, SkillSlot skill)
+{
+	// The use's time in the hero's own free attacks, to the nearest; a quick use is still one.
+	const uint64_t swing = AttackTime(player, AttackSkillSlot(player, WeaponSkill::None));
+	const uint64_t use = SkillUseTime(player, skill, false);
+	if (swing == 0)
+		return 1;
+	return static_cast<int>(std::clamp<uint64_t>((use + (swing / 2)) / swing, 1, UINT8_MAX));
+}
+
 void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixed26_6 dealt)
 {
 	if (!gbIsPoe2 || &player != MyPlayer || Repeating || skill.isEmpty() || dealt <= 0)
@@ -2237,14 +2254,17 @@ void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixe
 	if ((tags & (ST_Attack | ST_Melee)) != (ST_Attack | ST_Melee))
 		return;
 	Poe2PlayerData &state = player.poe2;
-	// A use spends one of the cry's hits, however many monsters it hits (each of them is empowered).
+	// A use spends one of the cry's hits, however many monsters it hits (each of them is empowered). Hellfire Roar's and
+	// Quaking Roar's spend one for each swing the use's time is worth, so a slow slam pays for its weight (balance
+	// re-score, batch2-fixes.md 5).
 	const auto spend = [&](EmpoweringCry cry) {
 		const auto index = static_cast<size_t>(cry);
 		if (state.cryUsedThisTick[index])
 			return true;
 		if (state.cryHits[index] == 0)
 			return false;
-		state.cryHits[index]--;
+		const int swings = IsAnyOf(cry, EmpoweringCry::Hellfire, EmpoweringCry::Quaking) ? CrySwingsOfUse(player, skill) : 1;
+		state.cryHits[index] = static_cast<uint8_t>(std::max<int>(state.cryHits[index] - swings, 0));
 		state.cryUsedThisTick[index] = true;
 		return true;
 	};
@@ -2260,9 +2280,13 @@ void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixe
 		AddBurst(tile, 0, QuakingAftershockTicks, slam != nullptr ? slam->type : DamageType::Physical, MissileGraphicID::StoneCurseShatter,
 		    Fixed26_6::fromRaw(std::max(Percent(dealt.raw(), QuakingAftershockPercent), 1)));
 	}
-	// The strike strikes again, as Flurry of Blows' repeats do; the repeat sets off nothing more.
-	if ((tags & ST_Strike) != 0 && !monster.hasNoLife() && spend(EmpoweringCry::BulKathos))
-		QueueUse(skill, tile, BulKathosRepeatTicks, percentOf(WeaponSkill::CryOfBulKathos), static_cast<int>(monster.getId()));
+	// The strike strikes again a moment later: its share of the hit it dealt, on where it struck, as Quaking's aftershock
+	// (balance re-score, batch2-fixes.md 2: the old repeat was a share of a plain weapon hit). It sets off nothing more.
+	if ((tags & ST_Strike) != 0 && !monster.hasNoLife() && spend(EmpoweringCry::BulKathos)) {
+		const TableSkillData *strike = skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
+		AddBurst(tile, 0, BulKathosRepeatTicks, strike != nullptr ? strike->type : DamageType::Physical, MissileGraphicID::MetalHit,
+		    Fixed26_6::fromRaw(std::max(Percent(dealt.raw(), percentOf(WeaponSkill::CryOfBulKathos)), 1)));
+	}
 }
 
 void AddPlayerBurst(Point center, int radius, int delay, DamageType type, MissileGraphicID effect, Fixed26_6 damage)

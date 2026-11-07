@@ -420,12 +420,18 @@ TEST_F(Poe2BowDraftsTest, ShatterShotSpraysShardsBehindItsFirstHit)
 	OnTableMissileHit(arrow, player, target, 10, false);
 	const std::vector<const Missile *> shards = MissilesOf(MissileID::BlueFlare);
 	ASSERT_EQ(shards.size(), static_cast<size_t>(ShatterShotShards));
-	for (const Missile *shard : shards) {
+	for (size_t i = 0; i < shards.size(); i++) {
+		const Missile *shard = shards[i];
 		EXPECT_TRUE(shard->poe2.draftPart);
 		EXPECT_EQ(shard->poe2.damageType, static_cast<int8_t>(DamageType::Cold));
 		EXPECT_EQ(shard->poe2.damagePercent, Curve(player, WeaponSkill::ShatterShot) * (285 * ShatterShotShardPercent / 100) / 100);
-		EXPECT_EQ(Point(shard->position.start), Point(43, 40));
-		EXPECT_EQ(shard->lastCollisionTargetHash, dMonster[43][40] ^ dPlayer[43][40]);
+		// Three from the target, a whole direction apart, then three more from two tiles behind it (batch2-fixes.md 1).
+		if (i < 3) {
+			EXPECT_EQ(Point(shard->position.start), Point(43, 40));
+			EXPECT_EQ(shard->lastCollisionTargetHash, dMonster[43][40] ^ dPlayer[43][40]);
+		} else {
+			EXPECT_EQ(Point(shard->position.start), Point(45, 40));
+		}
 		// Three tiles at a flare's speed.
 		EXPECT_LE(shard->duration, 20);
 	}

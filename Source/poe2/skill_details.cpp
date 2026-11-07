@@ -301,7 +301,9 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	}
 	if (const TableSkillData *table = FindTableSkill(attack); table != nullptr) {
 		if (table->buff == TableBuff::WarCry) {
-			hit.effect = std::format("Stuns enemies within {:d} tiles", table->radius);
+			// Only War Cry stuns; the other cries say what they do (balance re-score, batch2-fixes.md 7).
+			const std::string note = table->skill == WeaponSkill::WarCry ? std::string() : TableSkillExtraNote(table->skill);
+			hit.effect = note.empty() ? std::format("Stuns enemies within {:d} tiles", table->radius) : note;
 			return hit;
 		}
 		if (table->shape == TableShape::Buff) {

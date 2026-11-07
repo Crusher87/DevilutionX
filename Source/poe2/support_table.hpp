@@ -230,6 +230,11 @@ void AddPlayerBurst(Point center, int radius, int delay, DamageType type, Missil
  * hero's next hits act on it (Hellfire Roar, Quaking Roar, Cry of Bul-Kathos; Curtis 2026-11-07, Q48).
  */
 void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixed26_6 dealt);
+/**
+ * @brief How many of Hellfire Roar's or Quaking Roar's hits a use of the skill spends: its use time in the hero's free
+ * attacks, to the nearest, at least one (balance re-score, batch2-fixes.md 5).
+ */
+[[nodiscard]] int CrySwingsOfUse(const Player &player, SkillSlot skill);
 /** @brief A skill's blink came out here (Skylord's Storm, Phantom Step): Assassin's Blink bursts where it landed. */
 void OnSkillBlinked(Player &player, SkillSlot skill, Point landing);
 /** @brief A skill went off (a cast, a strike, a landing); the supports that repeat or add to it act now. */

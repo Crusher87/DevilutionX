@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
 #include <map>
 #include <string>
@@ -23,7 +24,9 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/player_data.hpp"
+#include "poe2/skill_details.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
@@ -549,7 +552,8 @@ TEST_F(Poe2WeaponDraftsTest, MagmaHurlBurstsAndThrowsShrapnel)
 	for (size_t i = 1; i < shrapnel.size(); i++) {
 		EXPECT_TRUE(shrapnel[i]->poe2.draftPart);
 		EXPECT_EQ(shrapnel[i]->poe2.damagePercent, percent * (75 * MagmaHurlShrapnelPercent / 100) / 100);
-		EXPECT_EQ(Point(shrapnel[i]->position.start), Point(43, 40));
+		// Three from the target, the fourth straight on from two tiles further (batch2-fixes.md 1).
+		EXPECT_EQ(Point(shrapnel[i]->position.start), i <= 3 ? Point(43, 40) : Point(45, 40));
 	}
 	// A shard sets off nothing more.
 	Heal(beside);
@@ -1013,6 +1017,263 @@ TEST_F(Poe2WeaponDraftsTest, ZakarumsJudgementBurstsTwice)
 	EXPECT_GT(monster.poe2.heavyStunTicks, 0);
 	EXPECT_FALSE(Hurt(far));
 	EXPECT_EQ(SkillZoneCount(), 0U);
+}
+
+// The batch-2 build fixes from the balance re-score (batch2-fixes.md, 11-07).
+
+TEST_F(Poe2WeaponDraftsTest, Fix1FanFliesAWholeDirectionApart)
+{
+	Player &player = SetUpFight();
+	Monster &target = PlaceMonster(0, { 43, 40 });
+	Use(player, WeaponSkill::MagmaHurl, { 43, 40 });
+	ASSERT_EQ(MissilesOf(MissileID::Firebolt).size(), 1U);
+	const Missile rock = *MissilesOf(MissileID::Firebolt).front();
+	Missiles.clear();
+	OnTableMissileHit(rock, player, target, 0, false);
+	const std::vector<const Missile *> shrapnel = MissilesOf(MissileID::Firebolt);
+	ASSERT_EQ(shrapnel.size(), static_cast<size_t>(MagmaHurlShrapnel));
+	// The screen's angle of each one's flight (a missile's y speed is halved on screen).
+	const auto angle = [](const Missile &missile) {
+		return std::atan2(2.0 * missile.position.velocity.deltaY, static_cast<double>(missile.position.velocity.deltaX)) * 180.0 / 3.14159265358979;
+	};
+	const auto apart = [&](const Missile &a, const Missile &b) {
+		double degrees = std::abs(angle(a) - angle(b));
+		return degrees > 180.0 ? 360.0 - degrees : degrees;
+	};
+	// Straight on, then a whole direction to either side; the fourth straight on again, from two tiles further.
+	EXPECT_NEAR(apart(*shrapnel[0], *shrapnel[1]), 45.0, 3.0);
+	EXPECT_NEAR(apart(*shrapnel[0], *shrapnel[2]), 45.0, 3.0);
+	EXPECT_NEAR(apart(*shrapnel[1], *shrapnel[2]), 90.0, 3.0);
+	EXPECT_NEAR(apart(*shrapnel[0], *shrapnel[3]), 0.0, 3.0);
+	EXPECT_EQ(Point(shrapnel[3]->position.start), Point(45, 40));
+	// A row that would start in a wall starts where the first did.
+	EXPECT_EQ(Point(shrapnel[0]->position.start), Point(43, 40));
+}
+
+TEST_F(Poe2WeaponDraftsTest, Fix2BulKathosRepeatIsAShareOfTheHitDealt)
+{
+	Player &player = SetUpFight();
+	for (const int dealt : { 100, 1000 }) {
+		ClearSupportEffects();
+		ClearMonsters();
+		player.poe2.clear();
+		Monster &monster = PlaceMonster(0, { 41, 40 });
+		Use(player, WeaponSkill::CryOfBulKathos, { 41, 40 });
+		player.poe2.tick();
+		OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::StormEdge), monster, Fixed26_6::fromInt(dealt));
+		EXPECT_EQ(player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::BulKathos)], 2);
+		// No repeat use waits: the strike comes again as a share of what it dealt, a moment later.
+		Supports(player, BulKathosRepeatTicks - 1);
+		EXPECT_FALSE(Hurt(monster));
+		Supports(player, 3);
+		EXPECT_TRUE(Hurt(monster)) << dealt;
+		EXPECT_LE(Lost(monster), Fixed26_6::fromInt(dealt * Row(WeaponSkill::CryOfBulKathos).damagePercent / 100).raw()) << dealt;
+		EXPECT_GT(Lost(monster), Fixed26_6::fromInt(dealt * Row(WeaponSkill::CryOfBulKathos).damagePercent / 200).raw()) << dealt;
+	}
+}
+
+TEST_F(Poe2WeaponDraftsTest, Fix3BulwarkWaveIsOneTileWide)
+{
+	Player &player = SetUpFight();
+	Monster &onLine = PlaceMonster(0, { 43, 40 });
+	Monster &beside = PlaceMonster(1, { 43, 41 });
+	Monster &end = PlaceMonster(2, { 44, 40 });
+	Monster &past = PlaceMonster(3, { 45, 40 });
+	SendBulwarkWave(player, { 46, 40 });
+	EXPECT_TRUE(Hurt(onLine));
+	EXPECT_TRUE(Hurt(end));
+	EXPECT_FALSE(Hurt(beside));
+	EXPECT_FALSE(Hurt(past));
+}
+
+// A fire row's weapon hit lands as fire: Cinder Strike, Pyre Blow and Brimstone Rift had landed physical.
+TEST_F(Poe2WeaponDraftsTest, Fix4FireRowsLandAsFire)
+{
+	Player &player = SetUpFight();
+	Monster &monster = PlaceMonster(0, { 41, 40 });
+	ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromInt(50), false);
+	EXPECT_EQ(monster.poe2.fireHitTicks, 0);
+	for (const WeaponSkill skill : { WeaponSkill::CinderStrike, WeaponSkill::PyreBlow, WeaponSkill::BrimstoneRift }) {
+		Monster &struck = PlaceMonster(1, { 42, 40 });
+		player.poe2.castSkill = skill;
+		ApplyPlayerAttackDamage(player, struck, Fixed26_6::fromInt(50), false);
+		player.poe2.castSkill = WeaponSkill::None;
+		EXPECT_TRUE(Hurt(struck)) << Row(skill).name;
+		EXPECT_GT(struck.poe2.fireHitTicks, 0) << Row(skill).name;
+		ClearMonsters();
+	}
+}
+
+TEST_F(Poe2WeaponDraftsTest, Fix5EarthsplitterShakesEachEnemyOnce)
+{
+	Player &player = SetUpFight();
+	// Two broken enemies at the line's edge, and one just off it beside both: only the shockwaves reach it.
+	const auto shaken = [&](bool both) {
+		for (uint32_t seed = 1; seed <= 32; seed++) {
+			ClearMonsters();
+			Monster &first = PlaceMonster(0, { 43, 41 });
+			Monster &second = PlaceMonster(1, { 45, 41 });
+			Monster &off = PlaceMonster(2, { 44, 42 });
+			first.poe2.armourBreakTicks = 60;
+			second.poe2.armourBreakTicks = both ? 60 : 0;
+			SetRndSeed(seed);
+			Use(player, WeaponSkill::Earthsplitter, { 46, 40 });
+			if (Hurt(first) && Hurt(second))
+				return Lost(off);
+		}
+		ADD_FAILURE() << "the line never hit both";
+		return 0;
+	};
+	const int32_t one = shaken(false);
+	EXPECT_GT(one, 0);
+	EXPECT_EQ(shaken(true), one);
+}
+
+TEST_F(Poe2WeaponDraftsTest, Fix5HoradricBurstsAnEnemyTwiceAtMost)
+{
+	Player &player = SetUpFight();
+	// Burning enemies in the pulse, and one just out of it beside them all.
+	const auto burst = [&](int burning) {
+		ClearMonsters();
+		const std::array<Point, 3> tiles { { { 42, 40 }, { 42, 41 }, { 42, 39 } } };
+		for (int i = 0; i < 3; i++) {
+			Monster &primed = PlaceMonster(static_cast<size_t>(i), tiles[static_cast<size_t>(i)]);
+			primed.poe2.igniteTicks = i < burning ? 60 : 0;
+			primed.poe2.igniteDamagePerTick = i < burning ? 1 : 0;
+		}
+		Monster &beside = PlaceMonster(3, { 43, 40 });
+		Use(player, WeaponSkill::HoradricSundering, { 41, 40 });
+		return Lost(beside);
+	};
+	const int32_t once = burst(1);
+	EXPECT_GT(once, 0);
+	const int32_t twice = burst(2);
+	EXPECT_GT(twice, once);
+	EXPECT_EQ(burst(3), twice);
+	EXPECT_EQ(HoradricMaxBursts, 2);
+}
+
+TEST_F(Poe2WeaponDraftsTest, Fix5OneHephastosHammerLodgedAtATime)
+{
+	Player &player = SetUpFight();
+	Monster &first = PlaceMonster(0, { 44, 40 });
+	Monster &second = PlaceMonster(1, { 44, 43 });
+	Use(player, WeaponSkill::HephastosHammer, { 44, 40 });
+	ASSERT_EQ(MissilesOf(MissileID::Firebolt).size(), 1U);
+	const Missile hammer = *MissilesOf(MissileID::Firebolt).front();
+	OnTableMissileHit(hammer, player, first, 0, false);
+	ASSERT_EQ(SkillZoneCount(), 1U);
+	OnTableMissileHit(hammer, player, second, 0, false);
+	ASSERT_EQ(SkillZoneCount(), 1U);
+	EXPECT_EQ(SkillZoneCenter(0), std::optional<Point>(Point(44, 43)));
+}
+
+TEST_F(Poe2WeaponDraftsTest, Fix5HellfireAndQuakingSpendASwingsWorth)
+{
+	Player &player = SetUpFight();
+	// A use's time in the hero's free attacks: a quick strike is one, a slow sweep two, a long spin three.
+	EXPECT_EQ(CrySwingsOfUse(player, SkillSlot::ForAttack(WeaponSkill::StormEdge)), 1);
+	EXPECT_EQ(CrySwingsOfUse(player, SkillSlot::ForAttack(WeaponSkill::HoradricSundering)), 2);
+	EXPECT_EQ(CrySwingsOfUse(player, SkillSlot::ForAttack(WeaponSkill::MountainsFall)), 2);
+	EXPECT_EQ(CrySwingsOfUse(player, SkillSlot::ForAttack(WeaponSkill::DervishAdvance)), 3);
+	Monster &monster = PlaceMonster(0, { 41, 40 });
+	Use(player, WeaponSkill::HellfireRoar, { 41, 40 });
+	player.poe2.tick();
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::HoradricSundering), monster, Fixed26_6::fromInt(10));
+	EXPECT_EQ(player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::Hellfire)], 1);
+	// Still one use's worth however many it hits.
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::HoradricSundering), monster, Fixed26_6::fromInt(10));
+	EXPECT_EQ(player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::Hellfire)], 1);
+	// A use worth more than is left spends what is left, and is empowered.
+	player.poe2.tick();
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::DervishAdvance), monster, Fixed26_6::fromInt(10));
+	EXPECT_EQ(player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::Hellfire)], 0);
+	// Quaking Roar's two hits go on one slow slam.
+	player.poe2.clear();
+	Use(player, WeaponSkill::QuakingRoar, { 41, 40 });
+	player.poe2.tick();
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::MountainsFall), monster, Fixed26_6::fromInt(10));
+	EXPECT_EQ(player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::Quaking)], 0);
+	// Cry of Bul-Kathos still spends one a use (only a strike spends it).
+	player.poe2.clear();
+	Use(player, WeaponSkill::CryOfBulKathos, { 41, 40 });
+	player.poe2.tick();
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::StormEdge), monster, Fixed26_6::fromInt(10));
+	EXPECT_EQ(player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::BulKathos)], 2);
+}
+
+TEST_F(Poe2WeaponDraftsTest, Fix6MountainsFallIsAPlusOnScreen)
+{
+	Player &player = SetUpFight();
+	const Point center { 43, 40 };
+	const int width = Row(WeaponSkill::MountainsFall).radius;
+	int tiles = 0;
+	int middle = 0;
+	for (int dx = -6; dx <= 6; dx++) {
+		for (int dy = -6; dy <= 6; dy++) {
+			const int percent = MountainsFallPercentAt(center, center + Displacement { dx, dy }, width, 100);
+			tiles += percent > 0 ? 1 : 0;
+			middle += percent == MountainsFallCentrePercent ? 1 : 0;
+		}
+	}
+	EXPECT_EQ(tiles, 21);
+	EXPECT_EQ(middle, 5);
+	// Its arms run down and across the screen, through the arm spikes.
+	for (const Point spike : MountainsFallSpikes(center))
+		EXPECT_GT(MountainsFallPercentAt(center, spike, width, 100), 0);
+	EXPECT_EQ(MountainsFallPercentAt(center, center + Displacement { 1, 1 }, width, 100), 100);
+	// Off it: a grid step two out, and the far corners the old grid arms reached.
+	EXPECT_EQ(MountainsFallPercentAt(center, center + Displacement { 2, 0 }, width, 100), 0);
+	EXPECT_EQ(MountainsFallPercentAt(center, center + Displacement { 3, 3 }, width, 100), 0);
+	Monster &onArm = PlaceMonster(0, center + Displacement { 2, 2 });
+	Monster &offArm = PlaceMonster(1, center + Displacement { 3, 3 });
+	UseUntilHurt(player, WeaponSkill::MountainsFall, center, onArm);
+	EXPECT_TRUE(Hurt(onArm));
+	EXPECT_FALSE(Hurt(offArm));
+}
+
+TEST_F(Poe2WeaponDraftsTest, Fix7OnlyWarCrySaysItStuns)
+{
+	Player &player = SetUpFight();
+	EXPECT_NE(GemLevelText(SkillSlot::ForAttack(WeaponSkill::WarCry), 1).find("stuns"), std::string::npos);
+	for (const WeaponSkill cry : { WeaponSkill::HellfireRoar, WeaponSkill::QuakingRoar, WeaponSkill::CryOfBulKathos, WeaponSkill::BulwarkRoar }) {
+		const std::string text = GemLevelText(SkillSlot::ForAttack(cry), 1);
+		EXPECT_EQ(text.find("tuns"), std::string::npos) << text;
+		EXPECT_NE(text.find(TableSkillExtraNote(cry)), std::string::npos) << text;
+		player.poe2.skillSlots[0] = SkillSlot::ForAttack(cry);
+		player.poe2.slotLevels[0] = 1;
+		bool noted = false;
+		for (const SkillDetailLine &line : SkillDetails(player, 0)) {
+			EXPECT_EQ(line.value.find("Stuns enemies"), std::string::npos) << Row(cry).name;
+			EXPECT_EQ(line.label.find("Stuns enemies"), std::string::npos) << Row(cry).name;
+			noted = noted || line.value == TableSkillExtraNote(cry) || line.label == TableSkillExtraNote(cry);
+		}
+		EXPECT_TRUE(noted) << Row(cry).name;
+	}
+}
+
+TEST_F(Poe2WeaponDraftsTest, Fix8PhantomBladeTakesNoMoreProjectiles)
+{
+	const SkillSlot blade = SkillSlot::ForAttack(WeaponSkill::PhantomBlade);
+	for (const SupportGem gem : { SupportGem::Volley, SupportGem::StoredVolley, SupportGem::NovaProjectiles })
+		EXPECT_FALSE(SupportGemCanSupport(gem, blade));
+	// Other projectile skills still take them, and the blade its other projectile supports.
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::Volley, SkillSlot::ForAttack(WeaponSkill::ThunderHatchet)));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::Ricochet, blade));
+}
+
+TEST_F(Poe2WeaponDraftsTest, Fix9EchoesLandWhereTheSlamLands)
+{
+	Player &player = SetUpFight();
+	const Point aimed { 46, 40 };
+	EXPECT_EQ(TableSkillHitTarget(player, WeaponSkill::ZakarumsJudgement, aimed), player.position.tile);
+	EXPECT_EQ(TableSkillHitTarget(player, WeaponSkill::MammothCharge, aimed), player.position.tile);
+	EXPECT_EQ(TableSkillHitTarget(player, WeaponSkill::Earthsplitter, aimed), Point(41, 40));
+	EXPECT_EQ(TableSkillHitTarget(player, WeaponSkill::BrimstoneRift, aimed), Point(41, 40));
+	EXPECT_EQ(TableSkillHitTarget(player, WeaponSkill::Earthsplitter, player.position.tile), player.position.tile + player._pdir);
+	// The others as they were.
+	EXPECT_EQ(TableSkillHitTarget(player, WeaponSkill::ArreatCrash, aimed), Point(42, 40));
+	EXPECT_EQ(TableSkillHitTarget(player, WeaponSkill::StormEdge, aimed), aimed);
 }
 
 } // namespace

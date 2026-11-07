@@ -200,8 +200,12 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 		if (skill.attack() == WeaponSkill::AmplifyDamage)
 			return std::format("+{:d}% physical damage taken", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (gemLevel - 1)));
 		if (const TableSkillData *table = FindTableSkill(skill.attack()); table != nullptr) {
-			if (table->buff == TableBuff::WarCry)
+			if (table->buff == TableBuff::WarCry) {
+				// Only War Cry stuns; the other cries say what they do (balance re-score, batch2-fixes.md 7).
+				if (std::string note = table->skill == WeaponSkill::WarCry ? std::string() : TableSkillExtraNote(table->skill); !note.empty())
+					return note;
 				return "stuns all around";
+			}
 			if (table->shape == TableShape::Buff)
 				return std::format("buff, {:d}s", table->duration / 20);
 			if (table->shape == TableShape::Curse && table->curse != TableCurse::Haunt && table->curse != TableCurse::Locust)

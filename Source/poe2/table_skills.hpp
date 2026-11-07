@@ -624,6 +624,12 @@ constexpr int MammothCrackPercent = 30;
 [[nodiscard]] std::vector<Point> BrimstoneRiftTiles(Point from, Direction dir, int length);
 /** @brief Mountain's Fall's five spikes: the centre, then MountainsFallArmTiles out to the north, east, south and west. */
 [[nodiscard]] std::vector<Point> MountainsFallSpikes(Point center);
+/**
+ * @brief The percent of Mountain's Fall's hit (of `percent`) a tile takes, or 0 off it: a + as the screen shows it, its
+ * arms `width` tiles wide (the row's radius) and running out past the arm spikes, the middle 5 tiles the centre spike's
+ * (balance re-score, batch2-fixes.md 6: about 21 tiles, where the grid-diagonal arms had covered 41).
+ */
+[[nodiscard]] int MountainsFallPercentAt(Point center, Point tile, int width, int percent);
 /** @brief Where a slam that reaches only so far lands, aimed at the target: the tile in sight that far at most. */
 [[nodiscard]] Point SlamLanding(const Player &player, Point target, int reach);
 /** @brief A warcry went off here: the Hephasto's Hammers lodged near it shatter into lines of fire. */
@@ -637,6 +643,8 @@ constexpr int PhantomBladePierces = 20;
 constexpr int HoradricBurstRadius = 1;
 constexpr int HoradricBurstPercent = 25;
 constexpr int HoradricFrozenBurstPercent = 50;
+/** @brief Horadric Sundering: an enemy takes at most this many of its bursts a pulse. */
+constexpr int HoradricMaxBursts = 2;
 /** @brief Zakarum's Judgement: the ring comes again this many ticks later. */
 constexpr int ZakarumsJudgementTicks = 8;
 /** @brief Bulwark Roar: its Guard is this percent of maximum life; each shield wave runs this many tiles. */
