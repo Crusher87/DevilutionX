@@ -1010,6 +1010,8 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 		if (mi == pcursmonst) {
 			ClxDrawOutlineSkipColorZero(out, OutlineColorsTowner, position, sprite);
 		}
+		// POE2 Mashup: with HD Lighting a townsperson (or a cow) casts shadows in town's evening light, as monsters do.
+		const hd::CasterScope caster(hd::Caster::Monster);
 		ClxDraw(out, position, sprite);
 		return;
 	}

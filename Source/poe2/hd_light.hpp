@@ -18,6 +18,7 @@ namespace hd {
  * screen, with the game's own falloff for each light. Lights add up as real light does, a wide flame or glow gives
  * shadows soft edges, and a little of each light still reaches round a pillar or corner by bouncing off the room.
  * Fires and spells shine brighter than the hero's own glow, so beside them things are lit brighter than full.
+ * In town it is Tristram's evening: the sky's light everywhere, and firelight from the forge, the tavern and the lamps and windows of the houses.
  */
 namespace light {
 
@@ -70,6 +71,9 @@ struct ShadowLight {
 /** @brief ShadowLight::source for the light of all the lava a point sees, shining as one wide light lying on the floor. */
 constexpr int LavaLight = -2;
 
+/** @brief ShadowLight::source for the evening sky over Tristram: a soft light from far off, the same everywhere in town. */
+constexpr int SkyLight = -3;
+
 /** @brief Light adds up as linear light: brightness as drawn (0 to 1) to linear light and back (a 2.2 gamma, as sRGB). */
 float ToLinear(float brightness);
 float ToBrightness(float linear);
@@ -81,7 +85,7 @@ float Drawn(float linear);
  * @brief Works out this frame's light over the world rectangle (in tiles) on screen.
  * @param heroX, heroY Where the hero is drawn, in tiles, so their light follows them smoothly between game ticks
  * (NaN when the hero isn't drawn).
- * @return False where the HD light isn't used (town), and the renderer lights the world as before.
+ * @return False where there is no level to light, and the renderer lights the world as before.
  */
 bool Update(const Look &look, float x0, float y0, float x1, float y1, float heroX, float heroY);
 
@@ -123,6 +127,9 @@ float LinearAt(float x, float y);
 
 /** @brief The brightest light there is (today's fully lit shade), for things that shine by themselves. */
 Rgb Full();
+
+/** @brief The light of the sky alone as drawn, in town (Tristram's evening); elsewhere Full. */
+Rgb Sky();
 
 /** @brief Light made some of the game's light levels brighter, no brighter than Full (other heroes are drawn 5 levels up). */
 Rgb Boost(const Rgb &light, float levels);

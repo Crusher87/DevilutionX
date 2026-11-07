@@ -261,6 +261,11 @@ struct Mood {
 /** @brief The gentle look the HD world has had since October, everywhere. */
 constexpr Mood GentleMood { 1.15F, { 1.05F, 0.97F, 0.86F }, { 0.86F, 0.91F, 1.05F } };
 
+/** @brief Tristram's evening with HD Lighting (hd_light.cpp): firelight warm, the sky's light cool. */
+constexpr Mood TownEvening { 1.15F, { 1.06F, 0.95F, 0.82F }, { 0.84F, 0.92F, 1.08F } };
+
+bool LightingWanted();
+
 /** @brief With HD Stronger Mood, firelight is warmer and dark corners darker, in a mood of its own for each part of the dungeon. */
 const Mood &CurrentMood()
 {
@@ -270,6 +275,8 @@ const Mood &CurrentMood()
 	static constexpr Mood Hell { 1.40F, { 1.18F, 0.86F, 0.64F }, { 1.00F, 0.60F, 0.56F } };
 	static constexpr Mood Hive { 1.35F, { 1.08F, 1.02F, 0.70F }, { 0.80F, 0.94F, 0.62F } };
 	static constexpr Mood Crypt { 1.35F, { 0.98F, 1.04F, 0.90F }, { 0.72F, 0.98F, 0.80F } };
+	if (leveltype == DTYPE_TOWN && LightingWanted())
+		return TownEvening;
 	if (!*GetOptions().Graphics.hdStrongMood)
 		return GentleMood;
 	switch (leveltype) {
@@ -309,11 +316,11 @@ bool HavePack()
 	return PackState == 1;
 }
 
-/** @brief This world is lit with HD Lighting: the option is on, it isn't town, and SDL can draw the light's shapes. */
+/** @brief This world is lit with HD Lighting (in town, Tristram's evening): the option is on and SDL can draw the light's shapes. */
 bool LightingWanted()
 {
 #if SDL_VERSION_ATLEAST(2, 0, 18)
-	return *GetOptions().Graphics.hdLighting && leveltype != DTYPE_TOWN;
+	return *GetOptions().Graphics.hdLighting;
 #else
 	return false;
 #endif
@@ -1083,6 +1090,9 @@ struct Shading {
 	/** @brief Where each colour is, as a fraction of the draw's width. */
 	std::array<float, 3> stops { 0.F, 0.5F, 1.F };
 	int count = 1;
+	/** @brief The colours along the draw's top edge, where they differ from those along its bottom (see FireLightUp). */
+	bool fades = false;
+	std::array<Colour3, 3> top {};
 };
 
 Shading Uniform(const Colour3 &colour)
@@ -1217,7 +1227,7 @@ void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading
 	}
 	// The game's own see-through pixels are already in the fallback's coverage.
 	const Uint8 alpha = art.hdArt && draw.style == SpriteStyle::Blended ? 128 : 255;
-	if (shading.count == 1) {
+	if (shading.count == 1 && !shading.fades) {
 		const Colour3 colour = ArtColour(shading.colours[0], art);
 		SDL_SetTextureColorMod(art.texture, ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]));
 		SDL_SetTextureAlphaMod(art.texture, alpha);
@@ -1235,33 +1245,38 @@ void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading
 	// Drawn as shapes with a colour at each corner (which leave the texture's own colour and alpha out).
 	SDL_SetTextureColorMod(art.texture, 255, 255, 255);
 	SDL_SetTextureAlphaMod(art.texture, 255);
+	// A colour at each stop along the bottom edge, and along the top edge too where the light fades up the draw (one
+	// colour fading up it is drawn as two stops, at its left and right edges).
+	const int stops = std::max(shading.count, 2);
 	std::array<SDL_Vertex, 6> vertices;
-	std::array<Colour3, 3> colours;
+	std::array<Colour3, 6> colours;
 	bool aboveFull = false;
-	for (int s = 0; s < shading.count; s++) {
-		const float fx = shading.stops[s];
-		colours[s] = ArtColour(shading.colours[s], art);
-		aboveFull = aboveFull || IsAboveFull(colours[s]);
-		const SDL_Color vertexColour { ColourByte(colours[s][0]), ColourByte(colours[s][1]), ColourByte(colours[s][2]), alpha };
-		vertices[s * 2] = SDL_Vertex { { dest.x + fx * dest.w, dest.y }, vertexColour, { fx, 0.F } };
-		vertices[s * 2 + 1] = SDL_Vertex { { dest.x + fx * dest.w, dest.y + dest.h }, vertexColour, { fx, 1.F } };
+	for (int s = 0; s < stops; s++) {
+		const int from = std::min(s, shading.count - 1);
+		const float fx = shading.count == 1 ? static_cast<float>(s) : shading.stops[s];
+		colours[s * 2] = ArtColour(shading.fades ? shading.top[from] : shading.colours[from], art);
+		colours[s * 2 + 1] = ArtColour(shading.colours[from], art);
+		for (int edge = 0; edge < 2; edge++) {
+			const Colour3 &colour = colours[s * 2 + edge];
+			aboveFull = aboveFull || IsAboveFull(colour);
+			const SDL_Color vertexColour { ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), alpha };
+			vertices[s * 2 + edge] = SDL_Vertex { { dest.x + fx * dest.w, dest.y + static_cast<float>(edge) * dest.h }, vertexColour, { fx, static_cast<float>(edge) } };
+		}
 	}
 	std::array<int, 12> indices;
 	int count = 0;
-	for (int s = 0; s + 1 < shading.count; s++) {
+	for (int s = 0; s + 1 < stops; s++) {
 		for (const int corner : { 0, 2, 3, 0, 3, 1 })
 			indices[count++] = s * 2 + corner;
 	}
-	SDL_RenderGeometry(renderer, art.texture, vertices.data(), shading.count * 2, indices.data(), count);
+	SDL_RenderGeometry(renderer, art.texture, vertices.data(), stops * 2, indices.data(), count);
 	if (aboveFull) {
-		for (int s = 0; s < shading.count; s++) {
-			const Colour3 above = AboveFull(colours[s]);
-			const SDL_Color vertexColour { ColourByte(above[0]), ColourByte(above[1]), ColourByte(above[2]), alpha };
-			vertices[s * 2].color = vertexColour;
-			vertices[s * 2 + 1].color = vertexColour;
+		for (int v = 0; v < stops * 2; v++) {
+			const Colour3 above = AboveFull(colours[v]);
+			vertices[v].color = SDL_Color { ColourByte(above[0]), ColourByte(above[1]), ColourByte(above[2]), alpha };
 		}
 		SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_ADD);
-		SDL_RenderGeometry(renderer, art.texture, vertices.data(), shading.count * 2, indices.data(), count);
+		SDL_RenderGeometry(renderer, art.texture, vertices.data(), stops * 2, indices.data(), count);
 		SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
 	}
 #endif
@@ -1309,6 +1324,20 @@ constexpr float FootShade = 0.8F;
 constexpr float ContactDrop = 5.F;
 /** @brief The hero is never drawn darker than this much of full light (the game always draws them fully lit). */
 constexpr float HeroLightFloor = 0.85F;
+/**
+ * @brief Under Tristram's evening sky about this much of the light anywhere comes from all round the sky, and a body
+ * keeps it off the ground right under it, as it does the light bouncing in under it in the dungeon (BounceShare).
+ */
+constexpr float SkyShade = 0.5F;
+/** @brief How high a game pixel up the screen stands, in tiles (see ViewLean). */
+constexpr float RisePerPixel = 1.F / (ViewLean * TileAcross);
+/**
+ * @brief Tristram's fires burn low (the forge's coals, the hearth behind the tavern's door), so their light reaches the
+ * walls round them but not the roofs above: it fades out from this high up a wall (in tiles above its floor) over this
+ * much more, and higher up there is only the sky's light.
+ */
+constexpr float FireLightHigh = 1.2F;
+constexpr float FireLightFade = 1.6F;
 /**
  * @brief The heroes' own glows are the light the game gives every hero to see by, kept as bright as the game has them. A
  * real fire or spell would outshine such a glow many times over, so inside the shadow of a light at least StrongLight
@@ -2009,9 +2038,10 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 	float wx;
 	float wy;
 	WorldOf(gx, gy, wx, wy);
-	// As the game hides a light inside a wall, a monster inside one doesn't give itself away by its shadow.
+	// As the game hides a light inside a wall, a monster inside one doesn't give itself away by its shadow. (In town
+	// Griswold stands behind his counter, on a solid tile.)
 	const Point tile { static_cast<int>(std::floor(wx + 0.5F)), static_cast<int>(std::floor(wy + 0.5F)) };
-	if (!InDungeonBounds(tile) || TileHasAny(tile, TileProperties::Solid))
+	if (!InDungeonBounds(tile) || (leveltype != DTYPE_TOWN && TileHasAny(tile, TileProperties::Solid)))
 		return;
 	std::array<light::ShadowLight, 3> lights;
 	light::ShadowLight overhead;
@@ -2036,7 +2066,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 	if (BlobTexture != nullptr) {
 		// Under the feet: the bounced light the body keeps off the floor, and the shadow of a light right overhead, its
 		// body laid straight down (wider the nearer the light) with an edge as soft as the light is wide.
-		float removed = FootShade * BounceShare * here;
+		float removed = FootShade * (leveltype == DTYPE_TOWN ? SkyShade : BounceShare) * here;
 		float across = BodyWidth * 2;
 		if (overhead.strength > 0) {
 			const float lightHeight = std::max(overhead.height, 0.1F);
@@ -2197,6 +2227,55 @@ Shading OpenTileLight(Point tile, bool right)
 	return Gradient(LightAt(tx - 0.25F, ty + 0.25F), LightAt(tx, ty));
 }
 
+/** @brief The light on a whole piece standing on a tile, both of its columns lit as they are when the piece is drawn. */
+Shading PieceLight(Point tile)
+{
+	const bool wall = light::Blocks(tile.x, tile.y);
+	const Shading left = wall ? WallLight(tile, false) : OpenTileLight(tile, false);
+	const Shading right = wall ? WallLight(tile, true) : OpenTileLight(tile, true);
+	Shading shading;
+	shading.count = 3;
+	shading.stops = { 0.F, 0.5F, 1.F };
+	shading.colours[0] = left.colours[0];
+	for (int c = 0; c < 3; c++)
+		shading.colours[1][c] = (left.colours[1][c] + right.colours[0][c]) / 2;
+	shading.colours[2] = right.colours[1];
+	return shading;
+}
+
+/** @brief How much of the fires' light still reaches this high up a wall (tiles above its floor), 0 to 1. */
+float FireLightKept(float rise)
+{
+	return std::clamp(1.F - (rise - FireLightHigh) / FireLightFade, 0.F, 1.F);
+}
+
+/**
+ * @brief In town, takes the fires' light off the part of a piece higher up than it reaches (FireLightHigh), leaving the
+ * sky's. The piece stands on a tile whose floor is drawn `back` game pixels further up the screen than its own tile's.
+ */
+void FireLightUp(Shading &shading, const Draw &draw, int back)
+{
+	if (leveltype != DTYPE_TOWN)
+		return;
+	const float bottom = (static_cast<float>(draw.tileOrigin.y - back - (draw.y + draw.height - 1)) - HalfTileHeight) * RisePerPixel;
+	const float keepBottom = FireLightKept(bottom);
+	const float keepTop = FireLightKept(bottom + static_cast<float>(draw.height) * RisePerPixel);
+	if (keepBottom >= 1 && keepTop >= 1)
+		return;
+	const Colour3 sky = ToColour(light::Sky());
+	const auto fade = [&sky](const Colour3 &lit, float keep) {
+		Colour3 out;
+		for (int c = 0; c < 3; c++)
+			out[c] = lit[c] - std::max(lit[c] - sky[c], 0.F) * (1 - keep);
+		return out;
+	};
+	for (int s = 0; s < shading.count; s++) {
+		shading.top[s] = fade(shading.colours[s], keepTop);
+		shading.colours[s] = fade(shading.colours[s], keepBottom);
+	}
+	shading.fades = true;
+}
+
 /** @brief How a draw that stands on the floor is lit. */
 Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 {
@@ -2209,19 +2288,21 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 			WorldOf(static_cast<float>(draw.x) + static_cast<float>(draw.width) / 2, static_cast<float>(draw.y + draw.height - 1), wx, wy);
 			return Uniform(LightAt(wx, wy));
 		}
-		if (light::Blocks(draw.cell.x, draw.cell.y))
-			return WallLight(draw.cell, IsRightColumn(draw));
-		return OpenTileLight(draw.cell, IsRightColumn(draw));
+		Shading shading = light::Blocks(draw.cell.x, draw.cell.y) ? WallLight(draw.cell, IsRightColumn(draw)) : OpenTileLight(draw.cell, IsRightColumn(draw));
+		FireLightUp(shading, draw, 0);
+		return shading;
 	}
 	float wx;
 	float wy;
 	StandsAt(draw, wx, wy);
 	switch (draw.caster) {
 	case Caster::MyHero: {
-		// The game always draws the hero being played fully lit; here they take the light's colour but stay bright.
+		// The game always draws the hero being played fully lit; here they take the light's colour but stay bright. In
+		// town's evening they stand in its light like everyone else.
 		const light::Rgb at = light::At(wx, wy);
 		const light::Rgb full = light::Full();
-		return Uniform({ std::max(at.r, full.r * HeroLightFloor), std::max(at.g, full.g * HeroLightFloor), std::max(at.b, full.b * HeroLightFloor) });
+		const float least = leveltype == DTYPE_TOWN ? 0.F : HeroLightFloor;
+		return Uniform({ std::max(at.r, full.r * least), std::max(at.g, full.g * least), std::max(at.b, full.b * least) });
 	}
 	case Caster::Hero:
 		// Other heroes are drawn 5 light levels brighter than where they stand.
@@ -2237,6 +2318,13 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 	}
 	if (draw.light < 0)
 		return Uniform(ToColour(light::Full()));
+	// Town's trees draw their leaves again over the hero (from the tile in front of each tree, see scrollrt.cpp): they
+	// take the light of the tree they cover, or they would shine by themselves.
+	if (leveltype == DTYPE_TOWN && draw.hasTile && IsArchPiece(draw)) {
+		Shading shading = PieceLight(draw.cell - Displacement { 1, 1 });
+		FireLightUp(shading, draw, TILE_HEIGHT);
+		return shading;
+	}
 	// Drawn without light (missiles, torch flames, strongboxes): it shines by itself.
 	if (!draw.lightmapped && draw.tbl == nullptr)
 		return Uniform(ToColour(light::Full()));

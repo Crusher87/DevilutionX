@@ -91,6 +91,9 @@ struct Source {
 	/** @brief For a torch on a wall: the open side it faces (the camera sees walls from +x and +y). */
 	int faceX = 0;
 	int faceY = 0;
+	/** @brief The open side a light shines out of (a doorway), as a direction in tiles; 0, 0 for all round (ConeOf). */
+	float coneX = 0;
+	float coneY = 0;
 };
 
 // The colours of the lights, before they're evened out.
@@ -118,6 +121,71 @@ constexpr float LavaHeight = 0.3F;
 /** @brief The most linear light the drawn brightness table goes up to. */
 constexpr float LinearTop = 4.F;
 
+/**
+ * @brief Tristram's evening, the HD Lighting look in town (Curtis's pick, 2026-11-07): the sky's light everywhere, a
+ * little darker and cooler than the game's fully lit town, firelight from the forge and the tavern's open door, and
+ * lamplight from the windows and lamps the town's art paints lit.
+ */
+constexpr float TownSkyBrightness = 0.62F;
+constexpr Colour TownSkyColour { 0.82F, 0.90F, 1.10F };
+/**
+ * @brief The sky's shadows fall the way the town's painted ones did (down and to the left on screen, along +y): soft
+ * and faint, from a light this far off and high enough that a body's shadow is about half as long as it is tall, as
+ * wide as a patch of bright sky, and half filled in by the light of the rest of the sky.
+ */
+constexpr float SkyDirX = 0.13F;
+constexpr float SkyDirY = 0.99F;
+constexpr float SkyDistance = 12.F;
+constexpr float SkyShadowLength = 0.55F;
+constexpr float SkySize = 4.F;
+constexpr float SkyFill = 0.45F;
+/** @brief A light shining out of an opening still lights things to its sides this much (0 to 1, see ConeOf). */
+constexpr float ConeSpill = 0.25F;
+
+/** @brief A fire lighting Tristram's evening: where it is (in tiles), and the open side it shines out of. */
+struct TownFire {
+	float x;
+	float y;
+	Colour colour;
+	int radius;
+	float height;
+	float size;
+	float fill;
+	float power;
+	float coneX;
+	float coneY;
+};
+
+/** @brief The cathedral's doorway glows red from inside, the red the town's art paints it. */
+constexpr Colour CathedralDoorColour { 1.00F, 0.18F, 0.16F };
+
+/** @brief The fires and lamps in town, where the town's art paints their glow. */
+constexpr std::array<TownFire, 14> TownFires { {
+	// Griswold's forge: its coals glow at waist height at the back of the smithy, out over the square (+y).
+	{ 63.F, 60.F, FireColour, 8, 0.9F, 0.6F, 0.2F, FlamePower, 0.F, 1.F },
+	// The tavern's open door: the fire inside shines out past Ogden, who stands in the doorway (+y), so his shadow falls
+	// out of the doorway in front of him.
+	{ 54.85F, 61.55F, TorchColour, 7, 1.5F, 0.5F, 0.25F, 1.6F, 0.F, 1.F },
+	// Lit windows and lamps shine a little onto the ground below them, out of the wall they're in. The tavern's two on
+	// its side towards the smithy:
+	{ 55.7F, 59.6F, CandleColour, 4, 1.4F, 0.4F, 0.2F, 1.F, 1.F, 0.F },
+	{ 55.7F, 58.5F, CandleColour, 4, 1.4F, 0.4F, 0.2F, 1.F, 1.F, 0.F },
+	// Pepin's three windows and the lamp beside his door:
+	{ 50.4F, 80.7F, CandleColour, 4, 1.1F, 0.4F, 0.2F, 1.F, 0.F, 1.F },
+	{ 52.6F, 80.7F, CandleColour, 4, 1.4F, 0.4F, 0.2F, 1.F, 0.F, 1.F },
+	{ 54.7F, 76.3F, CandleColour, 4, 1.4F, 0.4F, 0.2F, 1.F, 1.F, 0.F },
+	{ 54.7F, 79.1F, TorchColour, 4, 1.F, 0.3F, 0.2F, 1.F, 1.F, 0.F },
+	// Adria's two windows:
+	{ 78.7F, 19.3F, CandleColour, 4, 1.1F, 0.4F, 0.2F, 1.F, 1.F, 0.F },
+	{ 78.7F, 17.4F, CandleColour, 4, 1.4F, 0.4F, 0.2F, 1.F, 1.F, 0.F },
+	// The lamps by the doors of the three houses built alike:
+	{ 42.7F, 66.25F, TorchColour, 4, 1.3F, 0.3F, 0.2F, 1.F, 1.F, 0.F },
+	{ 54.7F, 44.25F, TorchColour, 4, 1.3F, 0.3F, 0.2F, 1.F, 1.F, 0.F },
+	{ 72.7F, 80.25F, TorchColour, 4, 1.3F, 0.3F, 0.2F, 1.F, 1.F, 0.F },
+	// The cathedral's doorway, red down the path in front of it (+y).
+	{ 25.1F, 30.F, CathedralDoorColour, 6, 1.2F, 0.8F, 0.25F, 1.5F, 0.F, 1.F },
+} };
+
 Look CurrentLook;
 bool HaveLook = false;
 /** @brief Brightness of a light level (0 bright to 15 dark), in 256 steps. */
@@ -127,6 +195,8 @@ std::array<float, 256> LinearOfLevel {};
 std::array<float, 4097> BrightnessOfLinear {};
 /** @brief How warm (1) or cool (0) light of a brightness (0 to 1, in 256 steps) looks, as the old shade table had it. */
 std::array<float, 256> WarmthOfBrightness {};
+/** @brief The sky's light alone as drawn (see Sky), worked out with the rest of the light in Finish. */
+Rgb SkyRgb;
 
 std::array<uint8_t, MAXDUNX * MAXDUNY> BlockMap {};
 uint32_t BlockVersion = 0;
@@ -440,6 +510,20 @@ float SampleLinear(const Source &source, float distance, float seen, float path)
 	if (seen < 1 && path <= static_cast<float>(source.radius + 1))
 		linear += LevelLinear(LevelAt(path, source.radius)) * source.fill * (1 - seen);
 	return linear * source.power;
+}
+
+/** @brief How much of a light shining out of an opening reaches a point: all of it straight out, less to its sides, none behind it. */
+float ConeOf(const Source &source, float x, float y)
+{
+	if (source.coneX == 0 && source.coneY == 0)
+		return 1.F;
+	const float dx = x - source.rayX;
+	const float dy = y - source.rayY;
+	const float length = Length(dx, dy);
+	if (length < 0.35F)
+		return 1.F;
+	const float facing = (dx * source.coneX + dy * source.coneY) / length;
+	return std::clamp((facing + ConeSpill) / (1 + ConeSpill), 0.F, 1.F);
 }
 
 /**
@@ -775,7 +859,7 @@ void ShineStatic(const Source &source, std::vector<float> &lava)
 				seen = seenAt[static_cast<size_t>(edge)];
 				path = paths[static_cast<size_t>(edge)] + extra;
 			}
-			const float linear = SampleLinear(source, distance, seen, path);
+			const float linear = SampleLinear(source, distance, seen, path) * ConeOf(source, sx, sy);
 			if (linear <= 1e-5F)
 				continue;
 			const size_t k = static_cast<size_t>(j) * LatticeW + i;
@@ -828,6 +912,24 @@ void UpdateStatics()
 	std::memcpy(BuiltPreLight.data(), dPreLight, sizeof(dPreLight));
 
 	StaticSources.clear();
+	const bool town = leveltype == DTYPE_TOWN;
+	if (town) {
+		for (const TownFire &fire : TownFires) {
+			Source source;
+			source.x = fire.x;
+			source.y = fire.y;
+			source.radius = fire.radius;
+			source.colour = Even(fire.colour);
+			source.height = fire.height;
+			source.size = fire.size;
+			source.fill = fire.fill;
+			source.power = fire.power;
+			source.coneX = fire.coneX;
+			source.coneY = fire.coneY;
+			PlaceRays(source);
+			StaticSources.push_back(source);
+		}
+	}
 	for (int i = 0; i < ActiveObjectCount; i++) {
 		const Object &object = Objects[ActiveObjects[i]];
 		Source source;
@@ -857,9 +959,11 @@ void UpdateStatics()
 		}
 	}
 
-	const float ambient = LevelLinear(15.F);
+	// The dungeon's dark, or the sky's light in town (in its own colour).
+	const float ambient = town ? ToLinear(TownSkyBrightness) : LevelLinear(15.F);
 	StaticBright.assign(static_cast<size_t>(LatticeW) * LatticeH, ambient);
-	StaticHue.assign(static_cast<size_t>(LatticeW) * LatticeH, { 0.F, 0.F, 0.F, 0.F });
+	const Colour sky = Even(TownSkyColour);
+	StaticHue.assign(static_cast<size_t>(LatticeW) * LatticeH, town ? std::array<float, 4> { sky[0] * ambient, sky[1] * ambient, sky[2] * ambient, ambient } : std::array<float, 4> { 0.F, 0.F, 0.F, 0.F });
 	// Lava shines as one light: its brightest tile at each sample, added to the other lights.
 	std::vector<float> lava(StaticBright.size(), 0.F);
 	for (const Source &source : StaticSources)
@@ -874,6 +978,9 @@ void UpdateStatics()
 		StaticHue[k][3] += lava[k];
 	}
 
+	// The game lights all of the town fully: its evening light is the sky's and the fires'.
+	if (town)
+		return;
 	// Anything the game baked into the level that the lights above don't explain still shines, through walls as before.
 	std::array<uint8_t, MAXDUNX * MAXDUNY> explained;
 	explained.fill(15);
@@ -929,23 +1036,25 @@ void GatherDynamic(float heroX, float heroY)
 		float power;
 		bool glow;
 		bool carried;
+		/** @brief A spell's light (a town portal's): the only moving light Tristram's evening shows. */
+		bool spell;
 	};
 	std::array<Kind, MAXLIGHTS> kinds;
-	kinds.fill({ CurrentLook.warm, 1.4F, 0.3F, 0.15F, 1.F, false, false });
+	kinds.fill({ CurrentLook.warm, 1.4F, 0.3F, 0.15F, 1.F, false, false, false });
 	const auto owns = [](int id) { return id >= 0 && id < MAXLIGHTS; };
 	// Owners from the least to the most sure, so a stale id held by a dying missile can't recolour a hero's light.
 	for (const Missile &missile : Missiles) {
 		if (!owns(missile._mlid))
 			continue;
 		// A spell flies at about waist height (a firebolt's ball of fire is about a third of a tile across).
-		kinds[missile._mlid] = { FromBytes(vfx::LightColourOf(missile)), 0.85F, 0.35F, 0.15F, SpellPower, false, false };
+		kinds[missile._mlid] = { FromBytes(vfx::LightColourOf(missile)), 0.85F, 0.35F, 0.15F, SpellPower, false, false, true };
 	}
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
 		if (!owns(monster.lightId))
 			continue;
 		// Uniques glow; other monsters only carry a light while berserk (POE2's Confuse sets the flag without one).
-		kinds[monster.lightId] = { monster.isUnique() ? UniqueGlowColour : BerserkColour, 0.7F, 0.8F, 0.3F, 1.F, false, true };
+		kinds[monster.lightId] = { monster.isUnique() ? UniqueGlowColour : BerserkColour, 0.7F, 0.8F, 0.3F, 1.F, false, true, false };
 	}
 	int myLight = NO_LIGHT;
 	for (const Player &player : Players) {
@@ -953,7 +1062,7 @@ void GatherDynamic(float heroX, float heroY)
 			continue;
 		// A hero's own light is a wide, soft glow hanging over them: it lights the way without hard shadows, so the
 		// shadows it gives are short, soft and faint, and a torch or a spell nearby casts the clear ones.
-		kinds[player.lightId] = { CurrentLook.warm, 2.6F, 1.6F, 0.45F, 1.F, true, true };
+		kinds[player.lightId] = { CurrentLook.warm, 2.6F, 1.6F, 0.45F, 1.F, true, true, false };
 		if (&player == MyPlayer)
 			myLight = player.lightId;
 	}
@@ -963,6 +1072,9 @@ void GatherDynamic(float heroX, float heroY)
 		const int id = ActiveLights[i];
 		const Light &light = Lights[id];
 		if (light.isInvalid)
+			continue;
+		// Tristram's evening is lit by its sky and its fires: no glow round the heroes (the game keeps a light on each).
+		if (leveltype == DTYPE_TOWN && !kinds[id].spell)
 			continue;
 		// As the game does: a monster hidden in a wall doesn't give itself away.
 		if (TileHasAny(light.position.tile, TileProperties::Solid))
@@ -1117,13 +1229,26 @@ void Finish()
 		const float alpha = high > 1 ? std::clamp(1.5F - (high + low) / 2, 0.F, 1.F) : 1.F;
 		WinMulPixels[k] = (byte(alpha) << 24) | (byte(colour[0] - 1 + alpha) << 16) | (byte(colour[1] - 1 + alpha) << 8) | byte(colour[2] - 1 + alpha);
 	}
+	// The sky's light alone, drawn as a point lit by nothing else is above.
+	SkyRgb = Full();
+	if (leveltype == DTYPE_TOWN) {
+		const float brightness = DrawnBrightness(ToLinear(TownSkyBrightness));
+		const float warmth = WarmthOfBrightness[static_cast<size_t>(std::clamp(brightness, 0.F, 1.F) * 255.F + 0.5F)];
+		const Colour sky = Even(TownSkyColour);
+		std::array<float, 3> colour;
+		for (int c = 0; c < 3; c++) {
+			const float grade = look.cool[c] + (sky[c] - look.cool[c]) * warmth;
+			colour[c] = std::clamp(brightness * grade * look.tint[c], 0.F, MaxLight);
+		}
+		SkyRgb = { colour[0], colour[1], colour[2] };
+	}
 }
 
 } // namespace
 
 bool Update(const Look &look, float x0, float y0, float x1, float y1, float heroX, float heroY)
 {
-	if (IsAnyOf(leveltype, DTYPE_TOWN, DTYPE_NONE))
+	if (leveltype == DTYPE_NONE)
 		return false;
 	UpdateLook(look);
 	UpdateBlocks();
@@ -1275,6 +1400,11 @@ Rgb Full()
 	return out;
 }
 
+Rgb Sky()
+{
+	return SkyRgb;
+}
+
 bool Blocks(int x, int y)
 {
 	return BlocksTile(x, y);
@@ -1391,7 +1521,7 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 		}
 		if (!source.castsShadows)
 			return;
-		const float linear = LevelLinear(LevelAt(distance, source.radius)) * source.power * SeenFraction(source, x, y);
+		const float linear = LevelLinear(LevelAt(distance, source.radius)) * source.power * SeenFraction(source, x, y) * ConeOf(source, x, y);
 		const float strength = ToBrightness(linear);
 		if (strength < 0.02F)
 			return;
@@ -1404,6 +1534,11 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 		consider(source, index++);
 	for (const Source &source : DynamicSources)
 		consider(source, index++);
+	if (leveltype == DTYPE_TOWN) {
+		// The evening sky shines on all of the town from far off, so its shadows all fall the same way.
+		const ShadowLight sky { x - SkyDirX * SkyDistance, y - SkyDirY * SkyDistance, TownSkyBrightness, SkyDistance / SkyShadowLength, SkySize, SkyFill, SkyDistance * 2, SkyLight };
+		offer(sky, ToLinear(TownSkyBrightness), SkyDistance, false);
+	}
 	const float lavaStrength = ToBrightness(lavaBrightest);
 	if (lavaStrength >= 0.02F) {
 		const float offX = lavaX / lavaLinear;
@@ -1432,6 +1567,8 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 
 float LinearOf(const ShadowLight &light, float x, float y)
 {
+	if (light.source == SkyLight)
+		return ToLinear(TownSkyBrightness);
 	if (light.source == LavaLight) {
 		const float distance = Length(x - light.x, y - light.y);
 		if (distance >= static_cast<float>(light.radius + 1))
@@ -1444,7 +1581,7 @@ float LinearOf(const ShadowLight &light, float x, float y)
 	const float distance = Length(x - source->x, y - source->y);
 	if (distance >= static_cast<float>(source->radius + 1) || !Clear(source->rayX, source->rayY, x, y))
 		return 0;
-	return LevelLinear(LevelAt(distance, source->radius)) * source->power;
+	return LevelLinear(LevelAt(distance, source->radius)) * source->power * ConeOf(*source, x, y);
 }
 
 float GlowAt(float x, float y)
