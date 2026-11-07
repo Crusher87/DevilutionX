@@ -78,6 +78,20 @@ TEST_F(Poe2WeaponSkillsTest, WeaponTypesGrantSkills)
 	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::GroundSlam);
 }
 
+// Q40 (Curtis 2026-11-07): Frenzy, Whirlwind and Leap Attack are sword skills, not dagger ones; Double Swing and
+// Cleave still work with a dagger (the 10-22 plan).
+TEST_F(Poe2WeaponSkillsTest, FrenzyWhirlwindAndLeapAttackTakeNoDagger)
+{
+	const Item dagger = MakeBase("Glass Shank");
+	const Item sword = MakeBase("Shortsword");
+	for (const WeaponSkill skill : { WeaponSkill::Frenzy, WeaponSkill::Whirlwind, WeaponSkill::LeapSlam }) {
+		EXPECT_FALSE(ItemAllowsWeaponSkill(dagger, skill)) << WeaponSkillName(skill);
+		EXPECT_TRUE(ItemAllowsWeaponSkill(sword, skill)) << WeaponSkillName(skill);
+	}
+	for (const WeaponSkill skill : { WeaponSkill::Flurry, WeaponSkill::Cleave })
+		EXPECT_TRUE(ItemAllowsWeaponSkill(dagger, skill)) << WeaponSkillName(skill);
+}
+
 TEST_F(Poe2WeaponSkillsTest, EveryWeaponHasAFreeDefaultAttack)
 {
 	Player &player = *MyPlayer;

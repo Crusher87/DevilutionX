@@ -354,7 +354,8 @@ bool TableWeaponAllows(const Item &item, TableWeapon weapon)
 	case TableWeapon::Axe:
 		return item._itype == ItemType::Axe;
 	case TableWeapon::AxeOrSword:
-		return IsAnyOf(item._itype, ItemType::Axe, ItemType::Sword);
+		// Whirlwind: swords only, not daggers (Curtis 2026-11-07, Q40).
+		return IsAnyOf(item._itype, ItemType::Axe, ItemType::Sword) && !IsDagger(item);
 	case TableWeapon::Mace:
 		return item._itype == ItemType::Mace;
 	case TableWeapon::Staff:
@@ -732,7 +733,8 @@ bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 	case WeaponSkill::Flurry:
 		return item._itype == ItemType::Sword;
 	case WeaponSkill::LeapSlam:
-		return IsAnyOf(item._itype, ItemType::Mace, ItemType::Axe, ItemType::Sword, ItemType::Staff);
+		// Not with a dagger (Curtis 2026-11-07, Q40).
+		return IsAnyOf(item._itype, ItemType::Mace, ItemType::Axe, ItemType::Sword, ItemType::Staff) && !IsDagger(item);
 	case WeaponSkill::RainOfArrows:
 	case WeaponSkill::LightningArrow:
 	case WeaponSkill::EscapeShot:
@@ -742,7 +744,8 @@ bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 	case WeaponSkill::ShadowStep:
 		return IsDagger(item);
 	case WeaponSkill::Frenzy:
-		return IsAnyOf(item._itype, ItemType::Axe, ItemType::Sword);
+		// Not with a dagger (Curtis 2026-11-07, Q40).
+		return IsAnyOf(item._itype, ItemType::Axe, ItemType::Sword) && !IsDagger(item);
 	case WeaponSkill::Smite:
 		return item._itype == ItemType::Mace;
 	case WeaponSkill::FistsOfThunder:
@@ -775,7 +778,7 @@ std::string_view WeaponSkillWeapons(WeaponSkill skill)
 	case WeaponSkill::Flurry:
 		return _("sword or dagger");
 	case WeaponSkill::LeapSlam:
-		return _("melee weapon");
+		return _("mace, axe, sword or staff");
 	case WeaponSkill::RainOfArrows:
 	case WeaponSkill::LightningArrow:
 	case WeaponSkill::EscapeShot:
