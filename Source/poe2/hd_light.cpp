@@ -198,13 +198,19 @@ std::array<float, 256> WarmthOfBrightness {};
 /** @brief The sky's light alone as drawn (see Sky), worked out with the rest of the light in Finish. */
 Rgb SkyRgb;
 
+/** @brief Per tile: 0 where light and walkers pass, 1 where light stops (walls), 2 for ground light passes over that
+ * nothing stands on (OpenGround: the Cathedral's dirt outside the rooms). */
 std::array<uint8_t, MAXDUNX * MAXDUNY> BlockMap {};
 uint32_t BlockVersion = 0;
+bool (*OpenGround)(int x, int y) = nullptr;
+/** @brief How many floor edges a sample of rock can be lit through (SpillRoots). */
+constexpr size_t SpillWays = 3;
 /**
  * @brief For each sample of the lattice in solid rock in front of a floor (towards the view) that no room faces, the
- * open sample at the floor's edge it is lit through (-1 for none), and the BlockVersion that was worked out for.
+ * open samples at the floors' edges it is lit through (-1 for none): the nearest any way, and the nearest straight
+ * behind it along y and along x. And the BlockVersion that was worked out for.
  */
-std::vector<int32_t> SpillRoot;
+std::vector<std::array<int32_t, SpillWays>> SpillRoots;
 uint32_t SpillVersion = 0;
 
 std::vector<Source> StaticSources;
@@ -355,6 +361,14 @@ bool SampleOpen(int i, int j)
 	return !BlocksTile(i / Per, j / Per);
 }
 
+/** @brief Light can't pass this tile: a wall, unlike the open ground outside the rooms that light passes over. */
+bool BlocksSight(int x, int y)
+{
+	if (x < 0 || y < 0 || x >= MAXDUNX || y >= MAXDUNY)
+		return true;
+	return BlockMap[static_cast<size_t>(x) * MAXDUNY + y] == 1;
+}
+
 /** @brief Light goes from one world point to another without a wall in between (the tiles they're in don't count). */
 bool Clear(float x0, float y0, float x1, float y1)
 {
@@ -386,7 +400,7 @@ bool Clear(float x0, float y0, float x1, float y1)
 			steps--;
 		} else {
 			// Exactly through a corner: it squeezes past only if one of the two tiles beside the corner is open.
-			if (BlocksTile(tx + sx, ty) && BlocksTile(tx, ty + sy))
+			if (BlocksSight(tx + sx, ty) && BlocksSight(tx, ty + sy))
 				return false;
 			tx += sx;
 			ty += sy;
@@ -396,7 +410,7 @@ bool Clear(float x0, float y0, float x1, float y1)
 		}
 		if (tx == ex && ty == ey)
 			return true;
-		if (BlocksTile(tx, ty))
+		if (BlocksSight(tx, ty))
 			return false;
 	}
 	return true;
@@ -606,12 +620,21 @@ void UpdateLook(const Look &look)
 		reach.radius = -1;
 }
 
+/**
+ * @brief Finds the tiles that stop light, and the ground outside the rooms that light passes over (the Cathedral's dirt,
+ * see SetOpenGround). Stopped by the dirt as by a wall, the light of a hero at a room's open corner left the room
+ * across the dirt black, and the dirt drawn beside them with it, from a straight line on.
+ */
 void UpdateBlocks()
 {
 	std::array<uint8_t, MAXDUNX * MAXDUNY> blocks;
 	for (int x = 0; x < MAXDUNX; x++) {
-		for (int y = 0; y < MAXDUNY; y++)
-			blocks[static_cast<size_t>(x) * MAXDUNY + y] = TileHasAny({ x, y }, TileProperties::BlockLight) ? 1 : 0;
+		for (int y = 0; y < MAXDUNY; y++) {
+			uint8_t block = 0;
+			if (TileHasAny({ x, y }, TileProperties::BlockLight))
+				block = OpenGround != nullptr && OpenGround(x, y) ? 2 : 1;
+			blocks[static_cast<size_t>(x) * MAXDUNY + y] = block;
+		}
 	}
 	if (blocks != BlockMap) {
 		BlockMap = blocks;
@@ -623,7 +646,7 @@ void UpdateBlocks()
 constexpr int SpillSteps = static_cast<int>(NumLightRadiuses) * Per;
 
 /**
- * @brief Works out which rock the floors' light reaches into (SpillRoot) when the walls change.
+ * @brief Works out which rock the floors' light reaches into (SpillRoots) when the walls change.
  *
  * FillWalls gives rock that faces a room (an open sample at most three samples in front of it) that room's light. Rock
  * further in front of a floor, where the floor ends without a wall (the Cathedral's dirt edges, drawn as a field of dirt
@@ -631,10 +654,14 @@ constexpr int SpillSteps = static_cast<int>(NumLightRadiuses) * Per;
  * floor's edge behind it sees. Left dark, the dirt showed only its first row (lit from behind, see hd.cpp's
  * FromBehind), as blocks with black lines between them, and a light fading out from the edge left the same lines a
  * row or two further down.
+ *
+ * Rock in front of two rooms' edges (the Cathedral's new rooms, a dark room beside the lit one) is lit through both,
+ * each light through whichever edge sees it. Lit only through the nearest edge, the dirt in front of the hero's room
+ * went black from a straight line on, wherever a dark room's edge was nearer.
  */
 void UpdateSpill()
 {
-	if (SpillVersion == BlockVersion && !SpillRoot.empty())
+	if (SpillVersion == BlockVersion && !SpillRoots.empty())
 		return;
 	SpillVersion = BlockVersion;
 	const size_t count = static_cast<size_t>(LatticeW) * LatticeH;
@@ -664,7 +691,7 @@ void UpdateSpill()
 			}
 		}
 	}
-	SpillRoot.assign(count, -1);
+	SpillRoots.assign(count, { -1, -1, -1 });
 	// Steps from the edge, a step further each pass, and the samples the last pass reached.
 	std::vector<uint8_t> depth(count, 0);
 	std::vector<size_t> last;
@@ -678,7 +705,7 @@ void UpdateSpill()
 			const size_t n = static_cast<size_t>(j - step[1]) * LatticeW + (i - step[0]);
 			if (pass == 1 ? set[n] != 1 : depth[n] != pass - 1)
 				continue;
-			SpillRoot[k] = pass == 1 ? static_cast<int32_t>(n) : SpillRoot[n];
+			SpillRoots[k][0] = pass == 1 ? static_cast<int32_t>(n) : SpillRoots[n][0];
 			depth[k] = static_cast<uint8_t>(pass);
 			reached.push_back(k);
 			return;
@@ -700,26 +727,72 @@ void UpdateSpill()
 			}
 		}
 	}
+	// And the edge straight behind, each way: the rock right in front of a room's edge belongs to that room's light too,
+	// even where another room's edge is nearer.
+	const auto straight = [&](int i, int j, size_t way, int32_t &edge, int &run) {
+		const size_t k = static_cast<size_t>(j) * LatticeW + i;
+		if (set[k] == 1) {
+			edge = static_cast<int32_t>(k);
+			run = 0;
+			return;
+		}
+		if (set[k] != 0 || edge < 0 || ++run > SpillSteps) {
+			edge = -1;
+			return;
+		}
+		std::array<int32_t, SpillWays> &roots = SpillRoots[k];
+		if (std::find(roots.begin(), roots.end(), edge) == roots.end())
+			roots[way] = edge;
+	};
+	for (int i = 0; i < LatticeW; i++) {
+		int32_t edge = -1;
+		int run = 0;
+		for (int j = 0; j < LatticeH; j++)
+			straight(i, j, 1, edge, run);
+	}
+	for (int j = 0; j < LatticeH; j++) {
+		int32_t edge = -1;
+		int run = 0;
+		for (int i = 0; i < LatticeW; i++)
+			straight(i, j, 2, edge, run);
+	}
 }
 
 /**
- * @brief The open sample at the floor's edge a sample of rock is lit through (SpillRoot), as an index into a box of the
- * lattice (w by h samples from i0, j0), and how far the sample is from it; -1 where the floors' light doesn't reach into
- * the sample or its edge is outside the box.
+ * @brief The open samples at the floors' edges a sample of rock is lit through (SpillRoots), as indexes into a box of the
+ * lattice (w by h samples from i0, j0), and how far the sample is from each. None where the floors' light doesn't reach
+ * into the sample, or the edges are outside the box.
+ * @return How many edges there are.
  */
-int EdgeInBox(int i, int j, int i0, int j0, int w, int h, float &extra)
+int EdgesInBox(int i, int j, int i0, int j0, int w, int h, std::array<int, SpillWays> &edges, std::array<float, SpillWays> &extras)
 {
-	if (SpillRoot.empty())
-		return -1;
-	const int32_t root = SpillRoot[static_cast<size_t>(j) * LatticeW + i];
-	if (root < 0)
-		return -1;
-	const int ri = root % LatticeW;
-	const int rj = root / LatticeW;
-	if (ri < i0 || rj < j0 || ri >= i0 + w || rj >= j0 + h)
-		return -1;
-	extra = Length(SampleAt(i) - SampleAt(ri), SampleAt(j) - SampleAt(rj));
-	return (rj - j0) * w + (ri - i0);
+	if (SpillRoots.empty())
+		return 0;
+	int count = 0;
+	for (const int32_t root : SpillRoots[static_cast<size_t>(j) * LatticeW + i]) {
+		if (root < 0)
+			continue;
+		const int ri = root % LatticeW;
+		const int rj = root / LatticeW;
+		if (ri < i0 || rj < j0 || ri >= i0 + w || rj >= j0 + h)
+			continue;
+		extras[static_cast<size_t>(count)] = Length(SampleAt(i) - SampleAt(ri), SampleAt(j) - SampleAt(rj));
+		edges[static_cast<size_t>(count)] = (rj - j0) * w + (ri - i0);
+		count++;
+	}
+	return count;
+}
+
+/**
+ * @brief The sample is ground outside the rooms that light passes over (the Cathedral's dirt, see SetOpenGround), where
+ * the floors' light reaches it so it is drawn: the lights that see it light it as they light the floor.
+ */
+bool GroundSample(int i, int j)
+{
+	if (SpillRoots.empty() || BlockMap[static_cast<size_t>(i / Per) * MAXDUNY + j / Per] != 2)
+		return false;
+	const std::array<int32_t, SpillWays> &roots = SpillRoots[static_cast<size_t>(j) * LatticeW + i];
+	return roots[0] >= 0 || roots[1] >= 0 || roots[2] >= 0;
 }
 
 /**
@@ -833,7 +906,7 @@ void ShineStatic(const Source &source, std::vector<float> &lava)
 	const int h = j1 - j0 + 1;
 	static std::vector<float> paths;
 	PathsFrom(source, i0, j0, w, h, paths);
-	// How much of the light each open sample sees, for the rock lit through the floor's edge (EdgeInBox). An edge comes
+	// How much of the light each open sample sees, for the rock lit through the floors' edges (EdgesInBox). An edge comes
 	// before the rock in front of it in this order.
 	static std::vector<float> seenAt;
 	seenAt.assign(paths.size(), 0.F);
@@ -845,21 +918,24 @@ void ShineStatic(const Source &source, std::vector<float> &lava)
 			if (distance >= reach)
 				continue;
 			const size_t b = static_cast<size_t>(j - j0) * w + (i - i0);
-			float seen;
-			float path;
-			if (SampleOpen(i, j)) {
-				seen = SeenFraction(source, sx, sy);
+			float linear = 0;
+			const bool open = SampleOpen(i, j);
+			if (open || GroundSample(i, j)) {
+				const float seen = SeenFraction(source, sx, sy);
 				seenAt[b] = seen;
-				path = paths[b];
-			} else {
-				float extra;
-				const int edge = EdgeInBox(i, j, i0, j0, w, h, extra);
-				if (edge < 0)
-					continue;
-				seen = seenAt[static_cast<size_t>(edge)];
-				path = paths[static_cast<size_t>(edge)] + extra;
+				linear = SampleLinear(source, distance, seen, paths[b]);
 			}
-			const float linear = SampleLinear(source, distance, seen, path) * ConeOf(source, sx, sy);
+			if (!open) {
+				// Rock in front of the floors' edges: as much light as the edge that lets the most through.
+				std::array<int, SpillWays> edges;
+				std::array<float, SpillWays> extras;
+				const int count = EdgesInBox(i, j, i0, j0, w, h, edges, extras);
+				for (int e = 0; e < count; e++) {
+					const auto edge = static_cast<size_t>(edges[static_cast<size_t>(e)]);
+					linear = std::max(linear, SampleLinear(source, distance, seenAt[edge], paths[edge] + extras[static_cast<size_t>(e)]));
+				}
+			}
+			linear *= ConeOf(source, sx, sy);
 			if (linear <= 1e-5F)
 				continue;
 			const size_t k = static_cast<size_t>(j) * LatticeW + i;
@@ -1119,7 +1195,7 @@ void GatherDynamic(float heroX, float heroY)
 				const int j = reach.j0 + b;
 				for (int a = 0; a < reach.w; a++) {
 					const int i = reach.i0 + a;
-					if (SampleOpen(i, j))
+					if (SampleOpen(i, j) || GroundSample(i, j))
 						reach.seen[static_cast<size_t>(b) * reach.w + a] = static_cast<uint8_t>(SeenFraction(source, SampleAt(i), SampleAt(j)) * 255.F + 0.5F);
 				}
 			}
@@ -1137,24 +1213,28 @@ void GatherDynamic(float heroX, float heroY)
 			const float sy = SampleAt(j);
 			for (int a = a0; a < a1; a++) {
 				const size_t r = static_cast<size_t>(b) * reach.w + a;
-				float seen = static_cast<float>(reach.seen[r]) / 255.F;
-				float path = reach.paths[r];
+				const float seen = static_cast<float>(reach.seen[r]) / 255.F;
+				const float path = reach.paths[r];
 				const int i = reach.i0 + a;
-				if (seen <= 0 && path > range) {
-					// Rock in front of a floor's edge sees what the edge sees (UpdateSpill).
-					float extra;
-					const int edge = EdgeInBox(i, j, reach.i0, reach.j0, reach.w, reach.h, extra);
-					if (edge < 0)
-						continue;
-					seen = static_cast<float>(reach.seen[static_cast<size_t>(edge)]) / 255.F;
-					path = reach.paths[static_cast<size_t>(edge)] + extra;
-					if (seen <= 0 && path > range)
-						continue;
-				}
 				const float distance = Length(SampleAt(i) - source.x, sy - source.y);
-				if (distance >= range && path > range)
-					continue;
-				const float linear = SampleLinear(source, distance, seen, path);
+				float linear = 0;
+				if (distance < range || path <= range)
+					linear = SampleLinear(source, distance, seen, path);
+				if (seen < 1 && path > range) {
+					// Rock in front of the floors' edges sees what they see (UpdateSpill): as much light as the edge that
+					// lets the most through.
+					std::array<int, SpillWays> edges;
+					std::array<float, SpillWays> extras;
+					const int count = EdgesInBox(i, j, reach.i0, reach.j0, reach.w, reach.h, edges, extras);
+					for (int e = 0; e < count; e++) {
+						const auto edge = static_cast<size_t>(edges[static_cast<size_t>(e)]);
+						const float edgeSeen = static_cast<float>(reach.seen[edge]) / 255.F;
+						const float edgePath = reach.paths[edge] + extras[static_cast<size_t>(e)];
+						if ((edgeSeen <= 0 || distance >= range) && edgePath > range)
+							continue;
+						linear = std::max(linear, SampleLinear(source, distance, edgeSeen, edgePath));
+					}
+				}
 				if (linear <= 1e-5F)
 					continue;
 				const size_t k = static_cast<size_t>(j - WinJ0) * WinW + (i - WinI0);
@@ -1354,6 +1434,93 @@ Rgb GroundAt(float x, float y)
 	});
 }
 
+Rgb TileGroundAt(float x, float y, int tileX, int tileY)
+{
+	if (WinW <= 0 || WinH <= 0)
+		return Full();
+	const auto add = [](Rgb &sum, const Rgb &colour, float weight) {
+		sum.r += colour.r * weight;
+		sum.g += colour.g * weight;
+		sum.b += colour.b * weight;
+	};
+	// Blended from the samples round the point, leaving out the rock lit for the walls' faces.
+	const float fi = std::clamp((x + 0.25F) * Per - static_cast<float>(WinI0), 0.F, static_cast<float>(WinW - 1));
+	const float fj = std::clamp((y + 0.25F) * Per - static_cast<float>(WinJ0), 0.F, static_cast<float>(WinH - 1));
+	const int i = std::min(static_cast<int>(fi), std::max(WinW - 2, 0));
+	const int j = std::min(static_cast<int>(fj), std::max(WinH - 2, 0));
+	const float u = std::clamp(fi - static_cast<float>(i), 0.F, 1.F);
+	const float v = std::clamp(fj - static_cast<float>(j), 0.F, 1.F);
+	Rgb sum;
+	float weights = 0;
+	for (int dj = 0; dj <= 1; dj++) {
+		for (int di = 0; di <= 1; di++) {
+			const size_t k = static_cast<size_t>(std::min(j + dj, WinH - 1)) * WinW + std::min(i + di, WinW - 1);
+			const float weight = (di == 0 ? 1 - u : u) * (dj == 0 ? 1 - v : v);
+			if (LitForWalls(k) || weight <= 0)
+				continue;
+			add(sum, WinColour[k], weight);
+			weights += weight;
+		}
+	}
+	if (weights > 0.05F)
+		return { sum.r / weights, sum.g / weights, sum.b / weights };
+	// All rock lit for the walls (the point is on the wall beside it): the tile's own samples.
+	sum = {};
+	int count = 0;
+	for (int dj = 0; dj < Per; dj++) {
+		for (int di = 0; di < Per; di++) {
+			const int si = tileX * Per + di - WinI0;
+			const int sj = tileY * Per + dj - WinJ0;
+			if (si < 0 || sj < 0 || si >= WinW || sj >= WinH)
+				continue;
+			const size_t k = static_cast<size_t>(sj) * WinW + si;
+			if (LitForWalls(k))
+				continue;
+			add(sum, WinColour[k], 1);
+			count++;
+		}
+	}
+	if (count == 0)
+		return {};
+	return { sum.r / static_cast<float>(count), sum.g / static_cast<float>(count), sum.b / static_cast<float>(count) };
+}
+
+Rgb FaceAt(float x, float y)
+{
+	if (WinW <= 0 || WinH <= 0)
+		return Full();
+	const float fi = std::clamp((x + 0.25F) * Per - static_cast<float>(WinI0), 0.F, static_cast<float>(WinW - 1));
+	const float fj = std::clamp((y + 0.25F) * Per - static_cast<float>(WinJ0), 0.F, static_cast<float>(WinH - 1));
+	const int i = std::min(static_cast<int>(fi), std::max(WinW - 2, 0));
+	const int j = std::min(static_cast<int>(fj), std::max(WinH - 2, 0));
+	const float u = std::clamp(fi - static_cast<float>(i), 0.F, 1.F);
+	const float v = std::clamp(fj - static_cast<float>(j), 0.F, 1.F);
+	std::array<size_t, 4> samples;
+	std::array<float, 4> weights;
+	bool wallLit = false;
+	for (int n = 0; n < 4; n++) {
+		const int di = n & 1;
+		const int dj = n >> 1;
+		samples[n] = static_cast<size_t>(std::min(j + dj, WinH - 1)) * WinW + std::min(i + di, WinW - 1);
+		weights[n] = (di == 0 ? 1 - u : u) * (dj == 0 ? 1 - v : v);
+		wallLit = wallLit || (weights[n] > 0 && LitForWalls(samples[n]));
+	}
+	Rgb sum;
+	float total = 0;
+	for (int n = 0; n < 4; n++) {
+		if (weights[n] <= 0 || (wallLit && WinSet[samples[n]] == 1))
+			continue;
+		const Rgb &colour = WinColour[samples[n]];
+		sum.r += colour.r * weights[n];
+		sum.g += colour.g * weights[n];
+		sum.b += colour.b * weights[n];
+		total += weights[n];
+	}
+	if (total <= 0)
+		return At(x, y);
+	return { sum.r / total, sum.g / total, sum.b / total };
+}
+
 Rgb BehindAt(float x, float y, bool alongY)
 {
 	return Blend(x, y, [alongY](int i, int j) {
@@ -1408,6 +1575,11 @@ Rgb Sky()
 bool Blocks(int x, int y)
 {
 	return BlocksTile(x, y);
+}
+
+void SetOpenGround(bool (*isOpenGround)(int x, int y))
+{
+	OpenGround = isOpenGround;
 }
 
 namespace {
@@ -1625,7 +1797,7 @@ uint16_t UnpaintedPiece(int x, int y, uint16_t piece)
 void Reset()
 {
 	BuiltStatics = {};
-	SpillRoot.clear();
+	SpillRoots.clear();
 	for (Reach &reach : Reaches)
 		reach.radius = -1;
 	HaveLook = false;
