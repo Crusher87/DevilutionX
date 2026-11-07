@@ -2388,6 +2388,20 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    CanPlayerTakeAction);
+	// POE2 Mashup: H turns the whole HD look (the upscaled art, its in-betweens, HD Lighting and the moods, which all
+	// ride on it) on or off at once (Curtis 2026-11-07). In the passive tree H is still the heat map.
+	options.Keymapper.AddAction(
+	    "ToggleHD",
+	    N_("HD on/off"),
+	    N_("Turns the HD art, smoothing and lighting on or off."),
+	    'H',
+	    [] {
+		    OptionEntryBoolean &hd = GetOptions().Graphics.hdGraphics;
+		    hd.SetValue(!*hd);
+		    EventPlrMsg(*hd ? _("HD on") : _("HD off"));
+	    },
+	    nullptr,
+	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
 	options.Keymapper.AddAction(
 	    "PauseGame",
 	    N_("Pause Game"),
