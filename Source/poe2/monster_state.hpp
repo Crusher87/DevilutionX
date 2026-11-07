@@ -108,6 +108,8 @@ struct Poe2MonsterState {
 	int32_t poisonDamagePerTick = 0;
 	/** @brief The poison is Cobra Strike's own, which its next strike doesn't consume (Curtis 2026-11-07, Q42; not saved). */
 	bool poisonFromCobra = false;
+	/** @brief The bleed is Bloodletting's own, which its next stab doesn't consume (the Cobra Strike rule, Q42; not saved). */
+	bool bleedFromBloodletting = false;
 	/**
 	 * @brief Pyre Blow (Curtis 2026-11-07, Q48; not saved): it dies within this many game ticks of the blow and it bursts
 	 * into flame, for this much (a raw Fixed26_6 value), from this player.

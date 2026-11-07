@@ -163,6 +163,7 @@ void BurstBlood(const HeraldTrigger &trigger)
 			state.bleedDamagePerTick = perTick;
 			state.bleedSource = static_cast<int8_t>(MyPlayerId);
 			state.bleedSkill = WeaponSkill::None;
+			state.bleedFromBloodletting = false;
 		}
 		state.bleedTicks = std::max<uint8_t>(state.bleedTicks, BleedTicks);
 		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);

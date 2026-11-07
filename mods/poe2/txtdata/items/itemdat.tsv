@@ -1095,3 +1095,12 @@ poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Whirling Volley Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Lodestone Salvo Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Swamp Gas Arrow Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Fire Blast Gem	Gem	1	0	0	0	0	0	0	0	21		SKILLGEM_TABLE	Null	true	580
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Shock Web Gem	Gem	1	0	0	0	0	0	0	0	21		SKILLGEM_TABLE	Null	true	580
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Blades of Ice Gem	Gem	3	0	0	0	0	0	0	0	27		SKILLGEM_TABLE	Null	true	840
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Phoenix Strike Gem	Gem	15	0	0	0	0	0	0	0	63		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Bloodletting Gem	Gem	15	0	0	0	0	0	0	0	63		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Ember Fang Gem	Gem	20	0	0	0	0	0	0	0	78		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Death Sentry Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Viz-Jaq'taar Strike Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Winter's Edge Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700

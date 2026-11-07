@@ -96,6 +96,7 @@ set(tests
   poe2_staff_drafts_test
   poe2_weapon_drafts_test
   poe2_bow_drafts_test
+  poe2_dagger_drafts_test
   poe2_spirit_order_test
   poe2_regen_test
   poe2_skill_gems_test

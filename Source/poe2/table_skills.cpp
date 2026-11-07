@@ -85,7 +85,7 @@ const TableSkillData Table[] = {
 	{ WS::Vengeance, "Vengeance", "A strike that bursts into fire, lightning and cold", 11, 5, TW::Sword, 0, Strike, 260, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Elements, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 0 },
 	{ WS::ArkainesWrath, "Arkaine's Wrath", "A sweeping blow that calls down lightning and staggers", 15, 17, TW::Sword, 0, Arc, 240, 0, 0, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Sword | TT_Elemental, Icon(SpellIcon::LightningWall), TableCurve::Boneshatter, 0 },
 	// Dagger
-	{ WS::FanOfBlades, "Fan of Blades", "Throw daggers in every direction", 5, 5, TW::Dagger, 0, Projectiles, 70, 8, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Sentinel), TableCurve::LightningArrow, 280 },
+	{ WS::FanOfBlades, "Fan of Blades", "Throw daggers in every direction; each that hits leaves the enemy bleeding", 5, 5, TW::Dagger, 0, Projectiles, 70, 8, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Sentinel), TableCurve::LightningArrow, 280 },
 	{ WS::ViperStrike, "Cobra Strike", "A heavy poisoned stab: poison from your other skills on the enemy deals all it has left at once, then its own strong poison goes on", 7, 11, TW::Dagger, 0, Strike, 380, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::DoomSerpents), TableCurve::Boneshatter, 0, GrantedRider::None, 60 },
 	{ WS::BladeSentinel, "Blade Sentinel", "A whirling blade that guards the target spot for 5 seconds", 9, 12, TW::Dagger, 0, Zone, 35, 0, 1, 100, 20, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::Pulse, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Sentinel), TableCurve::Boneshatter, 260 },
 	{ WS::DeathMark, "Death Mark", "Marks an enemy to take 25% more damage; your next Shadow Lunge or Cobra Strike on it uses the mark for double damage", 11, 9, TW::Dagger, 1, Curse, Flat, 0, 0, 160, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, 0, TableZone::None, TableCurse::DeathMark, TableBuff::None, TT_Dagger, Icon(SpellIcon::RedSkull), TableCurve::Boneshatter, 100 },
@@ -252,6 +252,17 @@ const TableSkillData Table[] = {
 	{ WS::WhirlingVolley, "Whirling Volley", "Spin forward three tiles, loosing sixteen arrows in a ring where you stop; each enemy takes one", 25, 18, TW::Bow, 0, Dash, 135, 3, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Jester), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 0, 0 },
 	{ WS::LodestoneSalvo, "Lodestone Salvo", "Eight bolts of lightning fall on the enemies near the target, at most two on each; shocked enemies take more", 25, 18, TW::Bow, 0, Burst, 115, 8, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::LightningWall), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 0, 0 },
 	{ WS::SwampGasArrow, "Swamp Gas Arrow", "An arrow that leaves a cloud of poison gas where it lands; fire sets the cloud off in a burst of flame", 25, 18, TW::Bow, 0, Projectiles, 130, 1, 1, 80, 10, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_LandingZone, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::FireCloud), TableCurve::LightningArrow, 0, GrantedRider::None, 25, 0, 0 },
+	// The draft gems' Dagger batch (Q48, build order 4). The bomb, the web and the sentry are thrown (TF_Lobbed, as Acid
+	// Flask); Blades of Ice, Ember Fang and Winter's Edge land as their element (convertPercent).
+	{ WS::FireBlast, "Fire Blast", "Throws a fire bomb that bursts where it lands", 1, 6, TW::Dagger, 0, Zone, 60, 0, 1, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Lobbed, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Fireball), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::ShockWeb, "Shock Web", "Throws a spark that bursts into a web of lightning, which shocks what stands in it for 2 seconds", 1, 6, TW::Dagger, 0, Zone, 50, 0, 1, 40, 10, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Lobbed, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::ChainLightning), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::BladesOfIce, "Blades of Ice", "Quick icy stabs that chill; every third freezes the enemy", 3, 4, TW::Dagger, 0, Strike, 190, 0, 0, 0, 0, 0, DT::Cold, MissileID::Null, MG::BlueFlareExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Nova), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 0 },
+	{ WS::PhoenixStrike, "Phoenix Strike", "Quick strikes; every third adds an element in turn: a burst of fire, a ring of ice, a chain of lightning", 15, 12, TW::Dagger, 0, Strike, 235, 0, 0, 0, 0, 0, DT::Physical, MissileID::BlueFlare, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Apocalypse), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::Bloodletting, "Bloodletting", "A deep stab: a bleeding enemy takes more, and bleeding from your other skills deals all it has left at once", 15, 13, TW::Dagger, 0, Strike, 415, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::BloodRitual), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::EmberFang, "Ember Fang", "A burning stab that always ignites; the fire spreads to two enemies beside it", 20, 15, TW::Dagger, 0, Strike, 380, 0, 0, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::FlameWave), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 0 },
+	{ WS::DeathSentry, "Death Sentry", "Throws a sentry that blows up a corpse near it every second for 10 seconds", 25, 18, TW::Dagger, 0, Zone, 155, 0, 1, 200, 20, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Lobbed, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Pentagram), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::VizJaqtaarStrike, "Viz-Jaq'taar Strike", "Vanish and stab four enemies in turn from behind; a lone enemy takes two of the stabs", 25, 18, TW::Dagger, 0, Seven, 285, 4, 4, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Phasing), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::WintersEdge, "Winter's Edge", "A slow, heavy stab of ice whose freeze builds twice as fast; a frozen enemy takes more and shatters", 25, 18, TW::Dagger, 0, Strike, 525, 0, 0, 0, 0, 0, DT::Cold, MissileID::Null, MG::BlueFlareExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::StoneCurse), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 200 },
 };
 // clang-format on
 
@@ -432,6 +443,7 @@ void InflictTableBleed(const Player &player, Monster &monster, WeaponSkill skill
 		state.bleedDamagePerTick = perTick;
 		state.bleedSource = static_cast<int8_t>(player.getId());
 		state.bleedSkill = skill;
+		state.bleedFromBloodletting = skill == WeaponSkill::Bloodletting;
 	}
 	state.bleedTicks = static_cast<uint8_t>(std::max<int>(ticks, state.bleedTicks));
 	NoteSupportedBleed(player, monster);
@@ -878,6 +890,11 @@ int ZoneLimit(const Player &player, const TableSkillData &data)
 	// The draft Bow gems' (Q48).
 	case WeaponSkill::SwampGasArrow:
 		return SupportZoneLimit(player, slot, SwampGasClouds);
+	// The draft Dagger gems' (Q48): two webs; the sentries count as traps.
+	case WeaponSkill::ShockWeb:
+		return SupportZoneLimit(player, slot, ShockWebWebs);
+	case WeaponSkill::DeathSentry:
+		return SupportTrapLimit(player, slot);
 	default:
 		break;
 	}
@@ -889,6 +906,13 @@ int ZoneLimit(const Player &player, const TableSkillData &data)
 
 vfx::LobKind LobKindOf(const TableSkillData &data)
 {
+	// The draft Dagger gems' throws (Q48): a fire bomb, a crackling spark, an iron sentry.
+	switch (data.skill) {
+	case WeaponSkill::FireBlast: return vfx::LobKind::Bomb;
+	case WeaponSkill::ShockWeb: return vfx::LobKind::Spark;
+	case WeaponSkill::DeathSentry: return vfx::LobKind::Canister;
+	default: break;
+	}
 	switch (data.zone) {
 	case TableZone::GasTrap: return vfx::LobKind::Canister;
 	case TableZone::Pod: return vfx::LobKind::Seed;
@@ -2520,6 +2544,266 @@ void OnBowDraftArrowHit(const Missile &missile, Player &player, Monster &monster
 	}
 }
 
+/** @brief What is left of the monster's bleed, as raw life: Blood and Venom's more while it is poisoned, as each tick deals. */
+int64_t BleedLeft(const Monster &monster)
+{
+	const Poe2MonsterState &state = monster.poe2;
+	const int64_t perTick = state.bleedVsPoison && state.poisonTicks > 0 ? static_cast<int64_t>(state.bleedDamagePerTick) * (100 + BloodAndVenomPercent) / 100 : state.bleedDamagePerTick;
+	return perTick * state.bleedTicks;
+}
+
+/**
+ * @brief Bloodletting (Q48): the bleed's remaining damage at once, as its ticks would have dealt it (no armour). The
+ * bleed ends, unless the stab's own just took its place.
+ */
+void ConsumeBleed(const Player &player, Monster &monster, int64_t left)
+{
+	Poe2MonsterState &state = monster.poe2;
+	if (!state.bleedFromBloodletting) {
+		state.bleedTicks = 0;
+		state.bleedDamagePerTick = 0;
+		state.bleedVsPoison = false;
+	}
+	AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
+	vfx::Impact(monster.position.tile, vfx::Element::Blood, 1.3F);
+	if (&player != MyPlayer || left <= 0 || monster.hasNoLife())
+		return;
+	ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(left, 1, INT32_MAX / 2))));
+	monster.tag(player);
+	if (monster.hasNoLife())
+		M_StartKill(monster, player);
+}
+
+/** @brief The monsters within the radius of the tile, nearest first, without the one given; at most this many. */
+std::vector<Monster *> NearestBeside(Point at, int radius, const Monster *without, size_t most)
+{
+	std::vector<Monster *> near = MonstersNear(at, radius);
+	std::erase(near, without);
+	std::stable_sort(near.begin(), near.end(), [at](const Monster *a, const Monster *b) {
+		return at.WalkingDistance(a->position.tile) < at.WalkingDistance(b->position.tile);
+	});
+	if (near.size() > most)
+		near.resize(most);
+	return near;
+}
+
+/**
+ * @brief The six whole directions round a tile but straight on and straight back, so each projectile of a ring takes its
+ * own first tile (the fan rule, batch2-fixes.md 1).
+ */
+std::array<Direction, 6> RingOfSixWays(Direction on)
+{
+	return { Left(on), Right(on), Left(Left(on)), Right(Right(on)), Opposite(Left(on)), Opposite(Right(on)) };
+}
+
+/** @brief Phoenix Strike's third strike adds its element where it struck: fire, then ice, then lightning (Q48). */
+void PhoenixElementBurst(Player &player, const TableSkillData &data, int element, Point at, Monster *struck, CastResult &result)
+{
+	const SkillSlot slot = SkillSlot::ForAttack(data.skill);
+	const Fixed26_6 base = FixedDamage(player, data);
+	switch (element) {
+	case 0: {
+		// A burst of fire round what it struck.
+		const int radius = std::max(SupportAreaRadius(player, slot, PhoenixFireRadius), 1);
+		AddVisualEffect(at, MissileGraphicID::FireArrowExplosion, 0, 4);
+		vfx::Impact(at, vfx::Element::Fire, 1.3F);
+		vfx::Nova(at, radius, vfx::Element::Fire);
+		BreakObjectsInArea(player, at, radius);
+		for (Monster *monster : MonstersNear(at, radius)) {
+			SpellHitMonster(player, *monster, DamageType::Fire, ShareOf(base, PhoenixFirePercent), SourceOf(data));
+			result.hit = true;
+		}
+		break;
+	}
+	case 1: {
+		// A ring of ice shards flies out from it, each its own whole direction, on past what it struck.
+		TableSkillData shard = data;
+		shard.type = DamageType::Cold;
+		shard.missile = MissileID::BlueFlare;
+		static_assert(PhoenixShards == 6);
+		vfx::Impact(at, vfx::Element::Cold, 1.1F);
+		for (const Direction way : RingOfSixWays(player._pdir)) {
+			if (Missile *bolt = FireDraftBolt(player, shard, at, at + Displacement { way } * 8, data.damagePercent * PhoenixShardPercent / 100, PhoenixShardTiles, struck != nullptr); bolt != nullptr)
+				bolt->poe2.draftPart = true;
+		}
+		break;
+	}
+	default: {
+		// Lightning leaps on from it, each leap to the nearest enemy it hasn't struck yet.
+		std::vector<const Monster *> hit { struck };
+		Point from = at;
+		AddVisualEffect(at, MissileGraphicID::Lightning);
+		for (int leap = 0; leap < PhoenixChains; leap++) {
+			Monster *next = nullptr;
+			int best = std::numeric_limits<int>::max();
+			ForEachMonsterNear(from, PhoenixChainTiles, [&](Monster &other) {
+				const int distance = from.WalkingDistance(other.position.tile);
+				if (std::find(hit.begin(), hit.end(), &other) == hit.end() && distance < best) {
+					best = distance;
+					next = &other;
+				}
+			});
+			if (next == nullptr)
+				break;
+			vfx::Arc(from, next->position.tile, vfx::Element::Lightning);
+			AddVisualEffect(next->position.tile, MissileGraphicID::ThinLightning, 0, 4);
+			from = next->position.tile;
+			hit.push_back(next);
+			SpellHitMonster(player, *next, DamageType::Lightning, ShareOf(base, PhoenixChainPercent), SourceOf(data));
+			result.hit = true;
+		}
+		break;
+	}
+	}
+}
+
+/** @brief Makes a draft Dagger gem go off; false for the thrown ones, which are zones (ProcessDraftZone). */
+bool ExecuteDaggerDraft(Player &player, const TableSkillData &data, CastResult &result)
+{
+	const Point tile = player.position.tile;
+	const Direction dir = player._pdir;
+	const SkillSlot slot = SkillSlot::ForAttack(data.skill);
+	switch (data.skill) {
+	case WeaponSkill::BladesOfIce: {
+		// Its cold stab chills; every third freezes what it struck.
+		player.poe2.bladesOfIceTicks = static_cast<uint8_t>(BladesOfIceResetTicks);
+		const bool freezes = ++player.poe2.bladesOfIceCount >= BladesOfIceFreezeEvery;
+		if (freezes)
+			player.poe2.bladesOfIceCount = 0;
+		Monster *monster = MonsterInFrontOf(player);
+		if (monster == nullptr) {
+			BreakObjectAt(player, tile + dir);
+			return true;
+		}
+		// As Frostforged Hammer's, the freeze holds what isn't unique.
+		if (LandsHit(player, *monster, data, data.damagePercent, result) && freezes && IsAlive(*monster) && !monster->isUnique()) {
+			monster->poe2.freezeTicks = std::max<uint8_t>(monster->poe2.freezeTicks, static_cast<uint8_t>(BladesOfIceFreezeTicks));
+			AddVisualEffect(monster->position.tile, MissileGraphicID::StoneCurseShatter);
+			vfx::Impact(monster->position.tile, vfx::Element::Cold, 1.2F);
+		}
+		return true;
+	}
+	case WeaponSkill::PhoenixStrike: {
+		Monster *struck = StrikeInFront(player, data, data.damagePercent, result);
+		player.poe2.phoenixTicks = static_cast<uint8_t>(PhoenixResetTicks);
+		if (++player.poe2.phoenixCount < PhoenixEvery)
+			return true;
+		player.poe2.phoenixCount = 0;
+		const int element = player.poe2.phoenixElement % 3;
+		player.poe2.phoenixElement = static_cast<uint8_t>((element + 1) % 3);
+		const Point front = tile + dir;
+		const Point at = struck != nullptr ? Point(struck->position.tile) : (InDungeonBounds(front) && !IsTileSolid(front) ? front : tile);
+		PhoenixElementBurst(player, data, element, at, struck, result);
+		return true;
+	}
+	case WeaponSkill::Bloodletting: {
+		Monster *monster = MonsterInFrontOf(player);
+		if (monster == nullptr) {
+			BreakObjectAt(player, tile + dir);
+			return true;
+		}
+		// A bleeding target takes more; another skill's bleed is dealt at once, its own isn't (the Cobra Strike rule, Q42).
+		const Poe2MonsterState &state = monster->poe2;
+		const bool bleeding = state.bleedTicks > 0 && state.bleedDamagePerTick > 0;
+		const bool consumes = bleeding && !state.bleedFromBloodletting;
+		const int64_t left = consumes ? BleedLeft(*monster) : 0;
+		if (LandsHit(player, *monster, data, data.damagePercent * (bleeding ? BloodlettingBleedingPercent : 100) / 100, result) && consumes && IsAlive(*monster))
+			ConsumeBleed(player, *monster, left);
+		return true;
+	}
+	case WeaponSkill::EmberFang: {
+		Monster *monster = MonsterInFrontOf(player);
+		if (monster == nullptr) {
+			BreakObjectAt(player, tile + dir);
+			return true;
+		}
+		// The fire stab always ignites, for its share of what the stab dealt, and the fire spreads to those beside it.
+		const Fixed26_6 before = monster->hitPoints;
+		if (!LandsHit(player, *monster, data, data.damagePercent, result))
+			return true;
+		const Fixed26_6 dealt = Fixed26_6::fromRaw(std::max<int32_t>((before - monster->hitPoints).raw(), 1));
+		const Point at = monster->position.tile;
+		if (IsAlive(*monster))
+			InflictBlastAilment(*monster, player, DamageType::Fire, dealt);
+		vfx::Impact(at, vfx::Element::Fire, 1.1F);
+		for (Monster *other : NearestBeside(at, EmberFangSpreadTiles, monster, EmberFangSpreads)) {
+			InflictBlastAilment(*other, player, DamageType::Fire, dealt);
+			vfx::Arc(at, other->position.tile, vfx::Element::Fire);
+			vfx::Impact(other->position.tile, vfx::Element::Fire, 0.7F);
+		}
+		return true;
+	}
+	case WeaponSkill::VizJaqtaarStrike: {
+		// The nearest enemies the hero can see, a stab on each in turn; a lone one takes two of them.
+		std::vector<Monster *> targets = MonstersNear(tile, data.radius);
+		std::erase_if(targets, [tile](const Monster *monster) { return LastTileInSight(tile, monster->position.tile) != Point(monster->position.tile); });
+		std::stable_sort(targets.begin(), targets.end(), [tile](const Monster *a, const Monster *b) {
+			return tile.WalkingDistance(a->position.tile) < tile.WalkingDistance(b->position.tile);
+		});
+		if (targets.size() > data.count)
+			targets.resize(data.count);
+		if (targets.empty())
+			return true;
+		const int stabs = std::min<int>(data.count, VizJaqtaarStabsEach * static_cast<int>(targets.size()));
+		std::optional<Point> last;
+		int delay = 0;
+		for (int stab = 0; stab < stabs; stab++) {
+			Monster &target = *targets[stab % targets.size()];
+			if (!IsAlive(target))
+				continue;
+			const Point at = target.position.tile;
+			AddVisualEffect(at, MissileGraphicID::Etherealize, delay);
+			AddVisualEffect(at, data.effect, delay + 1, 4);
+			delay += 2;
+			WeaponHit(player, target, data, data.damagePercent, result);
+			last = at;
+		}
+		// The hero comes out behind the last enemy, else beside it.
+		if (last) {
+			const Point behind = *last + GetDirection(tile, *last);
+			std::optional<Point> landing;
+			if (InDungeonBounds(behind) && PosOkPlayer(player, behind))
+				landing = behind;
+			else if (tile.WalkingDistance(*last) > 1)
+				landing = FreeTileBeside(player, *last);
+			if (landing && *landing != tile) {
+				AddVisualEffect(tile, MissileGraphicID::Etherealize);
+				MovePlayerTo(player, *landing);
+				player._pdir = GetDirection(player.position.tile, *last);
+			}
+		}
+		// Assassin's Blink bursts where the hero came out.
+		OnSkillBlinked(player, slot, player.position.tile);
+		return true;
+	}
+	case WeaponSkill::WintersEdge: {
+		Monster *monster = MonsterInFrontOf(player);
+		if (monster == nullptr) {
+			BreakObjectAt(player, tile + dir);
+			return true;
+		}
+		// A frozen target takes more, and shatters: its freeze is used up and its shards hit those beside it, each once.
+		const bool frozen = monster->poe2.freezeTicks > 0;
+		if (!LandsHit(player, *monster, data, data.damagePercent * (frozen ? WintersEdgeFrozenPercent : 100) / 100, result) || !frozen)
+			return true;
+		const Point at = monster->position.tile;
+		monster->poe2.freezeTicks = 0;
+		AddVisualEffect(at, MissileGraphicID::StoneCurseShatter);
+		vfx::Impact(at, vfx::Element::Cold, 1.4F);
+		const int radius = std::max(SupportAreaRadius(player, slot, WintersEdgeShardRadius), 1);
+		vfx::Nova(at, radius, vfx::Element::Cold);
+		const Fixed26_6 shard = ShareOf(FixedDamage(player, data), WintersEdgeShardPercent);
+		for (Monster *other : NearestBeside(at, radius, monster, WintersEdgeShards)) {
+			vfx::IceSpike(other->position.tile, 0, 0.5F);
+			SpellHitMonster(player, *other, DamageType::Cold, shard, SourceOf(data));
+		}
+		return true;
+	}
+	default:
+		return false;
+	}
+}
+
 /** @brief A draft gem's zone that needs more than its kind's usual work; false for the rest. */
 bool ProcessDraftZone(Player &player, const TableSkillData &data, SkillZone &zone, bool &done)
 {
@@ -2549,6 +2833,49 @@ bool ProcessDraftZone(Player &player, const TableSkillData &data, SkillZone &zon
 		return true;
 	}
 	switch (data.skill) {
+	// The draft Dagger gems' throws (Q48).
+	case WeaponSkill::FireBlast:
+		// The bomb bursts where it lands, and is gone.
+		ZoneBurst(player, data, zone.center, std::max(radius, 1), zone.damage);
+		vfx::Impact(zone.center, vfx::Element::Fire, 1.3F);
+		vfx::Nova(zone.center, std::max(radius, 1), vfx::Element::Fire);
+		PlaySkillSound(TableSkillSounds(data).spell, zone.center);
+		if (&player == MyPlayer)
+			ShakeCamera(ShakeStrength::Light, 4);
+		done = true;
+		return true;
+	case WeaponSkill::ShockWeb:
+		// The spark bursts into its web as it lands, then the web pulses every interval while it lasts.
+		if (zone.counter == 0) {
+			ZoneBurst(player, data, zone.center, std::max(radius, 1), ShareOf(zone.damage, ShockWebBurstPercent));
+			vfx::Sigil(zone.center, std::max(radius, 1), zone.ticksLeft * gnTickDelay, vfx::Element::Lightning);
+			vfx::Impact(zone.center, vfx::Element::Lightning, 1.1F);
+			PlaySkillSound(TableSkillSounds(data).spell, zone.center);
+		} else if ((zone.counter + 1) % std::max<int>(data.interval, 1) == 0) {
+			ZoneBurst(player, data, zone.center, std::max(radius, 1), ShareOf(zone.damage, ShockWebPulsePercent));
+			vfx::Sparks(zone.center, vfx::Element::Lightning, 0.8F);
+			PlayTableSkillHitSound(data, zone.center);
+		}
+		return true;
+	case WeaponSkill::DeathSentry:
+		// The sentry stands where it lands; every interval it blows up the nearest corpse within its reach.
+		if (zone.counter == 0) {
+			vfx::Canister(zone.center, zone.ticksLeft * gnTickDelay, zone.key);
+			PlaySkillSound(TableSkillSounds(data).spell, zone.center);
+		}
+		if ((zone.counter + 1) % DeathSentryIntervalTicks == 0) {
+			if (const std::optional<Point> corpse = CorpseNear(zone.center, DeathSentryReachTiles); corpse) {
+				dCorpse[corpse->x][corpse->y] = 0;
+				vfx::Arc(zone.center, *corpse, vfx::Element::Blood);
+				ZoneBurst(player, data, *corpse, std::max(radius, 1), zone.damage);
+				vfx::Impact(*corpse, vfx::Element::Blood, 1.5F);
+				vfx::Nova(*corpse, std::max(radius, 1), vfx::Element::Blood);
+				PlayTableSkillHitSound(data, *corpse);
+				if (&player == MyPlayer)
+					ShakeCamera(ShakeStrength::Light, 4);
+			}
+		}
+		return true;
 	case WeaponSkill::BrimstoneRift:
 		// The rift's ground burns what stands on it every interval.
 		if (zone.counter % std::max<int>(data.interval, 1) == 0) {
@@ -2822,6 +3149,19 @@ bool FrostforgedNextFreezes(const Player &player)
 	return player.poe2.frostforgedCount + 1 >= FrostforgedFreezeEvery;
 }
 
+bool BladesOfIceNextFreezes(const Player &player)
+{
+	return player.poe2.bladesOfIceCount + 1 >= BladesOfIceFreezeEvery;
+}
+
+std::optional<DamageType> PhoenixNextElement(const Player &player)
+{
+	if (player.poe2.phoenixCount + 1 < PhoenixEvery)
+		return std::nullopt;
+	constexpr DamageType Elements[] = { DamageType::Fire, DamageType::Cold, DamageType::Lightning };
+	return Elements[player.poe2.phoenixElement % 3];
+}
+
 std::vector<Point> BrimstoneRiftTiles(Point from, Direction dir, int length)
 {
 	std::vector<Point> tiles = LineTiles(from, dir, length);
@@ -2927,6 +3267,11 @@ Point TableSkillHitTarget(const Player &player, WeaponSkill skill, Point target)
 	case WeaponSkill::Earthsplitter:
 	case WeaponSkill::BrimstoneRift:
 		return player.position.tile + (target == player.position.tile ? player._pdir : GetDirection(player.position.tile, target));
+	// The Dagger throws land where the hero can see (ExecuteTableSkill's Zone).
+	case WeaponSkill::FireBlast:
+	case WeaponSkill::ShockWeb:
+	case WeaponSkill::DeathSentry:
+		return LastTileInSight(player.position.tile, target);
 	default:
 		return target;
 	}
@@ -3085,6 +3430,30 @@ std::string TableSkillExtraNote(WeaponSkill skill)
 	case WeaponSkill::SwampGasArrow:
 		return std::format("The arrow hits for {:d}%; its cloud within {:d} poisons for {:d}% a second for {:d} seconds, {:d} clouds at most; fire in it bursts the cloud within {:d} for {:d}%",
 		    SwampGasArrowPercent, static_cast<int>(data->radius), TablePoisonPercentPerSecond(*data), data->duration / TicksPerSecond, SwampGasClouds, SwampGasBurstRadius, SwampGasBurstPercent);
+	case WeaponSkill::FanOfBlades:
+		return std::format("Each blade that hits bleeds the enemy for {:d}% of its hit over {:d} seconds; the strongest bleed counts", FanOfBladesBleedPercent, FanOfBladesBleedTicks / TicksPerSecond);
+	case WeaponSkill::FireBlast:
+		return std::format("Its hit is fire; the bomb bursts within {:d} of where it lands", static_cast<int>(data->radius));
+	case WeaponSkill::ShockWeb:
+		return std::format("Its hit is lightning; bursts within {:d} for {:d}%, then the web pulses for {:d}% every {:.1f} seconds for {:d} seconds; {:d} webs at most",
+		    static_cast<int>(data->radius), ShockWebBurstPercent, ShockWebPulsePercent, data->interval / static_cast<double>(TicksPerSecond), data->duration / TicksPerSecond, ShockWebWebs);
+	case WeaponSkill::BladesOfIce:
+		return std::format("Its hit is cold, and chills; every {:d}rd stab freezes the enemy for {:d} second", BladesOfIceFreezeEvery, BladesOfIceFreezeTicks / TicksPerSecond);
+	case WeaponSkill::PhoenixStrike:
+		return std::format("Every {:d}rd strike adds an element in turn: fire within {:d} for {:d}%, a ring of {:d} ice shards for {:d}% each, lightning leaping to {:d} enemies for {:d}%",
+		    PhoenixEvery, PhoenixFireRadius, PhoenixFirePercent, PhoenixShards, PhoenixShardPercent, PhoenixChains, PhoenixChainPercent);
+	case WeaponSkill::Bloodletting:
+		return std::format("A bleeding enemy takes {:d}% more; bleeding from your other skills deals all it has left at once and ends", BloodlettingBleedingPercent - 100);
+	case WeaponSkill::EmberFang:
+		return std::format("Its hit is fire, and always ignites; the ignite spreads to {:d} enemies beside it", EmberFangSpreads);
+	case WeaponSkill::DeathSentry:
+		return std::format("For {:d} seconds, every second it blows up a corpse within {:d} of it, hitting all within {:d}; {:d} sentries at most",
+		    data->duration / TicksPerSecond, DeathSentryReachTiles, static_cast<int>(data->radius), MaxPlacedTraps);
+	case WeaponSkill::VizJaqtaarStrike:
+		return std::format("Stabs {:d} enemies within {:d} in turn, coming out behind the last; a lone enemy takes {:d} stabs", static_cast<int>(data->count), static_cast<int>(data->radius), VizJaqtaarStabsEach);
+	case WeaponSkill::WintersEdge:
+		return std::format("Its hit is cold, its freeze builds {:d}% as fast; a frozen enemy takes {:d}% more and shatters, {:d} shards hitting those within {:d} for {:d}% each",
+		    TableAilmentPercent(*data), WintersEdgeFrozenPercent - 100, WintersEdgeShards, WintersEdgeShardRadius, WintersEdgeShardPercent);
 	default:
 		return {};
 	}
@@ -3177,9 +3546,10 @@ bool IsTableMeleeSkill(const TableSkillData &data)
 
 bool IsTableProjectileSkill(const TableSkillData &data)
 {
-	// Acid Flask's flask and Bloated Pods' pods fly as projectiles; Venom Sentry's canister is set down as a trap.
+	// Acid Flask's flask and Bloated Pods' pods fly as projectiles; Venom Sentry's canister and Death Sentry are set down
+	// as traps.
 	return IsAnyOf(data.shape, Projectiles, Stream) || data.zone == TableZone::Turret || data.zone == TableZone::ShardRing
-	    || ((data.flags & TF_Lobbed) != 0 && data.zone != TableZone::GasTrap);
+	    || ((data.flags & TF_Lobbed) != 0 && data.zone != TableZone::GasTrap && data.skill != WeaponSkill::DeathSentry);
 }
 
 bool IsTableAreaSkill(const TableSkillData &data)
@@ -3265,7 +3635,8 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	// A war cry shatters the Hephasto's Hammers lodged near the hero (Q48).
 	if ((SkillTags(slot) & ST_Warcry) != 0)
 		ShatterLodgedHammers(player, tile);
-	if (ExecuteStaffDraft(player, data, result) || ExecuteWeaponDraft(player, data, target, result) || ExecuteBowDraft(player, data, target, result)) {
+	if (ExecuteStaffDraft(player, data, result) || ExecuteWeaponDraft(player, data, target, result) || ExecuteBowDraft(player, data, target, result)
+	    || ExecuteDaggerDraft(player, data, result)) {
 		AfterCast(player, data, result);
 		return;
 	}
@@ -3751,6 +4122,9 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 	}
 	if (data != nullptr && IsAnyOf(data->skill, WeaponSkill::ShatterShot, WeaponSkill::SparkArrow, WeaponSkill::Strafe, WeaponSkill::KindlingArrow))
 		OnBowDraftArrowHit(missile, player, monster, *data);
+	// Fan of Blades (Q48): each blade that hits bleeds for its share of its own hit; the strongest bleed counts.
+	if (data != nullptr && data->skill == WeaponSkill::FanOfBlades && CanHit(monster))
+		InflictTableBleed(player, monster, data->skill, ShareOf(poisonBase(), FanOfBladesBleedPercent), FanOfBladesBleedTicks);
 	// Whirling Volley's ring: the monster has taken its arrow of this cast.
 	if (missile.poe2.volleyCast != 0)
 		monster.poe2.volleyCastHit = missile.poe2.volleyCast;
@@ -4179,6 +4553,18 @@ SkillSounds TableSkillSounds(const TableSkillData &data)
 		break;
 	case WeaponSkill::KindlingArrow:
 		sounds.hit = ImpactOf(data);
+		break;
+	// The draft Dagger throws (Q48): the bomb's blast, the web's crackle, the sentry set down and its corpses bursting.
+	case WeaponSkill::FireBlast:
+		sounds.spell = Sfx(SfxID::BigExplosion);
+		break;
+	case WeaponSkill::ShockWeb:
+		sounds.spell = Sfx(SfxID::SpellLightning);
+		sounds.hit = Sfx(SfxID::SpellLightning);
+		break;
+	case WeaponSkill::DeathSentry:
+		sounds.spell = Sfx(SfxID::SpellTrapDisarm);
+		sounds.hit = Sfx(SfxID::BigExplosion);
 		break;
 	case WeaponSkill::ManaDrain:
 		// Diablo's own mana theft.

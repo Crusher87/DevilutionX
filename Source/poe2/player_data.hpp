@@ -237,7 +237,17 @@ enum class WeaponSkill : uint8_t {
 	WhirlingVolley,
 	LodestoneSalvo,
 	SwampGasArrow,
-	Last = SwampGasArrow,
+	/** The draft gems' Dagger batch (Q48, build order 4): stabs, throws and a sentry on the Dagger tab. */
+	FireBlast,
+	ShockWeb,
+	BladesOfIce,
+	PhoenixStrike,
+	Bloodletting,
+	EmberFang,
+	DeathSentry,
+	VizJaqtaarStrike,
+	WintersEdge,
+	Last = WintersEdge,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
@@ -1120,6 +1130,16 @@ struct Poe2PlayerData {
 	/** @brief Frostforged Hammer's hits towards its freezing third, and the game ticks until the count starts over (not saved). */
 	uint8_t frostforgedCount = 0;
 	uint8_t frostforgedTicks = 0;
+	/** @brief Blades of Ice's stabs towards its freezing third, and the game ticks until the count starts over (not saved). */
+	uint8_t bladesOfIceCount = 0;
+	uint8_t bladesOfIceTicks = 0;
+	/**
+	 * @brief Phoenix Strike's strikes towards its third, the game ticks until the count starts over, and the element its
+	 * next third adds, in turn fire, ice and lightning (not saved).
+	 */
+	uint8_t phoenixCount = 0;
+	uint8_t phoenixTicks = 0;
+	uint8_t phoenixElement = 0;
 	/**
 	 * @brief The damage war cries' empowered hits (not saved), by EmpoweringCry: the hits left, the game ticks they last,
 	 * and whether a use this tick took one already (a use's hits on several monsters spend one).
@@ -1419,6 +1439,11 @@ struct Poe2PlayerData {
 		rimeTicks = 0;
 		frostforgedCount = 0;
 		frostforgedTicks = 0;
+		bladesOfIceCount = 0;
+		bladesOfIceTicks = 0;
+		phoenixCount = 0;
+		phoenixTicks = 0;
+		phoenixElement = 0;
 		cryHits = {};
 		cryTicks = {};
 		cryUsedThisTick = {};
@@ -1481,6 +1506,10 @@ struct Poe2PlayerData {
 			rimeCount = 0;
 		if (frostforgedTicks > 0 && --frostforgedTicks == 0)
 			frostforgedCount = 0;
+		if (bladesOfIceTicks > 0 && --bladesOfIceTicks == 0)
+			bladesOfIceCount = 0;
+		if (phoenixTicks > 0 && --phoenixTicks == 0)
+			phoenixCount = 0;
 		for (size_t cry = 0; cry < cryHits.size(); cry++) {
 			cryUsedThisTick[cry] = false;
 			if (cryTicks[cry] > 0 && --cryTicks[cry] == 0)

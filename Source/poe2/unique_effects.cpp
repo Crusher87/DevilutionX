@@ -484,6 +484,8 @@ void InflictBleed(const Player &player, Monster &monster, int32_t physical)
 		state.bleedDamagePerTick = perTick;
 		state.bleedSource = static_cast<int8_t>(player.getId());
 		state.bleedSkill = WeaponSkill::None;
+		// Bloodletting's own hit's bleed, which its next stab doesn't consume (Q48).
+		state.bleedFromBloodletting = SupportHitSkill() == SkillSlot::ForAttack(WeaponSkill::Bloodletting);
 	}
 	state.bleedTicks = BleedTicks;
 	NoteSupportedBleed(player, monster);

@@ -542,6 +542,8 @@ void InflictSupportBleed(const Player &player, Monster &monster, int32_t physica
 		state.bleedDamagePerTick = perTick;
 		state.bleedSource = static_cast<int8_t>(player.getId());
 		state.bleedSkill = WeaponSkill::None;
+		// Bloodletting's own hit's bleed, which its next stab doesn't consume (Q48).
+		state.bleedFromBloodletting = Hit.skill == SkillSlot::ForAttack(WeaponSkill::Bloodletting);
 	}
 	state.bleedTicks = static_cast<uint8_t>(std::max<int>(state.bleedTicks, Ticks));
 	NoteSupportedBleed(player, monster);
@@ -783,6 +785,7 @@ void PassDamageOverTime(const Player &player, const Monster &from)
 			target.bleedDamagePerTick = std::max(target.bleedDamagePerTick, state.bleedDamagePerTick * 4 / 5);
 			target.bleedSource = static_cast<int8_t>(player.getId());
 			target.bleedSkill = state.bleedSkill;
+			target.bleedFromBloodletting = state.bleedFromBloodletting;
 		}
 		if (state.poisonTicks > 0) {
 			target.poisonTicks = std::max(target.poisonTicks, state.poisonTicks);
@@ -1355,6 +1358,23 @@ uint32_t SkillTags(SkillSlot skill)
 	case WeaponSkill::SwampGasArrow:
 		tags |= ST_Chaos | ST_Fire;
 		break;
+	// The draft Dagger gems' (Q48). The bomb bursts and is gone; the sentry is set down; Phoenix Strike's thirds are of
+	// all three elements and burst; Bloodletting is a bleed skill; Viz-Jaq'taar Strike blinks.
+	case WeaponSkill::FireBlast:
+		tags &= ~ST_Duration;
+		break;
+	case WeaponSkill::DeathSentry:
+		tags |= ST_Placed;
+		break;
+	case WeaponSkill::PhoenixStrike:
+		tags |= ST_Fire | ST_Frost | ST_Lightning | ST_Area;
+		break;
+	case WeaponSkill::Bloodletting:
+		tags |= ST_DamageOverTime;
+		break;
+	case WeaponSkill::VizJaqtaarStrike:
+		tags |= ST_Movement;
+		break;
 	default:
 		break;
 	}
@@ -1461,7 +1481,14 @@ bool TableSupportFits(const SupportData &data, SkillSlot skill)
 	case SG::NovaProjectiles:
 		// Phantom Blade throws one ghost sword out and back: more projectiles would do nothing (balance re-score,
 		// batch2-fixes.md 8).
-		return skill.kind != SkillKind::Attack || skill.attack() != WeaponSkill::PhantomBlade;
+		// Nor would they for the Dagger throws: one bomb, one spark (Q48).
+		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::PhantomBlade, WeaponSkill::FireBlast, WeaponSkill::ShockWeb);
+	case SG::Ricochet:
+		// A lobbed bomb or spark never meets a wall.
+		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::FireBlast, WeaponSkill::ShockWeb);
+	case SG::Multistrike:
+		// Viz-Jaq'taar Strike is four heavy stabs already (drafts-61-priced.json: should not take Flurry of Blows).
+		return skill.kind != SkillKind::Attack || skill.attack() != WeaponSkill::VizJaqtaarStrike;
 	default:
 		return true;
 	}
@@ -1916,8 +1943,9 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 			AddBurst(tile, 3, 0, DamageType::Physical, MissileGraphicID::MetalHit, SkillBaseDamage(player, SkillSlot::ForAttack(WeaponSkill::Cleave), 150));
 			break;
 		case SG::BlinkStrike:
-			// Skylord's Storm and Phantom Step blink as they go off: theirs bursts where they land (OnSkillBlinked).
-			if (skill.kind == SkillKind::Attack && IsAnyOf(skill.attack(), WeaponSkill::SkylordsStorm, WeaponSkill::PhantomStep))
+			// Skylord's Storm, Phantom Step and Viz-Jaq'taar Strike blink as they go off: theirs bursts where they land
+			// (OnSkillBlinked).
+			if (skill.kind == SkillKind::Attack && IsAnyOf(skill.attack(), WeaponSkill::SkylordsStorm, WeaponSkill::PhantomStep, WeaponSkill::VizJaqtaarStrike))
 				break;
 			AddBurst(skill.kind == SkillKind::Spell ? target : tile, 2, 2, DamageType::Physical, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 120));
 			break;

@@ -232,7 +232,8 @@ TEST_F(Poe2BowDraftsTest, BowDraftsAreDexterityGemsAtTheirTiers)
 {
 	// Appended after the Sword and Shield batch, in the batch's order.
 	EXPECT_EQ(static_cast<int>(WeaponSkill::ColdArrow), static_cast<int>(WeaponSkill::ZakarumsJudgement) + 1);
-	EXPECT_EQ(WeaponSkill::Last, WeaponSkill::SwampGasArrow);
+	// The Dagger batch follows (poe2_dagger_drafts_test.cpp).
+	EXPECT_EQ(static_cast<int>(WeaponSkill::FireBlast), static_cast<int>(WeaponSkill::SwampGasArrow) + 1);
 	for (size_t i = 0; i < Drafts.size(); i++)
 		EXPECT_EQ(static_cast<int>(Drafts[i].skill), static_cast<int>(WeaponSkill::ColdArrow) + static_cast<int>(i));
 	for (const DraftRow &draft : Drafts) {

@@ -207,3 +207,12 @@ KindlingArrow	70					143	122	Detonating Arrow (one shot, no channel)
 WhirlingVolley	100			400		162	131	Spiral Volley (no Frenzy)
 LodestoneSalvo	50					200	150	Magnetic Salvo
 SwampGasArrow	100							Gas Arrow
+FireBlast	80					125	113	none (Diablo 2 Assassin); nearest Explosive Spear
+ShockWeb	80					125	113	none (Diablo 2 Assassin); nearest Lightning Rod
+BladesOfIce	160							none (Diablo 2 Assassin); nearest Ice Strike
+PhoenixStrike	120							none (Diablo 2 Assassin)
+Bloodletting	100							Blood Hunt (Hemorrhage)
+EmberFang	100							none (Fire Fang)
+DeathSentry	80					125	113	none (Diablo 2 Assassin); nearest Detonate Dead
+VizJaqtaarStrike			0.8			124	112	Flicker Strike (Shadow Flight; no charges)
+WintersEdge	70					143	122	none; nearest Glacial Cascade's final spike

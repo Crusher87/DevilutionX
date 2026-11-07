@@ -92,8 +92,8 @@ TEST_F(Poe2GemcuttingTest, CatalogHoldsEveryGem)
 		ASSERT_TRUE(CreateGemItem(item, gem)) << GemName(gem);
 		EXPECT_EQ(static_cast<size_t>(item.IDidx), gem.itemIndex);
 	}
-	// 181 before the five crossbow skills were retired (Curtis 2026-10-27); 177 with Despair, 180 with Cleansing, Plague Arrow and Hex Rupture, 183 with Bone Spikes, Bone Spear and Blood Nova, 194 with the poison skills plan's eleven, 187 with pass 4's seven retired, 199 with the draft gems' Staff batch of twelve, 220 with the Mace and Axe batch's twenty-one, 225 with the Sword and Shield batch's five, 234 with the Bow batch's nine.
-	EXPECT_EQ(skills, 234U);
+	// 181 before the five crossbow skills were retired (Curtis 2026-10-27); 177 with Despair, 180 with Cleansing, Plague Arrow and Hex Rupture, 183 with Bone Spikes, Bone Spear and Blood Nova, 194 with the poison skills plan's eleven, 187 with pass 4's seven retired, 199 with the draft gems' Staff batch of twelve, 220 with the Mace and Axe batch's twenty-one, 225 with the Sword and Shield batch's five, 234 with the Bow batch's nine, 243 with the Dagger batch's nine.
+	EXPECT_EQ(skills, 243U);
 	// Lineage supports are found, never cut; the rest have an entry for each tier.
 	size_t tiers = 0;
 	for (size_t i = 1; i < static_cast<size_t>(SupportGem::Count); i++) {

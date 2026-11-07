@@ -702,6 +702,53 @@ constexpr int FireHitTicks = 3;
  */
 [[nodiscard]] int TableArrowHitPercent(const TableSkillData &data, Monster &monster);
 
+// The draft gems' Dagger batch (Q48, build order 4): stabs, two throws and a sentry.
+/** @brief Fan of Blades: each blade that hits bleeds the monster for this percent of its hit over this many ticks. */
+constexpr int FanOfBladesBleedPercent = 30;
+constexpr int FanOfBladesBleedTicks = 60;
+/** @brief Shock Web: the web lands with a burst of this percent of the hit, then pulses for this percent; this many webs at most. */
+constexpr int ShockWebBurstPercent = 50;
+constexpr int ShockWebPulsePercent = 25;
+constexpr int ShockWebWebs = 2;
+/** @brief Blades of Ice: every this many stabs freezes the target this many ticks; the count starts over after this many idle. */
+constexpr int BladesOfIceFreezeEvery = 3;
+constexpr int BladesOfIceFreezeTicks = 20;
+constexpr int BladesOfIceResetTicks = 60;
+/**
+ * @brief Phoenix Strike: every this many strikes adds an element in turn (the count starts over after this many idle
+ * ticks): a fire burst this far for this percent of the strike; a ring of this many ice shards this many tiles for this
+ * percent each; lightning that leaps to this many enemies, this far each leap, for this percent.
+ */
+constexpr int PhoenixEvery = 3;
+constexpr int PhoenixResetTicks = 60;
+constexpr int PhoenixFireRadius = 1;
+constexpr int PhoenixFirePercent = 150;
+constexpr int PhoenixShards = 6;
+constexpr int PhoenixShardTiles = 3;
+constexpr int PhoenixShardPercent = 60;
+constexpr int PhoenixChains = 3;
+constexpr int PhoenixChainTiles = 3;
+constexpr int PhoenixChainPercent = 80;
+/** @brief Bloodletting: a bleeding target takes this percent of the stab, and another skill's bleed on it is dealt at once. */
+constexpr int BloodlettingBleedingPercent = 160;
+/** @brief Ember Fang: its ignite spreads to this many enemies within this many tiles of the target. */
+constexpr int EmberFangSpreads = 2;
+constexpr int EmberFangSpreadTiles = 1;
+/** @brief Death Sentry: every this many ticks it blows up one corpse within this many tiles; this many sentries at most (MaxPlacedTraps). */
+constexpr int DeathSentryIntervalTicks = 20;
+constexpr int DeathSentryReachTiles = 4;
+/** @brief Viz-Jaq'taar Strike: a lone monster takes this many of its stabs (the others go to the next enemies in turn). */
+constexpr int VizJaqtaarStabsEach = 2;
+/** @brief Winter's Edge: a frozen target takes this percent, and shatters into this many shards within this far, this percent each. */
+constexpr int WintersEdgeFrozenPercent = 150;
+constexpr int WintersEdgeShards = 4;
+constexpr int WintersEdgeShardRadius = 1;
+constexpr int WintersEdgeShardPercent = 15;
+/** @brief Whether Blades of Ice's next stab is the third, which freezes. */
+[[nodiscard]] bool BladesOfIceNextFreezes(const Player &player);
+/** @brief The element Phoenix Strike's next strike adds, or none if it isn't the third: Fire, Cold or Lightning. */
+[[nodiscard]] std::optional<DamageType> PhoenixNextElement(const Player &player);
+
 /**
  * @brief Seven-Sided Strike's strikes land in full on this many enemies or more; on fewer, each strike deals their share
  * of it (a lone monster a third of each strike).

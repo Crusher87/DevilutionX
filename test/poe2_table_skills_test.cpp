@@ -788,8 +788,8 @@ TEST_F(Poe2TableSkillsTest, EveryTableSkillHasAGem)
 		EXPECT_EQ(AllItemsList[*index].iMinMLvl, data.level) << data.name;
 	}
 	// 55, then Despair (chaos damage plan step 11), Plague Arrow and Hex Rupture, then Bone Spikes, Bone Spear and Blood Nova,
-	// then the poison skills plan's eleven, then the draft gems' Staff batch of twelve (Q48), then the Mace and Axe batch's twenty-one, then the Sword and Shield batch's five, then the Bow batch's nine.
-	EXPECT_EQ(gems, 119U);
+	// then the poison skills plan's eleven, then the draft gems' Staff batch of twelve (Q48), then the Mace and Axe batch's twenty-one, then the Sword and Shield batch's five, then the Bow batch's nine, then the Dagger batch's nine.
+	EXPECT_EQ(gems, 128U);
 }
 
 TEST_F(Poe2TableSkillsTest, TheTableCoversTheRestOfTheRoster)

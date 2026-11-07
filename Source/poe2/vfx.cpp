@@ -1687,7 +1687,19 @@ void AdvanceLobs(float ms)
 			Particle p;
 			p.pos = at;
 			p.z = z + 6;
-			if (fx.kind == LobKind::Canister) {
+			if (fx.kind == LobKind::Bomb || fx.kind == LobKind::Spark) {
+				// Sparks fly from the bomb's fuse, or crackle off the ball of lightning.
+				const Colours spark = ColoursOf(fx.kind == LobKind::Bomb ? Element::Fire : Element::Lightning);
+				p.shape = Shape::Streak;
+				p.vel = { Random(-40, 40), Random(-30, 10) };
+				p.gravity = fx.kind == LobKind::Bomb ? 200 : 0;
+				p.drag = 2;
+				p.life = Random(150, 300);
+				p.size0 = 1.6F;
+				p.size1 = 0.6F;
+				p.c0 = spark.core;
+				p.c1 = spark.edge;
+			} else if (fx.kind == LobKind::Canister) {
 				// A hiss of gas from its nozzle.
 				p.shape = Shape::Puff;
 				p.life = Random(500, 800);
@@ -7722,6 +7734,26 @@ void DrawLobs()
 			SoftDisc(Glowing, at + dir * 5, 2.5F, venom.core, 0.9F, false);
 			SoftDisc(Glowing, at + dir * 5, 9, venom.mid, 0.3F, false);
 			break;
+		case LobKind::Bomb: {
+			// A round black bomb, its fuse burning at the tip.
+			const Colours fire = ColoursOf(Element::Fire);
+			SoftDisc(Dark, at, 6.5F, { 34, 30, 28 }, 0.97F, false, 0.95F);
+			SoftDisc(Dark, at + Vec { -1.5F, -1.5F }, 2.5F, { 90, 86, 80 }, 0.6F, false, 0.5F);
+			SoftLine(Dark, at + dir * 5, at + dir * 9, 1.4F, { 120, 100, 70 }, { 120, 100, 70 }, 0.9F, 0.9F);
+			SoftDisc(Glowing, at + dir * 9.5F, 2.2F, fire.core, 0.95F, false);
+			SoftDisc(Glowing, at + dir * 9.5F, 7, fire.mid, 0.35F, false);
+			break;
+		}
+		case LobKind::Spark: {
+			// A crackling ball of lightning, flickering as it turns.
+			const Colours storm = ColoursOf(Element::Lightning);
+			const float flicker = 0.75F + 0.25F * std::sin(fx.age * 0.05F);
+			SoftDisc(Glowing, at, 12, storm.mid, 0.3F * flicker, false);
+			SoftDisc(Glowing, at, 5, storm.core, 0.95F, false);
+			SoftLine(Glowing, at - dir * 7, at + dir * 7, 1.2F, storm.core, storm.edge, 0.8F * flicker, 0.4F);
+			SoftLine(Glowing, at - Vec { -dir.y, dir.x } * 6, at + Vec { -dir.y, dir.x } * 6, 1.2F, storm.core, storm.edge, 0.6F * flicker, 0.3F);
+			break;
+		}
 		}
 	}
 }

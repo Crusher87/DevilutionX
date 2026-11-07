@@ -57,11 +57,16 @@ enum class MiasmaKind : uint8_t {
 	Bog,
 };
 
-/** @brief What a lobbed throw looks like in the air: a glass flask, a seed pod, or an iron gas canister. */
+/**
+ * @brief What a lobbed throw looks like in the air: a glass flask, a seed pod, an iron gas canister, a fire bomb with a
+ * burning fuse, or a crackling ball of lightning.
+ */
 enum class LobKind : uint8_t {
 	Flask,
 	Seed,
 	Canister,
+	Bomb,
+	Spark,
 };
 
 /** @brief How a weapon moves through the air, to match the hero's attack animation. Every hero swings right-handed. */
