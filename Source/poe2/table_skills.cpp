@@ -1645,7 +1645,8 @@ bool ExecuteStaffDraft(Player &player, const TableSkillData &data, CastResult &r
 		BreakObjectsInArea(player, center, data.radius);
 		for (Monster *monster : MonstersNear(center, data.radius))
 			WeaponHit(player, *monster, data, data.damagePercent, result);
-		FireDraftFan(player, data, center, dir, data.count, data.damagePercent * WrathBoltSharePercent / 100, WrathBoltTiles);
+		// They fly on from the slam: what stands on its tile was slammed already, and isn't hit by all three at once.
+		FireDraftFan(player, data, center, dir, data.count, data.damagePercent * WrathBoltSharePercent / 100, WrathBoltTiles, true);
 		return true;
 	}
 	case WeaponSkill::FrostveinRupture: {
@@ -1691,7 +1692,10 @@ bool ExecuteStaffDraft(Player &player, const TableSkillData &data, CastResult &r
 		player.poe2.rimeTicks = static_cast<uint8_t>(RimeStrikesResetTicks);
 		if (++player.poe2.rimeCount >= RimeStrikesShardEvery) {
 			player.poe2.rimeCount = 0;
-			FireDraftFan(player, data, tile, dir, RimeStrikesShards, data.damagePercent, RimeStrikesShardTiles);
+			// From the tile in front, flying on past what was struck there, not all into it.
+			const Point front = tile + dir;
+			const bool open = InDungeonBounds(front) && !IsTileSolid(front);
+			FireDraftFan(player, data, open ? front : tile, dir, RimeStrikesShards, data.damagePercent, RimeStrikesShardTiles, open);
 			vfx::Impact(tile + dir, vfx::Element::Cold, 1.1F);
 		}
 		return true;
@@ -1721,6 +1725,8 @@ bool ExecuteStaffDraft(Player &player, const TableSkillData &data, CastResult &r
 		const int radius = std::max<int>(data.radius, 1);
 		BreakObjectsInArea(player, tile, radius);
 		const Fixed26_6 burst = ShareOf(FixedDamage(player, data), ShatterpalmBurstPercent);
+		// Each enemy takes one shatter burst a palm, however many frozen enemies are beside it.
+		std::vector<const Monster *> burstOn;
 		for (Monster *monster : MonstersNear(tile, radius)) {
 			const bool frozen = monster->poe2.freezeTicks > 0;
 			if (!LandsHit(player, *monster, data, data.damagePercent * (frozen ? ShatterpalmFrozenPercent : 100) / 100, result) || !frozen)
@@ -1731,20 +1737,26 @@ bool ExecuteStaffDraft(Player &player, const TableSkillData &data, CastResult &r
 			AddVisualEffect(at, MissileGraphicID::StoneCurseShatter);
 			vfx::Impact(at, vfx::Element::Cold, 1.3F);
 			for (Monster *other : MonstersNear(at, ShatterpalmBurstRadius)) {
-				if (other != monster)
-					SpellHitMonster(player, *other, DamageType::Cold, burst, SourceOf(data));
+				if (other == monster || std::find(burstOn.begin(), burstOn.end(), other) != burstOn.end())
+					continue;
+				burstOn.push_back(other);
+				SpellHitMonster(player, *other, DamageType::Cold, burst, SourceOf(data));
 			}
 		}
 		return true;
 	}
 	case WeaponSkill::DervishAdvance: {
-		// Three spins along the walk: at each step after the start, then where it ended. A monster that stays beside the
-		// hero takes up to all three.
+		// Three spins along the walk: at each step after the start, then where it ended. A short walk spins on over the
+		// tiles ahead, not three times where the hero stands.
 		const std::vector<Point> path = DashPath(player, data.count);
 		player.poe2.dashStart = {};
-		std::vector<Point> centers(path.size() > 1 ? path.begin() + 1 : path.begin(), path.end());
-		while (centers.size() < static_cast<size_t>(DervishPulses))
-			centers.push_back(tile);
+		std::vector<Point> centers(path.size() > 1 ? path.begin() + 1 : path.end(), path.end());
+		Point ahead = tile;
+		while (centers.size() < static_cast<size_t>(DervishPulses)) {
+			if (const Point next = ahead + dir; InDungeonBounds(next) && !IsTileSolid(next))
+				ahead = next;
+			centers.push_back(ahead);
+		}
 		// A longer walk keeps its last steps, so the last spin is where the hero stops.
 		centers.erase(centers.begin(), centers.end() - DervishPulses);
 		const int radius = std::max<int>(data.radius, 1);
@@ -1819,6 +1831,8 @@ bool ExecuteStaffDraft(Player &player, const TableSkillData &data, CastResult &r
 	case WeaponSkill::PhantomStep: {
 		// The nearest enemies in turn, the first again if there are fewer; each strike is a burst around that enemy.
 		std::vector<Monster *> targets = MonstersNear(tile, data.radius);
+		// Only those the hero can see: never one behind a wall.
+		std::erase_if(targets, [tile](const Monster *monster) { return LastTileInSight(tile, monster->position.tile) != Point(monster->position.tile); });
 		std::stable_sort(targets.begin(), targets.end(), [tile](const Monster *a, const Monster *b) {
 			return tile.WalkingDistance(a->position.tile) < tile.WalkingDistance(b->position.tile);
 		});
@@ -1849,12 +1863,21 @@ bool ExecuteStaffDraft(Player &player, const TableSkillData &data, CastResult &r
 				player._pdir = GetDirection(player.position.tile, *last);
 			}
 		}
+		// Assassin's Blink bursts where the hero came out.
+		OnSkillBlinked(player, SkillSlot::ForAttack(data.skill), player.position.tile);
 		return true;
 	}
 	case WeaponSkill::SkylordsStorm:
+		// A support's repeat (the Echoing shrine, Shadow Warrior) strikes again where the hero stood, with no second blink.
+		if (IsSupportRepeat()) {
+			AddZone(player, data, player.poe2.skylordFrom != Point {} ? player.poe2.skylordFrom : tile, data.delay);
+			return true;
+		}
 		// The lightning comes down where the hero stood; the hero blinks back first (no leap: Curtis 2026-10-28).
 		AddZone(player, data, tile, data.delay);
+		player.poe2.skylordFrom = tile;
 		BlinkBack(player);
+		OnSkillBlinked(player, SkillSlot::ForAttack(data.skill), player.position.tile);
 		return true;
 	case WeaponSkill::PalmOfTheFrozenNorth:
 		if (Monster *monster = MonsterInFrontOf(player); monster != nullptr)
@@ -2625,6 +2648,22 @@ void ShatterLodgedHammers(Player &player, Point at)
 		}
 		for (Monster *monster : MonstersOnTiles(tiles, 0))
 			AreaSpellHit(player, fire, *monster, hammer.damage);
+	}
+}
+
+Point TableSkillHitTarget(const Player &player, WeaponSkill skill, Point target)
+{
+	switch (skill) {
+	case WeaponSkill::WrathOfTheSkies:
+		return player.position.tile + player._pdir;
+	case WeaponSkill::ArreatCrash:
+		return SlamLanding(player, target, ArreatReachTiles);
+	case WeaponSkill::MountainsFall:
+		return SlamLanding(player, target, MountainsFallReachTiles);
+	case WeaponSkill::HammerOfZakarum:
+		return SlamLanding(player, target, HammerOfZakarumReachTiles);
+	default:
+		return target;
 	}
 }
 
@@ -3535,14 +3574,9 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 	const Point tile = player.position.tile;
 	const Direction dir = player._pdir;
 	const bool mine = &player == MyPlayer;
-	// Wrath of the Skies slams the tile in front of the hero, not the one aimed at.
-	if (data.skill == WeaponSkill::WrathOfTheSkies)
-		target = tile + dir;
-	// Arreat Crash and Mountain's Fall reach only so far.
-	if (data.skill == WeaponSkill::ArreatCrash)
-		target = SlamLanding(player, target, ArreatReachTiles);
-	if (data.skill == WeaponSkill::MountainsFall)
-		target = SlamLanding(player, target, MountainsFallReachTiles);
+	// Wrath of the Skies slams the tile in front of the hero, not the one aimed at; Arreat Crash and Mountain's Fall reach
+	// only so far.
+	target = TableSkillHitTarget(player, data.skill, target);
 	if (const std::optional<MissileGraphicID> flash = TableSkillCastFlash(data); flash)
 		AddVisualEffect(tile + dir, *flash, 0, 3);
 	// POE2 Mashup: every skill is heard. An attack's swing, throw or shot sounds as it lands (a spell's incantation

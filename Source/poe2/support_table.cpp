@@ -1897,6 +1897,9 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 			AddBurst(tile, 3, 0, DamageType::Physical, MissileGraphicID::MetalHit, SkillBaseDamage(player, SkillSlot::ForAttack(WeaponSkill::Cleave), 150));
 			break;
 		case SG::BlinkStrike:
+			// Skylord's Storm and Phantom Step blink as they go off: theirs bursts where they land (OnSkillBlinked).
+			if (skill.kind == SkillKind::Attack && IsAnyOf(skill.attack(), WeaponSkill::SkylordsStorm, WeaponSkill::PhantomStep))
+				break;
 			AddBurst(skill.kind == SkillKind::Spell ? target : tile, 2, 2, DamageType::Physical, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 120));
 			break;
 		case SG::Sanctify:
@@ -2200,6 +2203,13 @@ SkillSlot SupportHitSkill()
 Point NearestMonsterTarget(const Player &player, Point from, int range)
 {
 	return NearestTarget(player, from, range);
+}
+
+void OnSkillBlinked(Player &player, SkillSlot skill, Point landing)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || skill.isEmpty() || Repeating || IsCastingRepeat(player) || !Has(player, skill, SG::BlinkStrike))
+		return;
+	AddBurst(landing, 2, 2, DamageType::Physical, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 120));
 }
 
 bool IsSupportRepeat()

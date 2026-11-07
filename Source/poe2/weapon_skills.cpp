@@ -1177,7 +1177,8 @@ bool CastSkill(Player &player, WeaponSkill skill, Point target)
 	const SkillLookScope skillLook(skill);
 	PlaySkillLookSound(SkillSlot::ForAttack(skill), target);
 	PlaySkillEffects(player, skill, target);
-	OnSkillUsed(player, SkillSlot::ForAttack(skill), target);
+	// The supports that follow the hits go where they land (Wrath of the Skies' slam is in front of the hero).
+	OnSkillUsed(player, SkillSlot::ForAttack(skill), TableSkillHitTarget(player, skill, target));
 	switch (skill) {
 	case WeaponSkill::BattleCry:
 		player.poe2.warcryTicks = BattleCryTicks;

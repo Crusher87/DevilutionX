@@ -230,6 +230,8 @@ void AddPlayerBurst(Point center, int radius, int delay, DamageType type, Missil
  * hero's next hits act on it (Hellfire Roar, Quaking Roar, Cry of Bul-Kathos; Curtis 2026-11-07, Q48).
  */
 void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixed26_6 dealt);
+/** @brief A skill's blink came out here (Skylord's Storm, Phantom Step): Assassin's Blink bursts where it landed. */
+void OnSkillBlinked(Player &player, SkillSlot skill, Point landing);
 /** @brief A skill went off (a cast, a strike, a landing); the supports that repeat or add to it act now. */
 void OnSkillUsed(Player &player, SkillSlot skill, Point target);
 /** @brief A monster the local player hit last died. */

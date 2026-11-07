@@ -1119,6 +1119,8 @@ struct Poe2PlayerData {
 	std::array<bool, 4> cryUsedThisTick {};
 	/** @brief What is left of Bulwark Roar's Guard, raw life it takes instead of the hero while the cry lasts (not saved). */
 	int32_t bulwarkGuard = 0;
+	/** @brief Where Skylord's Storm last blinked from, for a support's repeat to strike there again (not saved). */
+	Point skylordFrom {};
 	/** @brief A skill still firing a stream of shots, one every few ticks, e.g. Barrage's arrows (not saved). */
 	WeaponSkill volleySkill = WeaponSkill::None;
 	uint8_t volleyShotsLeft = 0;
@@ -1411,6 +1413,7 @@ struct Poe2PlayerData {
 		cryTicks = {};
 		cryUsedThisTick = {};
 		bulwarkGuard = 0;
+		skylordFrom = {};
 		riposteTicks = 0;
 		frenzyCharges = 0;
 		frenzyTicks = 0;

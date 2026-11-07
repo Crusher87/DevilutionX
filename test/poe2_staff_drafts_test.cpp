@@ -22,6 +22,7 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/player_data.hpp"
+#include "poe2/shrines.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -65,6 +66,7 @@ public:
 	{
 		Missiles.clear();
 		ClearSkillZones();
+		ClearSupportEffects();
 		ClearMonsters();
 		gbIsPoe2 = false;
 		leveltype = DTYPE_TOWN;
@@ -136,6 +138,11 @@ public:
 		return (monster.maxHitPoints - monster.hitPoints).raw();
 	}
 
+	static void Heal(Monster &monster)
+	{
+		monster.hitPoints = monster.maxHitPoints;
+	}
+
 	static std::vector<const Missile *> MissilesOf(MissileID type)
 	{
 		std::vector<const Missile *> found;
@@ -144,6 +151,26 @@ public:
 				found.push_back(&missile);
 		}
 		return found;
+	}
+
+	/** @brief The skill in the first Skills panel socket, with the support gem. */
+	static void Supported(WeaponSkill skill, SupportGem gem)
+	{
+		Player &player = *MyPlayer;
+		player.poe2.skillSlots[0] = SkillSlot::ForAttack(skill);
+		player.poe2.slotLevels[0] = 1;
+		player.poe2.slotSupports[0] = {};
+		player.poe2.slotSupportTiers[0] = {};
+		player.poe2.slotSupports[0][0] = gem;
+		player.poe2.slotSupportTiers[0][0] = 1;
+	}
+
+	static void Supports(Player &player, int ticks)
+	{
+		for (int tick = 0; tick < ticks; tick++) {
+			ProcessSupportEffects(player);
+			player.poe2.tick();
+		}
 	}
 
 	/** @brief Uses the skill on the target as its animation's action frame would. */
@@ -495,8 +522,8 @@ TEST_F(Poe2StaffDraftsTest, DervishAdvanceSpinsThreeTimesAlongItsWalk)
 	EXPECT_TRUE(Hurt(onTheWay));
 	EXPECT_TRUE(Hurt(atTheEnd));
 	EXPECT_FALSE(Hurt(behind));
-	// With no walk, all three spins are where the hero stands: a monster beside takes all three, 3 x 55% against
-	// Whirlwind's one 70% at the same speed.
+	// With no walk, the spins go on over the tiles ahead (audit fix 3): a monster in front takes two of them, 2 x 55%
+	// against Whirlwind's one 70% at the same speed, not all three.
 	const auto standing = [&](WeaponSkill skill) {
 		ClearMonsters();
 		Monster &monster = PlaceMonster(0, { 44, 40 });
@@ -512,7 +539,9 @@ TEST_F(Poe2StaffDraftsTest, DervishAdvanceSpinsThreeTimesAlongItsWalk)
 	};
 	const int64_t whirlwind = standing(WeaponSkill::Whirlwind);
 	EXPECT_GT(whirlwind, 0);
-	EXPECT_GT(standing(WeaponSkill::DervishAdvance), whirlwind * 3 / 2);
+	const int64_t dervish = standing(WeaponSkill::DervishAdvance);
+	EXPECT_GT(dervish, whirlwind * 5 / 4);
+	EXPECT_LT(dervish, whirlwind * 2);
 }
 
 TEST_F(Poe2StaffDraftsTest, StormSiphonUsesUpTheShockAndArcs)
@@ -612,6 +641,177 @@ TEST_F(Poe2StaffDraftsTest, PalmOfTheFrozenNorthThrowsAPiercingLance)
 	EXPECT_EQ(lance.poe2.damageType, static_cast<int8_t>(DamageType::Cold));
 	EXPECT_GE(lance.poe2.piercesLeft, 3);
 	EXPECT_LE(lance.duration, 25);
+}
+
+// The fixes after the balance re-score of the batch (audit-drafts-staff.md).
+
+TEST_F(Poe2StaffDraftsTest, Fix1WrathBoltsFlyOnFromTheSlammedMonster)
+{
+	Player &player = SetUpFight();
+	PlaceMonster(0, { 41, 40 });
+	Use(player, WeaponSkill::WrathOfTheSkies, { 44, 40 });
+	const std::vector<const Missile *> bolts = MissilesOf(MissileID::ChargedBolt);
+	ASSERT_EQ(bolts.size(), 3U);
+	// Each counts the monster on its start tile as checked already, as Nova's balls do.
+	for (const Missile *bolt : bolts) {
+		EXPECT_EQ(Point(bolt->position.start), Point(41, 40));
+		EXPECT_EQ(bolt->lastCollisionTargetHash, dMonster[41][40] ^ dPlayer[41][40]);
+		EXPECT_NE(bolt->lastCollisionTargetHash, 0);
+	}
+}
+
+TEST_F(Poe2StaffDraftsTest, Fix2RimeShardsFlyOnPastTheStruckMonster)
+{
+	Player &player = SetUpFight();
+	PlaceMonster(0, { 41, 40 });
+	for (int use = 0; use < RimeStrikesShardEvery; use++) {
+		Missiles.clear();
+		Use(player, WeaponSkill::RimeStrikes, { 41, 40 });
+	}
+	const std::vector<const Missile *> shards = MissilesOf(MissileID::BlueFlare);
+	ASSERT_EQ(shards.size(), static_cast<size_t>(RimeStrikesShards));
+	for (const Missile *shard : shards) {
+		EXPECT_EQ(Point(shard->position.start), Point(41, 40));
+		EXPECT_EQ(shard->lastCollisionTargetHash, dMonster[41][40] ^ dPlayer[41][40]);
+	}
+}
+
+TEST_F(Poe2StaffDraftsTest, Fix3DervishPointBlankSpinsOverTheTilesAhead)
+{
+	Player &player = SetUpFight();
+	Monster &behind = PlaceMonster(0, { 39, 40 });
+	Monster &third = PlaceMonster(1, { 44, 40 });
+	for (uint32_t seed = 1; seed <= 8 && !Hurt(third); seed++) {
+		player.poe2.dashStart = {};
+		SetRndSeed(seed);
+		Use(player, WeaponSkill::DervishAdvance, { 45, 40 });
+	}
+	// Spins at 41, 42 and 43: the last reaches 44, and none is on the hero's own tile.
+	EXPECT_TRUE(Hurt(third));
+	EXPECT_FALSE(Hurt(behind));
+}
+
+TEST_F(Poe2StaffDraftsTest, Fix4ShatterpalmBurstsEachEnemyOnce)
+{
+	Player &player = SetUpFight();
+	// Two frozen enemies beside the hero, and one beyond beside both of them, out of the palm's reach.
+	const auto palm = [&](bool bothFrozen) {
+		ClearMonsters();
+		Monster &first = PlaceMonster(0, { 41, 40 });
+		Monster &second = PlaceMonster(1, { 41, 41 });
+		Monster &beyond = PlaceMonster(2, { 42, 41 });
+		for (uint32_t seed = 1; seed <= 16 && !(Hurt(first) && Hurt(second)); seed++) {
+			Heal(first);
+			Heal(second);
+			Heal(beyond);
+			first.poe2.freezeTicks = 60;
+			second.poe2.freezeTicks = bothFrozen ? 60 : 0;
+			SetRndSeed(seed);
+			Use(player, WeaponSkill::Shatterpalm, { 41, 40 });
+		}
+		EXPECT_TRUE(Hurt(first) && Hurt(second));
+		return Lost(beyond);
+	};
+	const int32_t one = palm(false);
+	EXPECT_GT(one, 0);
+	EXPECT_EQ(palm(true), one);
+}
+
+TEST_F(Poe2StaffDraftsTest, Fix5PhantomStepNeedsToSeeItsTargets)
+{
+	Player &player = SetUpFight();
+	SOLData[0] = TileProperties::None;
+	SOLData[1] = TileProperties::Solid | TileProperties::BlockLight | TileProperties::BlockMissile;
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++)
+			dPiece[x][y] = 0;
+	}
+	// A wall between the hero and the one to the south-east.
+	for (int y = 37; y <= 43; y++)
+		dPiece[42][y] = 1;
+	ASSERT_NE(LastTileInSight({ 40, 40 }, { 43, 40 }), Point(43, 40));
+	Monster &seen = PlaceMonster(0, { 40, 43 });
+	Monster &hidden = PlaceMonster(1, { 43, 40 });
+	for (uint32_t seed = 1; seed <= 8 && !Hurt(seen); seed++) {
+		player.position.tile = player.position.future = player.position.old = { 40, 40 };
+		SetRndSeed(seed);
+		Use(player, WeaponSkill::PhantomStep, { 43, 40 });
+	}
+	EXPECT_TRUE(Hurt(seen));
+	EXPECT_FALSE(Hurt(hidden));
+	EXPECT_LT(player.position.tile.x, 42);
+	for (int y = 37; y <= 43; y++)
+		dPiece[42][y] = 0;
+}
+
+TEST_F(Poe2StaffDraftsTest, Fix6WrathsEchoOfArreatLandsOnTheSlam)
+{
+	Player &player = SetUpFight();
+	EXPECT_EQ(TableSkillHitTarget(player, WeaponSkill::WrathOfTheSkies, { 46, 40 }), Point(41, 40));
+	EXPECT_EQ(TableSkillHitTarget(player, WeaponSkill::ArreatCrash, { 46, 40 }), Point(42, 40));
+	EXPECT_EQ(TableSkillHitTarget(player, WeaponSkill::NorthwindWave, { 46, 40 }), Point(46, 40));
+	Supported(WeaponSkill::WrathOfTheSkies, SupportGem::Aftershock);
+	// Two tiles past the slam: only its echo reaches it (the bolts don't fly here). The aimed tile is further on.
+	Monster &nearSlam = PlaceMonster(0, { 43, 40 });
+	Monster &aimed = PlaceMonster(1, { 47, 40 });
+	for (uint32_t seed = 1; seed <= 16 && !Hurt(nearSlam); seed++) {
+		ClearSupportEffects();
+		Missiles.clear();
+		SetRndSeed(seed);
+		Use(player, WeaponSkill::WrathOfTheSkies, { 47, 40 });
+		Supports(player, 16);
+	}
+	EXPECT_TRUE(Hurt(nearSlam));
+	EXPECT_FALSE(Hurt(aimed));
+}
+
+TEST_F(Poe2StaffDraftsTest, Fix7AssassinsBlinkBurstsWhereTheBlinkLands)
+{
+	Player &player = SetUpFight();
+	Supported(WeaponSkill::SkylordsStorm, SupportGem::BlinkStrike);
+	// Skylord's Storm blinks three tiles back, to 37: the burst is there, not where the hero started.
+	Monster &byLanding = PlaceMonster(0, { 36, 40 });
+	Monster &byStart = PlaceMonster(1, { 42, 40 });
+	Use(player, WeaponSkill::SkylordsStorm, { 41, 40 });
+	ASSERT_EQ(player.position.tile, Point(37, 40));
+	Supports(player, 4);
+	EXPECT_TRUE(Hurt(byLanding));
+	EXPECT_FALSE(Hurt(byStart));
+	// Phantom Step: beside the last enemy struck, the burst hits it again.
+	ClearSkillZones();
+	ClearSupportEffects();
+	ClearMonsters();
+	player.position.tile = player.position.future = player.position.old = { 40, 40 };
+	Supported(WeaponSkill::PhantomStep, SupportGem::BlinkStrike);
+	Monster &target = PlaceMonster(0, { 44, 40 });
+	for (uint32_t seed = 1; seed <= 8 && !Hurt(target); seed++) {
+		player.position.tile = player.position.future = player.position.old = { 40, 40 };
+		SetRndSeed(seed);
+		Use(player, WeaponSkill::PhantomStep, { 44, 40 });
+	}
+	ASSERT_TRUE(Hurt(target));
+	EXPECT_LE(Point(player.position.tile).WalkingDistance(Point(44, 40)), 1);
+	const int32_t struck = Lost(target);
+	Supports(player, 4);
+	EXPECT_GT(Lost(target), struck);
+}
+
+TEST_F(Poe2StaffDraftsTest, Fix8ARepeatedSkylordsStormBlinksOnce)
+{
+	Player &player = SetUpFight();
+	LoadShrineData();
+	player._pMaxMana = player._pMana = player._pManaBase = player._pMaxManaBase = Fixed26_6::fromInt(500);
+	ASSERT_TRUE(AddShrineBuff(player.poe2.shrines, ShrineKind::Hidden, 0, 1000));
+	ASSERT_TRUE(GetShrineBonuses(player).echoing);
+	Use(player, WeaponSkill::SkylordsStorm, { 41, 40 });
+	EXPECT_EQ(player.position.tile, Point(37, 40));
+	EXPECT_EQ(SkillZoneCount(), 1U);
+	// The echo strikes where the hero stood again, and the hero stays where the one blink took him.
+	Supports(player, 20);
+	EXPECT_EQ(player.position.tile, Point(37, 40));
+	ASSERT_EQ(SkillZoneCount(), 2U);
+	EXPECT_EQ(SkillZoneCenter(1), std::optional<Point>(Point(40, 40)));
+	player.poe2.shrines = {};
 }
 
 } // namespace

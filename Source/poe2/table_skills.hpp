@@ -642,6 +642,11 @@ constexpr int ZakarumsJudgementTicks = 8;
 /** @brief Bulwark Roar: its Guard is this percent of maximum life; each shield wave runs this many tiles. */
 constexpr int BulwarkGuardPercent = 10;
 constexpr int BulwarkWaveTiles = 4;
+/**
+ * @brief Where a table skill's hits land when aimed at the target, for the supports that follow them (Echo of Arreat,
+ * Immortal King's Stride): Wrath of the Skies slams the tile in front, a slam that reaches only so far its landing.
+ */
+[[nodiscard]] Point TableSkillHitTarget(const Player &player, WeaponSkill skill, Point target);
 /** @brief A shield attack: a shield gem's attack, Raise Shield's bash or Shield Charge, which Bulwark Roar's waves follow. */
 [[nodiscard]] bool IsShieldAttack(SkillSlot skill);
 /** @brief Bulwark Roar's shield wave, from the hero towards the target. */
