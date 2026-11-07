@@ -115,6 +115,13 @@ Rgb At(float x, float y);
 Rgb GroundAt(float x, float y);
 
 /**
+ * @brief The light on the ground outside the rooms at a world point on its own tile (GroundAt gives it where the dirt
+ * shows, a tile further back), leaving out the rock lit for the walls' faces; where only that is round the point, the
+ * light of the tile's own samples.
+ */
+Rgb TileGroundAt(float x, float y, int tileX, int tileY);
+
+/**
  * @brief The light of the room behind a wall at a world point (in tiles) just behind the wall's face: as At, but where
  * the point is rock lit for the walls by the room in front of them, the light of the first floor (or ground outside the
  * rooms) further back, up to a tile behind it. The face looks along the x axis (towards +x) or, if `alongY`, along the
@@ -134,8 +141,14 @@ Rgb Sky();
 /** @brief Light made some of the game's light levels brighter, no brighter than Full (other heroes are drawn 5 levels up). */
 Rgb Boost(const Rgb &light, float levels);
 
-/** @brief This tile stops light (walls, pillars, closed doors). */
+/** @brief This tile is a wall or rock (walls, pillars, closed doors, and the ground outside the rooms). */
 bool Blocks(int x, int y);
+
+/**
+ * @brief The renderer's test for ground outside the rooms that nothing stands on but light passes over (the Cathedral's
+ * dirt), so its tiles count as rock for walking but not as walls for light. Null for none.
+ */
+void SetOpenGround(bool (*isOpenGround)(int x, int y));
 
 /**
  * @brief The strongest lights shining on a world point that can see it, strongest first.

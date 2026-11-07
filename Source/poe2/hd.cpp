@@ -1728,8 +1728,17 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
  */
 constexpr std::array<uint8_t, 16> CathedralDirt { 18, 19, 20, 21, 22, 23, 24, 195, 196, 199, 200, 201, 202, 203, 204, 205 };
 
+/** @brief What a piece of the dirt is (DirtPieces). */
+enum class DirtKind : uint8_t {
+	None,
+	/** @brief The tomb's dirt (195, 196): it stands in the tomb's wall beside the doorway, so light stops at it. */
+	Walled,
+	/** @brief Light passes over it (light::SetOpenGround). */
+	Open,
+};
+
 /** @brief The pieces the dirt is drawn with, by piece number, worked out from the level's own tiles (empty elsewhere). */
-std::vector<bool> DirtPieces;
+std::vector<DirtKind> DirtPieces;
 const MegaTile *DirtMegaTiles = nullptr;
 dungeon_type DirtLevelType = DTYPE_NONE;
 
@@ -1742,22 +1751,38 @@ void IndexDirt()
 	DirtPieces.clear();
 	if (leveltype != DTYPE_CATHEDRAL || DirtMegaTiles == nullptr)
 		return;
-	DirtPieces.assign(MAXTILES, false);
+	DirtPieces.assign(MAXTILES, DirtKind::None);
 	for (const uint8_t tile : CathedralDirt) {
+		const DirtKind kind = IsAnyOf(tile, 195, 196) ? DirtKind::Walled : DirtKind::Open;
 		const MegaTile &mega = DirtMegaTiles[tile - 1];
 		for (const uint16_t piece : { Swap16LE(mega.micro1), Swap16LE(mega.micro2), Swap16LE(mega.micro3), Swap16LE(mega.micro4) }) {
 			// Only its solid pieces: the tomb's dirt stands on a piece of plain floor that other tiles share.
-			if (piece < MAXTILES && HasAnyOf(SOLData[piece], TileProperties::Solid))
-				DirtPieces[piece] = true;
+			if (piece >= MAXTILES || !HasAnyOf(SOLData[piece], TileProperties::Solid))
+				continue;
+			// A piece the tomb's dirt shares is the tomb's.
+			DirtKind &was = DirtPieces[piece];
+			if (was == DirtKind::None || kind < was)
+				was = kind;
 		}
 	}
 }
 
-bool IsDirt(Point cell)
+DirtKind DirtAt(Point cell)
 {
 	if (DirtPieces.empty() || !InDungeonBounds(cell))
-		return false;
+		return DirtKind::None;
 	return DirtPieces[dPiece[cell.x][cell.y]];
+}
+
+bool IsDirt(Point cell)
+{
+	return DirtAt(cell) != DirtKind::None;
+}
+
+/** @brief The dirt outside the rooms that light passes over (see light::SetOpenGround). */
+bool IsOpenGround(int x, int y)
+{
+	return DirtAt({ x, y }) == DirtKind::Open;
 }
 
 /**
@@ -1780,6 +1805,10 @@ void DrawGroundLit(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 		return;
 	SDL_SetTextureColorMod(art.texture, 255, 255, 255);
 	SDL_SetTextureAlphaMod(art.texture, 255);
+	// No darker than the dirt is on its own tile, a tile in front of where it shows: beside the end of a wall it stands
+	// up over the floor behind the wall, which the wall can leave dark, and it showed black beside a hero at a room's
+	// open corner. Not the tomb's dirt, which stands in its wall.
+	const bool own = DirtAt(draw.cell) == DirtKind::Open;
 	// Half a piece (16 game pixels) apart, as far apart as the light's samples: closer looks the same and costs more.
 	constexpr int Steps = 2;
 	constexpr int Row = Steps + 1;
@@ -1793,7 +1822,12 @@ void DrawGroundLit(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 			float wy;
 			WorldOf(static_cast<float>(draw.x) + fx * static_cast<float>(draw.width), static_cast<float>(draw.y) + fy * static_cast<float>(draw.height), wx, wy);
 			const size_t k = static_cast<size_t>(j * Row + i);
-			colours[k] = ArtColour(ToColour(light::GroundAt(wx, wy)), art);
+			light::Rgb ground = light::GroundAt(wx, wy);
+			if (own) {
+				const light::Rgb there = light::TileGroundAt(wx + 1, wy + 1, draw.cell.x, draw.cell.y);
+				ground = { std::max(ground.r, there.r), std::max(ground.g, there.g), std::max(ground.b, there.b) };
+			}
+			colours[k] = ArtColour(ToColour(ground), art);
 			vertices[k] = SDL_Vertex {
 				{ dest.x + fx * dest.w, dest.y + fy * dest.h },
 				{ ColourByte(colours[k][0]), ColourByte(colours[k][1]), ColourByte(colours[k][2]), 255 },
@@ -2394,11 +2428,12 @@ bool RenderLit(SDL_Renderer *renderer, float toLogical, const std::array<float, 
 	look.warm = mood.warm;
 	look.cool = mood.cool;
 	look.tint = tint;
+	IndexDirt();
+	light::SetOpenGround(IsOpenGround);
 	if (!light::Update(look, x0, y0, x1, y1, heroX, heroY))
 		return false;
 	FrameLit = true;
 	MakeBlobTexture(renderer);
-	IndexDirt();
 
 	const Shading unlit = Uniform({ 1.F, 1.F, 1.F });
 	for (size_t i = 0; i < FloorEnd && i < Draws.size(); i++) {
