@@ -528,6 +528,7 @@ target_link_dependencies(libdevilutionx_load_cel
   PUBLIC
   tl
   PRIVATE
+  libdevilutionx_hd_hooks
   libdevilutionx_strings
 )
 if(SUPPORTS_MPQ)

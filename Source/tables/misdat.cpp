@@ -24,6 +24,7 @@
 #include "headless_mode.hpp"
 #include "missiles.h"
 #include "mpq/mpq_common.hpp"
+#include "poe2/hd.hpp"
 #include "sound_effect_enums.h"
 #include "tables/spelldat.h"
 #include "utils/file_name_generator.hpp"
@@ -438,6 +439,8 @@ std::expected<void, std::string> MissileFileData::LoadGFX()
 		FileNameGenerator pathGenerator({ "missiles\\", name }, DEVILUTIONX_CL2_EXT);
 		ASSIGN_OR_RETURN(OwnedClxSpriteSheet spriteSheet, LoadMultipleCl2Sheet<16>(pathGenerator, animFAmt, animWidth));
 		sprites.emplace(OwnedClxSpriteListOrSheet { std::move(spriteSheet) });
+		// One file per direction: HD art is named like a sheet, missiles/<name>/d<direction>_f<frame>.
+		hd::RegisterSprites(StrCat("missiles\\", name), ClxSpriteListOrSheet { *sprites });
 	}
 #endif
 	return {};

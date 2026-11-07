@@ -7,6 +7,7 @@ namespace hd {
 bool Recording = false;
 RecordTileFn RecordTileHook = nullptr;
 RecordSpriteFn RecordSpriteHook = nullptr;
+RegisterSpritesFn RegisterSpritesHook = nullptr;
 
 } // namespace hd
 

@@ -196,8 +196,14 @@ SDL_Renderer *CacheRenderer = nullptr;
 const std::byte *CacheCels = nullptr;
 dungeon_type CacheLevelType = DTYPE_NONE;
 
+/** @brief A sprite frame's HD art name, with the frame's size to tell it from other art loaded where freed art was. */
+struct SpriteName {
+	std::string name;
+	uint16_t width;
+	uint16_t height;
+};
 /** @brief Each frame of a loaded sprite, by the address of its pixels: the name of its HD art. */
-std::unordered_map<const uint8_t *, std::string> SpriteNames;
+std::unordered_map<const uint8_t *, SpriteName> SpriteNames;
 /** @brief Each dungeon frame, by the address of its pixels: its HD art name. */
 std::unordered_map<const uint8_t *, std::string> TileNames;
 std::unordered_map<std::string, HdArt> Art;
@@ -835,7 +841,10 @@ const std::string *ArtName(const Draw &draw)
 	if (IsOutline(draw.style))
 		return nullptr;
 	const auto it = SpriteNames.find(draw.sprite->pixelData());
-	return it != SpriteNames.end() ? &it->second : nullptr;
+	// Names stay after their art is freed, and art loaded without a name can land in the same place.
+	if (it == SpriteNames.end() || it->second.width != draw.sprite->width() || it->second.height != draw.sprite->height())
+		return nullptr;
+	return &it->second.name;
 }
 
 /** @brief Works out the HD art a draw shows, if there is any for it. */
@@ -2492,7 +2501,7 @@ void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites)
 		for (size_t frame = 0; frame < list.numSprites(); frame++) {
 			char name[32];
 			std::snprintf(name, sizeof(name), "/d%zu_f%02zu", direction, frame);
-			SpriteNames[list[frame].pixelData()] = base + name;
+			SpriteNames[list[frame].pixelData()] = SpriteName { base + name, list[frame].width(), list[frame].height() };
 		}
 	};
 	if (sprites.isSheet()) {
@@ -2503,6 +2512,11 @@ void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites)
 		registerList(sprites.list(), 0);
 	}
 }
+
+namespace {
+// The CEL loader names its art through this pointer (hd_hooks.cpp); it is set before main runs.
+[[maybe_unused]] const bool RegisterSpritesHookSet = (RegisterSpritesHook = RegisterSprites, true);
+} // namespace
 
 bool ExportLevelTiles(const std::string &dir)
 {

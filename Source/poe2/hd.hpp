@@ -145,6 +145,15 @@ inline void RecordSprite(const Surface &out, Point position, ClxSprite clx, cons
 /** @brief Names every frame of a loaded sprite file, so its HD art can be found. */
 void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);
 
+using RegisterSpritesFn = void (*)(std::string_view path, ClxSpriteListOrSheet sprites);
+
+/**
+ * @brief RegisterSprites when the HD renderer is linked in, otherwise null.
+ *
+ * A pointer (in hd_hooks.cpp) so the CEL loader and the tests of the libraries using it don't link the whole renderer.
+ */
+extern RegisterSpritesFn RegisterSpritesHook;
+
 /** @brief Draws the recorded world in full colour. */
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
 
