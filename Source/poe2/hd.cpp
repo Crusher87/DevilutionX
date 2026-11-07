@@ -2301,6 +2301,44 @@ float FireLightKept(float rise)
 }
 
 /**
+ * @brief How much further down the screen (in game pixels) than a piece's own tile the floor is that its height counts
+ * from, for a piece on a tile inside a house or under its roof: the floor of the tile right behind the house's front tile
+ * in the same column of the screen.
+ *
+ * Tristram's houses draw their roofs from the tiles under them, up to five rows behind their front walls. Measured up
+ * from such a tile's own floor, inside the house, the roof counted as low on a wall and kept the fires' light, in blocks
+ * a column wide (Griswold's roof, the roof above Pepin's windows). Not from the front tile's own floor: along a wall, the
+ * front tiles stand half a tile lower in every other column, and measured from them the lit windows in a wall lost some
+ * of their glow in those columns. A house's outer walls (the tiles that stop light) count from their own floor: what
+ * stands in front of them is a porch, a door or a lamp, not more of the house.
+ */
+int FrontTileBelow(const Draw &draw)
+{
+	constexpr int Step = TILE_HEIGHT / 2;
+	// Further back than this, all of a piece is above the fires' light anyway.
+	constexpr int MostInFront = 8;
+	static_assert(static_cast<float>((MostInFront - 1) * Step) * RisePerPixel >= FireLightHigh + FireLightFade);
+	if (!TileHasAny(draw.cell, TileProperties::Solid) || light::Blocks(draw.cell.x, draw.cell.y))
+		return 0;
+	// Down the screen, a column holds the left half of tile (x, y), the right half of (x, y + 1), the left half of
+	// (x + 1, y + 1) and so on, each half a tile's height lower.
+	Point tile = draw.cell;
+	bool right = IsRightColumn(draw);
+	int inFront = 0;
+	while (inFront < MostInFront) {
+		if (right)
+			tile.x++;
+		else
+			tile.y++;
+		right = !right;
+		if (!InDungeonBounds(tile) || !TileHasAny(tile, TileProperties::Solid))
+			break;
+		inFront++;
+	}
+	return std::max(inFront - 1, 0) * Step;
+}
+
+/**
  * @brief In town, takes the fires' light off the part of a piece higher up than it reaches (FireLightHigh), leaving the
  * sky's. The piece stands on a tile whose floor is drawn `back` game pixels further up the screen than its own tile's.
  */
@@ -2340,7 +2378,8 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 			return Uniform(LightAt(wx, wy));
 		}
 		Shading shading = light::Blocks(draw.cell.x, draw.cell.y) ? WallLight(draw.cell, IsRightColumn(draw)) : OpenTileLight(draw.cell, IsRightColumn(draw));
-		FireLightUp(shading, draw, 0);
+		if (leveltype == DTYPE_TOWN)
+			FireLightUp(shading, draw, -FrontTileBelow(draw));
 		return shading;
 	}
 	float wx;
