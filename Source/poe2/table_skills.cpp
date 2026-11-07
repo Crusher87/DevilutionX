@@ -2148,7 +2148,7 @@ bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target
 		const Fixed26_6 ball = ShareOf(FixedDamage(player, data), CinderBallPercent);
 		const Displacement side { Left(Left(dir)) };
 		for (int i = 0; i < data.count; i++) {
-			Point at = tile + Displacement { dir } * (1 + GenerateRnd(CinderBallTiles)) + side * (GenerateRnd(3) - 1);
+			Point at = tile + Displacement { dir } * static_cast<int>(1 + GenerateRnd(CinderBallTiles)) + side * static_cast<int>(GenerateRnd(3) - 1);
 			if (!InDungeonBounds(at) || IsTileSolid(at) || LastTileInSight(tile, at) != at)
 				at = tile + dir;
 			AddDraftBurst(data, at, 4 + (3 * i), ball, data.radius);
@@ -2259,7 +2259,7 @@ bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target
 		}
 		BreakObjectsInArea(player, tile, radius);
 		const Fixed26_6 hit = FixedDamage(player, data);
-		const Fixed26_6 third = Fixed26_6::fromRaw(std::max(hit.raw() / 3, 1));
+		const Fixed26_6 third = Fixed26_6::fromRaw(std::max<int32_t>(hit.raw() / 3, 1));
 		for (Monster *monster : struck) {
 			for (const DamageType type : { DamageType::Fire, DamageType::Cold, DamageType::Lightning })
 				SpellHitMonster(player, *monster, type, third, SourceOf(data));
@@ -2299,7 +2299,7 @@ bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target
 		// Its block, Guard and waves (EmpoweringCry::Bulwark); a support's repeat adds none.
 		if (!IsSupportRepeat()) {
 			GrantCryHits(player, data, EmpoweringCry::Bulwark);
-			player.poe2.bulwarkGuard = static_cast<int32_t>(static_cast<int64_t>(std::max(player._pMaxHP.raw(), 0)) * BulwarkGuardPercent / 100);
+			player.poe2.bulwarkGuard = static_cast<int32_t>(static_cast<int64_t>(std::max<int32_t>(player._pMaxHP.raw(), 0)) * BulwarkGuardPercent / 100);
 			AddVisualEffect(tile, MissileGraphicID::ManaShield, 0, 2);
 		}
 		return true;
