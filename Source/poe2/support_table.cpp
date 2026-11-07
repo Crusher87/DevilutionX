@@ -1342,6 +1342,18 @@ uint32_t SkillTags(SkillSlot skill)
 	case WeaponSkill::ZakarumsJudgement:
 		tags |= ST_Slam;
 		break;
+	// The draft Bow gems' (Q48). Spark and Kindling's arrows burst; Whirling Volley's ring is arrows, not an area; Swamp
+	// Gas Arrow's cloud poisons and bursts in fire.
+	case WeaponSkill::SparkArrow:
+	case WeaponSkill::KindlingArrow:
+		tags |= ST_Area;
+		break;
+	case WeaponSkill::WhirlingVolley:
+		tags = (tags & ~ST_Area) | ST_Projectile;
+		break;
+	case WeaponSkill::SwampGasArrow:
+		tags |= ST_Chaos | ST_Fire;
+		break;
 	default:
 		break;
 	}

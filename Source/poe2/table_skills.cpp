@@ -241,6 +241,17 @@ const TableSkillData Table[] = {
 	{ WS::TollingShield, "Tolling Shield", "Strike your shield: it rings out all around you, stunning and breaking armour", 15, 14, TW::Shield, 0, Around, 85, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Stun | TF_ArmourBreak, TableZone::None, TableCurse::None, TableBuff::None, TT_Shield, Icon(SpellIcon::Sentinel), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
 	{ WS::BulwarkRoar, "Bulwark Roar", "A roar that throws enemies back; for 8 seconds you block more often and a Guard takes hits for you, and your next 3 shield attacks send out a shield wave", 20, 15, TW::Shield, 1, Buff, 60, 3, 2, 160, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Knockback, TableZone::None, TableCurse::None, TableBuff::WarCry, TT_Shield, Icon(SpellIcon::Reflect), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
 	{ WS::ZakarumsJudgement, "Zakarum's Judgement", "Slam your shield: holy light bursts all around you and stuns, then bursts again a moment later", 25, 18, TW::Shield, 0, Around, 55, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::HolyBoltExplosion, TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Shield, Icon(SpellIcon::Search), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	// The draft gems' Bow batch (Q48, build order 3): real arrows, so the bow's arrow supports (Volley, Ring of Missiles,
+	// Rebound) work with them. Cold, Shatter, Spark and Kindling's arrows land as their element (convertPercent).
+	{ WS::ColdArrow, "Cold Arrow", "An arrow of ice that chills what it hits; its freeze builds twice as fast", 3, 7, TW::Bow, 0, Projectiles, 355, 1, 0, 0, 0, 0, DT::Cold, MissileID::Arrow, MG::BlueFlareExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Elemental), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 100, 200 },
+	{ WS::DeadeyeShot, "Deadeye Shot", "A slow, heavy arrow; a frozen enemy takes more, and its freeze shatters", 3, 7, TW::Bow, 0, Projectiles, 225, 1, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Identify), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::ShatterShot, "Shatter Shot", "An arrow of ice; on the first enemy it hits, six shards of ice fly on behind it", 15, 14, TW::Bow, 0, Projectiles, 285, 1, 0, 0, 0, 0, DT::Cold, MissileID::Arrow, MG::BlueFlareExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Nova), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 100, 0 },
+	{ WS::SparkArrow, "Spark Arrow", "A quick lightning arrow that bursts on the first enemy it hits; the burst always shocks", 15, 13, TW::Bow, 0, Projectiles, 145, 1, 1, 0, 0, 0, DT::Lightning, MissileID::Arrow, MG::Lightning, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::ChargedBolt), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 100, 0 },
+	{ WS::Strafe, "Strafe", "A quick arrow that splits into six arrows in a ring from the first enemy it hits", 20, 13, TW::Bow, 0, Projectiles, 195, 1, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Sentinel), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::KindlingArrow, "Kindling Arrow", "A slow fire arrow that explodes on the first enemy it hits; burning enemies take more", 20, 16, TW::Bow, 0, Projectiles, 95, 1, 1, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Firebolt), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 100, 0 },
+	{ WS::WhirlingVolley, "Whirling Volley", "Spin forward three tiles, loosing sixteen arrows in a ring where you stop; each enemy takes one", 25, 18, TW::Bow, 0, Dash, 135, 3, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Jester), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::LodestoneSalvo, "Lodestone Salvo", "Eight bolts of lightning fall on the enemies near the target, at most two on each; shocked enemies take more", 25, 18, TW::Bow, 0, Burst, 115, 8, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::LightningWall), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::SwampGasArrow, "Swamp Gas Arrow", "An arrow that leaves a cloud of poison gas where it lands; fire sets the cloud off in a burst of flame", 25, 18, TW::Bow, 0, Projectiles, 130, 1, 1, 80, 10, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_LandingZone, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::FireCloud), TableCurve::LightningArrow, 0, GrantedRider::None, 25, 0, 0 },
 };
 // clang-format on
 
@@ -301,11 +312,15 @@ struct WallSegment {
 };
 std::vector<WallSegment> WallSegments;
 
-/** @brief An Explosive Arrow's burst set off a poison cloud: it bursts in fire after the zones are done this tick. */
+/**
+ * @brief An Explosive Arrow's burst set off a poison cloud, or fire set off a Swamp Gas Arrow cloud: it bursts in fire
+ * after the zones are done this tick, as the skill's hit.
+ */
 struct Detonation {
 	Point center;
 	int radius;
 	Fixed26_6 damage;
+	WeaponSkill skill = WeaponSkill::ExplosiveBolt;
 };
 std::vector<Detonation> PendingDetonations;
 
@@ -860,6 +875,9 @@ int ZoneLimit(const Player &player, const TableSkillData &data)
 		return SupportZoneLimit(player, slot, AncestorTotems);
 	case WeaponSkill::SteelTempest:
 		return SupportZoneLimit(player, slot, SteelTempestStorms);
+	// The draft Bow gems' (Q48).
+	case WeaponSkill::SwampGasArrow:
+		return SupportZoneLimit(player, slot, SwampGasClouds);
 	default:
 		break;
 	}
@@ -1114,12 +1132,17 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	// Plague Arrow is a poison arrow: drawn green, dripping venom as it flies (Curtis, Rogue run 2).
 	if (!spell && (data.flags & TF_PoisonBurst) != 0)
 		missile->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Poison);
+	// An arrow that lands as its element (the Bow batch's Cold, Shatter, Spark and Kindling arrows) is drawn in it.
+	if (!spell && !weaponBolt && data.convertPercent > 0)
+		missile->poe2.vfxElement = static_cast<int8_t>(LookOf(data));
 	// A per-target skill's projectiles hit each monster once a cast, the first in full (GrantedMissileTargetPercent).
 	if ((data.flags & TF_PerTarget) != 0)
 		missile->poe2.grantedCast = player.poe2.grantedState.castSerial;
 	// Souls add to weapon projectiles through the weapon hit (see ResourceAttackDamagePercent).
 	const int souls = spell || weaponBolt ? SoulHarvestDamagePercent(player) : 0;
-	missile->poe2.damagePercent = static_cast<int16_t>(std::min<int>(CurvePercent(player, data.skill) * data.damagePercent / 100 * GrantedSpellDamagePercent(player, data) / 100 * (100 + souls) / 100, INT16_MAX));
+	// Swamp Gas Arrow's arrow is only a share of its hit; the cloud takes the rest (Q48).
+	const int rowPercent = data.skill == WeaponSkill::SwampGasArrow ? data.damagePercent * SwampGasArrowPercent / 100 : data.damagePercent;
+	missile->poe2.damagePercent = static_cast<int16_t>(std::min<int>(CurvePercent(player, data.skill) * rowPercent / 100 * GrantedSpellDamagePercent(player, data) / 100 * (100 + souls) / 100, INT16_MAX));
 	if ((data.flags & TF_Pierce) != 0)
 		missile->poe2.piercesLeft = static_cast<int8_t>(std::min<int>(missile->poe2.piercesLeft + (data.skill == WeaponSkill::BoneSpear ? BoneSpearPierces : 3), INT8_MAX));
 	// Bone Spear is drawn as a great spear, not a bolt.
@@ -1420,7 +1443,15 @@ void AddHolyGround(const Player &player, const TableSkillData &data, Point cente
 /** @brief Whether Explosive Arrow sets this zone's poison off: the poison clouds and grounds of the poison skills (Q37). */
 bool IsDetonatablePoison(WeaponSkill skill)
 {
-	return IsAnyOf(skill, WeaponSkill::BloatedPods, WeaponSkill::ThornvineArrow, WeaponSkill::WitchsBog, WeaponSkill::AcidFlask, WeaponSkill::VenomSentry);
+	return IsAnyOf(skill, WeaponSkill::BloatedPods, WeaponSkill::ThornvineArrow, WeaponSkill::WitchsBog, WeaponSkill::AcidFlask, WeaponSkill::VenomSentry, WeaponSkill::SwampGasArrow);
+}
+
+/** @brief Fire set off a Swamp Gas Arrow cloud: it bursts in flame (SwampGasBurstRadius, SwampGasBurstPercent of its hit) and ends. */
+void DetonateSwampGas(SkillZone &zone)
+{
+	zone.detonated = true;
+	const Fixed26_6 burst = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(zone.damage.raw()) * SwampGasBurstPercent / 100), 1));
+	PendingDetonations.push_back({ zone.center, SwampGasBurstRadius, burst, WeaponSkill::SwampGasArrow });
 }
 
 /** @brief Explosive Arrow's blast touched these poison zones: each bursts in fire for the blast's damage in its own area and ends. */
@@ -1431,6 +1462,10 @@ void DetonatePoisonClouds(Point center, int radius, Fixed26_6 damage)
 			continue;
 		if (center.WalkingDistance(zone.center) > radius + std::max<int>(zone.radius, 1))
 			continue;
+		if (zone.skill == WeaponSkill::SwampGasArrow) {
+			DetonateSwampGas(zone);
+			continue;
+		}
 		zone.detonated = true;
 		PendingDetonations.push_back({ zone.center, std::max<int>(zone.radius, 1), damage });
 	}
@@ -2318,6 +2353,148 @@ bool ExecuteWeaponDraft(Player &player, const TableSkillData &data, Point target
 	}
 }
 
+/** @brief Whirling Volley's last cast; each of its arrows carries it, and hits a monster once a cast (Poe2MissileData::volleyCast). */
+uint16_t VolleyCastSerial = 0;
+
+/** @brief The tiles a ring of arrows is aimed at, 8 tiles out: sixteen ways round, then between them for any more. */
+Point RingAim(Point from, int index)
+{
+	constexpr int Ring[16][2] = { { 4, 0 }, { 4, 2 }, { 4, 4 }, { 2, 4 }, { 0, 4 }, { -2, 4 }, { -4, 4 }, { -4, 2 }, { -4, 0 }, { -4, -2 }, { -4, -4 }, { -2, -4 }, { 0, -4 }, { 2, -4 }, { 4, -4 }, { 4, -2 } };
+	const int at = index % 16;
+	const Displacement aim { Ring[at][0] * 2, Ring[at][1] * 2 };
+	if (index < 16)
+		return from + aim;
+	const int next = (at + 1) % 16;
+	return from + aim + Displacement { Ring[next][0] - Ring[at][0], Ring[next][1] - Ring[at][1] };
+}
+
+/** @brief Makes a draft Bow gem go off; false for the gems that are plain arrows on the Projectiles shape (Cold Arrow and the rest). */
+bool ExecuteBowDraft(Player &player, const TableSkillData &data, Point target, CastResult &result)
+{
+	const Point tile = player.position.tile;
+	const SkillSlot slot = SkillSlot::ForAttack(data.skill);
+	switch (data.skill) {
+	case WeaponSkill::WhirlingVolley: {
+		// Where the spin ends, a ring of arrows flies out all round; each monster takes one arrow of the ring. Volley and
+		// the other supports that add projectiles add arrows to the ring.
+		player.poe2.dashStart = {};
+		VolleyCastSerial = static_cast<uint16_t>(VolleyCastSerial == UINT16_MAX ? 1 : VolleyCastSerial + 1);
+		const int arrows = WhirlingVolleyArrows + SupportExtraProjectileCount(player, slot);
+		for (int i = 0; i < arrows; i++) {
+			if (Missile *arrow = FireTableMissile(player, data, tile, RingAim(tile, i)); arrow != nullptr)
+				arrow->poe2.volleyCast = VolleyCastSerial;
+		}
+		return true;
+	}
+	case WeaponSkill::LodestoneSalvo: {
+		// Bolts of lightning fall on the monsters near the target, the nearest first, round them all and then round again,
+		// at most LodestoneBoltsPerMonster on each. A shocked monster takes more from a bolt.
+		std::vector<Monster *> near = MonstersNear(target, std::max<int>(data.radius, 1));
+		std::stable_sort(near.begin(), near.end(), [target](const Monster *a, const Monster *b) {
+			return target.ExactDistance(a->position.tile) < target.ExactDistance(b->position.tile);
+		});
+		const Fixed26_6 bolt = FixedDamage(player, data);
+		int left = data.count;
+		for (int round = 0; round < LodestoneBoltsPerMonster && left > 0; round++) {
+			for (Monster *monster : near) {
+				if (left == 0)
+					break;
+				if (!IsAlive(*monster))
+					continue;
+				left--;
+				const Point at = monster->position.tile;
+				vfx::SkyStrike(at, vfx::Element::Lightning);
+				AddVisualEffect(at, MissileGraphicID::ThinLightning, round * 2, 4);
+				const int percent = monster->poe2.shockTicks > 0 ? LodestoneShockedPercent : 100;
+				SpellHitMonster(player, *monster, DamageType::Lightning, ShareOf(bolt, percent), SourceOf(data));
+				result.hit = true;
+			}
+		}
+		// With nothing to fall on, one bolt comes down on the target.
+		if (left == data.count)
+			vfx::SkyStrike(target, vfx::Element::Lightning);
+		PlayTableSkillHitSound(data, target);
+		return true;
+	}
+	default:
+		return false;
+	}
+}
+
+/**
+ * @brief A draft Bow gem's arrow hit its first monster: Shatter Shot's shards, Spark Arrow's shocking burst, Strafe's
+ * split arrows, Kindling Arrow's blast. The lesser projectiles these send out set off nothing more.
+ */
+void OnBowDraftArrowHit(const Missile &missile, Player &player, Monster &monster, const TableSkillData &data)
+{
+	// Only the arrow's first monster: one that pierced or flew on from another already went off.
+	if (missile.poe2.draftPart || missile.poe2.lastHitMonster >= 0)
+		return;
+	const Point at = monster.position.tile;
+	const SkillSlot slot = SkillSlot::ForAttack(data.skill);
+	const Fixed26_6 base = FixedDamage(player, data);
+	const Point start = missile.position.start;
+	const Direction on = start == at ? player._pdir : GetDirection(start, at);
+	switch (data.skill) {
+	case WeaponSkill::ShatterShot: {
+		// Shards of ice spray on behind the target, as Frostbite Blades' blades do.
+		TableSkillData shard = data;
+		shard.missile = MissileID::BlueFlare;
+		AddVisualEffect(at, data.effect, 0, 4);
+		vfx::Impact(at, vfx::Element::Cold, 1.0F);
+		for (Missile *bolt : FireDraftFan(player, shard, at, on, ShatterShotShards, data.damagePercent * ShatterShotShardPercent / 100, ShatterShotShardTiles, true))
+			bolt->poe2.draftPart = true;
+		break;
+	}
+	case WeaponSkill::SparkArrow: {
+		// A burst of lightning round the target, which shocks every enemy it hits.
+		const int radius = std::max(SupportAreaRadius(player, slot, SparkArrowBurstRadius), 1);
+		AddVisualEffect(at, MissileGraphicID::Lightning, 0, 4);
+		vfx::Impact(at, vfx::Element::Lightning, 1.2F);
+		const Fixed26_6 burst = ShareOf(base, SparkArrowBurstPercent);
+		for (Monster *other : MonstersNear(at, radius)) {
+			SpellHitMonster(player, *other, DamageType::Lightning, burst, SourceOf(data));
+			if (IsAlive(*other))
+				other->poe2.shockTicks = std::max<uint8_t>(other->poe2.shockTicks, static_cast<uint8_t>(ShockTicks));
+		}
+		break;
+	}
+	case WeaponSkill::Strafe: {
+		// The arrow splits into a ring of arrows from the target, each piercing one; they fly on from it, not back into it.
+		TableSkillData split = data;
+		split.damagePercent = static_cast<int16_t>(std::max(data.damagePercent * StrafeSplitPercent / 100, 1));
+		constexpr int Ring[StrafeSplitArrows][2] = { { 8, 0 }, { 4, 7 }, { -4, 7 }, { -8, 0 }, { -4, -7 }, { 4, -7 } };
+		vfx::Volley(at, at + on, StrafeSplitArrows, false);
+		for (const auto &offset : Ring) {
+			Missile *arrow = FireTableMissile(player, split, at, at + Displacement { offset[0], offset[1] });
+			if (arrow == nullptr)
+				continue;
+			arrow->poe2.draftPart = true;
+			arrow->poe2.piercesLeft = static_cast<int8_t>(std::max<int>(arrow->poe2.piercesLeft, StrafeSplitPierces));
+			arrow->lastCollisionTargetHash = static_cast<int16_t>(dMonster[at.x][at.y] ^ dPlayer[at.x][at.y]);
+		}
+		break;
+	}
+	case WeaponSkill::KindlingArrow: {
+		// It explodes on the target: the blast hits those beside it, a burning one for more (the arrow's own hit on its
+		// target took the same, TableArrowHitPercent).
+		const int radius = std::max(SupportAreaRadius(player, slot, KindlingBlastRadius), 1);
+		AddVisualEffect(at, data.effect, 0, 4);
+		vfx::Impact(at, vfx::Element::Fire, 1.3F);
+		BreakObjectsInArea(player, at, radius);
+		for (Monster *other : MonstersNear(at, radius)) {
+			if (other == &monster)
+				continue;
+			SpellHitMonster(player, *other, DamageType::Fire, ShareOf(base, other->poe2.igniteTicks > 0 ? KindlingBurningPercent : 100), SourceOf(data));
+		}
+		PlayTableSkillHitSound(data, at);
+		break;
+	}
+	default:
+		break;
+	}
+}
+
 /** @brief A draft gem's zone that needs more than its kind's usual work; false for the rest. */
 bool ProcessDraftZone(Player &player, const TableSkillData &data, SkillZone &zone, bool &done)
 {
@@ -2382,6 +2559,16 @@ bool ProcessDraftZone(Player &player, const TableSkillData &data, SkillZone &zon
 		if (zone.counter % TicksPerSecond == 0)
 			vfx::Impact(zone.center, vfx::Element::Fire, 0.6F);
 		return true;
+	case WeaponSkill::SwampGasArrow:
+		// A burning monster in the cloud, or one a fire hit just struck, sets it off; else it poisons as poisoned ground.
+		for (const Monster *monster : MonstersNear(zone.center, std::max(radius, 1))) {
+			if (monster->poe2.igniteTicks > 0 || monster->poe2.fireHitTicks > 0) {
+				DetonateSwampGas(zone);
+				done = true;
+				return true;
+			}
+		}
+		return false;
 	default:
 		return false;
 	}
@@ -2568,6 +2755,27 @@ std::vector<Point> NorthwindWaveTiles(Point from, Direction dir, int length)
 bool RimeStrikesNextIsThird(const Player &player)
 {
 	return player.poe2.rimeCount + 1 >= RimeStrikesShardEvery;
+}
+
+int TableArrowHitPercent(const TableSkillData &data, Monster &monster)
+{
+	if (!gbIsPoe2)
+		return 100;
+	switch (data.skill) {
+	case WeaponSkill::DeadeyeShot:
+		// A frozen target takes more, and its freeze shatters (as Glacial Spike's does).
+		if (monster.poe2.freezeTicks == 0 || monster.hasNoLife())
+			return 100;
+		monster.poe2.freezeTicks = 0;
+		AddVisualEffect(monster.position.tile, MissileGraphicID::StoneCurseShatter);
+		vfx::Impact(monster.position.tile, vfx::Element::Cold, 1.3F);
+		return DeadeyeFrozenPercent;
+	case WeaponSkill::KindlingArrow:
+		// A burning target takes more; it keeps burning.
+		return monster.poe2.igniteTicks > 0 ? KindlingBurningPercent : 100;
+	default:
+		return 100;
+	}
 }
 
 int TableAilmentPercent(const TableSkillData &data)
@@ -2799,6 +3007,25 @@ std::string TableSkillExtraNote(WeaponSkill skill)
 		    static_cast<int>(data->radius), data->duration / TicksPerSecond, BulwarkBlockChance, BulwarkGuardPercent, static_cast<int>(data->count), BulwarkWaveTiles, static_cast<int>(data->damagePercent));
 	case WeaponSkill::ZakarumsJudgement:
 		return std::format("Hits all within {:d} and stuns, then all within it again {:.1f} seconds later", static_cast<int>(data->radius), ZakarumsJudgementTicks / static_cast<double>(TicksPerSecond));
+	case WeaponSkill::ColdArrow:
+		return std::format("Its hit is cold; chills by {:d}%, and its freeze builds {:d}% as fast", ColdArrowChillPercent, TableAilmentPercent(*data));
+	case WeaponSkill::DeadeyeShot:
+		return std::format("A frozen enemy takes {:d}% more, and its freeze shatters", DeadeyeFrozenPercent - 100);
+	case WeaponSkill::ShatterShot:
+		return std::format("Its hit is cold; {:d} shards of ice fly on {:d} tiles behind the first enemy hit, {:d}% each", ShatterShotShards, ShatterShotShardTiles, ShatterShotShardPercent);
+	case WeaponSkill::SparkArrow:
+		return std::format("Its hit is lightning; bursts within {:d} of the first enemy hit for {:d}%, shocking all it hits", SparkArrowBurstRadius, SparkArrowBurstPercent);
+	case WeaponSkill::Strafe:
+		return std::format("Splits into {:d} arrows in a ring from the first enemy hit, {:d}% each, each through {:d} enemy", StrafeSplitArrows, StrafeSplitPercent, StrafeSplitPierces);
+	case WeaponSkill::KindlingArrow:
+		return std::format("Its hit is fire; explodes on the first enemy hit, hitting all within {:d} of it for 100%; burning enemies take {:d}% more", KindlingBlastRadius, KindlingBurningPercent - 100);
+	case WeaponSkill::WhirlingVolley:
+		return std::format("Spins {:d} tiles, then looses {:d} arrows all round; each enemy takes one", static_cast<int>(data->count), WhirlingVolleyArrows);
+	case WeaponSkill::LodestoneSalvo:
+		return std::format("{:d} bolts fall on the enemies within {:d} of the target, at most {:d} on each; a shocked enemy takes {:d}% more", static_cast<int>(data->count), static_cast<int>(data->radius), LodestoneBoltsPerMonster, LodestoneShockedPercent - 100);
+	case WeaponSkill::SwampGasArrow:
+		return std::format("The arrow hits for {:d}%; its cloud within {:d} poisons for {:d}% a second for {:d} seconds, {:d} clouds at most; fire in it bursts the cloud within {:d} for {:d}%",
+		    SwampGasArrowPercent, static_cast<int>(data->radius), TablePoisonPercentPerSecond(*data), data->duration / TicksPerSecond, SwampGasClouds, SwampGasBurstRadius, SwampGasBurstPercent);
 	default:
 		return {};
 	}
@@ -2979,7 +3206,7 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	// A war cry shatters the Hephasto's Hammers lodged near the hero (Q48).
 	if ((SkillTags(slot) & ST_Warcry) != 0)
 		ShatterLodgedHammers(player, tile);
-	if (ExecuteStaffDraft(player, data, result) || ExecuteWeaponDraft(player, data, target, result)) {
+	if (ExecuteStaffDraft(player, data, result) || ExecuteWeaponDraft(player, data, target, result) || ExecuteBowDraft(player, data, target, result)) {
 		AfterCast(player, data, result);
 		return;
 	}
@@ -3375,7 +3602,12 @@ int GrantedExtraTargetPercent(const TableSkillData &data)
 
 bool GrantedMissileSkipsMonster(const Missile &missile, const Monster &monster)
 {
-	return gbIsPoe2 && missile.poe2.grantedCast != 0 && monster.poe2.grantedCastHit == missile.poe2.grantedCast;
+	if (!gbIsPoe2)
+		return false;
+	// Whirling Volley's ring hits each monster once a cast, as a per-target granted skill's projectiles do.
+	if (missile.poe2.volleyCast != 0 && monster.poe2.volleyCastHit == missile.poe2.volleyCast)
+		return true;
+	return missile.poe2.grantedCast != 0 && monster.poe2.grantedCastHit == missile.poe2.grantedCast;
 }
 
 int GrantedMissileTargetPercent(const Missile &missile, Player &player, Monster &monster)
@@ -3453,6 +3685,16 @@ void OnTableMissileHit(const Missile &missile, Player &player, Monster &monster,
 	}
 	if (data != nullptr && IsAnyOf(data->skill, WeaponSkill::MagmaHurl, WeaponSkill::HephastosHammer, WeaponSkill::ThunderHatchet))
 		OnDraftMissileHit(missile, player, monster, *data);
+	// The draft Bow gems (Q48): Cold Arrow chills hard; the others go off on the arrow's first monster.
+	if (data != nullptr && data->skill == WeaponSkill::ColdArrow && IsAlive(monster)) {
+		monster.poe2.chillPercent = static_cast<uint8_t>(std::max<int>(monster.poe2.chillPercent, ColdArrowChillPercent));
+		monster.poe2.chillTicks = static_cast<uint8_t>(std::max<int>(monster.poe2.chillTicks, ChillTicks));
+	}
+	if (data != nullptr && IsAnyOf(data->skill, WeaponSkill::ShatterShot, WeaponSkill::SparkArrow, WeaponSkill::Strafe, WeaponSkill::KindlingArrow))
+		OnBowDraftArrowHit(missile, player, monster, *data);
+	// Whirling Volley's ring: the monster has taken its arrow of this cast.
+	if (missile.poe2.volleyCast != 0)
+		monster.poe2.volleyCastHit = missile.poe2.volleyCast;
 	if (data != nullptr && (data->flags & TF_PoisonBurst) != 0)
 		PoisonBurst(player, monster, *data);
 	// Venom Bolt: the bolt's poison, of the row's strength.
@@ -3609,6 +3851,12 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 		AddVisualEffect(tile + Left(dir), data.effect, 2);
 		break;
 	case Dash:
+		// Whirling Volley's ring of arrows flies out all round as the spin ends (Q48).
+		if (data.skill == WeaponSkill::WhirlingVolley) {
+			for (int i = 0; i < 8; i++)
+				vfx::Volley(tile, tile + Displacement { static_cast<Direction>(i) } * 4, 2, i % 2 == 0);
+			break;
+		}
 		// Whirlwind's spin and its funnel of wind started with its animation (see BeginSkillAnimation); here its blades
 		// bite into everything around, without the slam's glowing cracks that read as lightning (Curtis 2026-10-21).
 		if (SpinsWhileStriking(data.skill)) {
@@ -3673,6 +3921,11 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 			ShakeCamera(ShakeStrength::Light, 4);
 		break;
 	case Burst:
+		// Lodestone Salvo (Q48): the hero shoots up into the sky; its bolts strike down where they fall (ExecuteBowDraft).
+		if (data.skill == WeaponSkill::LodestoneSalvo) {
+			vfx::Volley(tile, target, std::max<int>(data.count, 1), true);
+			break;
+		}
 		AddVisualEffect(target, data.effect, 0, 6);
 		if (data.radius > 0)
 			EffectRingAround(target, data.radius, data.effect, 2);
@@ -3856,6 +4109,18 @@ SkillSounds TableSkillSounds(const TableSkillData &data)
 	case WeaponSkill::ExplosiveBolt:
 		sounds.hit = Sfx(SfxID::BigExplosion);
 		break;
+	// The draft Bow gems (Q48): the ring and the salvo leave with the bow's shot; the salvo's bolts come down as lightning.
+	case WeaponSkill::WhirlingVolley:
+		sounds.cast = Sfx(SfxID::ShootBow2);
+		sounds.spell = Sfx(SfxID::ShootBow);
+		break;
+	case WeaponSkill::LodestoneSalvo:
+		sounds.cast = Sfx(SfxID::ShootBow2);
+		sounds.hit = Sfx(SfxID::SpellLightning);
+		break;
+	case WeaponSkill::KindlingArrow:
+		sounds.hit = ImpactOf(data);
+		break;
 	case WeaponSkill::ManaDrain:
 		// Diablo's own mana theft.
 		sounds.hit = Sfx(SfxID::SpellEnd);
@@ -3990,7 +4255,11 @@ void PoisonGroundLands(Player &player, const TableSkillData &data, const SkillZo
 {
 	const int radius = std::max<int>(zone.radius, 1);
 	const int ms = zone.ticksLeft * gnTickDelay;
-	if ((data.flags & TF_LandingZone) != 0) {
+	if ((data.flags & TF_LandingZone) != 0 && data.skill == WeaponSkill::SwampGasArrow) {
+		// Swamp Gas Arrow's cloud of gas, where the arrow came down.
+		vfx::Miasma(zone.center, radius, ms, vfx::MiasmaKind::Gas, zone.key);
+		vfx::Impact(zone.center, vfx::Element::Poison, 0.8F);
+	} else if ((data.flags & TF_LandingZone) != 0) {
 		vfx::Thorns(zone.center, radius, ms, zone.key);
 		vfx::Impact(zone.center, vfx::Element::Poison, 0.8F);
 	} else {
@@ -4022,7 +4291,7 @@ void PoisonGroundPulse(Player &player, const TableSkillData &data, const SkillZo
 			continue;
 		}
 		InflictPoison(player, *monster, TablePoisonTotal(zone.damage, data), PoisonTicks, 1, false);
-		if ((data.flags & TF_LandingZone) != 0)
+		if ((data.flags & TF_LandingZone) != 0 && data.skill != WeaponSkill::SwampGasArrow)
 			HinderMonster(*monster, ThornvineHinderPercent);
 		monster->tag(player);
 	}
@@ -4289,21 +4558,26 @@ void ProcessSkillZones(Player &player)
 			i++;
 		}
 	}
-	// The poison clouds an Explosive Arrow touched burst in fire, each for the blast's damage in its own area.
+	// The poison clouds an Explosive Arrow touched burst in fire, each for the blast's damage in its own area; a Swamp Gas
+	// Arrow cloud fire set off bursts for its own share.
 	if (!PendingDetonations.empty()) {
 		const std::vector<Detonation> detonations = std::move(PendingDetonations);
 		PendingDetonations.clear();
-		if (const TableSkillData *arrow = FindTableSkill(WeaponSkill::ExplosiveBolt); arrow != nullptr) {
-			const SupportHitScope scope(player, SkillSlot::ForAttack(arrow->skill));
-			TableSkillData fire = *arrow;
+		for (const Detonation &burst : detonations) {
+			const TableSkillData *source = FindTableSkill(burst.skill);
+			if (source == nullptr)
+				continue;
+			const SupportHitScope scope(player, SkillSlot::ForAttack(source->skill));
+			TableSkillData fire = *source;
 			fire.type = DamageType::Fire;
 			fire.flags = 0;
 			fire.effect = MissileGraphicID::BigExplosion;
-			for (const Detonation &burst : detonations) {
-				ZoneBurst(player, fire, burst.center, burst.radius, burst.damage);
-				vfx::Impact(burst.center, vfx::Element::Fire, 1.4F);
-				ShakeCamera(ShakeStrength::Light, 4);
-			}
+			const int radius = burst.skill == WeaponSkill::SwampGasArrow ? std::clamp(SupportAreaRadius(player, SkillSlot::ForAttack(burst.skill), burst.radius), 1, 12) : burst.radius;
+			ZoneBurst(player, fire, burst.center, radius, burst.damage);
+			vfx::Impact(burst.center, vfx::Element::Fire, 1.4F);
+			if (burst.skill == WeaponSkill::SwampGasArrow)
+				vfx::Nova(burst.center, radius, vfx::Element::Fire);
+			ShakeCamera(ShakeStrength::Light, 4);
 		}
 	}
 }
@@ -4451,6 +4725,8 @@ void ProcessTableCurses(Monster &monster)
 	Poe2MonsterState &state = monster.poe2;
 	if (state.pyreTicks > 0)
 		state.pyreTicks--;
+	if (state.fireHitTicks > 0)
+		state.fireHitTicks--;
 	// Rathma's Doom: a hand-cast curse running out on a living monster bursts (ProcessCurseSupports), on its caster's
 	// machine. Blasphemy's aura curses don't, nor one Hex Rupture burst.
 	if ((state.doomCurses | state.festerCurses) != 0) {

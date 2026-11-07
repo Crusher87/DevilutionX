@@ -1062,7 +1062,8 @@ bool IsThrowingSkill(WeaponSkill skill)
 
 bool SpinsWhileStriking(WeaponSkill skill)
 {
-	return IsAnyOf(skill, WeaponSkill::Whirlwind, WeaponSkill::DervishAdvance);
+	// Whirling Volley spins as it goes, loosing its ring of arrows where it stops (Q48).
+	return IsAnyOf(skill, WeaponSkill::Whirlwind, WeaponSkill::DervishAdvance, WeaponSkill::WhirlingVolley);
 }
 
 namespace {
@@ -1114,7 +1115,8 @@ void ProcessDashLooks(Player &player)
 			vfx::Impact(player.position.tile, vfx::Element::Physical, 0.45F);
 		break;
 	case WeaponSkill::Whirlwind:
-	case WeaponSkill::DervishAdvance: {
+	case WeaponSkill::DervishAdvance:
+	case WeaponSkill::WhirlingVolley: {
 		// The hero spins through every facing all along the dash, inside its funnel of wind.
 		const PlayerAnimationData &walk = player.AnimationData[static_cast<size_t>(player_graphic::Walk)];
 		if (!HeadlessMode && walk.sprites)

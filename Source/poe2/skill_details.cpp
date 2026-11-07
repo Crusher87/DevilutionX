@@ -1093,7 +1093,10 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 	if (table != nullptr) {
 		switch (table->zone) {
 		case TableZone::PoisonGround:
-			Text(shape, Kind::Note, (table->flags & TF_LandingZone) != 0 ? std::format("The vine poisons and hinders {:d}% every half second", ThornvineHinderPercent) : std::string("The ground poisons all in it every half second"));
+			if (table->skill == WeaponSkill::SwampGasArrow)
+				Text(shape, Kind::Note, std::string("The gas poisons all in it every half second"));
+			else
+				Text(shape, Kind::Note, (table->flags & TF_LandingZone) != 0 ? std::format("The vine poisons and hinders {:d}% every half second", ThornvineHinderPercent) : std::string("The ground poisons all in it every half second"));
 			break;
 		case TableZone::GasTrap:
 			Text(shape, Kind::Note, std::format("Waits {:d} seconds for an enemy, then fills with gas", VenomSentryArmTicks / TicksPerSecond));

@@ -1086,3 +1086,12 @@ poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Tolling Shield Gem	Gem	15	0	0	0	0	0	63	0	0		SKILLGEM_TABLE	Null	true	2400
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Bulwark Roar Gem	Gem	20	0	0	0	0	0	78	0	0		SKILLGEM_TABLE	Null	true	3050
 	0	Misc	Unequippable	GREATER_RUNE_OF_FIRE	Misc	NONE	Zakarum's Judgement Gem	Gem	25	0	0	0	0	0	93	0	0		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Cold Arrow Gem	Gem	3	0	0	0	0	0	0	0	27		SKILLGEM_TABLE	Null	true	840
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Deadeye Shot Gem	Gem	3	0	0	0	0	0	0	0	27		SKILLGEM_TABLE	Null	true	840
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Shatter Shot Gem	Gem	15	0	0	0	0	0	0	0	63		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Spark Arrow Gem	Gem	15	0	0	0	0	0	0	0	63		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Strafe Gem	Gem	20	0	0	0	0	0	0	0	78		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Kindling Arrow Gem	Gem	20	0	0	0	0	0	0	0	78		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Whirling Volley Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Lodestone Salvo Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Swamp Gas Arrow Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700

@@ -4319,6 +4319,9 @@ void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damag
 		monster.hitPoints = Fixed26_6::fromInt(1);
 	TelemetryMonsterDamaged(monster, damage, lifeBefore, damageType);
 	NoteSupportedDamage(monster, damageType, damage);
+	// POE2 Mashup: a fire hit sets off Swamp Gas Arrow's cloud round the monster (ProcessSkillZones).
+	if (gbIsPoe2 && damageType == DamageType::Fire && damage > 0)
+		monster.poe2.fireHitTicks = static_cast<uint8_t>(FireHitTicks);
 
 	if (monster.hasNoLife()) {
 		// A monster without life no longer blocks the tile it stands on.

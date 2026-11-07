@@ -784,6 +784,12 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 		state.storedChill = 0;
 	}
 	raw = raw * HitConditionPercent(player, monster) / 100;
+	// A table skill's arrow: the skill's own row, for its payoff (Deadeye Shot's frozen target) and its element.
+	const TableSkillData *arrowRow = nullptr;
+	if (const SkillSlot arrowSkill = ranged ? SupportHitSkill() : SkillSlot {}; arrowSkill.kind == SkillKind::Attack)
+		arrowRow = FindTableSkill(arrowSkill.attack());
+	if (arrowRow != nullptr)
+		raw = raw * TableArrowHitPercent(*arrowRow, monster) / 100;
 	// War Banner: more attack damage in its area. Every attack hit builds the banners' Glory.
 	raw = raw * (100 + BannerAttackDamagePercent(player)) / 100;
 	OnSpiritAttackHit(player, monster);
@@ -820,13 +826,19 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	}
 	// Fire converts first; a staff's lightning (Staff of the Storm Gods) takes what is left. Smite's blow is lightning,
 	// like POE2's (Curtis 2026-10-28): all of what the fire leaves.
-	const int toFire = std::clamp(Rule(player, UniqueRule::PhysicalToFire), 0, 100);
+	// The draft gems' hits are their element, Wrath of the Skies' in part (TableSkillData::convertPercent): a swing's
+	// skill, or an arrow's own (the Bow batch's Cold, Shatter, Spark and Kindling arrows). A fire arrow's is fire.
+	const TableSkillData *table = ranged ? arrowRow : FindTableSkill(CurrentWeaponSkill(player));
+	if (table != nullptr && table->convertPercent == 0)
+		table = nullptr;
+	int toFire = std::clamp(Rule(player, UniqueRule::PhysicalToFire), 0, 100);
+	if (table != nullptr && ranged && table->type == DamageType::Fire)
+		toFire = std::max<int>(toFire, std::min<int>(table->convertPercent, 100));
 	int toLightning = staffHit ? std::clamp(Rule(player, UniqueRule::StaffToLightning), 0, 100 - toFire) : 0;
 	if (!ranged && IsLightningAttackSkill(player.poe2.activeSkill))
 		toLightning = 100 - toFire;
-	// The draft Staff gems' hits are their element, Wrath of the Skies' in part (TableSkillData::convertPercent).
 	int toCold = 0;
-	if (const TableSkillData *table = !ranged ? FindTableSkill(CurrentWeaponSkill(player)) : nullptr; table != nullptr && table->convertPercent > 0) {
+	if (table != nullptr) {
 		if (table->type == DamageType::Lightning)
 			toLightning = std::max(toLightning, std::min<int>(table->convertPercent, 100 - toFire));
 		else if (table->type == DamageType::Cold)

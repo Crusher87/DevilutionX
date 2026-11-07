@@ -60,6 +60,8 @@ struct Poe2MissileData {
 	int16_t homingMonster = -1;
 	/** @brief A draft gem's lesser projectile (Magma Hurl's shrapnel): its hits set off nothing more of the skill's. */
 	bool draftPart = false;
+	/** @brief Whirling Volley's cast this arrow of its ring belongs to, which hits each monster once (not saved), or 0. */
+	uint16_t volleyCast = 0;
 };
 
 } // namespace devilution

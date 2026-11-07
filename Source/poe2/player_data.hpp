@@ -227,7 +227,17 @@ enum class WeaponSkill : uint8_t {
 	TollingShield,
 	BulwarkRoar,
 	ZakarumsJudgement,
-	Last = ZakarumsJudgement,
+	/** The draft gems' Bow batch (Q48, build order 3): real arrows, with the bow's arrow supports. */
+	ColdArrow,
+	DeadeyeShot,
+	ShatterShot,
+	SparkArrow,
+	Strafe,
+	KindlingArrow,
+	WhirlingVolley,
+	LodestoneSalvo,
+	SwampGasArrow,
+	Last = SwampGasArrow,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */

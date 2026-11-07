@@ -258,7 +258,8 @@ TEST_F(Poe2WeaponDraftsTest, WeaponDraftsAreStrengthGemsAtTheirTiers)
 	for (size_t i = 0; i < SwordShieldDrafts.size(); i++)
 		EXPECT_EQ(static_cast<int>(SwordShieldDrafts[i].skill), static_cast<int>(WeaponSkill::PhantomBlade) + static_cast<int>(i));
 	EXPECT_EQ(static_cast<int>(WeaponSkill::PhantomBlade), static_cast<int>(WeaponSkill::MammothCharge) + 1);
-	EXPECT_EQ(WeaponSkill::Last, WeaponSkill::ZakarumsJudgement);
+	// The Bow batch follows (poe2_bow_drafts_test.cpp).
+	EXPECT_EQ(static_cast<int>(WeaponSkill::ColdArrow), static_cast<int>(WeaponSkill::ZakarumsJudgement) + 1);
 	const std::array<std::pair<uint32_t, GemCategory>, 4> tabs { { { TT_Mace, GemCategory::Mace }, { TT_Axe, GemCategory::Axe }, { TT_Sword, GemCategory::Sword }, { TT_Shield, GemCategory::Shield } } };
 	std::vector<DraftRow> all(Drafts.begin(), Drafts.end());
 	all.insert(all.end(), SwordShieldDrafts.begin(), SwordShieldDrafts.end());

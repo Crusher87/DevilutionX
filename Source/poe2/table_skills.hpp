@@ -654,6 +654,46 @@ void SendBulwarkWave(Player &player, Point target);
 /** @brief What Bulwark Roar's Guard leaves of a hit on the hero, taking the rest from the Guard. */
 [[nodiscard]] Fixed26_6 AbsorbBulwarkGuard(Player &player, Fixed26_6 damage);
 
+// The draft gems' Bow batch (Q48, build order 3): real arrows, with the bow's arrow supports.
+/** @brief Cold Arrow: what it hits is chilled this much. */
+constexpr int ColdArrowChillPercent = 50;
+/** @brief Deadeye Shot: a frozen target takes this percent of the arrow, and its freeze shatters. */
+constexpr int DeadeyeFrozenPercent = 160;
+/** @brief Shatter Shot: on its first hit this many ice shards fly on behind the target, this many tiles, for this percent of the arrow. */
+constexpr int ShatterShotShards = 6;
+constexpr int ShatterShotShardTiles = 3;
+constexpr int ShatterShotShardPercent = 50;
+/** @brief Spark Arrow: its first hit bursts this far for this percent of the arrow, and shocks all it hits. */
+constexpr int SparkArrowBurstRadius = 1;
+constexpr int SparkArrowBurstPercent = 60;
+/** @brief Strafe: on its first hit the arrow splits into this many arrows in a ring, for this percent each, piercing this many. */
+constexpr int StrafeSplitArrows = 6;
+constexpr int StrafeSplitPercent = 50;
+constexpr int StrafeSplitPierces = 1;
+/** @brief Kindling Arrow: its first hit blasts this far; a burning enemy takes this percent of the arrow and of the blast. */
+constexpr int KindlingBlastRadius = 1;
+constexpr int KindlingBurningPercent = 160;
+/** @brief Whirling Volley: arrows loosed in a ring where the spin ends; each monster takes one of them a use. */
+constexpr int WhirlingVolleyArrows = 16;
+/** @brief Lodestone Salvo: at most this many of its bolts fall on one monster; a shocked one takes this percent. */
+constexpr int LodestoneBoltsPerMonster = 2;
+constexpr int LodestoneShockedPercent = 160;
+/**
+ * @brief Swamp Gas Arrow: the arrow hits for this percent; at most this many clouds; a fire hit or a burning enemy in a
+ * cloud sets it off, a fire burst this far for this percent.
+ */
+constexpr int SwampGasArrowPercent = 30;
+constexpr int SwampGasClouds = 3;
+constexpr int SwampGasBurstRadius = 2;
+constexpr int SwampGasBurstPercent = 40;
+/** @brief Game ticks a fire hit counts as fresh on a monster, for Swamp Gas Arrow's clouds. */
+constexpr int FireHitTicks = 3;
+/**
+ * @brief The percent of its hit a table skill's arrow deals this monster before it lands, and what it uses up: Deadeye
+ * Shot's frozen target (its freeze shatters), Kindling Arrow's burning one. 100 for the others.
+ */
+[[nodiscard]] int TableArrowHitPercent(const TableSkillData &data, Monster &monster);
+
 /**
  * @brief Seven-Sided Strike's strikes land in full on this many enemies or more; on fewer, each strike deals their share
  * of it (a lone monster a third of each strike).

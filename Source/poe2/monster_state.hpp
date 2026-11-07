@@ -188,6 +188,10 @@ struct Poe2MonsterState {
 	uint8_t plagueTicks = 0;
 	/** @brief The per-target granted cast whose projectile last hit it, which hits it once (not saved). */
 	uint16_t grantedCastHit = 0;
+	/** @brief The Whirling Volley cast whose ring of arrows hit it, which hits it once (not saved). */
+	uint16_t volleyCastHit = 0;
+	/** @brief Game ticks a fire hit on it counts as fresh, for Swamp Gas Arrow's clouds (FireHitTicks; not saved). */
+	uint8_t fireHitTicks = 0;
 	/**
 	 * @brief Summon Commands (poe2/summon_commands.hpp; none saved). A minion's Command waiting for its attack's action
 	 * frame (a SummonCommand, 0 for none) and the tile it's aimed at.
