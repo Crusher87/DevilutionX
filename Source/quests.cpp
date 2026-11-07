@@ -21,6 +21,7 @@
 #include "missiles.h"
 #include "monster.h"
 #include "options.h"
+#include "poe2/floors.hpp"
 #include "tables/townerdat.hpp"
 #include "towners.h"
 #include "utils/format.hpp"
@@ -409,6 +410,19 @@ void ResyncMPQuests()
 	}
 }
 
+namespace {
+
+/**
+ * POE2 Mashup: a floor built again (multiplayer, or a POE2 fresh floor) puts its quest monsters back as they first stood,
+ * so they are set back to how far their quest got (Curtis 2026-11-07: Gharbad started over on a fresh floor 4).
+ */
+bool FloorWasRebuilt()
+{
+	return gbIsMultiplayer || (gbIsPoe2 && Poe2FloorFresh);
+}
+
+} // namespace
+
 void ResyncQuests()
 {
 	if (gbIsSpawn)
@@ -438,7 +452,7 @@ void ResyncQuests()
 			TransVal = 9;
 			DRLG_MRectTrans({ SetPiece.position, WorldTileSize((SetPiece.size.width / 2) + 4, SetPiece.size.height / 2) });
 			TransVal = tren;
-			if (gbIsMultiplayer && snotSpill != nullptr && snotSpill->talkMsg != TEXT_BANNER12) {
+			if (FloorWasRebuilt() && snotSpill != nullptr && snotSpill->talkMsg != TEXT_BANNER12) {
 				snotSpill->goal = MonsterGoal::Inquiring;
 				snotSpill->talkMsg = Quests[Q_LTBANNER]._qactive == QUEST_DONE ? TEXT_BANNER12 : TEXT_BANNER11;
 				snotSpill->flags |= MFLAG_QUEST_COMPLETE;
@@ -452,7 +466,7 @@ void ResyncQuests()
 			TransVal = 9;
 			DRLG_MRectTrans({ SetPiece.position, WorldTileSize((SetPiece.size.width / 2) + 4, SetPiece.size.height / 2) });
 			TransVal = tren;
-			if (gbIsMultiplayer && snotSpill != nullptr) {
+			if (FloorWasRebuilt() && snotSpill != nullptr) {
 				snotSpill->goal = MonsterGoal::Normal;
 				snotSpill->flags |= MFLAG_QUEST_COMPLETE;
 				snotSpill->talkMsg = TEXT_NONE;
@@ -487,7 +501,7 @@ void ResyncQuests()
 			ObjChangeMapResync(1, 11, 20, 18);
 		if (Quests[Q_BETRAYER]._qvar1 >= 6) {
 			ObjChangeMapResync(1, 18, 20, 24);
-			if (gbIsMultiplayer) {
+			if (FloorWasRebuilt()) {
 				Monster *lazarus = FindUniqueMonster(UniqueMonsterType::Lazarus);
 				if (lazarus != nullptr) {
 					// Ensure lazarus starts attacking again after returning to the level
@@ -521,7 +535,7 @@ void ResyncQuests()
 	    && gbIsMultiplayer) {
 		CleanTownFountain();
 	}
-	if (Quests[Q_GARBUD].IsAvailable() && gbIsMultiplayer) {
+	if (Quests[Q_GARBUD].IsAvailable() && FloorWasRebuilt()) {
 		Monster *garbud = FindUniqueMonster(UniqueMonsterType::Garbud);
 		if (garbud != nullptr && Quests[Q_GARBUD]._qvar1 != QS_GHARBAD_INIT) {
 			switch (Quests[Q_GARBUD]._qvar1) {
@@ -552,7 +566,7 @@ void ResyncQuests()
 			}
 		}
 	}
-	if (Quests[Q_ZHAR].IsAvailable() && gbIsMultiplayer) {
+	if (Quests[Q_ZHAR].IsAvailable() && FloorWasRebuilt()) {
 		Monster *zhar = FindUniqueMonster(UniqueMonsterType::Zhar);
 		if (zhar != nullptr && Quests[Q_ZHAR]._qvar1 != QS_ZHAR_INIT) {
 			zhar->flags |= MFLAG_QUEST_COMPLETE;
@@ -573,7 +587,7 @@ void ResyncQuests()
 			}
 		}
 	}
-	if (Quests[Q_WARLORD].IsAvailable() && gbIsMultiplayer) {
+	if (Quests[Q_WARLORD].IsAvailable() && FloorWasRebuilt()) {
 		Monster *warlord = FindUniqueMonster(UniqueMonsterType::WarlordOfBlood);
 		if (warlord != nullptr && Quests[Q_WARLORD]._qvar1 == QS_WARLORD_ATTACKING) {
 			warlord->activeForTicks = UINT8_MAX;
@@ -581,7 +595,7 @@ void ResyncQuests()
 			warlord->goal = MonsterGoal::Normal;
 		}
 	}
-	if (Quests[Q_VEIL].IsAvailable() && gbIsMultiplayer) {
+	if (Quests[Q_VEIL].IsAvailable() && FloorWasRebuilt()) {
 		Monster *lachdan = FindUniqueMonster(UniqueMonsterType::Lachdan);
 		if (lachdan != nullptr) {
 			switch (Quests[Q_VEIL]._qvar2) {

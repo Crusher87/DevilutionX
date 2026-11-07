@@ -45,6 +45,7 @@
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/stacking.hpp"
+#include "poe2/regen.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry_events.hpp"
@@ -2710,6 +2711,15 @@ std::string TelemetryBuildText(const Player &player)
 	StrAppend(text, std::format(" | defences: armour {:d}, evasion {:d}, energy shield {:d}, block {:d}%, resist fire {:d}% lightning {:d}% cold {:d}% chaos {:d}% (max {:d}%), spirit {:d}/{:d}",
 	                    ArmourRating(player, false), EvasionRating(player, false), player.poe2.maxEnergyShield, LoggedBlockChance(player),
 	                    player._pFireResist, player._pLghtResist, Poe2ColdResistance(player), player.poe2.chaosResistance, player.poe2.maxChaosResistance, ReservedSpirit(player), MaxSpirit(player)));
+	// Regeneration a second and the worn items that give life regeneration (Curtis 2026-11-07: 4-5 a second from a +1 helm).
+	const int lifeRegen = LifeRegenTenthsPerSecond(player);
+	const int manaRegen = ManaRegenTenthsPerSecond(player);
+	StrAppend(text, std::format(" | regen: life {:d}.{:d}/s (flat {:d}, per mille {:d}), mana {:d}.{:d}/s", lifeRegen / 10, lifeRegen % 10, player.poe2.lifeRegen,
+	                    player.poe2.lifeRegenPerMille, manaRegen / 10, manaRegen % 10));
+	for (const Item &item : player.InvBody) {
+		if (!item.isEmpty() && item._iStatFlag && item._iPLLifeRegen != 0)
+			StrAppend(text, std::format("; {:s} {:+d}", item._iIName, item._iPLLifeRegen));
+	}
 	StrAppend(text, " | belt:");
 	for (const Item &item : player.SpdList) {
 		if (!item.isEmpty())

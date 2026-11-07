@@ -1136,5 +1136,33 @@ TEST_F(Poe2ItemBasesTest, UnidentifiedItemsShowOnlyTheirBase)
 	EXPECT_EQ(maxDamage, AllItemsList[plain.IDidx].iMaxDam * 120 / 100);
 }
 
+
+TEST_F(Poe2ItemBasesTest, LifeRegenerationCountsEachModOnce)
+{
+	// Curtis 2026-11-07: a +1 regeneration helm, yet 4-5 life a second. Each roll and implicit counts once, also after a load.
+	const auto family = static_cast<uint8_t>(*FindModifierFamily("life_regeneration") + 1);
+	for (const char *name : { "Crimson Amulet", "Iron Cap", "Coral Ring" }) {
+		int checked = 0;
+		for (uint32_t seed = 1; seed < 3000 && checked < 20; seed++) {
+			const Item item = MakeRare(FindBase(name), seed);
+			int expected = 0;
+			for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+				if (mod.family == family)
+					expected += mod.values[0];
+			}
+			for (const ItemImplicit &implicit : ItemImplicits(item)) {
+				if (implicit.implicit->effect == ModEffect::LifeRegeneration)
+					expected += implicit.values[0];
+			}
+			if (expected == 0 && item._iPLLifeRegen == 0)
+				continue;
+			checked++;
+			EXPECT_EQ(item._iPLLifeRegen, expected) << name << " " << seed;
+			EXPECT_EQ(SaveAndLoad(item)._iPLLifeRegen, expected) << name << " loaded " << seed;
+		}
+		EXPECT_GT(checked, 0) << name;
+	}
+}
+
 } // namespace
 } // namespace devilution

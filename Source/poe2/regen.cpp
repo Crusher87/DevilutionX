@@ -51,6 +51,23 @@ int ManaFromItemMagic(const Player &player, int magic)
 	return (player.getClassAttributes().itmMana * magic).whole();
 }
 
+int LifeRegenTenthsPerSecond(const Player &player)
+{
+	if (!gbIsPoe2)
+		return 0;
+	const int64_t lifePerSecond = static_cast<int64_t>(player.poe2.lifeRegen) * 64 + static_cast<int64_t>(std::max<int32_t>(player._pMaxHP.raw(), 0)) * player.poe2.lifeRegenPerMille / 1000;
+	return static_cast<int>(std::max<int64_t>(lifePerSecond * LifeRecoveryPercent(player, false) / 100, 0) * 10 / 64);
+}
+
+int ManaRegenTenthsPerSecond(const Player &player)
+{
+	if (!gbIsPoe2 || HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana) || IsRecoveryLocked(player))
+		return 0;
+	const int manaMultiplier = std::max(100 + player.poe2.manaRegenBonus, 0) * ManaRecoveryPercent(player) / 100;
+	const int64_t perSecond = static_cast<int64_t>(std::max<int32_t>(player._pMaxMana.raw(), 0)) * BaseManaRegenPercent * manaMultiplier / (100 * 100);
+	return static_cast<int>(perSecond * 10 / 64);
+}
+
 void ApplyRegen(Player &player)
 {
 	if (!gbIsPoe2 || player.hasNoLife())
