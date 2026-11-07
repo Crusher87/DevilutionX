@@ -106,6 +106,8 @@ struct Poe2MonsterState {
 	uint8_t poisonTicks = 0;
 	int8_t poisonSource = -1;
 	int32_t poisonDamagePerTick = 0;
+	/** @brief The poison is Cobra Strike's own, which its next strike doesn't consume (Curtis 2026-11-07, Q42; not saved). */
+	bool poisonFromCobra = false;
 	/** @brief Plague Burst: the poison builds plague, the chaos its ticks dealt as a raw Fixed26_6 value, which bursts on death. */
 	bool poisonPlague = false;
 	int32_t plagueStore = 0;

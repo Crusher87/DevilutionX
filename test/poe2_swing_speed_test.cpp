@@ -759,7 +759,8 @@ TEST_F(Poe2SwingSpeedTest, HeldPerHitSkillsStrikeAtThePerHitTime)
 	EXPECT_EQ(strikes.starts.front(), 0);
 	EXPECT_NEAR(strikes.averageCycle() / 20, 1 / (1.55 * 2.4), 0.002);
 	EXPECT_EQ(PerHitDamagePercent(player, zeal), 100);
-	EXPECT_EQ(WeaponSkillManaCost(zeal), 1);
+	// Q42: Zeal's listed 10 at its tier IX, two thirds for melee, a quarter a strike.
+	EXPECT_EQ(WeaponSkillManaCost(zeal), 2);
 
 	// Blade Fury with a Glass Shank: one dagger a use at 550% of 1.55 a second would be 0.12 seconds; no action is
 	// quicker than 4 ticks, so each dagger hits for what the 0.2 seconds lost (171%).

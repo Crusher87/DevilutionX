@@ -180,8 +180,9 @@ constexpr int PoisonTicks = 2 * 20;
 /**
  * @brief Poisons a monster: total is the poison's whole damage, as a raw Fixed26_6, spread over ticks. With maxStacks 1
  * only the strongest poison counts: a weaker one is lost, a stronger one takes over. More stacks add up to that many.
+ * Returns whether the poison landed.
  */
-void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1, bool fromHit = true);
+bool InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1, bool fromHit = true);
 /**
  * @brief Puts a poison of perTick (a raw Fixed26_6 a tick) for ticks into the monster's poison, with no supports: with
  * maxStacks 1 only the strongest counts, as InflictPoison. Returns false when the poison was weaker and so lost.

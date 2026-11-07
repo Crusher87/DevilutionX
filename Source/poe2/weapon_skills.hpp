@@ -101,10 +101,15 @@ constexpr int BarrageShotTicks = 3;
 constexpr int EmberShotTicks = 2;
 /** @brief Charged Bolt throws Arcing Sparks' sparks too from this gem level (Curtis 2026-11-07, Q34). */
 constexpr int ChargedBoltSparksGemLevel = 10;
-/** @brief The sparks each Charged Bolt cast throws from ChargedBoltSparksGemLevel; each rolls Spark's row (60%). */
+/** @brief The sparks each Charged Bolt cast throws from ChargedBoltSparksGemLevel. */
 constexpr int ChargedBoltSparks = 2;
-/** @brief Fire Wall cast this close to the hero makes Ring of Fire's ring instead of a line (Curtis 2026-11-07, Q34). */
-constexpr int FireWallRingTiles = 1;
+/** @brief Each spark's hit in percent of a spell base (Curtis 2026-11-07, Q43: 60% to 25%). */
+constexpr int ChargedBoltSparkPercent = 25;
+/**
+ * @brief Fire Wall cast this close to the hero makes Ring of Fire's ring instead of a line (Curtis 2026-11-07, Q34): only
+ * on the hero's own tile, so one aimed at a monster beside them is the normal wall (Q42).
+ */
+constexpr int FireWallRingTiles = 0;
 /** @brief Barrage fires its arrows one after another at one target. */
 constexpr int BarrageArrows = 5;
 /** @brief Ember Fusillade's embers before its gem level adds more. */

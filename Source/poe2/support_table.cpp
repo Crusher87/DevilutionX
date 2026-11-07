@@ -977,13 +977,15 @@ bool AddPoison(Monster &monster, int32_t perTick, int ticks, int maxStacks)
 		state.poisonDamagePerTick = std::min<int32_t>(state.poisonTicks > 0 ? state.poisonDamagePerTick + perTick : perTick, std::max<int32_t>(cap, state.poisonDamagePerTick));
 		state.poisonTicks = static_cast<uint8_t>(std::max<int>(state.poisonTicks, ticks));
 	}
+	// Another poison landed, which Cobra Strike may consume (Q42); the strike marks its own after this.
+	state.poisonFromCobra = false;
 	return true;
 }
 
-void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks, bool fromHit)
+bool InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks, bool fromHit)
 {
 	if (!AilmentAllowed(player, HitSource()))
-		return;
+		return false;
 	// The supports of the hit in progress: Deadly Venom's stronger poison (only a hit's: a pool or a curse has none to
 	// lessen, the poison skills plan), Twin Fangs' extra stack and shorter poisons (POE2's Deadly Poison and Escalating
 	// Poison), and Lingering Venom's longer, weaker ones.
@@ -1007,7 +1009,7 @@ void InflictPoison(const Player &player, Monster &monster, int32_t total, int ti
 	const int32_t perTick = std::max<int32_t>(total / std::max(ticks, 1), 1);
 	const bool stacked = state.poisonTicks > 0 && maxStacks > 1;
 	if (!AddPoison(monster, perTick, ticks, maxStacks))
-		return;
+		return false;
 	state.poisonSource = static_cast<int8_t>(player.getId());
 	const bool supported = Hit.player == &player && !Hit.skill.isEmpty();
 	// Plague Burst: the poison builds plague; a stack added to it keeps the plague it had (POE2's Bursting Plague).
@@ -1018,6 +1020,7 @@ void InflictPoison(const Player &player, Monster &monster, int32_t total, int ti
 		BreakMonsterArmour(monster, &player);
 	// Blood and Venom: this poison deals more while the monster bleeds.
 	state.poisonVsBleed = supported && Has(player, Hit.skill, SG::BloodAndVenom);
+	return true;
 }
 
 void NoteSupportedBleed(const Player &player, Monster &monster)

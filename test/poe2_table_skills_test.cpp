@@ -249,29 +249,38 @@ TEST_F(Poe2TableSkillsTest, ConfuseFromLevelTenSendsARareBerserk)
 }
 
 // Q37 (Curtis 2026-11-07): Zeal's uses 1 to 3 are quick stabs at the monster in front; every fourth is a heavy blow at
-// 150% on every monster beside the hero. The count starts over 3 seconds after the last Zeal.
-TEST_F(Poe2TableSkillsTest, ZealEveryFourthUseIsAHeavyBlowAround)
+// 150% on the three tiles in front, as Cleave sweeps (Q43: no longer all 8). The count starts over 3 seconds after the
+// last Zeal.
+TEST_F(Poe2TableSkillsTest, ZealEveryFourthUseIsAHeavyBlowInFront)
 {
 	Player &player = SetUpFight();
 	int sideOnStabs = 0;
 	int sideOnHeavy = 0;
+	int behindHit = 0;
 	for (uint32_t seed = 1; seed <= 6; seed++) {
 		ClearMonsters();
 		player.poe2.zealCount = 0;
 		player.poe2.zealTicks = 0;
+		player._pdir = Direction::SouthEast;
 		PlaceMonster(0, { 41, 40 });
-		Monster &side = PlaceMonster(1, { 40, 41 });
+		// Facing south-east: south is beside the target, in front; south-west is beside the hero, not in front.
+		Monster &side = PlaceMonster(1, { 41, 41 });
+		Monster &behind = PlaceMonster(2, { 40, 41 });
 		for (int use = 1; use <= ZealHeavyEvery; use++) {
 			const Fixed26_6 before = side.hitPoints;
+			const Fixed26_6 behindBefore = behind.hitPoints;
 			SetRndSeed(seed * 10 + use);
 			ExecuteSkillCast(player, WeaponSkill::Zeal, { 41, 40 });
 			EXPECT_EQ(player.poe2.zealCount, use % ZealHeavyEvery);
 			if (side.hitPoints < before)
 				(use == ZealHeavyEvery ? sideOnHeavy : sideOnStabs)++;
+			if (behind.hitPoints < behindBefore)
+				behindHit++;
 		}
 	}
 	EXPECT_EQ(sideOnStabs, 0);
 	EXPECT_GT(sideOnHeavy, 0);
+	EXPECT_EQ(behindHit, 0);
 	EXPECT_EQ(ZealHeavyPercent, 150);
 	ExecuteSkillCast(player, WeaponSkill::Zeal, { 41, 40 });
 	EXPECT_EQ(player.poe2.zealCount, 1);
@@ -536,6 +545,42 @@ TEST_F(Poe2TableSkillsTest, CobraStrikeBurstsThePoisonLeft)
 		EXPECT_EQ(poisoned - plain, 50 * 64) << seed;
 	}
 	EXPECT_GT(compared, 0);
+	ClearMonsters();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q42 (Curtis 2026-11-07): spammed, Cobra Strike doesn't consume its own last poison; only another skill's.
+TEST_F(Poe2TableSkillsTest, CobraStrikeLeavesItsOwnPoison)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	Monster &monster = PlaceMonster(0, player.position.tile + Direction::East);
+	monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
+	bool poisoned = false;
+	for (uint32_t seed = 1; seed <= 20 && !poisoned; seed++) {
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::ViperStrike, monster.position.tile);
+		poisoned = monster.poe2.poisonTicks > 0;
+	}
+	ASSERT_TRUE(poisoned);
+	EXPECT_TRUE(monster.poe2.poisonFromCobra);
+	// Its own poison: the next strike lands its hit and keeps the poison going, with no burst.
+	const int32_t perTick = monster.poe2.poisonDamagePerTick;
+	int strikesAfter = 0;
+	for (uint32_t seed = 30; seed <= 50; seed++) {
+		const Fixed26_6 before = monster.hitPoints;
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::ViperStrike, monster.position.tile);
+		if (monster.hitPoints < before) {
+			strikesAfter++;
+			EXPECT_GT(monster.poe2.poisonTicks, 0) << seed;
+			EXPECT_GE(monster.poe2.poisonDamagePerTick, perTick) << seed;
+		}
+	}
+	EXPECT_GT(strikesAfter, 0);
+	// Another skill's poison takes over, and the next strike may consume it.
+	ASSERT_TRUE(AddPoison(monster, monster.poe2.poisonDamagePerTick * 2, 40, 1));
+	EXPECT_FALSE(monster.poe2.poisonFromCobra);
 	ClearMonsters();
 	leveltype = DTYPE_TOWN;
 }
@@ -840,25 +885,26 @@ TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
 	// Area skills hit each monster for 50-80% of a hit; a delay, crowd control, a leap or damage over time leaves some
 	// outside that band.
 	const std::pair<WeaponSkill, int> Percents[] = {
-		{ WeaponSkill::Whirlwind, 85 },
+		// Q43 (Curtis 2026-11-07): Whirlwind 85 -> 70, Falling Sword 135 -> 90; Q45 Blessed Shield 70 -> 150.
+		{ WeaponSkill::Whirlwind, 70 },
 		{ WeaponSkill::Fissure, 65 },
 		// Tier moves keep each skill's score (Curtis 2026-11-07): Shockwave x1.35, Call of the Ancients x1.20, Falling
 		// Sword x1.35, Lashing Tail Kick x1.45.
 		{ WeaponSkill::Shockwave, 95 },
 		{ WeaponSkill::CallOfTheAncients, 72 },
-		{ WeaponSkill::FallingSword, 135 },
+		{ WeaponSkill::FallingSword, 90 },
 		{ WeaponSkill::LashingTailKick, 94 },
 		{ WeaponSkill::WaveOfLight, 50 },
 		{ WeaponSkill::CycloneStrike, 50 },
 		{ WeaponSkill::BlessedHammer, 20 },
 		{ WeaponSkill::Condemn, 50 },
-		{ WeaponSkill::BlessedShield, 70 },
+		{ WeaponSkill::BlessedShield, 150 },
 		{ WeaponSkill::FistOfTheHeavens, 110 },
 		// Q30 (Curtis 2026-11-07): Corpse Explosion V to VII (50 -> 60).
 		{ WeaponSkill::CorpseExplosion, 60 },
 		// Curtis 2026-10-28: 35 -> 400, a tier V area spike (audit-casters-v3.md); then 200 with Firebolt (Q27); then
-		// tier III to IX, 350 (Q30).
-		{ WeaponSkill::GlacialSpike, 350 },
+		// tier III to IX, 350 (Q30); 250 (Q44).
+		{ WeaponSkill::GlacialSpike, 250 },
 		{ WeaponSkill::Blizzard, 21 },
 		// Frozen Orb, Meteor and Thunderstorm moved to tier XI (Q30, Q35): 70, 150 -> 145, 100 -> 136.
 		{ WeaponSkill::FrozenOrb, 70 },

@@ -407,13 +407,16 @@ constexpr int DeathMarkConsumePercent = 200;
  * @brief Wave of Light (Q38): at full Combo it drops a bell in front of the hero, a weapon hit at this percent in this
  * radius; it stands this many game ticks (6 s), and each hit on it tolls for this percent in this radius.
  */
-constexpr int WaveBellPercent = 200;
+constexpr int WaveBellPercent = 100;
 constexpr int WaveBellRadius = 2;
 constexpr int WaveBellTicks = 120;
 constexpr int WaveBellTollPercent = 50;
 constexpr int WaveBellTollRadius = 2;
-/** @brief Game ticks between two tolls of the bell: one a swing, however many of the bell's tiles it hits. */
-constexpr int WaveBellTollCooldown = 4;
+/**
+ * @brief Game ticks between two tolls of the bell: one a swing, however many of the bell's tiles it hits. Only weapon
+ * swings toll it, not area skills sweeping its tile (Curtis 2026-11-07, Q42).
+ */
+constexpr int WaveBellTollCooldown = 12;
 /** @brief Glacial Spike (Q38): a frozen monster it hits takes this percent of the hit and loses the freeze. */
 constexpr int GlacialSpikeFrozenPercent = 200;
 /** @brief Attract (Curtis 2026-11-07, Q36): monsters this near the cursed monster attack it instead of the hero. */

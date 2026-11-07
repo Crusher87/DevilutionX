@@ -580,7 +580,8 @@ int ListedManaCost(WeaponSkill skill)
 	case WeaponSkill::RainOfArrows:
 		return 10;
 	case WeaponSkill::ShieldCharge:
-		return 8;
+		// Curtis 2026-11-07 (Q42): 8 to 6, the normal mana for its new tier III.
+		return 6;
 	case WeaponSkill::BattleCry:
 		return 10;
 	case WeaponSkill::LightningArrow:
@@ -611,7 +612,8 @@ int ListedManaCost(WeaponSkill skill)
 	case WeaponSkill::RapidFire:
 		return 8;
 	case WeaponSkill::ShieldBash:
-		return 4;
+		// Curtis 2026-11-07 (Q42): 4 to 3, the normal mana for its new tier I.
+		return 3;
 	case WeaponSkill::AmplifyDamage:
 		return 8;
 	default:
@@ -1301,7 +1303,9 @@ int FireChargedBoltSparks(Player &player, Point target, int spellLevel)
 		// Either side of the bolts' line: 1, -1, 2, -2, ...
 		const int offset = (i / 2 + 1) * (i % 2 == 0 ? 1 : -1);
 		const Point aim = far + side * offset;
-		const int hit = RollPoe2SkillSpellHit(player, WeaponSkill::Spark, std::max(spellLevel, 1));
+		// Spark's roll, at the sparks' own share (Q43).
+		const int sparkPercent = std::max(SkillSpellDamagePercent(WeaponSkill::Spark), 1);
+		const int hit = std::max(RollPoe2SkillSpellHit(player, WeaponSkill::Spark, std::max(spellLevel, 1)) * ChargedBoltSparkPercent / sparkPercent, 1);
 		Missile *spark = AddMissile(player.position.tile, aim, GetDirection(player.position.tile, aim), MissileID::ChargedBolt, TARGET_MONSTERS, player, hit, spellLevel);
 		if (spark == nullptr)
 			continue;

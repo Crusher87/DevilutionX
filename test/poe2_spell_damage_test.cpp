@@ -102,7 +102,8 @@ TEST_F(Poe2SpellDamageTest, TheFileGivesThePlannedPercents)
 	// then 70 with Firebolt (Q27).
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChargedBolt), 70);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Flash), 110);
-	EXPECT_EQ(SpellDamagePercent(SpellID::Fireball), 105);
+	// Q43 (Curtis 2026-11-07): Fireball 105 -> 90.
+	EXPECT_EQ(SpellDamagePercent(SpellID::Fireball), 90);
 	EXPECT_EQ(SpellDamagePercent(SpellID::ChainLightning), 400);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Elemental), 250);
 	EXPECT_EQ(SpellDamagePercent(SpellID::Immolation), 160);
@@ -157,12 +158,12 @@ TEST_F(Poe2SpellDamageTest, NoTwelvePointFivePercentStacking)
 	EXPECT_EQ(GemDamagePercent(fireball, 1), 187);
 	EXPECT_EQ(GemDamagePercent(fireball, 20), 312 * 187 / 100);
 
-	// A level 20 Fireball's missile is the base times 105%, with no 1.125^20 on top.
+	// A level 20 Fireball's missile is the base times 90%, with no 1.125^20 on top.
 	const Player &player = *MyPlayer;
 	for (uint32_t seed = 1; seed < 30; seed++) {
 		const Missile &ball = Cast(MissileID::Fireball, 20, seed);
-		EXPECT_GE(ball._midam, Percent(SpellBaseMin(player, 20), 105));
-		EXPECT_LE(ball._midam, Percent(SpellBaseMax(player, 20), 105));
+		EXPECT_GE(ball._midam, Percent(SpellBaseMin(player, 20), 90));
+		EXPECT_LE(ball._midam, Percent(SpellBaseMax(player, 20), 90));
 	}
 }
 
@@ -262,16 +263,18 @@ TEST_F(Poe2SpellDamageTest, ChargedBoltThrowsArcingSparksFromLevelTen)
 		EXPECT_TRUE(vfx::IsArcingSpark(missile));
 		EXPECT_EQ((SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId }), SkillSlot::ForSpell(SpellID::ChargedBolt));
 		EXPECT_GE(missile.poe2.piercesLeft, PierceCount);
-		EXPECT_GE(missile._midam, std::max(Percent(SpellBaseMin(player, ChargedBoltSparksGemLevel), 60), 1));
-		EXPECT_LE(missile._midam, std::max(Percent(SpellBaseMax(player, ChargedBoltSparksGemLevel), 60), 1));
+		// Q43: 25% of a spell base each, from Spark's 60% roll.
+		EXPECT_GE(missile._midam, std::max(Percent(SpellBaseMin(player, ChargedBoltSparksGemLevel), 60) * ChargedBoltSparkPercent / 60, 1));
+		EXPECT_LE(missile._midam, std::max(Percent(SpellBaseMax(player, ChargedBoltSparksGemLevel), 60) * ChargedBoltSparkPercent / 60, 1));
 	}
 }
 
-// Q34 (Curtis 2026-11-07): Ring of Fire merged into Fire Wall: cast on or beside the hero it makes the ring.
+// Q34 (Curtis 2026-11-07): Ring of Fire merged into Fire Wall: cast on the hero's own tile it makes the ring; aimed at
+// a monster beside them it's the normal wall (Q42).
 TEST_F(Poe2SpellDamageTest, FireWallAtYourFeetMakesTheRing)
 {
 	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 40, 40 }), MissileID::RingOfFire);
-	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 41, 41 }), MissileID::RingOfFire);
+	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 41, 41 }), MissileID::FireWallControl);
 	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 42, 40 }), MissileID::FireWallControl);
 	gbIsPoe2 = false;
 	EXPECT_EQ(FireWallMissile({ 40, 40 }, { 40, 40 }), MissileID::FireWallControl);
