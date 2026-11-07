@@ -54,7 +54,7 @@ struct Poe2MonsterState {
 	uint8_t amplifyPercent = 0;
 	/** @brief Armour broken by Smite: takes more physical damage. */
 	uint8_t armourBreakTicks = 0;
-	/** @brief Curses from the skill table, in game ticks left: Weaken and Decrepify make it hit softer, Iron Maiden turns its
+	/** @brief Curses from the skill table, in game ticks left: Weaken makes it hit softer, Decrepify slows it, Iron Maiden turns its
 	 * melee hits back on it, Lower Resist and Death Mark make it take more damage, Confuse sets it on other monsters. */
 	uint8_t weakenTicks = 0;
 	uint8_t decrepifyTicks = 0;
@@ -66,6 +66,15 @@ struct Poe2MonsterState {
 	uint8_t confuseTicks = 0;
 	/** @brief Confuse made the monster turn on its kind, so its flags go back when the curse ends. */
 	bool confusedByCurse = false;
+	/**
+	 * @brief Confuse's Berserk (Curtis 2026-11-07, Q36): a rare or unique it was aimed at from gem level 10 hits this much
+	 * harder, in percent (Berserk's 120-129%), while confuseTicks last; 0 when it isn't berserk (not saved).
+	 */
+	uint8_t berserkPercent = 0;
+	/** @brief Attract (Q36): game ticks the monster draws the monsters near it onto itself (not saved). */
+	uint8_t attractTicks = 0;
+	/** @brief Attract's roll at the cast, so each rare near it obeys or not for the whole curse, alike on every machine. */
+	uint8_t attractSeed = 0;
 	/** @brief Haunt and Locust Swarm drain the monster and move on to another when it dies. */
 	uint8_t hauntTicks = 0;
 	uint8_t locustTicks = 0;

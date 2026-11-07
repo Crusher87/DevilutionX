@@ -148,7 +148,7 @@ std::vector<Debuff> MonsterDebuffs(const Monster &monster)
 	if (const int weaken = TableCurseShownPercent(monster, TableCurse::Weaken); weaken > 0)
 		add(SpellIcon::LongHorn, SpellType::Skill, Curse, PercentText(-weaken * 10));
 	if (const int decrepify = TableCurseShownPercent(monster, TableCurse::Decrepify); decrepify > 0)
-		add(SpellIcon::RedSkull, SpellType::Skill, Curse, PercentText(decrepify * 10));
+		add(SpellIcon::RedSkull, SpellType::Skill, Curse, PercentText(-decrepify * 10));
 	if (const int deathMark = TableCurseShownPercent(monster, TableCurse::DeathMark); deathMark > 0)
 		add(SpellIcon::BoneSpirit, SpellType::Skill, Curse, PercentText(deathMark * 10));
 	if (const int ironMaiden = TableCurseShownPercent(monster, TableCurse::IronMaiden); ironMaiden > 0)

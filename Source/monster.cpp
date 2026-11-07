@@ -791,7 +791,9 @@ void UpdateEnemy(Monster &monster)
 			continue;
 
 		const int dist = otherMonster.position.tile.WalkingDistance(position);
-		if (!isPlayerMinion && otherMonster.poe2.decoy && dist < decoyDist) {
+		// POE2 Mashup: Attract makes the cursed monster a decoy too, for the monsters near it that obey (Curtis 2026-11-07).
+		const bool attracts = gbIsPoe2 && otherMonster.poe2.attractTicks > 0 && dist <= AttractTiles && MonsterObeysAttract(monster, otherMonster);
+		if (!isPlayerMinion && (otherMonster.poe2.decoy || attracts) && dist < decoyDist) {
 			decoy = static_cast<int>(monsterId);
 			decoyDist = dist;
 		}
@@ -4385,6 +4387,11 @@ void M_StartStand(Monster &monster, Direction md)
 	UpdateEnemy(monster);
 }
 
+void M_UpdateEnemy(Monster &monster)
+{
+	UpdateEnemy(monster);
+}
+
 void M_ClearSquares(const Monster &monster)
 {
 	for (const Point searchTile : PointsInRectangle(Rectangle { monster.position.old, 1 })) {
@@ -4783,6 +4790,9 @@ int ScaleMonsterBlow(const Monster &attacker, int dam)
 			dam = static_cast<int>(std::min<int64_t>(static_cast<int64_t>(dam) * CommandMinionDamagePercent(attacker) / 100, INT32_MAX / 4));
 		}
 	}
+	// POE2 Mashup: Confuse's Berserk, Diablo's Berserk spell's 120-129% harder blows (Curtis 2026-11-07, Q36).
+	if (gbIsPoe2 && attacker.poe2.berserkPercent > 0)
+		dam = static_cast<int>(std::min<int64_t>(static_cast<int64_t>(dam) * attacker.poe2.berserkPercent / 100, INT32_MAX / 4));
 	// Grave Howl's weaken is in the monster's damage scale (ScaleMonsterHit), so its missiles and spells meet it too.
 	return dam;
 }

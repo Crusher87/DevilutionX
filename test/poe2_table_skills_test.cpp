@@ -19,6 +19,7 @@
 #include "player.h"
 #include "poe2/bases.hpp"
 #include "poe2/gem_levels.hpp"
+#include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spell_base.hpp"
 #include "poe2/support_table.hpp"
@@ -107,6 +108,142 @@ public:
 		ActiveMonsterCount = 0;
 	}
 };
+
+/** @brief Gives the monster a seed that rolls the rarity (GetMonsterAffixes). */
+void MakeRarity(Monster &monster, MonsterRarity rarity)
+{
+	for (uint32_t seed = 1; seed < 100000; seed++) {
+		monster.rndItemSeed = seed;
+		if (GetMonsterAffixes(monster).rarity == rarity)
+			break;
+	}
+	EXPECT_EQ(GetMonsterAffixes(monster).rarity, rarity);
+}
+
+// Q36 (Curtis 2026-11-07): Decrepify is only a slow, like POE2's Temporal Chains: 30% less action speed, 20% on a rare,
+// 10% on a unique. Its weaken and its extra physical damage taken are gone.
+TEST_F(Poe2TableSkillsTest, DecrepifyIsOnlyASlow)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	Monster &normal = PlaceMonster(0, { 45, 40 });
+	MakeRarity(normal, MonsterRarity::Normal);
+	Monster &rare = PlaceMonster(1, { 46, 40 });
+	MakeRarity(rare, MonsterRarity::Rare);
+	Monster &unique = PlaceMonster(2, { 47, 40 });
+	unique.uniqueType = static_cast<UniqueMonsterType>(0);
+	ASSERT_TRUE(unique.isUnique());
+	const std::pair<Monster *, int> Slows[] = { { &normal, 30 }, { &rare, 20 }, { &unique, 10 } };
+	for (const auto &[monster, slow] : Slows) {
+		ApplyTableCurse(player, *monster, WeaponSkill::Decrepify, 100);
+		EXPECT_GT(monster->poe2.decrepifyTicks, 0);
+		EXPECT_EQ(DecrepifySlowPercentFor(*monster), slow);
+		EXPECT_EQ(monster->poe2.chillPercent, slow);
+		EXPECT_EQ(TableCurseShownPercent(*monster, TableCurse::Decrepify), slow);
+		EXPECT_EQ(TableCurseDamageTakenPercent(*monster, DamageType::Physical), 0);
+	}
+	// It no longer softens the monster's hits.
+	const Fixed26_6 hit = Fixed26_6::fromInt(100);
+	EXPECT_EQ(ApplyTableSkillDefences(normal, player, hit), hit);
+	ClearMonsters();
+}
+
+// Q36: Attract makes the cursed monster a decoy for 3 seconds: the monsters within 5 tiles attack it. Normal and magic
+// ones always, rares half the time, uniques never. It no longer sets the monster berserk.
+TEST_F(Poe2TableSkillsTest, AttractDrawsTheMonstersNearIt)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	Monster &cursed = PlaceMonster(0, { 45, 40 });
+	Monster &nearby = PlaceMonster(1, { 47, 40 });
+	MakeRarity(nearby, MonsterRarity::Normal);
+	Monster &distant = PlaceMonster(2, { 45, 47 });
+	MakeRarity(distant, MonsterRarity::Normal);
+	Monster &unique = PlaceMonster(3, { 44, 40 });
+	unique.uniqueType = static_cast<UniqueMonsterType>(0);
+	// The hero is on the level, the enemy the pack would have without the curse.
+	player.plractive = true;
+	setlevel = false;
+	player.setLevel(currlevel);
+	ApplyTableCurse(player, cursed, WeaponSkill::Attract, 100);
+	EXPECT_EQ(cursed.poe2.attractTicks, FindTableSkill(WeaponSkill::Attract)->duration);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Attract)->duration, 3 * 20);
+	EXPECT_EQ(cursed.flags & MFLAG_BERSERK, 0U);
+	EXPECT_EQ(cursed.poe2.confuseTicks, 0);
+	EXPECT_TRUE(MonsterObeysAttract(nearby, cursed));
+	EXPECT_FALSE(MonsterObeysAttract(unique, cursed));
+
+	M_UpdateEnemy(nearby);
+	EXPECT_EQ(nearby.enemy, 0);
+	EXPECT_NE(nearby.flags & MFLAG_TARGETS_MONSTER, 0U);
+	M_UpdateEnemy(distant);
+	EXPECT_EQ(distant.flags & MFLAG_TARGETS_MONSTER, 0U);
+	M_UpdateEnemy(unique);
+	EXPECT_EQ(unique.flags & MFLAG_TARGETS_MONSTER, 0U);
+
+	// A rare obeys for some rolls of the curse and not others, the same all through one curse.
+	Monster &rare = PlaceMonster(4, { 46, 41 });
+	MakeRarity(rare, MonsterRarity::Rare);
+	int obeyed = 0;
+	for (int seed = 0; seed < 8; seed++) {
+		cursed.poe2.attractSeed = static_cast<uint8_t>(seed);
+		obeyed += MonsterObeysAttract(rare, cursed) ? 1 : 0;
+		EXPECT_EQ(MonsterObeysAttract(rare, cursed), MonsterObeysAttract(rare, cursed));
+	}
+	EXPECT_EQ(obeyed, 4);
+
+	// When it runs out, the pack goes back to the hero.
+	for (int i = 0; i < 3 * 20; i++)
+		ProcessTableCurses(cursed);
+	EXPECT_EQ(cursed.poe2.attractTicks, 0);
+	M_UpdateEnemy(nearby);
+	EXPECT_EQ(nearby.flags & MFLAG_TARGETS_MONSTER, 0U);
+	EXPECT_EQ(nearby.enemy, 0);
+	player.plractive = false;
+	ClearMonsters();
+}
+
+// Q36: Berserk merged into Confuse. From gem level 10, the rare or unique Confuse is aimed at goes berserk (Berserk's
+// 120-129% harder blows) for the curse's length; below it, nothing new.
+TEST_F(Poe2TableSkillsTest, ConfuseFromLevelTenSendsARareBerserk)
+{
+	Player &player = SetUpFight();
+	const TableSkillData &confuse = *FindTableSkill(WeaponSkill::Confuse);
+	player.poe2.skillSlots[0] = SkillSlot::ForAttack(WeaponSkill::Confuse);
+	for (const int level : { ConfuseBerserkGemLevel - 1, ConfuseBerserkGemLevel }) {
+		player.poe2.slotLevels[0] = static_cast<uint8_t>(level);
+		ClearMonsters();
+		Monster &rare = PlaceMonster(0, { 45, 40 });
+		MakeRarity(rare, MonsterRarity::Rare);
+		Monster &unique = PlaceMonster(1, { 49, 40 });
+		unique.uniqueType = static_cast<UniqueMonsterType>(0);
+		ExecuteTableSkill(player, confuse, rare.position.tile);
+		ExecuteTableSkill(player, confuse, unique.position.tile);
+		if (level < ConfuseBerserkGemLevel) {
+			EXPECT_EQ(rare.poe2.berserkPercent, 0);
+			EXPECT_EQ(unique.poe2.berserkPercent, 0);
+			EXPECT_EQ(unique.flags & MFLAG_BERSERK, 0U);
+			continue;
+		}
+		for (Monster *monster : { &rare, &unique }) {
+			EXPECT_GE(monster->poe2.berserkPercent, 120);
+			EXPECT_LE(monster->poe2.berserkPercent, 129);
+			EXPECT_NE(monster->flags & MFLAG_BERSERK, 0U);
+			EXPECT_EQ(monster->poe2.confuseTicks, confuse.duration);
+		}
+		const int blow = ScaleMonsterBlow(unique, 6400);
+		unique.poe2.berserkPercent = 0;
+		EXPECT_GT(blow, ScaleMonsterBlow(unique, 6400));
+		unique.poe2.berserkPercent = 125;
+		// It ends with the curse.
+		for (int i = 0; i < confuse.duration; i++)
+			ProcessTableCurses(unique);
+		EXPECT_EQ(unique.poe2.berserkPercent, 0);
+		EXPECT_EQ(unique.flags & MFLAG_BERSERK, 0U);
+	}
+	player.poe2.skillSlots[0] = {};
+	ClearMonsters();
+}
 
 TEST_F(Poe2TableSkillsTest, SpellBaseRollMatchesTheTooltipRange)
 {

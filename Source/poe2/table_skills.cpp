@@ -139,10 +139,10 @@ const TableSkillData Table[] = {
 	// Curses
 	{ WS::Weaken, "Weaken", "Curses enemies to hit 30% softer", 3, 8, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Weaken, TableBuff::None, TT_Occult, Icon(SpellIcon::Mana), TableCurve::Boneshatter, 100 },
 	{ WS::IronMaiden, "Iron Maiden", "Curses enemies so their melee hits wound them as well", 20, 8, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::IronMaiden, TableBuff::None, TT_Occult, Icon(SpellIcon::Reflect), TableCurve::Boneshatter, 100 },
-	{ WS::Decrepify, "Decrepify", "Curses enemies to move slowly, hit softer and take more physical damage", 7, 10, TW::None, 1, Curse, Flat, 0, 2, 160, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Decrepify, TableBuff::None, TT_Occult, Icon(SpellIcon::StoneCurse), TableCurve::Boneshatter, 100 },
+	{ WS::Decrepify, "Decrepify", "Curses enemies to act 30% slower (rares 20%, uniques 10%)", 7, 10, TW::None, 1, Curse, Flat, 0, 2, 160, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Decrepify, TableBuff::None, TT_Occult, Icon(SpellIcon::StoneCurse), TableCurve::Boneshatter, 100 },
 	{ WS::LowerResist, "Lower Resist", "Curses enemies with -30% to fire, lightning and cold resistance", 9, 10, TW::None, 1, Curse, Flat, 0, 2, 200, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::LowerResist, TableBuff::None, TT_Elemental, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 100 },
-	{ WS::Confuse, "Confuse", "Curses enemies to attack each other for 6 seconds", 11, 12, TW::None, 1, Curse, Flat, 0, 2, 120, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Confuse, TableBuff::None, TT_Occult, Icon(SpellIcon::Jester), TableCurve::Boneshatter, 100 },
-	{ WS::Attract, "Attract", "Turns a whole pack on each other for 3 seconds", 15, 14, TW::None, 1, Curse, Flat, 0, 5, 60, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Attract, TableBuff::None, TT_Occult, Icon(SpellIcon::Telekinesis), TableCurve::Boneshatter, 100 },
+	{ WS::Confuse, "Confuse", "Curses enemies to attack each other for 6 seconds; from level 10 a rare or unique you aim at goes berserk", 11, 12, TW::None, 1, Curse, Flat, 0, 2, 120, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Confuse, TableBuff::None, TT_Occult, Icon(SpellIcon::Jester), TableCurve::Boneshatter, 100 },
+	{ WS::Attract, "Attract", "Curses an enemy to draw the attacks of the monsters near it for 3 seconds", 15, 14, TW::None, 1, Curse, Flat, 0, 5, 60, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::Attract, TableBuff::None, TT_Occult, Icon(SpellIcon::Telekinesis), TableCurve::Boneshatter, 100 },
 	// Granted by the caster weapons rework's staves and wands (caster-weapons-plan-v2.md 6.12 and 7.2): no gem, no mana, no
 	// tab; each hit is set for its cast time (skill_speed.tsv), so the rows take no damage_pct.
 	// POE2 Mashup: three shards a cast, not five; each keeps its hit (Curtis 2026-10-29).
@@ -196,9 +196,8 @@ const TableSkillData Table[] = {
 };
 // clang-format on
 
-/** @brief Melee hits from Weaken, Decrepify and the player's defensive buffs land this much softer, in percent. */
+/** @brief Melee hits from Weaken and the player's defensive buffs land this much softer, in percent. */
 constexpr int WeakenPercent = 30;
-constexpr int DecrepifyPercent = 25;
 constexpr int FrozenArmorPercent = 20;
 constexpr int HolyShieldPercent = 15;
 /**
@@ -208,8 +207,6 @@ constexpr int HolyShieldPercent = 15;
 constexpr int MaxStackingZones = 1;
 constexpr int ShieldWallPercent = 40;
 constexpr int DeathMarkPercent = 25;
-/** Decrepify chills the cursed monster this much, in percent. */
-constexpr int DecrepifyChillPercent = 40;
 constexpr int SoulDamagePercent = 3;
 constexpr int MaxSouls = 10;
 constexpr int RagePercent = 5;
@@ -1024,10 +1021,11 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 		break;
 	case TableCurse::Decrepify:
 		state.decrepifyTicks = ticks;
-		// Its chill is a curse's, which the Sickness Road can stop.
+		// Only the slow, like POE2's Temporal Chains (Curtis 2026-11-07, Q36). Its chill is a curse's, which the Sickness
+		// Road can stop.
 		if (AilmentAllowed(player, AilmentSource::Spell)) {
 			state.chillTicks = ticks;
-			state.chillPercent = static_cast<uint8_t>(std::max<int>(state.chillPercent, DecrepifyChillPercent));
+			state.chillPercent = static_cast<uint8_t>(std::max<int>(state.chillPercent, DecrepifySlowPercentFor(monster)));
 		}
 		break;
 	case TableCurse::LowerResist:
@@ -1040,7 +1038,6 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 		state.despairTicks = ticks;
 		break;
 	case TableCurse::Confuse:
-	case TableCurse::Attract:
 		if (monster.isUnique())
 			break;
 		if ((monster.flags & MFLAG_BERSERK) == 0) {
@@ -1048,6 +1045,11 @@ void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &da
 			state.confusedByCurse = true;
 		}
 		state.confuseTicks = ticks;
+		break;
+	case TableCurse::Attract:
+		// Diablo 2's Attract (Curtis 2026-11-07, Q36): the monster becomes a decoy for the monsters near it (UpdateEnemy).
+		state.attractTicks = ticks;
+		state.attractSeed = static_cast<uint8_t>(GenerateRnd(256));
 		break;
 	case TableCurse::Haunt:
 		state.hauntTicks = ticks;
@@ -1299,7 +1301,7 @@ void ApplyAuraCurse(const Player &player, Monster &monster, WeaponSkill skill, i
 	state.auraCurseStrength = static_cast<uint8_t>(std::clamp(strengthPercent, 1, 100));
 	if (data->curse == TableCurse::Decrepify && AilmentAllowed(player, AilmentSource::Spell)) {
 		state.chillTicks = std::max(state.chillTicks, *left);
-		state.chillPercent = static_cast<uint8_t>(std::max<int>(state.chillPercent, DecrepifyChillPercent * state.auraCurseStrength / 100));
+		state.chillPercent = static_cast<uint8_t>(std::max<int>(state.chillPercent, DecrepifySlowPercentFor(monster) * state.auraCurseStrength / 100));
 	}
 	monster.tag(player);
 	if (fresh)
@@ -1603,6 +1605,15 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 				ApplyCurse(player, *monster, data);
 		} else {
 			ForEachMonsterNear(target, data.radius, [&](Monster &monster) { ApplyCurse(player, monster, data); });
+		}
+		// Berserk merged into Confuse (Curtis 2026-11-07, Q36): from gem level 10 the rare or unique it is aimed at goes
+		// berserk, as Diablo's Berserk spell made a monster.
+		if (data.curse == TableCurse::Confuse && GemLevel(player, data.skill) >= ConfuseBerserkGemLevel) {
+			if (Monster *aimed = TargetMonsterNear(target, 1); aimed != nullptr && !aimed->isPlayerMinion() && aimed->type().type != MT_DIABLO
+			    && (aimed->isUnique() || GetMonsterAffixes(*aimed).rarity == MonsterRarity::Rare)) {
+				GiveConfuseBerserk(*aimed, data.duration);
+				aimed->tag(player);
+			}
 		}
 		break;
 	case Buff:
@@ -2623,8 +2634,6 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 	int percent = 100;
 	if (monster.poe2.weakenTicks > 0)
 		percent -= WeakenPercent * TableCurseStrength(monster, TableCurse::Weaken) / 100;
-	if (monster.poe2.decrepifyTicks > 0)
-		percent -= DecrepifyPercent * TableCurseStrength(monster, TableCurse::Decrepify) / 100;
 	if (player.poe2.frozenArmorTicks > 0) {
 		percent -= FrozenArmorPercent;
 		if (AilmentAllowed(player, AilmentSource::Spell)) {
@@ -2679,10 +2688,44 @@ void ProcessTableCurses(Monster &monster)
 		if (*ticks > 0)
 			(*ticks)--;
 	}
-	if (state.confuseTicks > 0 && --state.confuseTicks == 0 && state.confusedByCurse) {
-		monster.flags &= ~(MFLAG_BERSERK | MFLAG_GOLEM);
-		state.confusedByCurse = false;
+	if (state.attractTicks > 0)
+		state.attractTicks--;
+	if (state.confuseTicks > 0 && --state.confuseTicks == 0) {
+		state.berserkPercent = 0;
+		if (state.confusedByCurse) {
+			monster.flags &= ~(MFLAG_BERSERK | MFLAG_GOLEM);
+			state.confusedByCurse = false;
+		}
 	}
+}
+
+int DecrepifySlowPercentFor(const Monster &monster)
+{
+	if (monster.isUnique() || monster.type().type == MT_DIABLO)
+		return DecrepifyUniqueSlowPercent;
+	if (GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
+		return DecrepifyRareSlowPercent;
+	return DecrepifySlowPercent;
+}
+
+bool MonsterObeysAttract(const Monster &monster, const Monster &cursed)
+{
+	if (monster.isPlayerMinion() || monster.isUnique() || monster.type().type == MT_DIABLO)
+		return false;
+	if (GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)
+		return ((cursed.poe2.attractSeed + monster.getId()) & 1) == 0;
+	return true;
+}
+
+void GiveConfuseBerserk(Monster &monster, int ticks)
+{
+	Poe2MonsterState &state = monster.poe2;
+	if ((monster.flags & MFLAG_BERSERK) == 0) {
+		monster.flags |= MFLAG_BERSERK | MFLAG_GOLEM;
+		state.confusedByCurse = true;
+	}
+	state.confuseTicks = static_cast<uint8_t>(std::clamp(std::max<int>(ticks, state.confuseTicks), 1, 255));
+	state.berserkPercent = static_cast<uint8_t>(120 + GenerateRnd(10));
 }
 
 int TableCurseDamageTakenPercent(const Monster &monster, DamageType type)
@@ -2690,8 +2733,6 @@ int TableCurseDamageTakenPercent(const Monster &monster, DamageType type)
 	int percent = 0;
 	if (monster.poe2.deathMarkTicks > 0)
 		percent += DeathMarkPercent * TableCurseStrength(monster, TableCurse::DeathMark) / 100;
-	if (monster.poe2.decrepifyTicks > 0 && type == DamageType::Physical)
-		percent += DecrepifyPercent * TableCurseStrength(monster, TableCurse::Decrepify) / 100;
 	return percent;
 }
 
@@ -2702,7 +2743,7 @@ int TableCurseShownPercent(const Monster &monster, TableCurse curse)
 	case TableCurse::Weaken:
 		return state.weakenTicks > 0 ? WeakenPercent * TableCurseStrength(monster, curse) / 100 : 0;
 	case TableCurse::Decrepify:
-		return state.decrepifyTicks > 0 ? DecrepifyPercent * TableCurseStrength(monster, curse) / 100 : 0;
+		return state.decrepifyTicks > 0 ? DecrepifySlowPercentFor(monster) * TableCurseStrength(monster, curse) / 100 : 0;
 	case TableCurse::DeathMark:
 		return state.deathMarkTicks > 0 ? DeathMarkPercent * TableCurseStrength(monster, curse) / 100 : 0;
 	case TableCurse::IronMaiden:

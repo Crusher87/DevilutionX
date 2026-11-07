@@ -375,6 +375,14 @@ constexpr int FreezingArrowBurstPercent = 40;
 constexpr int ExplosiveBoltBurstPercent = 45;
 /** @brief Fire Arrow's landing burst hits for this percent of the arrow's own percent (Curtis 2026-11-07, Q32). */
 constexpr int FireArrowBurstShare = 45;
+/** @brief Attract (Curtis 2026-11-07, Q36): monsters this near the cursed monster attack it instead of the hero. */
+constexpr int AttractTiles = 5;
+/** @brief Confuse cast at a rare or unique from this gem level gives it Berserk's old effect (Q36). */
+constexpr int ConfuseBerserkGemLevel = 10;
+/** @brief Decrepify slows the cursed monster's actions this much: a normal or magic one, a rare, a unique or boss (Q36). */
+constexpr int DecrepifySlowPercent = 30;
+constexpr int DecrepifyRareSlowPercent = 20;
+constexpr int DecrepifyUniqueSlowPercent = 10;
 /**
  * @brief Wither from a granted skill (Withering Bolt, Withering Ray): a stack a hit, up to this many, for 4 seconds. Each
  * stack is the game's Wither (3% more damage taken), so ten make up to +30% (Curtis 2026-10-30: smaller steps, more stacks).
@@ -563,10 +571,19 @@ void ProcessTableCurses(Monster &monster);
 int TableCurseDamageTakenPercent(const Monster &monster, DamageType type);
 /**
  * @brief POE2 Mashup: how strong a table curse on a monster is, as the enemy debuff icons show it (Curtis 2026-10-30):
- * how much softer it hits for Weaken and Decrepify, how much more damage it takes for Death Mark and Decrepify, how
- * much of its hit Iron Maiden turns back. 0 when the curse isn't on it or has no strength to show.
+ * how much softer it hits for Weaken, how much slower it acts for Decrepify, how much more damage it takes for Death
+ * Mark, how much of its hit Iron Maiden turns back. 0 when the curse isn't on it or has no strength to show.
  */
 [[nodiscard]] int TableCurseShownPercent(const Monster &monster, TableCurse curse);
+/** @brief How much Decrepify slows the monster, by its rarity (Q36). */
+[[nodiscard]] int DecrepifySlowPercentFor(const Monster &monster);
+/**
+ * @brief Whether a monster near an Attract-cursed one attacks it instead of the hero (Q36): a normal or magic monster
+ * always, a rare half the time (fixed for the whole curse by its roll), a unique or boss never.
+ */
+[[nodiscard]] bool MonsterObeysAttract(const Monster &monster, const Monster &cursed);
+/** @brief Confuse's Berserk (Q36): the monster turns on its kind and hits harder for the curse's length. */
+void GiveConfuseBerserk(Monster &monster, int ticks);
 /** @brief A monster died: Haunt and Locust Swarm move on to the next. */
 void OnTableCursedMonsterKilled(const Monster &monster);
 /** @brief More damage from Soul Harvest's souls, in percent. */

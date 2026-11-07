@@ -1257,7 +1257,7 @@ MonsterDamageTaken MonsterDamageTakenParts(const Monster &monster, DamageType ty
 			percent += ArmourBreakDamagePercent;
 	}
 	const bool deep = TelemetryDeepDamage();
-	// Death Mark and Decrepify.
+	// Death Mark.
 	percent += TableCurseDamageTakenPercent(monster, type);
 	if (type == DamageType::Lightning && IsMonsterElectrocuted(monster) && MyPlayer != nullptr)
 		percent += Rule(*MyPlayer, UniqueRule::ElectrocutedLightning);
