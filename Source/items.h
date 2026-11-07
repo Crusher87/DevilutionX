@@ -591,6 +591,8 @@ bool TakesOneCell(const Item &item);
  * item's modifiers work while worn, as in POE2 (Curtis, Monk run 2); in Diablo they wait for identifying.
  */
 bool ItemModifiersCount(const Item &item);
+/** @brief POE2 Mashup: whether the tooltip shows the item's modifiers; before identifying it shows the base and quality only. */
+bool ItemModifiersShown(const Item &item);
 /** @brief POE2 Mashup: items saved when they were bigger let go of the inventory cells they no longer cover. */
 void FitOneCellItems(Player &player);
 /** @param quality POE2 Mashup: the quality the item is made with, as starting gear rebuilt by crafting keeps its quality. */

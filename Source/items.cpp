@@ -4137,6 +4137,11 @@ bool ItemModifiersCount(const Item &item)
 	return item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified || gbIsPoe2;
 }
 
+bool ItemModifiersShown(const Item &item)
+{
+	return item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+}
+
 bool TakesOneCell(const Item &item)
 {
 	// Every charm picture is one cell; an old Stone Charm was saved with the 2x2 Magic Rock.
@@ -6763,13 +6768,16 @@ void DrawUniqueInfo(const Surface &out)
 	}
 }
 
-/** @brief The armour, evasion and energy shield (as shown) an item gives when worn, counting quality, local % and flat modifiers like CalcPlrInv. */
+/**
+ * @brief The armour, evasion and energy shield (as shown) an item gives when worn, counting quality, local % and flat
+ * modifiers like CalcPlrInv. Before identifying, only its base and quality, as its tooltip shows them.
+ */
 void SplitWornDefense(const Item &item, int &armour, int &evasion, int &energyShield)
 {
 	DefensePoints base;
 	DefensePoints bonus;
 	if (!item.isEmpty())
-		SplitItemDefense(item, base, bonus);
+		SplitShownItemDefense(item, base, bonus);
 	armour = base.armour + bonus.armour;
 	evasion = base.evasion + bonus.evasion;
 	energyShield = base.energyShield + bonus.energyShield;
@@ -7252,14 +7260,16 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		AddInfoBoxString(StrCat(difference > 0 ? "+" : "", difference, suffix, " ", label), true);
 		shown++;
 	};
-	// Unidentified weapons only show their base damage and quality; identified ones compare their whole hit, as the
-	// tooltip shows it. Defence counts its modifiers either way.
+	// Unidentified weapons and armour only show their base and quality; identified ones compare their whole hit and
+	// defence, as the tooltip shows them.
 	const auto hitDamage = [](const Item &it, bool max) {
-		const int base = max ? it._iMaxDam : it._iMinDam;
 		if (it.isEmpty())
-			return base;
-		const int physical = base * (100 + WeaponDamagePercent(it)) / 100;
-		if (!it._iIdentified)
+			return static_cast<int>(max ? it._iMaxDam : it._iMinDam);
+		int physicalMin;
+		int physicalMax;
+		ShownWeaponPhysicalDamage(it, physicalMin, physicalMax);
+		const int physical = max ? physicalMax : physicalMin;
+		if (!ItemModifiersShown(it))
 			return physical;
 		return physical + (max ? it._iFMaxDam + it._iLMaxDam : it._iFMinDam + it._iLMinDam);
 	};
@@ -7345,9 +7355,10 @@ void PrintItemDur(const Item &item)
 		if (item._iMagical != ITEM_QUALITY_NORMAL)
 			AddItemInfoBoxString(_("Not Identified"));
 	} else if (item._iClass == ICLASS_WEAPON) {
-		// POE2 Mashup: with its quality, which shows before identifying.
-		const int minDamage = item._iMinDam * (100 + WeaponDamagePercent(item)) / 100;
-		const int maxDamage = item._iMaxDam * (100 + WeaponDamagePercent(item)) / 100;
+		// POE2 Mashup: the base with its quality, which shows before identifying; the modifiers stay hidden.
+		int minDamage;
+		int maxDamage;
+		ShownWeaponPhysicalDamage(item, minDamage, maxDamage);
 		if (minDamage == maxDamage) {
 			if (item._iMaxDur == DUR_INDESTRUCTIBLE)
 				AddItemInfoBoxString(FormatRuntime(_("damage: {:d}  Indestructible"), minDamage));

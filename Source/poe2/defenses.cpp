@@ -15,6 +15,7 @@
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/meta_gems.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/monster_levels.hpp"
 #include "poe2/spirit_auras.hpp"
 #include "poe2/spirit_buffs.hpp"
@@ -160,6 +161,25 @@ void SplitItemDefense(const Item &item, DefensePoints &base, DefensePoints &bonu
 	bonus.armour = ScaledDefence(base.armour, increased, quality) - base.armour;
 	bonus.evasion = ScaledDefence(base.evasion, increased, quality) - base.evasion;
 	bonus.energyShield = ScaledDefence(base.energyShield, increased, quality) - base.energyShield;
+}
+
+void SplitShownItemDefense(const Item &item, DefensePoints &base, DefensePoints &bonus)
+{
+	if (ItemModifiersShown(item)) {
+		SplitItemDefense(item, base, bonus);
+		return;
+	}
+	// Take the modifiers' flat defence back out, leaving the base's roll and its implicits.
+	Item plain = item;
+	for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+		const ModFamily *family = ItemModFamily(mod);
+		if (family != nullptr && IsAnyOf(family->effect, ModEffect::FlatDefense, ModEffect::FlatArmour, ModEffect::FlatEvasion, ModEffect::FlatEnergyShield))
+			ApplyModEffect(plain, family->effect, -mod.values[0], -mod.values[1]);
+	}
+	plain._iAC = std::max<int16_t>(plain._iAC, 0);
+	// Only the quality is left of its local % increases.
+	plain._iPLAC = static_cast<int16_t>(LocalQuality(item, QualityKind::Defence));
+	SplitItemDefense(plain, base, bonus);
 }
 
 int ArmourRating(const Player &player, bool withSpiritBuffs)

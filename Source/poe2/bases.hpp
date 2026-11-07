@@ -154,5 +154,10 @@ int LocalQuality(const Item &item, QualityKind kind);
  * (1 + increased) x (1 + quality). Before identifying, only the quality, which isn't a hidden modifier.
  */
 int WeaponDamagePercent(const Item &item);
+/**
+ * @brief A weapon's physical damage as its tooltip shows it: all of it once identified, but before that only its base
+ * and quality, like POE2 (Curtis 2026-11-07). Its modifiers still count when it's held.
+ */
+void ShownWeaponPhysicalDamage(const Item &item, int &minDamage, int &maxDamage);
 
 } // namespace devilution
