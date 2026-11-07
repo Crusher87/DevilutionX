@@ -801,6 +801,7 @@ GraphicsOptions::GraphicsOptions()
     , hdGraphics("HD Graphics", OptionEntryFlags::None, N_("HD Graphics"), N_("Uses the sharper HD art for the world. It only shows when you zoom in with Z, and needs the HD pack and Upscale."), true)
     , hdLighting("HD Lighting", OptionEntryFlags::None, N_("HD Lighting"), N_("Torches and spells light the room in their own colours, walls stop their light, and heroes and monsters cast soft shadows that move with each light. Needs HD Graphics."), true)
     , hdStrongMood("HD Stronger Mood", OptionEntryFlags::None, N_("HD Stronger Mood"), N_("Firelight warmer and dark corners darker, in a mood of its own for each part of the dungeon: cold Catacombs, ember-red Hell, a sickly green Crypt. Needs HD Graphics."), true)
+    , hdLiftDarks("HD Lift Dark Shades", OptionEntryFlags::None, N_("HD Lift Dark Shades"), N_("Makes the darkest shades a little lighter, so dark scenes darken less on some screens while they move. Needs HD Graphics."), false)
     , brightness("Brightness Correction", OptionEntryFlags::Invisible, "Brightness Correction", "Brightness correction level.", 0)
     , zoom("Zoom", OptionEntryFlags::None, N_("Zoom"), N_("Zoom on when enabled."), false)
     , perPixelLighting("Per-pixel Lighting", OptionEntryFlags::None, N_("Per-pixel Lighting"), N_("Subtile lighting for smoother light gradients."), DEFAULT_PER_PIXEL_LIGHTING)
@@ -827,6 +828,7 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 		&hdGraphics,
 		&hdLighting,
 		&hdStrongMood,
+		&hdLiftDarks,
 #endif
 #ifndef __vita__
 		&fullscreen,
