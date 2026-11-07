@@ -193,6 +193,52 @@ TEST_F(Poe2GemcuttingTest, PassFourSpellTabs)
 	}
 }
 
+// Part B (Curtis's Workshop layout, 2026-10-22 and 11-06): the dagger gems move from Sword to a Dagger tab (Death Mark
+// loses its Occult tab); Double Swing shows in Sword and Dagger, Cleave in Dagger too. The healing, movement and ward
+// spells and the runes move from Occult to an Arcane tab.
+TEST_F(Poe2GemcuttingTest, DaggerAndArcaneTabs)
+{
+	const auto entry = [](SkillSlot skill) -> const GemEntry * {
+		for (const GemEntry &gem : GemCatalog()) {
+			if (gem.skill == skill)
+				return &gem;
+		}
+		return nullptr;
+	};
+	for (const WeaponSkill skill : { WeaponSkill::PoisonDagger, WeaponSkill::ShadowStep, WeaponSkill::FanOfBlades, WeaponSkill::ViperStrike, WeaponSkill::BladeSentinel,
+	         WeaponSkill::DeathMark, WeaponSkill::BladeFury, WeaponSkill::AcidFlask, WeaponSkill::VenomSentry }) {
+		const GemEntry *gem = entry(SkillSlot::ForAttack(skill));
+		ASSERT_NE(gem, nullptr) << WeaponSkillName(skill);
+		EXPECT_TRUE(GemInCategory(*gem, GemCategory::Dagger)) << WeaponSkillName(skill);
+		EXPECT_FALSE(GemInCategory(*gem, GemCategory::Sword)) << WeaponSkillName(skill);
+		EXPECT_FALSE(GemInCategory(*gem, GemCategory::Occult)) << WeaponSkillName(skill);
+		EXPECT_TRUE(AttackOnWeaponTab(skill)) << WeaponSkillName(skill);
+	}
+	for (const WeaponSkill skill : { WeaponSkill::Flurry, WeaponSkill::Cleave }) {
+		const GemEntry *gem = entry(SkillSlot::ForAttack(skill));
+		ASSERT_NE(gem, nullptr);
+		EXPECT_TRUE(GemInCategory(*gem, GemCategory::Sword)) << WeaponSkillName(skill);
+		EXPECT_TRUE(GemInCategory(*gem, GemCategory::Dagger)) << WeaponSkillName(skill);
+	}
+	EXPECT_EQ(GemCategoryName(GemCategory::Dagger), "Dagger");
+	EXPECT_EQ(GemCategoryName(GemCategory::Arcane), "Arcane");
+
+	for (const SpellID spell : { SpellID::Healing, SpellID::ManaShield, SpellID::Phasing, SpellID::Teleport, SpellID::Warp, SpellID::Etherealize, SpellID::RuneOfFire,
+	         SpellID::RuneOfLight, SpellID::RuneOfStone, SpellID::RuneOfNova, SpellID::RuneOfImmolation }) {
+		EXPECT_EQ(SpellGemCategory(spell), GemCategory::Arcane) << static_cast<int>(spell);
+		if (const GemEntry *gem = entry(SkillSlot::ForSpell(spell)); gem != nullptr) {
+			EXPECT_TRUE(GemInCategory(*gem, GemCategory::Arcane));
+			EXPECT_FALSE(GemInCategory(*gem, GemCategory::Occult));
+		}
+	}
+	EXPECT_EQ(SpellGemCategory(SpellID::BoneSpirit), GemCategory::Occult);
+	EXPECT_EQ(SpellGemCategory(SpellID::Fireball), GemCategory::Elemental);
+	// A skill gem being cut shows the new tabs.
+	const std::vector<GemCategory> skillTabs = GemcuttingTabs(UncutKind::Skill);
+	EXPECT_NE(std::find(skillTabs.begin(), skillTabs.end(), GemCategory::Dagger), skillTabs.end());
+	EXPECT_NE(std::find(skillTabs.begin(), skillTabs.end(), GemCategory::Arcane), skillTabs.end());
+}
+
 TEST_F(Poe2GemcuttingTest, CrossbowSkillsMovedToBowsOrRetired)
 {
 	// Curtis 2026-10-27: crossbows left the game. The crossbow skills that make sense with a bow moved to bows.

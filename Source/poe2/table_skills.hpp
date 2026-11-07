@@ -264,11 +264,13 @@ enum TableTab : uint16_t {
 	TT_Mace = 1 << 0,
 	TT_Axe = 1 << 1,
 	TT_Sword = 1 << 2,
-	TT_Bow = 1 << 3,
-	TT_Staff = 1 << 4,
-	TT_Shield = 1 << 5,
-	TT_Elemental = 1 << 6,
-	TT_Occult = 1 << 7,
+	TT_Dagger = 1 << 3,
+	TT_Bow = 1 << 4,
+	TT_Staff = 1 << 5,
+	TT_Shield = 1 << 6,
+	TT_Elemental = 1 << 7,
+	TT_Occult = 1 << 8,
+	TT_Arcane = 1 << 9,
 };
 
 struct TableSkillData {

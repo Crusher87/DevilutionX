@@ -230,10 +230,15 @@ Layout ComputeLayout(const Surface &out)
 	} else {
 		// Only the tabs of what the uncut gem can become, e.g. no Support or Spirit tab for a skill gem (Curtis 2026-10-22).
 		const Item *uncut = UncutItem();
+		const std::vector<GemCategory> categories = GemcuttingTabs(uncut != nullptr ? std::optional<UncutKind>(UncutGemKind(*uncut)) : std::nullopt);
+		// With the Dagger and Arcane tabs they get shorter on a small screen, so they all fit above the footer.
+		const int room = height - HeaderHeight - FooterHeight;
+		const int step = categories.empty() ? TabHeight + TabGap : std::clamp(room / static_cast<int>(categories.size()), 16, TabHeight + TabGap);
+		const int tabHeight = std::min(TabHeight, step - 2);
 		int y = origin.y + HeaderHeight;
-		for (const GemCategory category : GemcuttingTabs(uncut != nullptr ? std::optional<UncutKind>(UncutGemKind(*uncut)) : std::nullopt)) {
-			layout.tabs.push_back({ category, { { origin.x + Padding, y }, { TabWidth, TabHeight } } });
-			y += TabHeight + TabGap;
+		for (const GemCategory category : categories) {
+			layout.tabs.push_back({ category, { { origin.x + Padding, y }, { TabWidth, tabHeight } } });
+			y += step;
 		}
 	}
 
@@ -626,7 +631,8 @@ GemCategory DefaultSkillCategory(const Player &player)
 		case ItemType::Axe:
 			return GemCategory::Axe;
 		case ItemType::Sword:
-			return GemCategory::Sword;
+			// A dagger opens on its own tab (Shadow Lunge takes only a dagger).
+			return ItemAllowsWeaponSkill(item, WeaponSkill::ShadowStep) ? GemCategory::Dagger : GemCategory::Sword;
 		case ItemType::Mace:
 			return GemCategory::Mace;
 		case ItemType::Bow:

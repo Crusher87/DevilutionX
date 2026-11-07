@@ -348,7 +348,9 @@ std::vector<std::string> PreferredKits(GemCategory category, HeroClass heroClass
 	case GemCategory::Axe:
 		return { twoHanded + axe, axe + shield, axe };
 	case GemCategory::Sword:
-		return { sword + shield, twoHanded + sword, sword, std::string(_("Dagger")) };
+		return { sword + shield, twoHanded + sword, sword };
+	case GemCategory::Dagger:
+		return { std::string(_("Dagger")), sword };
 	case GemCategory::Shield:
 		return { sword + shield, mace + shield, axe + shield };
 	case GemCategory::Bow:
@@ -378,6 +380,7 @@ HeroClass FittingClass(const LabSkill &skill)
 	case GemCategory::Mace:
 	case GemCategory::Axe:
 	case GemCategory::Sword:
+	case GemCategory::Dagger:
 	case GemCategory::Shield:
 		return HeroClass::Warrior;
 	case GemCategory::Bow:

@@ -28,8 +28,10 @@ bool AttackInListedCategory(WeaponSkill skill, GemCategory category)
 	case GemCategory::Axe:
 		return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::LeapSlam, WeaponSkill::BattleCry, WeaponSkill::Frenzy);
 	case GemCategory::Sword:
-		return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::BattleCry, WeaponSkill::Riposte, WeaponSkill::ShadowStep,
-		    WeaponSkill::Frenzy);
+		return IsAnyOf(skill, WeaponSkill::Cleave, WeaponSkill::Flurry, WeaponSkill::LeapSlam, WeaponSkill::BattleCry, WeaponSkill::Riposte, WeaponSkill::Frenzy);
+	case GemCategory::Dagger:
+		// Shadow Lunge is a dagger skill; Double Swing and Cleave work with a dagger too (the 10-22 plan).
+		return IsAnyOf(skill, WeaponSkill::ShadowStep, WeaponSkill::Flurry, WeaponSkill::Cleave);
 	case GemCategory::Bow:
 		return IsAnyOf(skill, WeaponSkill::Barrage, WeaponSkill::RainOfArrows, WeaponSkill::LightningArrow, WeaponSkill::EscapeShot, WeaponSkill::RapidFire);
 	case GemCategory::Staff:
@@ -52,7 +54,7 @@ bool AttackInCategory(WeaponSkill skill, GemCategory category)
 {
 	if (!AttackInListedCategory(skill, category))
 		return false;
-	if (!IsAnyOf(category, GemCategory::Elemental, GemCategory::Occult))
+	if (!IsAnyOf(category, GemCategory::Elemental, GemCategory::Occult, GemCategory::Arcane))
 		return true;
 	return !AttackOnWeaponTab(skill);
 }
@@ -68,6 +70,8 @@ std::string_view GemCategoryName(GemCategory category)
 		return _("Axe");
 	case GemCategory::Sword:
 		return _("Sword");
+	case GemCategory::Dagger:
+		return _("Dagger");
 	case GemCategory::Bow:
 		return _("Bow");
 	case GemCategory::Staff:
@@ -79,6 +83,8 @@ std::string_view GemCategoryName(GemCategory category)
 		return _("Elemental");
 	case GemCategory::Occult:
 		return _("Occult");
+	case GemCategory::Arcane:
+		return _("Arcane");
 	case GemCategory::Spirit:
 		return _("Spirit");
 	case GemCategory::Support:
@@ -148,6 +154,19 @@ GemCategory SpellGemCategory(SpellID spell)
 	case SpellID::Elemental:
 		// Moved to Occult at tier XI to spread the Elemental tab (Curtis 2026-11-07, Q30).
 		return GemCategory::Occult;
+	case SpellID::Healing:
+	case SpellID::ManaShield:
+	case SpellID::Phasing:
+	case SpellID::Teleport:
+	case SpellID::Warp:
+	case SpellID::Etherealize:
+	case SpellID::RuneOfFire:
+	case SpellID::RuneOfLight:
+	case SpellID::RuneOfStone:
+	case SpellID::RuneOfNova:
+	case SpellID::RuneOfImmolation:
+		// The Arcane tab (Curtis 2026-11-06, Tree Workshop).
+		return GemCategory::Arcane;
 	default:
 		return GetSpellData(spell).type() == MagicType::Magic ? GemCategory::Occult : GemCategory::Elemental;
 	}
