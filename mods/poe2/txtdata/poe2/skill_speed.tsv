@@ -159,3 +159,16 @@ VenomBolt		0.8						Essence Drain
 PoisonExplosion		0.8						Profane Ritual
 PoisonNova		1.0						none (Diablo II Poison Nova)
 AcidCloud		1.0						none (Diablo III Acid Cloud)
+WrathOfTheSkies	70					143	122	Falling Thunder (POE2 slam 0.60; 0.70 so tier I is not sluggish)
+FrostveinRupture	75					134	117	Glacial Cascade
+RimeStrikes	140							Ice Strike: strikes 1-2
+RimeStrikes:finisher	70							every third strike, the shards
+NorthwindWave	55					182	141	Wave of Frost
+ThunderFurrow	75					134	117	Storm Wave
+Shatterpalm	75					134	117	Shattering Palm
+DervishAdvance	85			1000		273	187	Whirling Assault
+StormSiphon	100							Siphoning Strike
+TempestSweep	75					134	117	Wind Blast
+PhantomStep	60					167	134	Flicker Strike
+SkylordsStorm	70					143	122	Gathering Storm
+PalmOfTheFrozenNorth	120							Gelid Palm

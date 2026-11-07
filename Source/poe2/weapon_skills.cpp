@@ -1005,7 +1005,9 @@ void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graph
 		// The skill takes its attack or cast time (poe2/attack_speed.hpp), with any time it adds; a dash took part of it
 		// already. A quick strike hits DashStrikeWindupTicks in and spends the rest of the time after the hit.
 		const SkillSlot slot = SkillSlot::ForAttack(skill);
-		uint32_t time = SkillUseTime(player, slot, /*castAnimation=*/!attack, SkillStep::Main, dashTicks >= 0 ? player.poe2.dashDistancePercent : 0);
+		// Rime Strikes' third strike, which throws the shards, takes its slower finisher's time.
+		const SkillStep step = skill == WeaponSkill::RimeStrikes && RimeStrikesNextIsThird(player) ? SkillStep::Finisher : SkillStep::Main;
+		uint32_t time = SkillUseTime(player, slot, /*castAnimation=*/!attack, step, dashTicks >= 0 ? player.poe2.dashDistancePercent : 0);
 		if (dashTicks > 0)
 			time -= std::min(time, static_cast<uint32_t>(dashTicks) * ActionTimeOneTick);
 		NewPlrTimedAnim(player, graphic, dir, AnimationDistributionFlags::ProcessAnimationPending, actionFrame, TakeActionTicks(player, time), quickStrike ? DashStrikeWindupTicks : 0);
@@ -1054,7 +1056,7 @@ bool IsThrowingSkill(WeaponSkill skill)
 
 bool SpinsWhileStriking(WeaponSkill skill)
 {
-	return skill == WeaponSkill::Whirlwind;
+	return IsAnyOf(skill, WeaponSkill::Whirlwind, WeaponSkill::DervishAdvance);
 }
 
 namespace {
@@ -1105,7 +1107,8 @@ void ProcessDashLooks(Player &player)
 		if (elapsed % 2 == 0)
 			vfx::Impact(player.position.tile, vfx::Element::Physical, 0.45F);
 		break;
-	case WeaponSkill::Whirlwind: {
+	case WeaponSkill::Whirlwind:
+	case WeaponSkill::DervishAdvance: {
 		// The hero spins through every facing all along the dash, inside its funnel of wind.
 		const PlayerAnimationData &walk = player.AnimationData[static_cast<size_t>(player_graphic::Walk)];
 		if (!HeadlessMode && walk.sprites)

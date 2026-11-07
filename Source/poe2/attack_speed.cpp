@@ -66,7 +66,7 @@ bool SkillHasStep(SkillSlot skill, SkillStep step)
 	case SkillStep::Backhand:
 		return skill.attack() == WeaponSkill::Flurry;
 	case SkillStep::Finisher:
-		return skill.attack() == WeaponSkill::FistsOfThunder;
+		return IsAnyOf(skill.attack(), WeaponSkill::FistsOfThunder, WeaponSkill::RimeStrikes);
 	default:
 		return false;
 	}

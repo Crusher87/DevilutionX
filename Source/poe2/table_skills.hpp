@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <string_view>
 #include <vector>
 
@@ -314,6 +315,17 @@ struct TableSkillData {
 	 * Curtis 2026-11-03).
 	 */
 	uint8_t poisonPercent = 0;
+	/**
+	 * A weapon attack's hit that lands as the row's element, in percent of what the fire leaves (ApplyPlayerAttackDamage),
+	 * as Smite's: the draft Staff gems' (Curtis 2026-11-07, Q48). Such a row's hit doesn't also land a third again as its
+	 * element, as the older elemental attacks' does. 0 for every other row.
+	 */
+	uint8_t convertPercent = 0;
+	/**
+	 * The ailment its hits build, in percent: shock and ignite chance, and the freeze build-up of cold (Thunder Furrow's
+	 * doubled shock chance, Northwind Wave's and Palm of the Frozen North's doubled freeze). 0 is 100.
+	 */
+	uint16_t ailmentPercent = 0;
 };
 
 /** @brief A poisoning table skill's poison a second, in percent of the hit: the row's own, or POE2's common 20%. */
@@ -477,6 +489,53 @@ constexpr int GrantedBleedPercent = 75;
 constexpr int GrantedBleedTicks = 5 * 20;
 /** @brief The bolts a Burst skill sprays out (Fist of the Heavens) hit for this percent of the spell base each. */
 constexpr int BurstBoltDamagePercent = 50;
+
+// The draft gems' Staff batch (Curtis 2026-11-07, Q46-Q48; drafts-61-priced.json).
+/** @brief Wrath of the Skies: its bolts hit for this percent of the slam, and fly this many tiles in a fan from it. */
+constexpr int WrathBoltSharePercent = 50;
+constexpr int WrathBoltTiles = 5;
+/** @brief Frostvein Rupture: the spike at the line's end hits for this percent of the line, a frozen enemy for this percent more. */
+constexpr int FrostveinSpikePercent = 200;
+constexpr int FrostveinFrozenPercent = 150;
+/** @brief Rime Strikes: every this many strikes throws ice shards ahead, this many, this many tiles. */
+constexpr int RimeStrikesShardEvery = 3;
+constexpr int RimeStrikesShards = 3;
+constexpr int RimeStrikesShardTiles = 4;
+/** @brief Rime Strikes' count starts over this many game ticks after the last strike (3 seconds). */
+constexpr int RimeStrikesResetTicks = 60;
+/** @brief Northwind Wave: the chill it leaves on what it hits, in percent. */
+constexpr int NorthwindChillPercent = 50;
+/** @brief Shatterpalm: a frozen enemy takes this percent of the hit and shatters, a cold burst of this percent in this radius. */
+constexpr int ShatterpalmFrozenPercent = 140;
+constexpr int ShatterpalmBurstPercent = 25;
+constexpr int ShatterpalmBurstRadius = 1;
+/** @brief Dervish Advance spins this many times along its walk, each pulse all around the hero. */
+constexpr int DervishPulses = 3;
+/** @brief Storm Siphon: a shocked target takes this percent of the hit; the shock arcs on to this many within this many tiles for this percent. */
+constexpr int StormSiphonShockedPercent = 150;
+constexpr int StormSiphonArcs = 2;
+constexpr int StormSiphonArcTiles = 3;
+constexpr int StormSiphonArcPercent = 25;
+/** @brief Phantom Step's strikes each hit all within this radius of the enemy it blinks to. */
+constexpr int PhantomStepStrikeRadius = 1;
+/** @brief Tempest Sweep's gale hits what is beyond the sweep for this percent of it, out to the row's count of tiles. */
+constexpr int TempestGalePercent = 60;
+/** @brief Skylord's Storm blinks the hero back this many tiles, or as far as there is room. */
+constexpr int SkylordBlinkTiles = 3;
+/** @brief Palm of the Frozen North's lance hits for this percent of the palm and flies this many tiles. */
+constexpr int PalmLancePercent = 60;
+constexpr int PalmLanceTiles = 5;
+/**
+ * @brief The tiles Northwind Wave's cone covers: in front of the hero out to `length` steps, widening from three tiles
+ * to five, stopped by walls.
+ */
+[[nodiscard]] std::vector<Point> NorthwindWaveTiles(Point from, Direction dir, int length);
+/** @brief Whether a Rime Strikes use about to start is the third, which throws the shards and swings slower. */
+[[nodiscard]] bool RimeStrikesNextIsThird(const Player &player);
+/** @brief The ailment build-up of a table skill's hits, in percent (the row's ailmentPercent). */
+[[nodiscard]] int TableAilmentPercent(const TableSkillData &data);
+/** @brief What a table skill does besides its hit, for its tooltip; empty for most. */
+[[nodiscard]] std::string TableSkillExtraNote(WeaponSkill skill);
 
 /**
  * @brief Seven-Sided Strike's strikes land in full on this many enemies or more; on fewer, each strike deals their share

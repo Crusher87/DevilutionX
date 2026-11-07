@@ -326,8 +326,20 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		} else {
 			// A table skill's weapon hit takes the gem's percent, then its own (SkillHitMonster).
 			AddWeaponHit(hit, player, skill, level, percent, table->damagePercent);
-			if (table->type != DamageType::Physical && !hit.parts.empty())
+			// Wrath of the Skies' hit is part lightning (ApplyPlayerAttackDamage), the rest physical.
+			if (table->type != DamageType::Physical && !hit.parts.empty() && table->convertPercent > 0 && table->convertPercent < 100) {
+				HitPart element = hit.parts.front();
+				const double share = table->convertPercent / 100.0;
+				for (double *value : { &element.min, &element.max, &element.average })
+					*value *= share;
+				element.type = table->type;
+				HitPart &physical = hit.parts.front();
+				for (double *value : { &physical.min, &physical.max, &physical.average })
+					*value *= 1.0 - share;
+				hit.parts.insert(hit.parts.begin() + 1, element);
+			} else if (table->type != DamageType::Physical && !hit.parts.empty()) {
 				hit.parts.front().type = table->type;
+			}
 		}
 		return hit;
 	}
@@ -366,6 +378,11 @@ double UseSeconds(const Player &player, SkillSlot skill)
 			return (((every - 1) * ActionSeconds(SkillUseTime(player, skill, false))) + ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))) / every;
 		}
 		return ActionSeconds(SkillUseTime(player, skill, false));
+	}
+	// Rime Strikes' strikes on average: two quick ones, then the slower third that throws the shards.
+	if (attack == WeaponSkill::RimeStrikes) {
+		const int every = RimeStrikesShardEvery;
+		return (((every - 1) * ActionSeconds(SkillUseTime(player, skill, false))) + ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))) / every;
 	}
 	// A skill with its own animation; a dash's time counts from its start, for the shortest dash.
 	return ActionSeconds(SkillUseTime(player, skill, PlaysCastAnimation(attack)));
@@ -1010,6 +1027,10 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 			Value(lines, "Strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false))));
 			Value(lines, "Bursting strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))));
 		}
+		if (skill.kind == SkillKind::Attack && skill.attack() == WeaponSkill::RimeStrikes) {
+			Value(lines, "Strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false))));
+			Value(lines, "Third strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))));
+		}
 		if (const SkillSpeedRow *row = FindSkillSpeedRow(skill); row != nullptr && row->distanceMs > 0 && skill.kind == SkillKind::Attack)
 			Text(lines, Kind::Note, std::format("A longer leap adds up to {:s}", Seconds(row->distanceMs / 1000.0)));
 		if (perHitBurst > 0)
@@ -1066,6 +1087,8 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(shape, "Line", std::format("{:d} tiles: one wide for {:d}, then two wide", static_cast<int>(table->count), BoneSpikesSingleTiles));
 	if (table != nullptr && (table->flags & TF_PoisonBurst) != 0)
 		Text(shape, Kind::Note, std::format("The first hit bursts: it poisons all there and hits the others for {:d}%", PlagueArrowSplashPercent));
+	if (const std::string note = table != nullptr ? TableSkillExtraNote(table->skill) : std::string(); !note.empty())
+		Text(shape, Kind::Note, note);
 	// The poison skills' ground, traps, pods, effigy and bog.
 	if (table != nullptr) {
 		switch (table->zone) {

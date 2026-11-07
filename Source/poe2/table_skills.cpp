@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdlib>
+#include <format>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -195,6 +197,20 @@ const TableSkillData Table[] = {
 	{ WS::PoisonExplosion, "Poison Explosion", "Blows up a corpse near the target into a cloud of poison", 8, 12, TW::None, 1, CorpseBurst, 30, 0, 2, 40, 10, 0, DT::Chaos, MissileID::Null, MG::AcidSplat, TF_Spell | TF_Poison, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Immolation), TableCurve::Fireball, 312, GrantedRider::None, 40 },
 	{ WS::PoisonNova, "Poison Nova", "A ring of poison bursts out around you", 22, 25, TW::None, 1, Around, 60, 0, 3, 0, 0, 0, DT::Chaos, MissileID::Null, MG::AcidSplat, TF_Spell | TF_Poison, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::Nova), TableCurve::Fireball, 312, GrantedRider::None, 60 },
 	{ WS::AcidCloud, "Acid Cloud", "Acid rains on the target and leaves a pool that poisons", 25, 28, TW::None, 1, Zone, 95, 0, 2, 60, 10, 8, DT::Chaos, MissileID::Null, MG::AcidSplat, TF_Spell | TF_Poison, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::FireCloud), TableCurve::Fireball, 312, GrantedRider::None, 40 },
+	// The draft gems' Staff batch (Curtis 2026-11-07, Q46-Q48): each as its row in drafts-61-priced.json. Their weapon hits
+	// land as their element (convertPercent), so they don't also land a third again as it.
+	{ WS::WrathOfTheSkies, "Wrath of the Skies", "Slam the staff down: lightning strikes in front of you and three bolts fan out from it", 1, 6, TW::Staff, 0, Burst, 55, 3, 1, 0, 0, 0, DT::Lightning, MissileID::ChargedBolt, MG::Lightning, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Lightning), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 60, 0 },
+	{ WS::FrostveinRupture, "Frostvein Rupture", "Ice splits the ground ahead in a line of small bursts and ends in a great spike; frozen enemies the spike hits take more and break free", 1, 6, TW::Staff, 0, Line, 28, 5, 0, 0, 0, 0, DT::Cold, MissileID::Null, MG::BlueFlareExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::StoneCurse), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 0 },
+	{ WS::RimeStrikes, "Rime Strikes", "Quick icy strikes at the enemies in front; every third is slower and throws three ice shards ahead", 3, 8, TW::Staff, 0, Arc, 140, 3, 0, 0, 0, 0, DT::Cold, MissileID::BlueFlare, MG::BlueFlareExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Nova), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 0 },
+	{ WS::NorthwindWave, "Northwind Wave", "A freezing wave rolls out in a cone in front of you; it chills what it hits and freezes it twice as fast", 10, 12, TW::Staff, 0, Line, 85, 4, 0, 0, 0, 0, DT::Cold, MissileID::Null, MG::BlueFlareExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Elemental), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 200 },
+	{ WS::ThunderFurrow, "Thunder Furrow", "Drag the staff through the ground: a furrow of lightning tears out ahead of you and shocks twice as often", 15, 14, TW::Staff, 0, Line, 150, 8, 0, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::LightningWall), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 200 },
+	{ WS::Shatterpalm, "Shatterpalm", "Dash at the enemy and blast all around with your palm; frozen enemies take more and shatter, hitting those beside them", 15, 14, TW::Staff, 0, Dash, 70, 2, 1, 0, 0, 0, DT::Cold, MissileID::Null, MG::BlueFlareExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Reflect), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 0 },
+	{ WS::DervishAdvance, "Dervish Advance", "Spin forward, striking everything around you three times as you go", 20, 16, TW::Staff, 0, Dash, 55, 3, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Berserk), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::StormSiphon, "Storm Siphon", "Dash to an enemy and strike; a shocked enemy takes more, and its shock arcs to two more nearby", 20, 15, TW::Staff, 0, Dash, 380, 3, 0, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::ChargedBolt), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 0 },
+	{ WS::TempestSweep, "Tempest Sweep", "A huge sweep that knocks back and dazes the enemies in front, and throws a gale far ahead that pushes enemies back", 20, 16, TW::Staff, 0, Arc, 120, 6, 1, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, TF_Stun | TF_Knockback, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Warp), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::PhantomStep, "Phantom Step", "Vanish and strike three enemies in turn, a blink between each; each strike hits all around that enemy", 25, 18, TW::Staff, 0, Seven, 85, 3, 4, 0, 0, 0, DT::Physical, MissileID::Null, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Etherealize), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::SkylordsStorm, "Skylord's Storm", "Blink back, then lightning crashes down where you stood", 25, 18, TW::Staff, 0, Zone, 105, 0, 2, 0, 0, 6, DT::Lightning, MissileID::Null, MG::Lightning, TF_AtPlayer, TableZone::Delayed, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::ChainLightning), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::PalmOfTheFrozenNorth, "Palm of the Frozen North", "A fast palm strike that throws a piercing lance of ice straight ahead; every palm freezes twice as fast", 25, 15, TW::Staff, 0, Strike, 275, 1, 0, 0, 0, 0, DT::Cold, MissileID::BlueFlare, MG::BlueFlareExplosion, TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Staff, Icon(SpellIcon::Mana), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 200 },
 };
 // clang-format on
 
@@ -310,17 +326,19 @@ int SpellBase(const Player &player, int gemLevel)
 	return RollSpellBase(player, gemLevel);
 }
 
+/** @brief An average weapon hit for a table skill, in whole points, before the skill's own percents. */
+int WeaponHitBase(const Player &player, const TableSkillData &data)
+{
+	const auto [minDamage, maxDamage] = AttackWeaponDamage(player, SkillSlot::ForAttack(data.skill));
+	int base = (minDamage + maxDamage) / 2;
+	base += base * player._pIBonusDam / 100 + player._pIBonusDamMod + player._pDamageMod;
+	return std::max(base, 1);
+}
+
 /** @brief A table skill's damage as a fixed amount, for zones and spell hits: from Magic, or from an average weapon hit. */
 Fixed26_6 FixedDamage(const Player &player, const TableSkillData &data)
 {
-	int base;
-	if ((data.flags & TF_Spell) != 0) {
-		base = SpellBase(player, GemLevel(player, data.skill));
-	} else {
-		const auto [minDamage, maxDamage] = AttackWeaponDamage(player, SkillSlot::ForAttack(data.skill));
-		base = (minDamage + maxDamage) / 2;
-		base += base * player._pIBonusDam / 100 + player._pIBonusDamMod + player._pDamageMod;
-	}
+	const int base = (data.flags & TF_Spell) != 0 ? SpellBase(player, GemLevel(player, data.skill)) : WeaponHitBase(player, data);
 	int64_t raw = static_cast<int64_t>(std::max(base, 1)) * 64;
 	raw = raw * CurvePercent(player, data.skill) / 100;
 	raw = raw * data.damagePercent / 100;
@@ -495,8 +513,8 @@ void WeaponHit(Player &player, Monster &monster, const TableSkillData &data, int
 		monster.poe2.poisonFromCobra = data.skill == WeaponSkill::ViperStrike;
 	if (!alive)
 		return;
-	// Elemental attacks: part of the hit lands again as the skill's element.
-	if (data.type != DamageType::Physical) {
+	// Elemental attacks: part of the hit lands again as the skill's element; a row whose hit is its element doesn't.
+	if (data.type != DamageType::Physical && data.convertPercent == 0) {
 		const Fixed26_6 extra = Fixed26_6::fromRaw(FixedDamage(player, data).raw() / 3);
 		SpellHitMonster(player, monster, data.type, extra, SourceOf(data));
 	}
@@ -1030,8 +1048,10 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	const int gemLevel = GemLevel(player, data.skill);
 	const bool spell = (data.flags & TF_Spell) != 0;
 	const MissileID type = data.missile == MissileID::Null ? MissileID::Arrow : data.missile;
-	// Weapon projectiles take their damage from the weapon when they hit, like arrows.
-	const int damage = spell ? SpellBase(player, gemLevel) : ElementalArrowBaseDamage;
+	// Weapon arrows take their damage from the weapon when they hit. A weapon skill's bolt or shard that is no arrow (the
+	// draft Staff gems') carries an average weapon hit, as a zone does, and hits as its element.
+	const bool weaponBolt = !spell && type != MissileID::Arrow;
+	const int damage = spell ? SpellBase(player, gemLevel) : (weaponBolt ? WeaponHitBase(player, data) : ElementalArrowBaseDamage);
 	// POE2 Mashup: silent as it leaves; the skill's launch sounds once a cast or shot (SkillSounds), not once a projectile.
 	Missile *missile = AddMissile(from, target, GetDirection(from, target), type, TARGET_MONSTERS, player, damage, spell ? gemLevel : 0, nullptr, SfxID::None);
 	if (missile == nullptr)
@@ -1043,6 +1063,8 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 		if (data.type == DamageType::Physical || LookOf(data) == vfx::Element::Poison)
 			missile->poe2.vfxElement = static_cast<int8_t>(LookOf(data));
 	}
+	if (weaponBolt)
+		missile->poe2.damageType = static_cast<int8_t>(data.type);
 	// Plague Arrow is a poison arrow: drawn green, dripping venom as it flies (Curtis, Rogue run 2).
 	if (!spell && (data.flags & TF_PoisonBurst) != 0)
 		missile->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Poison);
@@ -1050,7 +1072,7 @@ Missile *FireTableMissile(Player &player, const TableSkillData &data, Point from
 	if ((data.flags & TF_PerTarget) != 0)
 		missile->poe2.grantedCast = player.poe2.grantedState.castSerial;
 	// Souls add to weapon projectiles through the weapon hit (see ResourceAttackDamagePercent).
-	const int souls = spell ? SoulHarvestDamagePercent(player) : 0;
+	const int souls = spell || weaponBolt ? SoulHarvestDamagePercent(player) : 0;
 	missile->poe2.damagePercent = static_cast<int16_t>(std::min<int>(CurvePercent(player, data.skill) * data.damagePercent / 100 * GrantedSpellDamagePercent(player, data) / 100 * (100 + souls) / 100, INT16_MAX));
 	if ((data.flags & TF_Pierce) != 0)
 		missile->poe2.piercesLeft = static_cast<int8_t>(std::min<int>(missile->poe2.piercesLeft + (data.skill == WeaponSkill::BoneSpear ? BoneSpearPierces : 3), INT8_MAX));
@@ -1437,6 +1459,356 @@ void ProcessShieldWall(const Player &player)
 	}
 }
 
+// The draft gems' Staff batch (Curtis 2026-11-07, Q46-Q48): what each does beyond its shape, as its row in
+// drafts-61-priced.json says.
+
+/** @brief The speeds a flare and a charged bolt fly at, in pixels a game tick (AddGenericMagicMissile, AddChargedBolt). */
+constexpr int FlarePixelsPerTick = 16;
+constexpr int ChargedBoltPixelsPerTick = 8;
+
+/** @brief A share of a hit, in percent. */
+Fixed26_6 ShareOf(Fixed26_6 hit, int percent)
+{
+	return Fixed26_6::fromRaw(static_cast<int32_t>(std::clamp<int64_t>(static_cast<int64_t>(hit.raw()) * percent / 100, 1, INT32_MAX / 2)));
+}
+
+/**
+ * @brief Ends a projectile after it has flown about this many tiles along its aim. A missile crosses a step of (dx, dy)
+ * tiles in 32 * sqrt(2 * (dx * dx + dy * dy)) / speed game ticks (UpdateMissileVelocity).
+ */
+void EndMissileAfter(Missile &missile, Displacement aim, int tiles, int pixelsPerTick)
+{
+	const int steps = std::max({ std::abs(aim.deltaX), std::abs(aim.deltaY), 1 });
+	const double length = std::sqrt(2.0 * ((aim.deltaX * aim.deltaX) + (aim.deltaY * aim.deltaY))) * tiles / steps;
+	const int speed = std::max(pixelsPerTick * missile.poe2.speedPercent / 100, 1);
+	missile.duration = std::max(static_cast<int>(std::ceil(32.0 * length / speed)), 1);
+}
+
+/** @brief One of a draft gem's projectiles: the row's missile at this percent of a weapon hit, flying this many tiles. */
+void FireDraftBolt(Player &player, const TableSkillData &data, Point from, Point aim, int percent, int tiles)
+{
+	TableSkillData bolt = data;
+	bolt.damagePercent = static_cast<int16_t>(std::clamp(percent, 1, static_cast<int>(INT16_MAX)));
+	Missile *missile = FireTableMissile(player, bolt, from, aim);
+	if (missile != nullptr)
+		EndMissileAfter(*missile, aim - from, tiles, data.missile == MissileID::ChargedBolt ? ChargedBoltPixelsPerTick : FlarePixelsPerTick);
+}
+
+/** @brief Projectiles in a narrow fan along the facing, from `from`: straight ahead, then a little to either side. */
+void FireDraftFan(Player &player, const TableSkillData &data, Point from, Direction dir, int count, int percent, int tiles)
+{
+	const Displacement side { Left(Left(dir)) };
+	const Point far = from + Displacement { dir } * 8;
+	for (int i = 0; i < count; i++) {
+		const int offset = (i + 1) / 2 * (i % 2 == 0 ? 1 : -1);
+		FireDraftBolt(player, data, from, far + side * (offset * 2), percent, tiles);
+	}
+}
+
+/** @brief The monsters an Arc shape hits: in front and to both sides; it smashes what can break there too. */
+std::vector<Monster *> ArcTargets(const Player &player)
+{
+	std::vector<Monster *> targets;
+	const Point tile = player.position.tile;
+	for (const Direction dir : { player._pdir, Left(player._pdir), Right(player._pdir) }) {
+		BreakObjectAt(player, tile + dir);
+		Monster *monster = FindMonsterAtPosition(tile + dir);
+		if (monster != nullptr && CanHit(*monster) && monster->position.old == tile + dir)
+			targets.push_back(monster);
+	}
+	return targets;
+}
+
+std::vector<Monster *> MonstersNear(Point center, int radius)
+{
+	std::vector<Monster *> monsters;
+	ForEachMonsterNear(center, radius, [&](Monster &monster) { monsters.push_back(&monster); });
+	return monsters;
+}
+
+bool IsAlive(const Monster &monster)
+{
+	return !monster.hasNoLife() && monster.mode != MonsterMode::Death;
+}
+
+/** @brief A weapon hit that tells whether it landed, as well as noting it in the cast's result. */
+bool LandsHit(Player &player, Monster &monster, const TableSkillData &data, int percent, CastResult &result)
+{
+	CastResult one;
+	WeaponHit(player, monster, data, percent, one);
+	result.hit = result.hit || one.hit;
+	return one.hit;
+}
+
+/** @brief A free tile next to the monster's for the hero, on the hero's side of it first, if there is one. */
+std::optional<Point> FreeTileBeside(const Player &player, Point monster)
+{
+	const Direction toward = GetDirection(monster, player.position.tile);
+	for (const Direction dir : { toward, Left(toward), Right(toward), Left(Left(toward)), Right(Right(toward)), Opposite(Left(toward)), Opposite(Right(toward)), Opposite(toward) }) {
+		const Point tile = monster + dir;
+		if (InDungeonBounds(tile) && PosOkPlayer(player, tile))
+			return tile;
+	}
+	return std::nullopt;
+}
+
+/** @brief Skylord's Storm: the hero blinks back, as far as SkylordBlinkTiles with nothing in the way. */
+void BlinkBack(Player &player)
+{
+	const Point from = player.position.tile;
+	const Displacement back { Opposite(player._pdir) };
+	for (int tiles = SkylordBlinkTiles; tiles >= 1; tiles--) {
+		bool clear = true;
+		for (int step = 1; step <= tiles && clear; step++) {
+			const Point at = from + back * step;
+			clear = InDungeonBounds(at) && !IsTileSolid(at);
+		}
+		const Point to = from + back * tiles;
+		if (!clear || !PosOkPlayer(player, to))
+			continue;
+		AddVisualEffect(from, MissileGraphicID::Etherealize);
+		MovePlayerTo(player, to);
+		AddVisualEffect(to, MissileGraphicID::Etherealize, 1);
+		return;
+	}
+}
+
+/** @brief Makes a draft Staff gem go off; false for a gem that only needs its shape (Thunder Furrow's line). */
+bool ExecuteStaffDraft(Player &player, const TableSkillData &data, CastResult &result)
+{
+	const Point tile = player.position.tile;
+	const Direction dir = player._pdir;
+	switch (data.skill) {
+	case WeaponSkill::WrathOfTheSkies: {
+		// A slam on the tile in front, then bolts fan out from it, each for half the slam.
+		const Point center = tile + dir;
+		BreakObjectsInArea(player, center, data.radius);
+		for (Monster *monster : MonstersNear(center, data.radius))
+			WeaponHit(player, *monster, data, data.damagePercent, result);
+		FireDraftFan(player, data, center, dir, data.count, data.damagePercent * WrathBoltSharePercent / 100, WrathBoltTiles);
+		return true;
+	}
+	case WeaponSkill::FrostveinRupture: {
+		// Small ice bursts along the line, each enemy on it hit once; then the great spike at its end.
+		std::vector<Monster *> line;
+		Point end = tile;
+		for (int step = 1; step <= data.count; step++) {
+			const Point at = tile + Displacement { dir } * step;
+			if (!InDungeonBounds(at) || IsTileSolid(at))
+				break;
+			end = at;
+			vfx::IceSpike(at, step * 2 * gnTickDelay, 0.45F);
+			BreakObjectsInArea(player, at, data.radius);
+			ForEachMonsterNear(at, data.radius, [&](Monster &monster) {
+				if (std::find(line.begin(), line.end(), &monster) == line.end())
+					line.push_back(&monster);
+			});
+		}
+		for (Monster *monster : line)
+			WeaponHit(player, *monster, data, data.damagePercent, result);
+		if (end == tile)
+			end = tile + dir;
+		const int spikeRadius = data.radius + 1;
+		const int spikeDelay = (data.count + 1) * 2;
+		vfx::IceSpike(end, spikeDelay * gnTickDelay, 1.6F);
+		AddVisualEffect(end, data.effect, spikeDelay, 4);
+		BreakObjectsInArea(player, end, spikeRadius);
+		for (Monster *monster : MonstersNear(end, spikeRadius)) {
+			// A frozen enemy takes more and breaks free.
+			const bool frozen = monster->poe2.freezeTicks > 0;
+			const int percent = data.damagePercent * FrostveinSpikePercent / 100 * (frozen ? FrostveinFrozenPercent : 100) / 100;
+			if (LandsHit(player, *monster, data, percent, result) && frozen) {
+				monster->poe2.freezeTicks = 0;
+				AddVisualEffect(monster->position.tile, MissileGraphicID::StoneCurseShatter);
+			}
+		}
+		return true;
+	}
+	case WeaponSkill::RimeStrikes: {
+		for (Monster *monster : ArcTargets(player))
+			WeaponHit(player, *monster, data, data.damagePercent, result);
+		// Every third strike (the slower one, see BeginSkillAnimation) throws the ice shards ahead.
+		player.poe2.rimeTicks = static_cast<uint8_t>(RimeStrikesResetTicks);
+		if (++player.poe2.rimeCount >= RimeStrikesShardEvery) {
+			player.poe2.rimeCount = 0;
+			FireDraftFan(player, data, tile, dir, RimeStrikesShards, data.damagePercent, RimeStrikesShardTiles);
+			vfx::Impact(tile + dir, vfx::Element::Cold, 1.1F);
+		}
+		return true;
+	}
+	case WeaponSkill::NorthwindWave: {
+		std::vector<Monster *> hit;
+		for (const Point at : NorthwindWaveTiles(tile, dir, data.count)) {
+			const int step = tile.WalkingDistance(at);
+			AddVisualEffect(at, data.effect, step * 2);
+			BreakObjectsInArea(player, at, data.radius);
+			ForEachMonsterNear(at, data.radius, [&](Monster &monster) {
+				if (std::find(hit.begin(), hit.end(), &monster) == hit.end())
+					hit.push_back(&monster);
+			});
+		}
+		vfx::Impact(tile + dir, vfx::Element::Cold, 1.2F);
+		for (Monster *monster : hit) {
+			// What it hits is chilled hard; the freeze builds twice as fast (the row's ailmentPercent).
+			if (LandsHit(player, *monster, data, data.damagePercent, result) && IsAlive(*monster)) {
+				monster->poe2.chillPercent = static_cast<uint8_t>(std::max<int>(monster->poe2.chillPercent, NorthwindChillPercent));
+				monster->poe2.chillTicks = static_cast<uint8_t>(std::max<int>(monster->poe2.chillTicks, ChillTicks));
+			}
+		}
+		return true;
+	}
+	case WeaponSkill::Shatterpalm: {
+		const int radius = std::max<int>(data.radius, 1);
+		BreakObjectsInArea(player, tile, radius);
+		const Fixed26_6 burst = ShareOf(FixedDamage(player, data), ShatterpalmBurstPercent);
+		for (Monster *monster : MonstersNear(tile, radius)) {
+			const bool frozen = monster->poe2.freezeTicks > 0;
+			if (!LandsHit(player, *monster, data, data.damagePercent * (frozen ? ShatterpalmFrozenPercent : 100) / 100, result) || !frozen)
+				continue;
+			// It shatters: the freeze is used up, and a burst of cold hits those beside it.
+			monster->poe2.freezeTicks = 0;
+			const Point at = monster->position.tile;
+			AddVisualEffect(at, MissileGraphicID::StoneCurseShatter);
+			vfx::Impact(at, vfx::Element::Cold, 1.3F);
+			for (Monster *other : MonstersNear(at, ShatterpalmBurstRadius)) {
+				if (other != monster)
+					SpellHitMonster(player, *other, DamageType::Cold, burst, SourceOf(data));
+			}
+		}
+		return true;
+	}
+	case WeaponSkill::DervishAdvance: {
+		// Three spins along the walk: at each step after the start, then where it ended. A monster that stays beside the
+		// hero takes up to all three.
+		const std::vector<Point> path = DashPath(player, data.count);
+		player.poe2.dashStart = {};
+		std::vector<Point> centers(path.size() > 1 ? path.begin() + 1 : path.begin(), path.end());
+		while (centers.size() < static_cast<size_t>(DervishPulses))
+			centers.push_back(tile);
+		// A longer walk keeps its last steps, so the last spin is where the hero stops.
+		centers.erase(centers.begin(), centers.end() - DervishPulses);
+		const int radius = std::max<int>(data.radius, 1);
+		int delay = 0;
+		for (const Point center : centers) {
+			EffectRingAround(center, radius, data.effect, delay);
+			delay += 3;
+			BreakObjectsInArea(player, center, radius);
+			for (Monster *monster : MonstersNear(center, radius))
+				WeaponHit(player, *monster, data, data.damagePercent, result);
+		}
+		return true;
+	}
+	case WeaponSkill::StormSiphon: {
+		Monster *monster = MonsterInFrontOf(player);
+		if (monster == nullptr)
+			monster = TargetMonsterNear(tile, 1);
+		if (monster == nullptr) {
+			BreakObjectAt(player, tile + dir);
+			return true;
+		}
+		player._pdir = GetDirection(tile, monster->position.tile);
+		const bool shocked = monster->poe2.shockTicks > 0;
+		if (!LandsHit(player, *monster, data, data.damagePercent * (shocked ? StormSiphonShockedPercent : 100) / 100, result) || !shocked)
+			return true;
+		// The shock is used up and arcs on to the nearest others.
+		monster->poe2.shockTicks = 0;
+		const Point at = monster->position.tile;
+		std::vector<Monster *> others;
+		for (Monster *other : MonstersNear(at, StormSiphonArcTiles)) {
+			if (other != monster)
+				others.push_back(other);
+		}
+		std::stable_sort(others.begin(), others.end(), [at](const Monster *a, const Monster *b) {
+			return at.WalkingDistance(a->position.tile) < at.WalkingDistance(b->position.tile);
+		});
+		if (others.size() > static_cast<size_t>(StormSiphonArcs))
+			others.resize(StormSiphonArcs);
+		const Fixed26_6 arc = ShareOf(FixedDamage(player, data), StormSiphonArcPercent);
+		for (Monster *other : others) {
+			vfx::Arc(at, other->position.tile, vfx::Element::Lightning);
+			AddVisualEffect(other->position.tile, MissileGraphicID::ThinLightning);
+			SpellHitMonster(player, *other, DamageType::Lightning, arc, SourceOf(data));
+		}
+		return true;
+	}
+	case WeaponSkill::TempestSweep: {
+		// The sweep dazes and knocks back; the gale beyond it only knocks back, for less.
+		const std::vector<Monster *> swept = ArcTargets(player);
+		std::vector<Monster *> gale;
+		const int radius = std::max<int>(data.radius, 1);
+		for (int step = 2; step <= data.count; step++) {
+			const Point at = tile + Displacement { dir } * step;
+			if (!InDungeonBounds(at) || IsTileSolid(at))
+				break;
+			AddVisualEffect(at, data.effect, step);
+			vfx::Impact(at, vfx::Element::Physical, 0.6F);
+			BreakObjectsInArea(player, at, radius);
+			ForEachMonsterNear(at, radius, [&](Monster &monster) {
+				if (std::find(swept.begin(), swept.end(), &monster) == swept.end() && std::find(gale.begin(), gale.end(), &monster) == gale.end())
+					gale.push_back(&monster);
+			});
+		}
+		for (Monster *monster : swept)
+			WeaponHit(player, *monster, data, data.damagePercent, result);
+		TableSkillData wind = data;
+		wind.flags = static_cast<uint32_t>(data.flags & ~TF_Stun);
+		for (Monster *monster : gale)
+			WeaponHit(player, *monster, wind, data.damagePercent * TempestGalePercent / 100, result);
+		return true;
+	}
+	case WeaponSkill::PhantomStep: {
+		// The nearest enemies in turn, the first again if there are fewer; each strike is a burst around that enemy.
+		std::vector<Monster *> targets = MonstersNear(tile, data.radius);
+		std::stable_sort(targets.begin(), targets.end(), [tile](const Monster *a, const Monster *b) {
+			return tile.WalkingDistance(a->position.tile) < tile.WalkingDistance(b->position.tile);
+		});
+		if (targets.size() > data.count)
+			targets.resize(data.count);
+		if (targets.empty())
+			return true;
+		std::optional<Point> last;
+		int delay = 0;
+		for (int strike = 0; strike < data.count; strike++) {
+			Monster &target = *targets[strike % targets.size()];
+			if (!IsAlive(target))
+				continue;
+			const Point at = target.position.tile;
+			AddVisualEffect(at, MissileGraphicID::Etherealize, delay);
+			AddVisualEffect(at, data.effect, delay + 1, 4);
+			delay += 2;
+			BreakObjectsInArea(player, at, PhantomStepStrikeRadius);
+			for (Monster *monster : MonstersNear(at, PhantomStepStrikeRadius))
+				WeaponHit(player, *monster, data, data.damagePercent, result);
+			last = at;
+		}
+		// The hero comes out of the last blink beside the last enemy.
+		if (last && tile.WalkingDistance(*last) > 1) {
+			if (const std::optional<Point> beside = FreeTileBeside(player, *last); beside) {
+				AddVisualEffect(tile, MissileGraphicID::Etherealize);
+				MovePlayerTo(player, *beside);
+				player._pdir = GetDirection(player.position.tile, *last);
+			}
+		}
+		return true;
+	}
+	case WeaponSkill::SkylordsStorm:
+		// The lightning comes down where the hero stood; the hero blinks back first (no leap: Curtis 2026-10-28).
+		AddZone(player, data, tile, data.delay);
+		BlinkBack(player);
+		return true;
+	case WeaponSkill::PalmOfTheFrozenNorth:
+		if (Monster *monster = MonsterInFrontOf(player); monster != nullptr)
+			WeaponHit(player, *monster, data, data.damagePercent, result);
+		else
+			BreakObjectAt(player, tile + dir);
+		// The lance flies straight ahead and pierces (TF_Pierce).
+		FireDraftBolt(player, data, tile, tile + Displacement { dir } * PalmLanceTiles, data.damagePercent * PalmLancePercent / 100, PalmLanceTiles);
+		return true;
+	default:
+		return false;
+	}
+}
+
 } // namespace
 
 std::span<const TableSkillData> TableSkills()
@@ -1518,6 +1890,77 @@ std::vector<BoneSpikesTile> BoneSpikesTiles(Point from, Direction dir, int lengt
 			tiles.push_back({ at + side, step, true });
 	}
 	return tiles;
+}
+
+std::vector<Point> NorthwindWaveTiles(Point from, Direction dir, int length)
+{
+	// The tiles out to `length` steps within about 34 degrees of the facing, and the three in front: 3, 3, 5 and 5 wide
+	// along the dungeon's grid (5 and 7 at the end along the screen's straight lines). Only those it can see.
+	std::vector<Point> tiles;
+	const Displacement facing { dir };
+	const int facingLength = (facing.deltaX * facing.deltaX) + (facing.deltaY * facing.deltaY);
+	for (int step = 1; step <= length; step++) {
+		for (int y = -step; y <= step; y++) {
+			for (int x = -step; x <= step; x++) {
+				if (std::max(std::abs(x), std::abs(y)) != step)
+					continue;
+				const Displacement offset { x, y };
+				const int dot = (x * facing.deltaX) + (y * facing.deltaY);
+				const bool inFront = step == 1 && IsAnyOf(offset, Displacement { dir }, Displacement { Left(dir) }, Displacement { Right(dir) });
+				if (!inFront && (dot <= 0 || dot * dot * 100 < 67 * ((x * x) + (y * y)) * facingLength))
+					continue;
+				const Point at = from + offset;
+				if (InDungeonBounds(at) && !IsTileSolid(at) && LastTileInSight(from, at) == at)
+					tiles.push_back(at);
+			}
+		}
+	}
+	return tiles;
+}
+
+bool RimeStrikesNextIsThird(const Player &player)
+{
+	return player.poe2.rimeCount + 1 >= RimeStrikesShardEvery;
+}
+
+int TableAilmentPercent(const TableSkillData &data)
+{
+	return data.ailmentPercent == 0 ? 100 : data.ailmentPercent;
+}
+
+std::string TableSkillExtraNote(WeaponSkill skill)
+{
+	const TableSkillData *data = FindTableSkill(skill);
+	if (data == nullptr)
+		return {};
+	switch (skill) {
+	case WeaponSkill::WrathOfTheSkies:
+		return std::format("{:d}% of the slam is lightning; {:d} bolts fan out from it, {:d} tiles, each for {:d}% of it", data->convertPercent, data->count, WrathBoltTiles, WrathBoltSharePercent);
+	case WeaponSkill::FrostveinRupture:
+		return std::format("The spike at the end hits for {:d}% of the line all around it; a frozen enemy takes {:d}% more and breaks free", FrostveinSpikePercent, FrostveinFrozenPercent - 100);
+	case WeaponSkill::RimeStrikes:
+		return std::format("Every third strike is slower and throws {:d} ice shards {:d} tiles ahead, each for the strike's hit", RimeStrikesShards, RimeStrikesShardTiles);
+	case WeaponSkill::NorthwindWave:
+		return std::format("Chills {:d}% and builds freeze {:d} times as fast", NorthwindChillPercent, TableAilmentPercent(*data) / 100);
+	case WeaponSkill::ThunderFurrow:
+		return std::format("Shocks {:d} times as often", TableAilmentPercent(*data) / 100);
+	case WeaponSkill::Shatterpalm:
+		return std::format("A frozen enemy takes {:d}% more and shatters: a burst of cold hits those beside it for {:d}% of the hit", ShatterpalmFrozenPercent - 100, ShatterpalmBurstPercent);
+	case WeaponSkill::DervishAdvance:
+		return std::format("{:d} spins on the way: an enemy that stays beside you takes up to {:d}", DervishPulses, DervishPulses);
+	case WeaponSkill::StormSiphon:
+		return std::format("A shocked enemy takes {:d}% more; its shock arcs to {:d} more within {:d} tiles for {:d}% of the hit", StormSiphonShockedPercent - 100, StormSiphonArcs, StormSiphonArcTiles, StormSiphonArcPercent);
+	case WeaponSkill::TempestSweep:
+		return std::format("The gale reaches {:d} tiles ahead for {:d}% and knocks back; those beside you are also dazed", static_cast<int>(data->count), TempestGalePercent);
+	case WeaponSkill::PhantomStep:
+		return std::format("Blinks to the {:d} nearest enemies in turn, each strike all around it; a lone enemy takes all {:d}", static_cast<int>(data->count), static_cast<int>(data->count));
+	case WeaponSkill::SkylordsStorm:
+		return std::format("Blinks you up to {:d} tiles back; the lightning comes down {:.1f} seconds later", SkylordBlinkTiles, data->delay / static_cast<double>(TicksPerSecond));
+	case WeaponSkill::PalmOfTheFrozenNorth:
+		return std::format("The lance hits for {:d}% of the palm, {:d} tiles, through 3 enemies; freeze builds {:d} times as fast", PalmLancePercent, PalmLanceTiles, TableAilmentPercent(*data) / 100);
+	default:
+		return {};
+	}
 }
 
 int TableLandingBurstPercent(const TableSkillData &data)
@@ -1692,6 +2135,10 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 	// A slam or a war cry shatters the hero's Shield Wall near it (Curtis 2026-11-07, Q37).
 	if ((SkillTags(slot) & (ST_Slam | ST_Warcry)) != 0)
 		ShatterShieldWall(player, (SkillTags(slot) & ST_Warcry) != 0 ? tile : target);
+	if (ExecuteStaffDraft(player, data, result)) {
+		AfterCast(player, data, result);
+		return;
+	}
 	switch (data.shape) {
 	case Strike:
 		if (Monster *monster = MonsterInFrontOf(player); monster != nullptr)
@@ -2281,6 +2728,9 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 	const Point tile = player.position.tile;
 	const Direction dir = player._pdir;
 	const bool mine = &player == MyPlayer;
+	// Wrath of the Skies slams the tile in front of the hero, not the one aimed at.
+	if (data.skill == WeaponSkill::WrathOfTheSkies)
+		target = tile + dir;
 	if (const std::optional<MissileGraphicID> flash = TableSkillCastFlash(data); flash)
 		AddVisualEffect(tile + dir, *flash, 0, 3);
 	// POE2 Mashup: every skill is heard. An attack's swing, throw or shot sounds as it lands (a spell's incantation
@@ -2320,6 +2770,12 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 			vfx::Sparks(tile, LookOf(data), 1.3F);
 			if (mine)
 				ShakeCamera(ShakeStrength::Light, 4);
+			break;
+		}
+		// A dash that ends in one strike (Storm Siphon) swings at the enemy in front.
+		if (data.radius == 0) {
+			AddVisualEffect(tile + dir, data.effect, 1, 4);
+			vfx::SwingAs(tile, tile + dir, LookOf(data), WeaponSwingStyle(player), HoldsHeavyWeapon(player), WeaponElementLook(player));
 			break;
 		}
 		[[fallthrough]];
@@ -2365,10 +2821,15 @@ void PlayTableSkillEffects(const Player &player, const TableSkillData &data, Poi
 			EffectRingAround(target, data.radius, data.effect, 2);
 		if ((data.flags & TF_Spell) == 0)
 			vfx::Slam(target, std::max<int>(data.radius, 1), LookOf(data));
-		else if (data.type == DamageType::Lightning)
+		if (data.skill == WeaponSkill::WrathOfTheSkies || ((data.flags & TF_Spell) != 0 && data.type == DamageType::Lightning))
 			vfx::SkyStrike(target, LookOf(data));
 		if (mine)
 			ShakeCamera(ShakeStrength::Medium, 5);
+		break;
+	case Line:
+		// The draft Staff gems' wave and lines start with a sweep of the staff.
+		if (data.weapon == TableWeapon::Staff)
+			vfx::Swing(tile, tile + dir, LookOf(data), data.skill == WeaponSkill::NorthwindWave, true, WeaponElementLook(player));
 		break;
 	case Curse:
 		EffectRingAround(target, std::max<int>(data.radius, 1), data.effect, 0);
@@ -2463,7 +2924,8 @@ SkillSounds TableSkillSounds(const TableSkillData &data)
 			sounds.hit = Sfx(SfxID::ShootBow);
 			break;
 		case TableZone::Delayed:
-			sounds.spell = Sfx(SfxID::BigExplosion);
+			// Skylord's Storm's lightning comes down as Diablo's Lightning spell.
+			sounds.spell = data.type == DamageType::Lightning && !spell ? Sfx(SfxID::SpellLightning) : Sfx(SfxID::BigExplosion);
 			break;
 		case TableZone::IceSpike:
 			// Bone Prison's cage grinds up out of the earth like stone.
@@ -2824,6 +3286,11 @@ void ProcessSkillZones(Player &player)
 				if (data->zone == TableZone::Delayed) {
 					PlaySkillSound(TableSkillSounds(*data).spell, zone.center);
 					ShakeCamera(ShakeStrength::Medium, 6);
+					// Skylord's Storm comes down from the sky.
+					if (data->skill == WeaponSkill::SkylordsStorm) {
+						vfx::SkyStrike(zone.center, vfx::Element::Lightning);
+						EffectRingAround(zone.center, std::max(radius, 1), data->effect, 1);
+					}
 				} else if (data->zone == TableZone::IceSpike) {
 					PlaySkillSound(TableSkillSounds(*data).spell, zone.center);
 					ShakeCamera(ShakeStrength::Medium, 5);

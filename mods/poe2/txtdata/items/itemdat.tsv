@@ -1048,3 +1048,15 @@ poe2:staff_void_staff	1	Weapon	Two-handed	STAFF_OF_LAZARUS	Staff	NONE	Void Staff
 	0	Misc	Unequippable	RUNE_OF_STONE	Misc	NONE	Lingering Venom Support	Gem	6	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Rathma's Doom Support	Gem	10	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
 	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Festering Hex Support	Gem	3	0	0	0	0	0	0	0	0		SUPPORT_TABLE	Null	true	800
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Wrath of the Skies Gem	Gem	1	0	0	0	0	0	0	0	21		SKILLGEM_TABLE	Null	true	580
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Frostvein Rupture Gem	Gem	1	0	0	0	0	0	0	0	21		SKILLGEM_TABLE	Null	true	580
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Rime Strikes Gem	Gem	3	0	0	0	0	0	0	0	27		SKILLGEM_TABLE	Null	true	840
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Northwind Wave Gem	Gem	10	0	0	0	0	0	0	0	48		SKILLGEM_TABLE	Null	true	1750
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Thunder Furrow Gem	Gem	15	0	0	0	0	0	0	0	63		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Shatterpalm Gem	Gem	15	0	0	0	0	0	0	0	63		SKILLGEM_TABLE	Null	true	2400
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Dervish Advance Gem	Gem	20	0	0	0	0	0	0	0	78		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Storm Siphon Gem	Gem	20	0	0	0	0	0	0	0	78		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Tempest Sweep Gem	Gem	20	0	0	0	0	0	0	0	78		SKILLGEM_TABLE	Null	true	3050
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Phantom Step Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Skylord's Storm Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700
+	0	Misc	Unequippable	RUNE_BOMB	Misc	NONE	Palm of the Frozen North Gem	Gem	25	0	0	0	0	0	0	0	93		SKILLGEM_TABLE	Null	true	3700

@@ -196,7 +196,8 @@ constexpr std::array<PoisonSkill, 11> PoisonSkills { {
 // Rogue's and Magic for the Sorcerer's, and drawn sickly green.
 TEST_F(Poe2PoisonSkillsTest, PoisonSkillsAreGreenGemsAtThePlansLevels)
 {
-	EXPECT_EQ(WeaponSkill::Last, WeaponSkill::AcidCloud);
+	// Appended after the skills before them; the draft gems' Staff batch (Q48) came after them.
+	EXPECT_EQ(static_cast<int>(WeaponSkill::AcidCloud) + 1, static_cast<int>(WeaponSkill::WrathOfTheSkies));
 	for (const PoisonSkill &entry : PoisonSkills) {
 		const TableSkillData &data = Row(entry.skill);
 		EXPECT_EQ(data.level, entry.level) << data.name;

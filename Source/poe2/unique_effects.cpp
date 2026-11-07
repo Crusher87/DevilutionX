@@ -824,12 +824,22 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	int toLightning = staffHit ? std::clamp(Rule(player, UniqueRule::StaffToLightning), 0, 100 - toFire) : 0;
 	if (!ranged && IsLightningAttackSkill(player.poe2.activeSkill))
 		toLightning = 100 - toFire;
-	if (toFire > 0 || toLightning > 0) {
+	// The draft Staff gems' hits are their element, Wrath of the Skies' in part (TableSkillData::convertPercent).
+	int toCold = 0;
+	if (const TableSkillData *table = !ranged ? FindTableSkill(CurrentWeaponSkill(player)) : nullptr; table != nullptr && table->convertPercent > 0) {
+		if (table->type == DamageType::Lightning)
+			toLightning = std::max(toLightning, std::min<int>(table->convertPercent, 100 - toFire));
+		else if (table->type == DamageType::Cold)
+			toCold = std::min<int>(table->convertPercent, 100 - toFire - toLightning);
+	}
+	if (toFire > 0 || toLightning > 0 || toCold > 0) {
 		const int64_t fire = packets[0] * toFire / 100;
 		const int64_t lightning = packets[0] * toLightning / 100;
-		packets[0] -= fire + lightning;
+		const int64_t cold = packets[0] * toCold / 100;
+		packets[0] -= fire + lightning + cold;
 		packets[1] += fire;
 		packets[2] += lightning;
+		packets[3] += cold;
 	}
 	// Fire in the Hand: spell damage adds to the increased damage of the attack's fire.
 	if (const int share = Rule(player, UniqueRule::SpellDamageToFireAttacks); share > 0 && packets[1] > 0) {

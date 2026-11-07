@@ -1272,6 +1272,32 @@ uint32_t SkillTags(SkillSlot skill)
 		tags |= ST_Slam;
 	if (table->skill == WeaponSkill::FallingSword)
 		tags |= ST_Slam;
+	// The draft Staff gems' tags, as the Tree Workshop gives them (drafts-2026-11-06).
+	switch (table->skill) {
+	case WeaponSkill::WrathOfTheSkies:
+		tags |= ST_Melee | ST_Slam;
+		break;
+	case WeaponSkill::FrostveinRupture:
+	case WeaponSkill::ThunderFurrow:
+		tags |= ST_Slam;
+		break;
+	case WeaponSkill::RimeStrikes:
+	case WeaponSkill::Shatterpalm:
+	case WeaponSkill::DervishAdvance:
+	case WeaponSkill::StormSiphon:
+	case WeaponSkill::TempestSweep:
+		tags |= ST_Strike;
+		break;
+	case WeaponSkill::PhantomStep:
+		tags |= ST_Movement;
+		break;
+	case WeaponSkill::SkylordsStorm:
+		// A blink and a burst, not a lasting zone.
+		tags = (tags & ~(ST_Duration | ST_Placed)) | ST_Melee | ST_Movement;
+		break;
+	default:
+		break;
+	}
 	// Thornvine Arrow's vine and Poison Explosion's cloud last.
 	if (table->zone == TableZone::PoisonGround)
 		tags |= ST_Duration;
@@ -1700,6 +1726,9 @@ int SupportAilmentChancePercent(DamageType type)
 	}
 	if (type == DamageType::Fire && (HitHas(SG::FuelThePyre) || HitHas(SG::AndarielsAnguish)))
 		return 0;
+	// The skill's own ailment build-up (Thunder Furrow's doubled shock chance, Northwind Wave's doubled freeze).
+	if (const TableSkillData *table = FindTableSkill(Hit.skill.attack()); table != nullptr)
+		percent = percent * TableAilmentPercent(*table) / 100;
 	return percent;
 }
 

@@ -186,7 +186,20 @@ enum class WeaponSkill : uint8_t {
 	PoisonExplosion,
 	PoisonNova,
 	AcidCloud,
-	Last = AcidCloud,
+	/** The draft gems' Staff batch (Curtis 2026-11-07, Q48): POE2's quarterstaff skills. */
+	WrathOfTheSkies,
+	FrostveinRupture,
+	RimeStrikes,
+	NorthwindWave,
+	ThunderFurrow,
+	Shatterpalm,
+	DervishAdvance,
+	StormSiphon,
+	TempestSweep,
+	PhantomStep,
+	SkylordsStorm,
+	PalmOfTheFrozenNorth,
+	Last = PalmOfTheFrozenNorth,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
@@ -1060,6 +1073,9 @@ struct Poe2PlayerData {
 	/** @brief Zeal's uses towards its heavy blow, and the game ticks until the count starts over (not saved). */
 	uint8_t zealCount = 0;
 	uint8_t zealTicks = 0;
+	/** @brief Rime Strikes' strikes towards its third, and the game ticks until the count starts over (not saved). */
+	uint8_t rimeCount = 0;
+	uint8_t rimeTicks = 0;
 	/** @brief A skill still firing a stream of shots, one every few ticks, e.g. Barrage's arrows (not saved). */
 	WeaponSkill volleySkill = WeaponSkill::None;
 	uint8_t volleyShotsLeft = 0;
@@ -1344,6 +1360,8 @@ struct Poe2PlayerData {
 		soulTicks = 0;
 		zealCount = 0;
 		zealTicks = 0;
+		rimeCount = 0;
+		rimeTicks = 0;
 		riposteTicks = 0;
 		frenzyCharges = 0;
 		frenzyTicks = 0;
@@ -1397,6 +1415,8 @@ struct Poe2PlayerData {
 			soulStacks = 0;
 		if (zealTicks > 0 && --zealTicks == 0)
 			zealCount = 0;
+		if (rimeTicks > 0 && --rimeTicks == 0)
+			rimeCount = 0;
 		if (frenzyTicks > 0 && --frenzyTicks == 0)
 			frenzyCharges = 0;
 		if (comboTicks > 0 && --comboTicks == 0)

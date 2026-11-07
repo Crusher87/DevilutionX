@@ -93,6 +93,7 @@ set(tests
   poe2_save_fixture_test
   poe2_skill_effects_test
   poe2_spirit_test
+  poe2_staff_drafts_test
   poe2_spirit_order_test
   poe2_regen_test
   poe2_skill_gems_test
