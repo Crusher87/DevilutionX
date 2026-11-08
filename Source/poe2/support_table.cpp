@@ -781,11 +781,16 @@ void PassDamageOverTime(const Player &player, const Monster &from)
 	for (Monster *other : NearestMonsters(from.position.tile, 4, 2, &from)) {
 		Poe2MonsterState &target = other->poe2;
 		if (state.bleedTicks > 0) {
+			// Whose bleed it is goes with the bleed that lands: a neighbour keeping its stronger bleed keeps its mark
+			// (audit-drafts-dagger.md 6.4).
+			const int32_t passed = state.bleedDamagePerTick * 4 / 5;
+			if (target.bleedTicks == 0 || passed >= target.bleedDamagePerTick) {
+				target.bleedSkill = state.bleedSkill;
+				target.bleedFromBloodletting = state.bleedFromBloodletting;
+			}
 			target.bleedTicks = std::max(target.bleedTicks, state.bleedTicks);
-			target.bleedDamagePerTick = std::max(target.bleedDamagePerTick, state.bleedDamagePerTick * 4 / 5);
+			target.bleedDamagePerTick = std::max(target.bleedDamagePerTick, passed);
 			target.bleedSource = static_cast<int8_t>(player.getId());
-			target.bleedSkill = state.bleedSkill;
-			target.bleedFromBloodletting = state.bleedFromBloodletting;
 		}
 		if (state.poisonTicks > 0) {
 			target.poisonTicks = std::max(target.poisonTicks, state.poisonTicks);
@@ -1359,7 +1364,8 @@ uint32_t SkillTags(SkillSlot skill)
 		tags |= ST_Chaos | ST_Fire;
 		break;
 	// The draft Dagger gems' (Q48). The bomb bursts and is gone; the sentry is set down; Phoenix Strike's thirds are of
-	// all three elements and burst; Bloodletting is a bleed skill; Viz-Jaq'taar Strike blinks.
+	// all three elements and burst; Viz-Jaq'taar Strike blinks. Bloodletting deals no damage over time of its own, so it
+	// takes no DoT tag (audit-drafts-dagger.md 6.5).
 	case WeaponSkill::FireBlast:
 		tags &= ~ST_Duration;
 		break;
@@ -1368,9 +1374,6 @@ uint32_t SkillTags(SkillSlot skill)
 		break;
 	case WeaponSkill::PhoenixStrike:
 		tags |= ST_Fire | ST_Frost | ST_Lightning | ST_Area;
-		break;
-	case WeaponSkill::Bloodletting:
-		tags |= ST_DamageOverTime;
 		break;
 	case WeaponSkill::VizJaqtaarStrike:
 		tags |= ST_Movement;

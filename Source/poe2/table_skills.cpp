@@ -255,7 +255,7 @@ const TableSkillData Table[] = {
 	// The draft gems' Dagger batch (Q48, build order 4). The bomb, the web and the sentry are thrown (TF_Lobbed, as Acid
 	// Flask); Blades of Ice, Ember Fang and Winter's Edge land as their element (convertPercent).
 	{ WS::FireBlast, "Fire Blast", "Throws a fire bomb that bursts where it lands", 1, 6, TW::Dagger, 0, Zone, 60, 0, 1, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Lobbed, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Fireball), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
-	{ WS::ShockWeb, "Shock Web", "Throws a spark that bursts into a web of lightning, which shocks what stands in it for 2 seconds", 1, 6, TW::Dagger, 0, Zone, 50, 0, 1, 40, 10, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Lobbed, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::ChainLightning), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::ShockWeb, "Shock Web", "Throws a spark that bursts into a web of lightning; for 2 seconds the web strikes what stands in it, and can shock it", 1, 6, TW::Dagger, 0, Zone, 50, 0, 1, 40, 10, 0, DT::Lightning, MissileID::Null, MG::Lightning, TF_Lobbed, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::ChainLightning), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
 	{ WS::BladesOfIce, "Blades of Ice", "Quick icy stabs that chill; every third freezes the enemy", 3, 4, TW::Dagger, 0, Strike, 190, 0, 0, 0, 0, 0, DT::Cold, MissileID::Null, MG::BlueFlareExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Nova), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 0 },
 	{ WS::PhoenixStrike, "Phoenix Strike", "Quick strikes; every third adds an element in turn: a burst of fire, a ring of ice, a chain of lightning", 15, 12, TW::Dagger, 0, Strike, 235, 0, 0, 0, 0, 0, DT::Physical, MissileID::BlueFlare, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Apocalypse), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
 	{ WS::Bloodletting, "Bloodletting", "A deep stab: a bleeding enemy takes more, and bleeding from your other skills deals all it has left at once", 15, 13, TW::Dagger, 0, Strike, 415, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::BloodRitual), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
@@ -2724,11 +2724,17 @@ bool ExecuteDaggerDraft(Player &player, const TableSkillData &data, CastResult &
 		const Fixed26_6 before = monster->hitPoints;
 		if (!LandsHit(player, *monster, data, data.damagePercent, result))
 			return true;
-		const Fixed26_6 dealt = Fixed26_6::fromRaw(std::max<int32_t>((before - monster->hitPoints).raw(), 1));
+		// The sure ignite keeps the ignite rules (audit-drafts-dagger.md 6.1): what says it can't ignite (Fuel the Pyre,
+		// Andariel's Anguish, Elemental Focus, a unique) stops it and its spread, and a stronger ignite (Hellfire) is stronger.
+		const bool ignites = SupportAilmentChancePercent(DamageType::Fire) > 0 && UniqueIgniteChancePercent(player) > 0;
+		const int32_t lost = std::max<int32_t>((before - monster->hitPoints).raw(), 1);
+		const Fixed26_6 dealt = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(lost) * SupportAilmentEffectPercent(DamageType::Fire) / 100), 1));
 		const Point at = monster->position.tile;
+		vfx::Impact(at, vfx::Element::Fire, 1.1F);
+		if (!ignites)
+			return true;
 		if (IsAlive(*monster))
 			InflictBlastAilment(*monster, player, DamageType::Fire, dealt);
-		vfx::Impact(at, vfx::Element::Fire, 1.1F);
 		for (Monster *other : NearestBeside(at, EmberFangSpreadTiles, monster, EmberFangSpreads)) {
 			InflictBlastAilment(*other, player, DamageType::Fire, dealt);
 			vfx::Arc(at, other->position.tile, vfx::Element::Fire);
@@ -3440,8 +3446,9 @@ std::string TableSkillExtraNote(WeaponSkill skill)
 	case WeaponSkill::FireBlast:
 		return std::format("Its hit is fire; the bomb bursts within {:d} of where it lands", static_cast<int>(data->radius));
 	case WeaponSkill::ShockWeb:
-		return std::format("Its hit is lightning; bursts within {:d} for {:d}%, then the web pulses for {:d}% every {:.1f} seconds for {:d} seconds; {:d} webs at most",
-		    static_cast<int>(data->radius), ShockWebBurstPercent, ShockWebPulsePercent, data->interval / static_cast<double>(TicksPerSecond), data->duration / TicksPerSecond, ShockWebWebs);
+		// The hit the details show is the burst (EstimateHit); each pulse is its share of that.
+		return std::format("Its hit is lightning, a burst within {:d} where it lands; then the web pulses for {:d}% of that every {:.1f} seconds for {:d} seconds, with a chance to shock; {:d} webs at most",
+		    static_cast<int>(data->radius), ShockWebPulsePercent * 100 / ShockWebBurstPercent, data->interval / static_cast<double>(TicksPerSecond), data->duration / TicksPerSecond, ShockWebWebs);
 	case WeaponSkill::BladesOfIce:
 		return std::format("Its hit is cold, and chills; every {:d}rd stab freezes the enemy for {:d} second", BladesOfIceFreezeEvery, BladesOfIceFreezeTicks / TicksPerSecond);
 	case WeaponSkill::PhoenixStrike:
@@ -3457,8 +3464,8 @@ std::string TableSkillExtraNote(WeaponSkill skill)
 	case WeaponSkill::VizJaqtaarStrike:
 		return std::format("Stabs {:d} enemies within {:d} in turn, coming out behind the last; a lone enemy takes {:d} stabs", static_cast<int>(data->count), static_cast<int>(data->radius), VizJaqtaarStabsEach);
 	case WeaponSkill::WintersEdge:
-		return std::format("Its hit is cold, its freeze builds {:d}% as fast; a frozen enemy takes {:d}% more and shatters, {:d} shards hitting those within {:d} for {:d}% each",
-		    TableAilmentPercent(*data), WintersEdgeFrozenPercent - 100, WintersEdgeShards, WintersEdgeShardRadius, WintersEdgeShardPercent);
+		return std::format("Its hit is cold, its freeze builds {:s} as fast; a frozen enemy takes {:d}% more and shatters, {:d} shards hitting those within {:d} for {:d}% each",
+		    TableAilmentPercent(*data) == 200 ? std::string("twice") : std::format("{:d}%", TableAilmentPercent(*data)), WintersEdgeFrozenPercent - 100, WintersEdgeShards, WintersEdgeShardRadius, WintersEdgeShardPercent);
 	default:
 		return {};
 	}

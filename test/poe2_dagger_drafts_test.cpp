@@ -23,6 +23,7 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/player_data.hpp"
+#include "poe2/skill_details.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
@@ -357,7 +358,9 @@ TEST_F(Poe2DaggerDraftsTest, DaggerDraftsHaveTheirTags)
 	EXPECT_TRUE(has(WeaponSkill::ShockWeb, ST_Projectile | ST_Lightning | ST_Area | ST_Duration));
 	EXPECT_TRUE(has(WeaponSkill::BladesOfIce, ST_Strike | ST_Frost));
 	EXPECT_TRUE(has(WeaponSkill::PhoenixStrike, ST_Strike | ST_Fire | ST_Frost | ST_Lightning | ST_Area));
-	EXPECT_TRUE(has(WeaponSkill::Bloodletting, ST_Strike | ST_Physical | ST_DamageOverTime));
+	EXPECT_TRUE(has(WeaponSkill::Bloodletting, ST_Strike | ST_Physical));
+	// It deals no damage over time of its own (audit-drafts-dagger.md 6.5).
+	EXPECT_FALSE(has(WeaponSkill::Bloodletting, ST_DamageOverTime));
 	EXPECT_TRUE(has(WeaponSkill::EmberFang, ST_Strike | ST_Fire));
 	EXPECT_TRUE(has(WeaponSkill::DeathSentry, ST_Placed | ST_Duration | ST_Area | ST_Physical));
 	EXPECT_FALSE(has(WeaponSkill::DeathSentry, ST_Projectile));
@@ -821,6 +824,94 @@ TEST_F(Poe2DaggerDraftsTest, WintersEdgeShattersTheFrozen)
 		}
 	}
 	EXPECT_EQ(hit, WintersEdgeShards);
+}
+
+// audit-drafts-dagger.md 6.1: Ember Fang's sure ignite keeps the ignite supports' rules.
+TEST_F(Poe2DaggerDraftsTest, DaggerFix1EmberFangsIgniteFollowsTheIgniteSupports)
+{
+	Player &player = SetUpFight();
+	const auto stab = [&](std::array<Monster *, 3> &out) {
+		ClearMonsters();
+		out[0] = &PlaceMonster(0, { 41, 40 });
+		out[1] = &PlaceMonster(1, { 42, 40 });
+		out[2] = &PlaceMonster(2, { 42, 41 });
+		UseUntilHurt(player, WeaponSkill::EmberFang, { 41, 40 }, *out[0]);
+	};
+	std::array<Monster *, 3> hit {};
+	// Hellfire's ignites burn 75% harder: the sure ignite and its spread with them.
+	ASSERT_TRUE(Fits(SupportGem::Hellfire, WeaponSkill::EmberFang));
+	Supported(WeaponSkill::EmberFang, SupportGem::Hellfire);
+	stab(hit);
+	ASSERT_TRUE(Hurt(*hit[0]));
+	const double base = static_cast<double>(Lost(*hit[0])) * IgnitePercentPerSecond / 100 / 20;
+	EXPECT_GE(hit[0]->poe2.igniteDamagePerTick / base, 1.7);
+	for (size_t i = 1; i < hit.size(); i++) {
+		ASSERT_GT(hit[i]->poe2.igniteTicks, 0);
+		EXPECT_NEAR(hit[i]->poe2.igniteDamagePerTick / base, 1.75, 0.03);
+	}
+	// What says it can't ignite stops the sure ignite and its spread.
+	for (const SupportGem gem : { SupportGem::FuelThePyre, SupportGem::AndarielsAnguish }) {
+		Supported(WeaponSkill::EmberFang, gem);
+		stab(hit);
+		ASSERT_TRUE(Hurt(*hit[0]));
+		for (const Monster *monster : hit)
+			EXPECT_EQ(monster->poe2.igniteTicks, 0) << static_cast<int>(gem);
+	}
+}
+
+// audit-drafts-dagger.md 6.2: Shock Web's text says it can shock, and its details show the burst it deals.
+TEST_F(Poe2DaggerDraftsTest, DaggerFix2ShockWebSaysWhatItDoes)
+{
+	const std::string description(Row(WeaponSkill::ShockWeb).description);
+	EXPECT_NE(description.find("can shock"), std::string::npos) << description;
+	EXPECT_EQ(description.find("shocks what"), std::string::npos) << description;
+	const std::string note = TableSkillExtraNote(WeaponSkill::ShockWeb);
+	EXPECT_NE(note.find("50% of that"), std::string::npos) << note;
+	EXPECT_NE(note.find("chance to shock"), std::string::npos) << note;
+	// Fire Blast is on the same curve and speed row, and its hit is its whole row: the web shows half its 50%.
+	Player &player = SetUpFight();
+	const double web = SkillHitAverage(player, SkillSlot::ForAttack(WeaponSkill::ShockWeb), 1);
+	const double blast = SkillHitAverage(player, SkillSlot::ForAttack(WeaponSkill::FireBlast), 1);
+	ASSERT_GT(blast, 0.0);
+	EXPECT_NEAR(web / blast, (50.0 * ShockWebBurstPercent / 100) / 60.0, 0.02);
+}
+
+// audit-drafts-dagger.md 6.3: the Cold Arrow wording.
+TEST_F(Poe2DaggerDraftsTest, DaggerFix3WintersEdgeFreezeBuildsTwiceAsFast)
+{
+	const std::string note = TableSkillExtraNote(WeaponSkill::WintersEdge);
+	EXPECT_NE(note.find("twice as fast"), std::string::npos) << note;
+	EXPECT_EQ(note.find("200%"), std::string::npos) << note;
+}
+
+// audit-drafts-dagger.md 6.4: a Pestilence spread marks only the bleeds it lands as its own.
+TEST_F(Poe2DaggerDraftsTest, DaggerFix4PestilencePassesTheBleedMarkOnlyWithTheBleed)
+{
+	SetUpFight();
+	Supported(WeaponSkill::Bloodletting, SupportGem::Pestilence);
+	Monster &dead = PlaceMonster(0, { 45, 45 });
+	Monster &stronger = PlaceMonster(1, { 46, 45 });
+	Monster &clean = PlaceMonster(2, { 45, 46 });
+	dead.poe2.lastHitPlayer = 0;
+	dead.poe2.lastHitSkillKind = static_cast<uint8_t>(SkillKind::Attack);
+	dead.poe2.lastHitSkillId = SkillSlot::ForAttack(WeaponSkill::Bloodletting).id;
+	dead.poe2.bleedTicks = 40;
+	dead.poe2.bleedDamagePerTick = 100;
+	dead.poe2.bleedSkill = WeaponSkill::Bloodletting;
+	dead.poe2.bleedFromBloodletting = true;
+	stronger.poe2.bleedTicks = 20;
+	stronger.poe2.bleedDamagePerTick = 200;
+	stronger.poe2.bleedSkill = WeaponSkill::FanOfBlades;
+	stronger.poe2.bleedFromBloodletting = false;
+	OnSupportedKill(dead);
+	// The neighbour keeps its stronger Fan bleed, so its mark stays the Fan's.
+	EXPECT_EQ(stronger.poe2.bleedDamagePerTick, 200);
+	EXPECT_EQ(stronger.poe2.bleedSkill, WeaponSkill::FanOfBlades);
+	EXPECT_FALSE(stronger.poe2.bleedFromBloodletting);
+	// One with no bleed takes Bloodletting's, mark and all.
+	EXPECT_EQ(clean.poe2.bleedDamagePerTick, 80);
+	EXPECT_EQ(clean.poe2.bleedSkill, WeaponSkill::Bloodletting);
+	EXPECT_TRUE(clean.poe2.bleedFromBloodletting);
 }
 
 } // namespace

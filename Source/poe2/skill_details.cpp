@@ -328,7 +328,13 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 		} else {
 			// A table skill's weapon hit takes the gem's percent, then its own (SkillHitMonster).
 			// Swamp Gas Arrow's arrow deals only its share of the row, as FireTableMissile shoots it (audit-drafts-bow.md 7.2).
-			AddWeaponHit(hit, player, skill, level, percent, table->skill == WeaponSkill::SwampGasArrow ? table->damagePercent * SwampGasArrowPercent / 100 : table->damagePercent);
+			// Shock Web's hit is its burst, half the row (audit-drafts-dagger.md 6.2); its pulses are in its note.
+			int rowPercent = table->damagePercent;
+			if (table->skill == WeaponSkill::SwampGasArrow)
+				rowPercent = table->damagePercent * SwampGasArrowPercent / 100;
+			else if (table->skill == WeaponSkill::ShockWeb)
+				rowPercent = table->damagePercent * ShockWebBurstPercent / 100;
+			AddWeaponHit(hit, player, skill, level, percent, rowPercent);
 			// Wrath of the Skies' hit is part lightning (ApplyPlayerAttackDamage), the rest physical.
 			if (table->type != DamageType::Physical && !hit.parts.empty() && table->convertPercent > 0 && table->convertPercent < 100) {
 				HitPart element = hit.parts.front();
