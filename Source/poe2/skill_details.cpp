@@ -327,7 +327,8 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 			AddSpellBase(hit, player, level, table->type, tablePercent);
 		} else {
 			// A table skill's weapon hit takes the gem's percent, then its own (SkillHitMonster).
-			AddWeaponHit(hit, player, skill, level, percent, table->damagePercent);
+			// Swamp Gas Arrow's arrow deals only its share of the row, as FireTableMissile shoots it (audit-drafts-bow.md 7.2).
+			AddWeaponHit(hit, player, skill, level, percent, table->skill == WeaponSkill::SwampGasArrow ? table->damagePercent * SwampGasArrowPercent / 100 : table->damagePercent);
 			// Wrath of the Skies' hit is part lightning (ApplyPlayerAttackDamage), the rest physical.
 			if (table->type != DamageType::Physical && !hit.parts.empty() && table->convertPercent > 0 && table->convertPercent < 100) {
 				HitPart element = hit.parts.front();

@@ -1147,6 +1147,8 @@ struct Poe2PlayerData {
 	std::array<uint8_t, 4> cryHits {};
 	std::array<uint8_t, 4> cryTicks {};
 	std::array<bool, 4> cryUsedThisTick {};
+	/** @brief The percent of its bonus that use gets: all of it, or the share of its swings it could pay for (not saved). */
+	std::array<uint8_t, 4> cryShareThisTick {};
 	/** @brief What is left of Bulwark Roar's Guard, raw life it takes instead of the hero while the cry lasts (not saved). */
 	int32_t bulwarkGuard = 0;
 	/** @brief Where Skylord's Storm last blinked from, for a support's repeat to strike there again (not saved). */
@@ -1447,6 +1449,7 @@ struct Poe2PlayerData {
 		cryHits = {};
 		cryTicks = {};
 		cryUsedThisTick = {};
+		cryShareThisTick = {};
 		bulwarkGuard = 0;
 		skylordFrom = {};
 		riposteTicks = 0;

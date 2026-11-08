@@ -215,7 +215,7 @@ constexpr uint32_t AllThree = TT_Mace | TT_Axe | TT_Sword;
 
 // drafts-61-priced.json (Curtis 19:33 UTC 11-07, Q46-Q48; build order 2, the Mace and Axe batch; Tremor Slam dropped).
 constexpr std::array<DraftRow, 21> Drafts { {
-	{ WeaponSkill::HellfireRoar, 1, 1, 6, 6, 10, 100, 100, DamageType::Fire, TableWeapon::None, AllThree, false },
+	{ WeaponSkill::HellfireRoar, 1, 1, 6, 6, 8, 100, 100, DamageType::Fire, TableWeapon::None, AllThree, false },
 	{ WeaponSkill::FrostforgedHammer, 1, 1, 5, 3, 155, 118, 109, DamageType::Cold, TableWeapon::Mace, TT_Mace, true },
 	{ WeaponSkill::PlateBreaker, 3, 3, 8, 6, 155, 125, 113, DamageType::Physical, TableWeapon::Mace, TT_Mace, true },
 	{ WeaponSkill::MagmaHurl, 3, 3, 8, 9, 75, 134, 117, DamageType::Fire, TableWeapon::Mace, TT_Mace, false },
@@ -1250,6 +1250,72 @@ TEST_F(Poe2WeaponDraftsTest, Fix7OnlyWarCrySaysItStuns)
 		}
 		EXPECT_TRUE(noted) << Row(cry).name;
 	}
+}
+
+// Curtis's three lowers (23:35 UTC 11-07, batch2-fixes.md "Approved"): Frostbite Blades pierce 1, Blood Harvest's kill
+// burst 25% of the hit, Hellfire Roar's burst 8%.
+TEST_F(Poe2WeaponDraftsTest, ApprovedLowersFrostbiteBloodHarvestAndHellfire)
+{
+	EXPECT_EQ(FrostbiteBladePierces, 1);
+	EXPECT_EQ(BloodHarvestBurstPercent, 25);
+	EXPECT_EQ(Row(WeaponSkill::HellfireRoar).damagePercent, 8);
+	EXPECT_NE(TableSkillExtraNote(WeaponSkill::FrostbiteBlades).find("through 1 enemies"), std::string::npos);
+	EXPECT_NE(TableSkillExtraNote(WeaponSkill::BloodHarvest).find("bursts for 25% of the hit"), std::string::npos);
+	EXPECT_NE(TableSkillExtraNote(WeaponSkill::HellfireRoar).find("8% of the hit"), std::string::npos);
+	// A blade goes through one more enemy only.
+	Player &player = SetUpFight();
+	Monster &monster = PlaceMonster(0, { 41, 40 });
+	UseUntilHurt(player, WeaponSkill::FrostbiteBlades, { 41, 40 }, monster);
+	for (const Missile *blade : MissilesOf(MissileID::BlueFlare))
+		EXPECT_EQ(blade->poe2.piercesLeft, 1);
+	// Hellfire's burst is 8% of the hit it empowers.
+	ClearMonsters();
+	Monster &struck = PlaceMonster(0, { 41, 40 });
+	Monster &beside = PlaceMonster(1, { 42, 40 });
+	Use(player, WeaponSkill::HellfireRoar, { 41, 40 });
+	player.poe2.tick();
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::StormEdge), struck, Fixed26_6::fromInt(1000));
+	Supports(player, 3);
+	EXPECT_NEAR(static_cast<double>(Lost(beside)) / Fixed26_6::fromInt(80).raw(), 1.0, 0.1);
+}
+
+// audit-drafts-bow.md 7.4: a use that finds fewer of the cry's charges left than its swings gets only that share.
+TEST_F(Poe2WeaponDraftsTest, BowFix4ACryUseShortOfChargesGetsItsShare)
+{
+	Player &player = SetUpFight();
+	Monster &struck = PlaceMonster(0, { 41, 40 });
+	Monster &beside = PlaceMonster(1, { 42, 40 });
+	ASSERT_EQ(CrySwingsOfUse(player, SkillSlot::ForAttack(WeaponSkill::HoradricSundering)), 2);
+	Use(player, WeaponSkill::HellfireRoar, { 41, 40 });
+	player.poe2.tick();
+	// Three charges: a 2-swing use pays 2 and is empowered in full; the next finds 1 and gets half.
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::HoradricSundering), struck, Fixed26_6::fromInt(1000));
+	Supports(player, 3);
+	const int32_t full = Lost(beside);
+	ASSERT_GT(full, 0);
+	EXPECT_EQ(player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::Hellfire)], 1);
+	Heal(beside);
+	Heal(struck);
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::HoradricSundering), struck, Fixed26_6::fromInt(1000));
+	// The same use's other monsters get the same share, and spend no more.
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::HoradricSundering), beside, Fixed26_6::fromInt(1000));
+	EXPECT_EQ(player.poe2.cryShareThisTick[static_cast<size_t>(EmpoweringCry::Hellfire)], 50);
+	EXPECT_EQ(player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::Hellfire)], 0);
+	Supports(player, 3);
+	// Half of each of the two bursts beside it, so about the one full burst.
+	EXPECT_NEAR(static_cast<double>(Lost(struck)) / full, 1.0, 0.1);
+	// Quaking Roar's two charges on a 3-swing slam: two thirds of the aftershock.
+	player.poe2.clear();
+	ClearMonsters();
+	Monster &slammed = PlaceMonster(0, { 41, 40 });
+	Use(player, WeaponSkill::QuakingRoar, { 41, 40 });
+	player.poe2.tick();
+	ASSERT_EQ(CrySwingsOfUse(player, SkillSlot::ForAttack(WeaponSkill::DervishAdvance)), 3);
+	EXPECT_EQ(player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::Quaking)], 2);
+	ASSERT_NE(SkillTags(SkillSlot::ForAttack(WeaponSkill::MountainsFall)) & ST_Slam, 0U);
+	const int swings = CrySwingsOfUse(player, SkillSlot::ForAttack(WeaponSkill::MountainsFall));
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::MountainsFall), slammed, Fixed26_6::fromInt(1000));
+	EXPECT_EQ(player.poe2.cryShareThisTick[static_cast<size_t>(EmpoweringCry::Quaking)], std::min(2, swings) * 100 / swings);
 }
 
 TEST_F(Poe2WeaponDraftsTest, Fix8PhantomBladeTakesNoMoreProjectiles)

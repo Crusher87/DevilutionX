@@ -598,7 +598,7 @@ constexpr int StormEdgeBeamPercent = 30;
 /** @brief Frostbite Blades' blades: this percent of the strike, this many tiles, through this many enemies. */
 constexpr int FrostbiteBladePercent = 50;
 constexpr int FrostbiteBladeTiles = 4;
-constexpr int FrostbiteBladePierces = 2;
+constexpr int FrostbiteBladePierces = 1;
 /** @brief Cinder Strike's molten balls: this percent of the strike each, landing up to this many tiles ahead. */
 constexpr int CinderBallPercent = 40;
 constexpr int CinderBallTiles = 3;
@@ -611,7 +611,7 @@ constexpr int ThunderHatchetChainTiles = 3;
 constexpr int ThunderHatchetChainPercent = 60;
 /** @brief Blood Harvest: a bleeding enemy takes this percent; one it kills bursts for this percent of the hit. */
 constexpr int BloodHarvestBleedingPercent = 150;
-constexpr int BloodHarvestBurstPercent = 50;
+constexpr int BloodHarvestBurstPercent = 25;
 /** @brief Pyre Blow: the sides take this percent; what dies within the row's duration of its hit bursts for this percent. */
 constexpr int PyreBlowSidePercent = 50;
 constexpr int PyreBlowBurstPercent = 50;

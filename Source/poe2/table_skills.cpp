@@ -214,7 +214,7 @@ const TableSkillData Table[] = {
 	// The draft gems' Mace, Axe and Sword batch (Curtis 2026-11-07, Q46-Q48): each as its row in drafts-61-priced.json, the
 	// three warcries shared by the three tabs. A warcry's percent is of the hits it empowers (Hellfire Roar, Cry of
 	// Bul-Kathos) or its own weapon hit (Quaking Roar); its count is the hits it empowers, its duration how long they wait.
-	{ WS::HellfireRoar, "Hellfire Roar", "A roar of hellfire: your next 3 melee hits within 8 seconds burst into fire around what they hit", 1, 6, TW::None, 1, Buff, 10, 3, 1, 160, 0, 0, DT::Fire, MissileID::Null, MG::MagmaBallExplosion, 0, TableZone::None, TableCurse::None, TableBuff::WarCry, TT_Mace | TT_Axe | TT_Sword, Icon(SpellIcon::Inferno), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
+	{ WS::HellfireRoar, "Hellfire Roar", "A roar of hellfire: for 8 seconds, each of your next 3 melee swings bursts into fire around every enemy it hits", 1, 6, TW::None, 1, Buff, 8, 3, 1, 160, 0, 0, DT::Fire, MissileID::Null, MG::MagmaBallExplosion, 0, TableZone::None, TableCurse::None, TableBuff::WarCry, TT_Mace | TT_Axe | TT_Sword, Icon(SpellIcon::Inferno), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
 	{ WS::FrostforgedHammer, "Frostforged Hammer", "An icy blow at the enemy in front that also hits those to either side; every third blow freezes its target", 1, 5, TW::Mace, 0, Arc, 155, 3, 0, 0, 0, 0, DT::Cold, MissileID::Null, MG::BlueFlareExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Mace, Icon(SpellIcon::StoneCurse), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 100, 0 },
 	{ WS::PlateBreaker, "Plate Breaker", "A crushing sweep at the three tiles in front that knocks back and breaks armour", 3, 8, TW::Mace, 0, Arc, 155, 0, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::StoneCurseShatter, TF_Knockback | TF_ArmourBreak, TableZone::None, TableCurse::None, TableBuff::None, TT_Mace, Icon(SpellIcon::Reflect), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
 	{ WS::MagmaHurl, "Magma Hurl", "Hurl a molten rock: it bursts on the first enemy it hits, and its shrapnel flies on behind it", 3, 8, TW::Mace, 0, Projectiles, 75, 1, 1, 0, 0, 0, DT::Fire, MissileID::Firebolt, MG::MagmaBallExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Mace, Icon(SpellIcon::Fireball), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 200 },
@@ -1630,8 +1630,9 @@ std::vector<Missile *> FireDraftFan(Player &player, const TableSkillData &data, 
 				break;
 			start = on;
 		}
-		// Only the row that starts on the struck tile skips it; the next row's start is a tile it hasn't reached yet.
-		const bool skip = skipStartTile && start == from;
+		// The row that starts on the struck tile skips it when asked. A later row's straight one hits what stands where the
+		// row starts (Magma Hurl's fourth shard); its side ones skip it, so no tile takes three (audit-drafts-bow.md 7.1).
+		const bool skip = start == from ? skipStartTile : way != 0;
 		if (Missile *missile = FireDraftBolt(player, data, start, start + Displacement { heading } * 8, percent, tiles, skip); missile != nullptr)
 			fired.push_back(missile);
 	}
@@ -2471,6 +2472,15 @@ bool ExecuteBowDraft(Player &player, const TableSkillData &data, Point target, C
 }
 
 /**
+ * @brief The six whole directions round a tile but straight on and straight back, so each projectile of a ring takes its
+ * own first tile (the fan rule, batch2-fixes.md 1).
+ */
+std::array<Direction, 6> RingOfSixWays(Direction on)
+{
+	return { Left(on), Right(on), Left(Left(on)), Right(Right(on)), Opposite(Left(on)), Opposite(Right(on)) };
+}
+
+/**
  * @brief A draft Bow gem's arrow hit its first monster: Shatter Shot's shards, Spark Arrow's shocking burst, Strafe's
  * split arrows, Kindling Arrow's blast. The lesser projectiles these send out set off nothing more.
  */
@@ -2512,10 +2522,12 @@ void OnBowDraftArrowHit(const Missile &missile, Player &player, Monster &monster
 		// The arrow splits into a ring of arrows from the target, each piercing one; they fly on from it, not back into it.
 		TableSkillData split = data;
 		split.damagePercent = static_cast<int16_t>(std::max(data.damagePercent * StrafeSplitPercent / 100, 1));
-		constexpr int Ring[StrafeSplitArrows][2] = { { 8, 0 }, { 4, 7 }, { -4, 7 }, { -8, 0 }, { -4, -7 }, { 4, -7 } };
+		// Each along its own whole direction, but straight on and straight back, so each takes its own first tile
+		// (audit-drafts-bow.md 7.6).
+		static_assert(StrafeSplitArrows == 6);
 		vfx::Volley(at, at + on, StrafeSplitArrows, false);
-		for (const auto &offset : Ring) {
-			Missile *arrow = FireTableMissile(player, split, at, at + Displacement { offset[0], offset[1] });
+		for (const Direction way : RingOfSixWays(on)) {
+			Missile *arrow = FireTableMissile(player, split, at, at + Displacement { way } * 8);
 			if (arrow == nullptr)
 				continue;
 			arrow->poe2.draftPart = true;
@@ -2585,15 +2597,6 @@ std::vector<Monster *> NearestBeside(Point at, int radius, const Monster *withou
 	if (near.size() > most)
 		near.resize(most);
 	return near;
-}
-
-/**
- * @brief The six whole directions round a tile but straight on and straight back, so each projectile of a ring takes its
- * own first tile (the fan rule, batch2-fixes.md 1).
- */
-std::array<Direction, 6> RingOfSixWays(Direction on)
-{
-	return { Left(on), Right(on), Left(Left(on)), Right(Right(on)), Opposite(Left(on)), Opposite(Right(on)) };
 }
 
 /** @brief Phoenix Strike's third strike adds its element where it struck: fire, then ice, then lightning (Q48). */
@@ -3358,7 +3361,8 @@ std::string TableSkillExtraNote(WeaponSkill skill)
 	case WeaponSkill::PalmOfTheFrozenNorth:
 		return std::format("The lance hits for {:d}% of the palm, {:d} tiles, through 3 enemies; freeze builds {:d} times as fast", PalmLancePercent, PalmLanceTiles, TableAilmentPercent(*data) / 100);
 	case WeaponSkill::HellfireRoar:
-		return std::format("Your next {:d} melee hits within {:d} seconds each burst into fire for {:d}% of the hit, radius {:d}", static_cast<int>(data->count), data->duration / TicksPerSecond, static_cast<int>(data->damagePercent), HellfireBurstRadius);
+		return std::format("For {:d} swings within {:d} seconds, every enemy a melee use hits bursts into fire for {:d}% of the hit, radius {:d}; a slow use spends a swing for each its time is worth",
+		    static_cast<int>(data->count), data->duration / TicksPerSecond, static_cast<int>(data->damagePercent), HellfireBurstRadius);
 	case WeaponSkill::FrostforgedHammer:
 		return std::format("The sides take {:d}%; every {:s} blow freezes the enemy in front for {:.0f} second", FrostforgedSidePercent, "third", FrostforgedFreezeTicks / static_cast<double>(TicksPerSecond));
 	case WeaponSkill::PlateBreaker:
@@ -3412,17 +3416,18 @@ std::string TableSkillExtraNote(WeaponSkill skill)
 	case WeaponSkill::ZakarumsJudgement:
 		return std::format("Hits all within {:d} and stuns, then all within it again {:.1f} seconds later", static_cast<int>(data->radius), ZakarumsJudgementTicks / static_cast<double>(TicksPerSecond));
 	case WeaponSkill::ColdArrow:
-		return std::format("Its hit is cold; chills by {:d}%, and its freeze builds {:d}% as fast", ColdArrowChillPercent, TableAilmentPercent(*data));
+		return std::format("Its hit is cold; chills by {:d}%, and its freeze builds {:s} as fast", ColdArrowChillPercent, TableAilmentPercent(*data) == 200 ? std::string("twice") : std::format("{:d}%", TableAilmentPercent(*data)));
 	case WeaponSkill::DeadeyeShot:
 		return std::format("A frozen enemy takes {:d}% more, and its freeze shatters", DeadeyeFrozenPercent - 100);
 	case WeaponSkill::ShatterShot:
-		return std::format("Its hit is cold; {:d} shards of ice fly on {:d} tiles behind the first enemy hit, {:d}% each", ShatterShotShards, ShatterShotShardTiles, ShatterShotShardPercent);
+		// The fan's second row starts DraftFanRowTiles further on (FireDraftFan).
+		return std::format("Its hit is cold; {:d} shards of ice fly on up to {:d} tiles behind the first enemy hit, {:d}% each", ShatterShotShards, ShatterShotShardTiles + (ShatterShotShards > 3 ? DraftFanRowTiles : 0), ShatterShotShardPercent);
 	case WeaponSkill::SparkArrow:
 		return std::format("Its hit is lightning; bursts within {:d} of the first enemy hit for {:d}%, shocking all it hits", SparkArrowBurstRadius, SparkArrowBurstPercent);
 	case WeaponSkill::Strafe:
 		return std::format("Splits into {:d} arrows in a ring from the first enemy hit, {:d}% each, each through {:d} enemy", StrafeSplitArrows, StrafeSplitPercent, StrafeSplitPierces);
 	case WeaponSkill::KindlingArrow:
-		return std::format("Its hit is fire; explodes on the first enemy hit, hitting all within {:d} of it for 100%; burning enemies take {:d}% more", KindlingBlastRadius, KindlingBurningPercent - 100);
+		return std::format("Its hit is fire; explodes on the first enemy hit, hitting those beside it within {:d} for 100%; burning enemies take {:d}% more", KindlingBlastRadius, KindlingBurningPercent - 100);
 	case WeaponSkill::WhirlingVolley:
 		return std::format("Spins {:d} tiles, then looses {:d} arrows all round; each enemy takes one", static_cast<int>(data->count), WhirlingVolleyArrows);
 	case WeaponSkill::LodestoneSalvo:

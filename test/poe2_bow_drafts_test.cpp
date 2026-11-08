@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <map>
 #include <string>
 #include <utility>
@@ -21,7 +22,9 @@
 #include "poe2/gemcutting.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/player_data.hpp"
+#include "poe2/skill_details.hpp"
 #include "poe2/skill_gems.hpp"
+#include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
@@ -432,6 +435,10 @@ TEST_F(Poe2BowDraftsTest, ShatterShotSpraysShardsBehindItsFirstHit)
 			EXPECT_EQ(shard->lastCollisionTargetHash, dMonster[43][40] ^ dPlayer[43][40]);
 		} else {
 			EXPECT_EQ(Point(shard->position.start), Point(45, 40));
+			// The second row's side shards skip what stands where the row starts; the straight one hits it (audit-drafts-bow.md 7.1).
+			if (i > 3) {
+				EXPECT_EQ(shard->lastCollisionTargetHash, dMonster[45][40] ^ dPlayer[45][40]);
+			}
 		}
 		// Three tiles at a flare's speed.
 		EXPECT_LE(shard->duration, 20);
@@ -493,6 +500,17 @@ TEST_F(Poe2BowDraftsTest, StrafeSplitsIntoARingOfPiercingArrows)
 	EXPECT_EQ(std::unique(ways.begin(), ways.end()) - ways.begin(), StrafeSplitArrows);
 	EXPECT_LT(ways.front().first, 0);
 	EXPECT_GT(ways.back().first, 0);
+	// Each along its own whole direction (audit-drafts-bow.md 7.6): on screen (a missile's y speed is halved there) a
+	// multiple of 45 degrees, six of the eight ways.
+	std::vector<int> octants;
+	for (const Missile *split : splits) {
+		const double degrees = std::atan2(2.0 * split->position.velocity.deltaY, static_cast<double>(split->position.velocity.deltaX)) * 180.0 / 3.14159265358979;
+		const double octant = (degrees + 360.0) / 45.0;
+		EXPECT_NEAR(octant, std::round(octant), 0.07);
+		octants.push_back(static_cast<int>(std::round(octant)) % 8);
+	}
+	std::sort(octants.begin(), octants.end());
+	EXPECT_EQ(std::unique(octants.begin(), octants.end()) - octants.begin(), StrafeSplitArrows);
 	// The split arrows split no more.
 	OnTableMissileHit(*splits.front(), player, target, 10, false);
 	EXPECT_EQ(MissilesOf(MissileID::Arrow).size(), static_cast<size_t>(StrafeSplitArrows));
@@ -636,6 +654,60 @@ TEST_F(Poe2BowDraftsTest, SwampGasArrowLeavesACloudThatFireSetsOff)
 	for (int i = 0; i < 4; i++)
 		Use(player, WeaponSkill::SwampGasArrow, { 44, 36 + 2 * i });
 	EXPECT_EQ(SkillZoneCount(), static_cast<size_t>(SwampGasClouds));
+}
+
+// audit-drafts-bow.md 7.1: the fan's later rows don't bunch on the monster where they start.
+TEST_F(Poe2BowDraftsTest, BowFix1ShatterShotsSecondRowSpreads)
+{
+	Player &player = SetUpFight();
+	Monster &target = PlaceMonster(0, { 43, 40 });
+	PlaceMonster(1, { 45, 40 });
+	Use(player, WeaponSkill::ShatterShot, { 43, 40 });
+	const Missile arrow = OnlyArrow();
+	OnTableMissileHit(arrow, player, target, 10, false);
+	const std::vector<const Missile *> shards = MissilesOf(MissileID::BlueFlare);
+	ASSERT_EQ(shards.size(), 6U);
+	const int16_t behind = static_cast<int16_t>(dMonster[45][40] ^ dPlayer[45][40]);
+	ASSERT_NE(behind, 0);
+	// Of the three that start on the monster behind the target, only the straight one can hit it.
+	EXPECT_NE(shards[3]->lastCollisionTargetHash, behind);
+	EXPECT_EQ(shards[4]->lastCollisionTargetHash, behind);
+	EXPECT_EQ(shards[5]->lastCollisionTargetHash, behind);
+	EXPECT_NE(TableSkillExtraNote(WeaponSkill::ShatterShot).find("up to 5 tiles"), std::string::npos);
+}
+
+// audit-drafts-bow.md 7.2: the skill details show Swamp Gas Arrow's arrow at its share of the row, as it is shot.
+TEST_F(Poe2BowDraftsTest, BowFix2SwampGasArrowsHitShowsItsShare)
+{
+	Player &player = SetUpFight();
+	// Both on the bow's curve at the same level, with no speed bonus: 30% of 130% against 195%.
+	const double swamp = SkillHitAverage(player, SkillSlot::ForAttack(WeaponSkill::SwampGasArrow), 10);
+	const double strafe = SkillHitAverage(player, SkillSlot::ForAttack(WeaponSkill::Strafe), 10);
+	ASSERT_GT(strafe, 0.0);
+	EXPECT_NEAR(swamp / strafe, (130.0 * SwampGasArrowPercent / 100) / 195.0, 0.02);
+}
+
+// audit-drafts-bow.md 7.3: Ring of Missiles does nothing on Whirling Volley, so it doesn't socket; Volley still adds arrows.
+TEST_F(Poe2BowDraftsTest, BowFix3WhirlingVolleyTakesNoRingOfMissiles)
+{
+	const SkillSlot volley = SkillSlot::ForAttack(WeaponSkill::WhirlingVolley);
+	EXPECT_FALSE(SupportGemCanSupport(SupportGem::NovaProjectiles, volley));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::Volley, volley));
+	EXPECT_TRUE(SupportGemCanSupport(SupportGem::NovaProjectiles, SkillSlot::ForAttack(WeaponSkill::Strafe)));
+}
+
+// audit-drafts-bow.md 7.5: the tooltips say what the gems do.
+TEST_F(Poe2BowDraftsTest, BowFix5TooltipsMatch)
+{
+	EXPECT_NE(TableSkillExtraNote(WeaponSkill::ColdArrow).find("twice as fast"), std::string::npos);
+	EXPECT_EQ(TableSkillExtraNote(WeaponSkill::ColdArrow).find("200%"), std::string::npos);
+	EXPECT_NE(TableSkillExtraNote(WeaponSkill::KindlingArrow).find("those beside it"), std::string::npos);
+	EXPECT_EQ(TableSkillExtraNote(WeaponSkill::KindlingArrow).find("all within"), std::string::npos);
+	EXPECT_NE(TableSkillExtraNote(WeaponSkill::ShatterShot).find("up to 5 tiles"), std::string::npos);
+	const std::string hellfire = TableSkillExtraNote(WeaponSkill::HellfireRoar);
+	EXPECT_NE(hellfire.find("swings"), std::string::npos) << hellfire;
+	EXPECT_EQ(hellfire.find("melee hits"), std::string::npos) << hellfire;
+	EXPECT_EQ(std::string(Row(WeaponSkill::HellfireRoar).description).find("melee hits"), std::string::npos);
 }
 
 } // namespace

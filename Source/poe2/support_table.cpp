@@ -1478,11 +1478,13 @@ bool TableSupportFits(const SupportData &data, SkillSlot skill)
 		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::LocustSwarm, WeaponSkill::ThornvineArrow);
 	case SG::Volley:
 	case SG::StoredVolley:
-	case SG::NovaProjectiles:
 		// Phantom Blade throws one ghost sword out and back: more projectiles would do nothing (balance re-score,
 		// batch2-fixes.md 8).
 		// Nor would they for the Dagger throws: one bomb, one spark (Q48).
 		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::PhantomBlade, WeaponSkill::FireBlast, WeaponSkill::ShockWeb);
+	case SG::NovaProjectiles:
+		// Nor a ring of them; Whirling Volley's ring never asks for one either (audit-drafts-bow.md 7.3).
+		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::PhantomBlade, WeaponSkill::FireBlast, WeaponSkill::ShockWeb, WeaponSkill::WhirlingVolley);
 	case SG::Ricochet:
 		// A lobbed bomb or spark never meets a wall.
 		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::FireBlast, WeaponSkill::ShockWeb);
@@ -2284,33 +2286,38 @@ void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixe
 	Poe2PlayerData &state = player.poe2;
 	// A use spends one of the cry's hits, however many monsters it hits (each of them is empowered). Hellfire Roar's and
 	// Quaking Roar's spend one for each swing the use's time is worth, so a slow slam pays for its weight (balance
-	// re-score, batch2-fixes.md 5).
-	const auto spend = [&](EmpoweringCry cry) {
+	// re-score, batch2-fixes.md 5). A use that finds fewer left than its swings is empowered for the share it pays
+	// (audit-drafts-bow.md 7.4): the percent of its bonus it gets, 0 for none.
+	const auto spend = [&](EmpoweringCry cry) -> int {
 		const auto index = static_cast<size_t>(cry);
 		if (state.cryUsedThisTick[index])
-			return true;
+			return state.cryShareThisTick[index];
 		if (state.cryHits[index] == 0)
-			return false;
+			return 0;
 		const int swings = IsAnyOf(cry, EmpoweringCry::Hellfire, EmpoweringCry::Quaking) ? CrySwingsOfUse(player, skill) : 1;
-		state.cryHits[index] = static_cast<uint8_t>(std::max<int>(state.cryHits[index] - swings, 0));
+		const int paid = std::min<int>(state.cryHits[index], swings);
+		state.cryHits[index] = static_cast<uint8_t>(state.cryHits[index] - paid);
 		state.cryUsedThisTick[index] = true;
-		return true;
+		state.cryShareThisTick[index] = static_cast<uint8_t>(paid * 100 / std::max(swings, 1));
+		return static_cast<int>(state.cryShareThisTick[index]);
 	};
 	const auto percentOf = [](WeaponSkill cry) {
 		const TableSkillData *data = FindTableSkill(cry);
 		return data != nullptr ? static_cast<int>(data->damagePercent) : 0;
 	};
 	const Point tile = monster.position.tile;
-	if (spend(EmpoweringCry::Hellfire))
-		AddBurst(tile, HellfireBurstRadius, 0, DamageType::Fire, MissileGraphicID::MagmaBallExplosion, Fixed26_6::fromRaw(std::max(Percent(dealt.raw(), percentOf(WeaponSkill::HellfireRoar)), 1)));
-	if ((tags & ST_Slam) != 0 && spend(EmpoweringCry::Quaking)) {
-		const TableSkillData *slam = skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
-		AddBurst(tile, 0, QuakingAftershockTicks, slam != nullptr ? slam->type : DamageType::Physical, MissileGraphicID::StoneCurseShatter,
-		    Fixed26_6::fromRaw(std::max(Percent(dealt.raw(), QuakingAftershockPercent), 1)));
+	if (const int share = spend(EmpoweringCry::Hellfire); share > 0)
+		AddBurst(tile, HellfireBurstRadius, 0, DamageType::Fire, MissileGraphicID::MagmaBallExplosion, Fixed26_6::fromRaw(std::max(Percent(Percent(dealt.raw(), percentOf(WeaponSkill::HellfireRoar)), share), 1)));
+	if ((tags & ST_Slam) != 0) {
+		if (const int share = spend(EmpoweringCry::Quaking); share > 0) {
+			const TableSkillData *slam = skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
+			AddBurst(tile, 0, QuakingAftershockTicks, slam != nullptr ? slam->type : DamageType::Physical, MissileGraphicID::StoneCurseShatter,
+			    Fixed26_6::fromRaw(std::max(Percent(Percent(dealt.raw(), QuakingAftershockPercent), share), 1)));
+		}
 	}
 	// The strike strikes again a moment later: its share of the hit it dealt, on where it struck, as Quaking's aftershock
 	// (balance re-score, batch2-fixes.md 2: the old repeat was a share of a plain weapon hit). It sets off nothing more.
-	if ((tags & ST_Strike) != 0 && !monster.hasNoLife() && spend(EmpoweringCry::BulKathos)) {
+	if ((tags & ST_Strike) != 0 && !monster.hasNoLife() && spend(EmpoweringCry::BulKathos) > 0) {
 		const TableSkillData *strike = skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
 		AddBurst(tile, 0, BulKathosRepeatTicks, strike != nullptr ? strike->type : DamageType::Physical, MissileGraphicID::MetalHit,
 		    Fixed26_6::fromRaw(std::max(Percent(dealt.raw(), percentOf(WeaponSkill::CryOfBulKathos)), 1)));
