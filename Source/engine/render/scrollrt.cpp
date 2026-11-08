@@ -206,6 +206,31 @@ std::optional<uint8_t> RankOutlineColor(const Monster &monster, int lightTableIn
 	return static_cast<uint8_t>(base + std::min(9 + lightTableIndex / 3, 14));
 }
 
+/**
+ * @brief POE2 Mashup: how a monster's outline shows in HD: thicker round rares and bosses (uniques and Diablo), with a
+ * slow glow round bosses, and fading in under the cursor.
+ */
+hd::OutlineLook MonsterOutlineLook(const Monster &monster, int monsterId)
+{
+	hd::OutlineLook look { .hovered = monsterId == pcursmonst, .thing = hd::OutlineThing(hd::ThingKind::Monster, monsterId) };
+	if (!gbIsPoe2 || monster.isPlayerMinion())
+		return look;
+	const bool boss = monster.isUnique() || monster.type().type == MT_DIABLO;
+	look.thick = boss || GetMonsterAffixes(monster).rarity == MonsterRarity::Rare;
+	look.glow = boss;
+	return look;
+}
+
+/** @brief POE2 Mashup: how an item's outline shows in HD: a slow glow round uniques and quest items, fading in under the cursor. */
+hd::OutlineLook ItemOutlineLook(const Item &item, int itemIndex)
+{
+	return {
+		.glow = gbIsPoe2 && (item._iMagical == ITEM_QUALITY_UNIQUE || item._iClass == ICLASS_QUEST),
+		.hovered = itemIndex == pcursitem,
+		.thing = hd::OutlineThing(hd::ThingKind::Item, itemIndex),
+	};
+}
+
 [[nodiscard]] DVL_ALWAYS_INLINE bool IsFloor(Point tilePosition)
 {
 	return !TileHasAny(tilePosition, TileProperties::Solid | TileProperties::BlockMissile);
@@ -694,6 +719,8 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, spriteBufferPosition, sprite);
 
+	// POE2 Mashup: in HD the outline under the cursor fades in.
+	const hd::OutlineScope outlineLook({ .hovered = &player == PlayerUnderCursor, .thing = hd::OutlineThing(hd::ThingKind::Player, player.getId()) });
 	if (&player == PlayerUnderCursor)
 		ClxDrawOutlineSkipColorZero(out, GetPlayerOutlineColor(player.getId()), spriteBufferPosition, sprite);
 	else if (const std::optional<uint8_t> glow = ShrineGlowColor(player))
@@ -772,6 +799,8 @@ void DrawObject(const Surface &out, const Object &objectToDraw, Point tilePositi
 
 	// POE2 Mashup: a strongbox stands out, drawn bright even in the dark with a gold edge.
 	const bool strongbox = StrongboxStandsOut(objectToDraw);
+	// POE2 Mashup: in HD the outline under the cursor fades in.
+	const hd::OutlineScope outlineLook({ .hovered = &objectToDraw == ObjectUnderCursor, .thing = hd::OutlineThing(hd::ThingKind::Object, static_cast<int>(objectToDraw.GetId())) });
 	if (&objectToDraw == ObjectUnderCursor) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsObject, screenPosition, sprite);
 	} else if (strongbox) {
@@ -978,6 +1007,8 @@ void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, 
 		return;
 	}
 	const ClxSprite sprite = item.AnimInfo.currentSprite();
+	// POE2 Mashup: in HD a unique or quest item's outline glows, and the one under the cursor fades in.
+	const hd::OutlineScope outlineLook(ItemOutlineLook(item, itemIndex));
 	const Point position = targetBufferPosition + item.getRenderingOffset(sprite);
 	if (!IsPlayerInStore()) {
 		if (itemIndex == pcursitem || AutoMapShowItems) {
@@ -1032,6 +1063,8 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 		bool backward;
 		const float fraction = TownerFrameFraction(towner, backward);
 		const hd::SubFrameScope subFrame(fraction, backward);
+		// POE2 Mashup: in HD the outline under the cursor fades in.
+		const hd::OutlineScope outlineLook({ .hovered = mi == pcursmonst, .thing = hd::OutlineThing(hd::ThingKind::Towner, mi) });
 		if (mi == pcursmonst) {
 			ClxDrawOutlineSkipColorZero(out, OutlineColorsTowner, position, sprite);
 		}
@@ -1074,6 +1107,8 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 	// POE2 Mashup: a hurt monster's life bar is drawn later, with the UI.
 	if (gbIsPoe2)
 		QueueMonsterOverheadBar(monster, monsterRenderPosition, sprite);
+	// POE2 Mashup: in HD the outline is thicker round rares and bosses, glows round bosses, and fades in under the cursor.
+	const hd::OutlineScope outlineLook(MonsterOutlineLook(monster, mi));
 	if (mi == pcursmonst) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsMonster, monsterRenderPosition, sprite);
 	} else if (const std::optional<uint8_t> rank = RankOutlineColor(monster, lightTableIndex); rank) {

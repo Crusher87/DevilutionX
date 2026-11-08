@@ -88,6 +88,44 @@ struct CasterScope {
 	CasterScope &operator=(const CasterScope &) = delete;
 };
 
+/**
+ * @brief How an outline the game draws in the world shows in HD: thicker round rare monsters and bosses, with a slow
+ * glow round bosses and unique or quest items, and fading in on the thing under the cursor.
+ */
+struct OutlineLook {
+	bool thick = false;
+	bool glow = false;
+	/** @brief It marks the thing under the cursor, so it fades in. */
+	bool hovered = false;
+	/** @brief The thing it goes round (OutlineThing), so the cursor's outline fades in from the one it had; 0 for none. */
+	uint32_t thing = 0;
+};
+
+/** @brief Kinds of things with outlines, for OutlineThing. */
+enum class ThingKind : uint8_t {
+	Item = 1,
+	Monster,
+	Towner,
+	Object,
+	Player,
+};
+
+/** @brief A number for a thing with an outline that only that thing has. */
+[[nodiscard]] inline uint32_t OutlineThing(ThingKind kind, int index)
+{
+	return (static_cast<uint32_t>(kind) << 24) | (static_cast<uint32_t>(index) & 0xFFFFFF);
+}
+
+/** @brief Set while the game draws an outline in the world. */
+extern OutlineLook CurrentOutlineLook;
+
+struct OutlineScope {
+	explicit OutlineScope(OutlineLook look) { CurrentOutlineLook = look; }
+	~OutlineScope() { CurrentOutlineLook = {}; }
+	OutlineScope(const OutlineScope &) = delete;
+	OutlineScope &operator=(const OutlineScope &) = delete;
+};
+
 /** @brief The dungeon tile whose walls and sprites are being drawn, and its position in the world buffer (DrawDungeon's). */
 extern Point CurrentTile;
 extern Point CurrentTileOrigin;
