@@ -300,12 +300,22 @@ bool RndLocBlocksPassage(Point tile, bool big, int tries)
 	return ObjectWouldBlockPassage(tile) || (big && ObjectWouldBlockPassage(tile + Displacement { 0, -1 }));
 }
 
+/**
+ * POE2 Mashup: how many random spots a chest, sarcophagus or barrel tries before the floor goes without it. The original
+ * loops never gave up, which never mattered on its open floors. On a new Cathedral floor the designed rooms bring their
+ * own props, so only the passages and plain rooms take random objects, and once their few open spots were used up the
+ * loading screen hung for good (a new hero's first Cathedral floor, 2026-11-08).
+ */
+constexpr int MaxRandomSpotTries = 20000;
+
 void InitRndLocObj(int min, int max, _object_id objtype)
 {
 	const int numobjs = GenerateRnd(max - min) + min;
 
 	for (int i = 0; i < numobjs; i++) {
 		for (int tries = 0;; tries++) {
+			if (tries > MaxRandomSpotTries)
+				return;
 			const int xp = GenerateRnd(80) + 16;
 			const int yp = GenerateRnd(80) + 16;
 			if (IsAreaOk(Rectangle { { xp - 1, yp - 1 }, { 3, 3 } }) && !RndLocBlocksPassage({ xp, yp }, false, tries)) {
@@ -321,6 +331,8 @@ void InitRndLocBigObj(int min, int max, _object_id objtype)
 	const int numobjs = GenerateRnd(max - min) + min;
 	for (int i = 0; i < numobjs; i++) {
 		for (int tries = 0;; tries++) {
+			if (tries > MaxRandomSpotTries)
+				return;
 			const int xp = GenerateRnd(80) + 16;
 			const int yp = GenerateRnd(80) + 16;
 			if (IsAreaOk(Rectangle { { xp - 1, yp - 2 }, { 3, 4 } }) && !RndLocBlocksPassage({ xp, yp }, true, tries)) {
@@ -447,7 +459,10 @@ void InitRndBarrels()
 	for (int i = 0; i < numobjs; i++) {
 		int xp;
 		int yp;
+		int tries = 0;
 		do {
+			if (tries++ > MaxRandomSpotTries)
+				return;
 			xp = GenerateRnd(80) + 16;
 			yp = GenerateRnd(80) + 16;
 		} while (!RndLocOk({ xp, yp }));
