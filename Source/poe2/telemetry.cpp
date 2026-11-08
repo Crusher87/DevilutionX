@@ -201,6 +201,11 @@ uint32_t FrameGapSinceTick = 0;
 uint32_t LastFrameMs = 0;
 /** Time each part of drawing took since the last counted frame, in nanoseconds. */
 std::array<uint64_t, NumFrameParts> PendingFrameParts {};
+/** Time each part of drawing took in the frames since the last game tick, in nanoseconds, for the stall line. */
+std::array<uint64_t, NumFrameParts> FramePartsSinceTick {};
+/** Slow work since the last game tick (TelemetrySlowWorkDone): how often and how long, in nanoseconds, for the stall line. */
+std::array<uint64_t, NumSlowWorks> SlowWorkNsSinceTick {};
+std::array<int, NumSlowWorks> SlowWorkCountSinceTick {};
 
 /** @brief A steady clock in nanoseconds for timing the parts of a frame (SDL 1 has no performance counter). */
 uint64_t FrameClockNs()
@@ -1331,10 +1336,35 @@ void TrackGains(const Player &player)
 	LastGold = gold;
 }
 
+/**
+ * @brief Where a freeze's time went: drawing (and the HD world's part of it), the game's own logic (the rest), and the
+ * slow work timed on its own. Curtis 2026-11-07: "game froze for 1004 ms (72 monsters, 0 missiles)" said nothing more.
+ */
+std::string StallBreakdown(uint32_t gap, const std::array<uint64_t, NumFrameParts> &parts, const std::array<uint64_t, NumSlowWorks> &workNs, const std::array<int, NumSlowWorks> &workCount)
+{
+	const auto ms = [](uint64_t ns) { return static_cast<int>(ns / 1000000); };
+	const auto part = [&](FramePart which) { return parts[static_cast<size_t>(which)]; };
+	// World is part of Drawing; the rest are timed apart from it.
+	const uint64_t drawingNs = part(FramePart::Drawing) + part(FramePart::WorldUpload) + part(FramePart::Hd) + part(FramePart::Effects) + part(FramePart::UiLayer) + part(FramePart::Present);
+	const int drawing = ms(drawingNs);
+	std::string text = std::format(": drawing {:d} ms (hd {:d}, present {:d}), game logic {:d} ms", drawing, ms(part(FramePart::Hd)), ms(part(FramePart::Present)), std::max(static_cast<int>(gap) - drawing, 0));
+	const auto work = [&](SlowWork which) { return static_cast<size_t>(which); };
+	if (workCount[work(SlowWork::Saving)] > 0)
+		StrAppend(text, ", saving ", ms(workNs[work(SlowWork::Saving)]), " ms");
+	if (workCount[work(SlowWork::HdArt)] > 0)
+		StrAppend(text, ", ", workCount[work(SlowWork::HdArt)], " new HD pictures (loaded or looked for) in ", ms(workNs[work(SlowWork::HdArt)]), " ms");
+	if (workCount[work(SlowWork::HdRaster)] > 0)
+		StrAppend(text, ", ", workCount[work(SlowWork::HdRaster)], " classic pictures made for HD in ", ms(workNs[work(SlowWork::HdRaster)]), " ms");
+	return text;
+}
+
 void TrackStalls(uint32_t now)
 {
 	const uint32_t gap = now - LastTickMs;
 	LastTickMs = now;
+	const std::array<uint64_t, NumFrameParts> parts = std::exchange(FramePartsSinceTick, {});
+	const std::array<uint64_t, NumSlowWorks> workNs = std::exchange(SlowWorkNsSinceTick, {});
+	const std::array<int, NumSlowWorks> workCount = std::exchange(SlowWorkCountSinceTick, {});
 	// A freeze in the game logic can be followed by a catch-up tick before any frame is drawn, so the time since the
 	// last frame counts too.
 	const uint32_t frameGap = std::max(std::exchange(FrameGapSinceTick, 0), now - LastFrameMs);
@@ -1348,8 +1378,21 @@ void TrackStalls(uint32_t now)
 	if (now - LastStallLogMs < 10000)
 		return;
 	LastStallLogMs = now;
-	WriteText("stall", std::format("game froze for {:d} ms ({:d} monsters, {:d} missiles)", gap, static_cast<int>(ActiveMonsterCount), static_cast<int>(Missiles.size())));
-	Event(LogChannel::Perf, LogLevel::Normal, "stall").add("ms", gap).add("monsters", static_cast<int>(ActiveMonsterCount)).add("missiles", static_cast<int>(Missiles.size()));
+	// The report script reads the start of this line: new parts go at the end.
+	WriteText("stall", std::format("game froze for {:d} ms ({:d} monsters, {:d} missiles)", gap, static_cast<int>(ActiveMonsterCount), static_cast<int>(Missiles.size())) + StallBreakdown(gap, parts, workNs, workCount));
+	const auto ms = [](uint64_t ns) { return static_cast<int>(ns / 1000000); };
+	Event(LogChannel::Perf, LogLevel::Normal, "stall")
+	    .add("ms", gap)
+	    .add("monsters", static_cast<int>(ActiveMonsterCount))
+	    .add("missiles", static_cast<int>(Missiles.size()))
+	    .add("drawingMs", ms(parts[static_cast<size_t>(FramePart::Drawing)]))
+	    .add("hdMs", ms(parts[static_cast<size_t>(FramePart::Hd)]))
+	    .add("presentMs", ms(parts[static_cast<size_t>(FramePart::Present)]))
+	    .add("savingMs", ms(workNs[static_cast<size_t>(SlowWork::Saving)]))
+	    .add("hdArtLoads", workCount[static_cast<size_t>(SlowWork::HdArt)])
+	    .add("hdArtMs", ms(workNs[static_cast<size_t>(SlowWork::HdArt)]))
+	    .add("hdRasters", workCount[static_cast<size_t>(SlowWork::HdRaster)])
+	    .add("hdRasterMs", ms(workNs[static_cast<size_t>(SlowWork::HdRaster)]));
 }
 
 } // namespace
@@ -1706,6 +1749,8 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	GamePaused = false;
 	PauseStartMs = 0;
 	LastBuildCheckMs = 0;
+	// The first freeze is always written (one every 10 s after that), even in the game's first 10 s.
+	LastStallLogMs = Now() - 10000;
 	LastExperience = player._pExperience;
 	LastGold = HeroGold(player);
 	StartOfGame = { player._pName, std::string(player.getClassName()), player.getCharacterLevel(), loaded };
@@ -2517,6 +2562,9 @@ void TelemetryPauseChanged(std::string_view reason)
 	// The game didn't tick while paused: the stall clock starts again from here.
 	LastTickMs = LastFrameMs = now;
 	FrameGapSinceTick = 0;
+	FramePartsSinceTick = {};
+	SlowWorkNsSinceTick = {};
+	SlowWorkCountSinceTick = {};
 	WriteText("resume", std::format("game resumed after {:.1f} s paused ({:s})", ms / 1000.0, PauseReason));
 	Event(LogChannel::Session, LogLevel::Normal, "resume").add("ms", ms).add("reason", PauseReason);
 }
@@ -2551,12 +2599,41 @@ void TelemetryFramePartDone(FramePart part, uint64_t start)
 	PendingFrameParts[static_cast<size_t>(part)] += FrameClockNs() - start;
 }
 
+void TelemetrySlowWorkDone(SlowWork work, uint64_t start)
+{
+	if (start == 0)
+		return;
+	SlowWorkNsSinceTick[static_cast<size_t>(work)] += FrameClockNs() - start;
+	SlowWorkCountSinceTick[static_cast<size_t>(work)]++;
+}
+
+void TelemetryGameSaved(std::string_view why, uint64_t start)
+{
+	if (start == 0 || LogFile == nullptr)
+		return;
+	const uint64_t ns = FrameClockNs() - start;
+	TelemetrySlowWorkDone(SlowWork::Saving, start);
+	const int ms = static_cast<int>(ns / 1000000);
+	WriteText("save", std::format("autosave ({:s}) took {:d} ms", why, ms));
+	Event(LogChannel::Perf, LogLevel::Normal, "autosave").add("why", why).add("ms", ms);
+}
+
+void TelemetryHdCacheDropped(size_t pictures)
+{
+	if (LogFile == nullptr || GameStartMs == 0)
+		return;
+	WriteText("hd", std::format("picture cache full: {:d} classic pictures dropped, to be made again as they show", pictures));
+	Event(LogChannel::Perf, LogLevel::Normal, "hd_cache_dropped").add("pictures", static_cast<int>(pictures));
+}
+
 void TelemetryFrameDrawn()
 {
 	DrawStep = nullptr;
 	// The parts timed since the last frame belong to this one (showing the last frame comes after it's counted).
 	const std::array<uint64_t, NumFrameParts> parts = PendingFrameParts;
 	PendingFrameParts = {};
+	for (size_t i = 0; i < NumFrameParts; i++)
+		FramePartsSinceTick[i] += parts[i];
 	if (LogFile == nullptr || GameStartMs == 0)
 		return;
 	const uint32_t now = Now();
@@ -2608,6 +2685,9 @@ void TelemetryLoadingDone()
 	// The game didn't tick or draw while loading: the stall clock starts again from here.
 	LastTickMs = LastFrameMs = now;
 	FrameGapSinceTick = 0;
+	FramePartsSinceTick = {};
+	SlowWorkNsSinceTick = {};
+	SlowWorkCountSinceTick = {};
 	const uint32_t fadeOut = LoadingFadedOutMs - start;
 	const uint32_t loading = LoadingFadingInMs - LoadingFadedOutMs;
 	const uint32_t fadeIn = now - LoadingFadingInMs;

@@ -17,6 +17,7 @@
 #include "multi.h"
 #include "player.h"
 #include "poe2/hardcore.hpp"
+#include "poe2/telemetry.hpp"
 
 namespace devilution {
 
@@ -28,6 +29,8 @@ constexpr uint32_t QuietSaveInterval = 3 * 60 * 1000;
 constexpr int QuietRadius = 12;
 
 bool Pending;
+/** What asked for the pending save, for the play log. */
+const char *PendingWhy = "";
 uint32_t LastSave;
 
 bool CanSaveNow()
@@ -57,9 +60,12 @@ bool MonsterNearby()
 	return false;
 }
 
-void Save()
+void Save(const char *why)
 {
+	// A save stops the game while it writes: the play log times it, so a freeze it causes says so.
+	const uint64_t start = TelemetryFramePartStart();
 	SaveGame();
+	TelemetryGameSaved(why, start);
 	Pending = false;
 	LastSave = SDL_GetTicks();
 }
@@ -71,10 +77,12 @@ bool AutosaveEnabled()
 	return gbIsPoe2 && !gbIsMultiplayer;
 }
 
-void RequestAutosave()
+void RequestAutosave(const char *why)
 {
-	if (AutosaveEnabled())
-		Pending = true;
+	if (!AutosaveEnabled())
+		return;
+	Pending = true;
+	PendingWhy = why;
 }
 
 void ProcessAutosave()
@@ -84,14 +92,16 @@ void ProcessAutosave()
 	const uint32_t now = SDL_GetTicks();
 	if (LastSave == 0)
 		LastSave = now;
-	if (Pending || (now - LastSave >= QuietSaveInterval && !MonsterNearby()))
-		Save();
+	if (Pending)
+		Save(PendingWhy);
+	else if (now - LastSave >= QuietSaveInterval && !MonsterNearby())
+		Save("quiet moment");
 }
 
 void AutosaveNow()
 {
 	if (CanSaveNow())
-		Save();
+		Save("leaving the game");
 }
 
 } // namespace devilution

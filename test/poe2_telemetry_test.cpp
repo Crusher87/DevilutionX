@@ -407,6 +407,34 @@ TEST_F(Poe2TelemetryTest, ALevelChangeIsLoadingTimeNotAStall)
 	EXPECT_NE(TelemetryStatsText().find("stalls 1"), std::string::npos) << TelemetryStatsText();
 }
 
+TEST_F(Poe2TelemetryTest, AFreezeSaysWhereItsTimeWent)
+{
+	// Curtis 2026-11-07: "game froze for 1004 ms (72 monsters, 0 missiles)" in the Bone Chamber, and 1.6 s on floor 4
+	// after a unique's kill. The line now says how much of it was drawing, saving and the HD world's first looks.
+	using namespace std::chrono_literals;
+	TelemetryFrameDrawn();
+	TelemetryTick();
+	{
+		const uint64_t start = TelemetryFramePartStart();
+		std::this_thread::sleep_for(200ms);
+		TelemetryGameSaved("level up", start);
+	}
+	{
+		const SlowWorkScope raster(SlowWork::HdRaster);
+		std::this_thread::sleep_for(100ms);
+	}
+	TelemetryTick();
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[save] autosave (level up) took "), std::string::npos) << log;
+	const size_t stall = log.rfind("[stall] game froze for ");
+	ASSERT_NE(stall, std::string::npos) << log;
+	const std::string line = log.substr(stall, log.find('\n', stall) - stall);
+	EXPECT_NE(line.find(" missiles): drawing 0 ms (hd 0, present 0), game logic "), std::string::npos) << line;
+	EXPECT_NE(line.find(", saving 2"), std::string::npos) << line;
+	EXPECT_NE(line.find(", 1 classic pictures made for HD in 1"), std::string::npos) << line;
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"autosave\",\"area\":\"town\",\"why\":\"level up\",\"ms\":"), std::string::npos);
+}
+
 TEST_F(Poe2TelemetryTest, StatsSplitEachFrameIntoItsParts)
 {
 	// Curtis 2026-11-04 asked whether the game could get back to 60 fps: the stats line shows where a frame's time goes.

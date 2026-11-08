@@ -2847,7 +2847,7 @@ void NextPlrLevel(Player &player)
 {
 	player.setCharacterLevel(player.getCharacterLevel() + 1);
 	if (&player == MyPlayer)
-		RequestAutosave();
+		RequestAutosave("level up");
 
 	CalcPlrInv(player, true);
 

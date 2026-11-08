@@ -39,6 +39,7 @@
 #include "utils/file_util.h"
 #include "options.h"
 #include "poe2/hd_light.hpp"
+#include "poe2/telemetry.hpp"
 #include "utils/is_of.hpp"
 #include "utils/png.h"
 #include "utils/sdl_wrap.h"
@@ -725,6 +726,8 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 	HdArt &art = it->second;
 	if (!inserted)
 		return art;
+	// Read from disk the first time it shows, in the frame: timed for the play log's freezes.
+	const SlowWorkScope timed(SlowWork::HdArt);
 	art.name = name;
 	std::string path = "hd\\" + name + ".png";
 	std::replace(path.begin(), path.end(), '/', '\\');
@@ -1026,6 +1029,7 @@ Raster &FallbackRaster(const Draw &draw, bool keepTable)
 		const RasterKey key { draw.src, tbl, static_cast<uint32_t>(draw.mask) | (static_cast<uint32_t>(draw.tile) << 8) | (static_cast<uint32_t>(draw.height) << 16) };
 		auto [it, inserted] = Rasters.try_emplace(key);
 		if (inserted) {
+			const SlowWorkScope timed(SlowWork::HdRaster);
 			const auto drawTile = [&](const Surface &out, MaskType mask) {
 				RenderTileFrame(out, FullyLitLightmap(out), Point { 0, draw.height - 1 }, draw.tile, draw.src, draw.height, mask, tbl != nullptr ? tbl : FullyLitLightTable);
 			};
@@ -1037,6 +1041,7 @@ Raster &FallbackRaster(const Draw &draw, bool keepTable)
 	const RasterKey key { draw.sprite->pixelData(), tbl, extra };
 	auto [it, inserted] = Rasters.try_emplace(key);
 	if (inserted) {
+		const SlowWorkScope timed(SlowWork::HdRaster);
 		const int pad = IsOutline(draw.style) ? 1 : 0;
 		const Point position { pad, draw.height - 1 - pad };
 		const auto drawSprite = [&](const Surface &out, bool blended) {
@@ -1186,6 +1191,7 @@ HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &dr
 	HdArt &art = it->second;
 	if (!inserted)
 		return art.texture != nullptr ? &art : nullptr;
+	const SlowWorkScope timed(SlowWork::HdArt);
 	art.missing = true;
 	std::string path = "hd\\" + name + ".png";
 	std::replace(path.begin(), path.end(), '/', '\\');
@@ -1325,6 +1331,7 @@ Outline MakeArtOutline(SDL_Renderer *renderer, const HdArt &art, const Draw &spr
 {
 	Outline none;
 	none.tried = true;
+	const SlowWorkScope timed(SlowWork::HdArt);
 	std::string path = "hd\\" + art.name + ".png";
 	std::replace(path.begin(), path.end(), '/', '\\');
 	SDL_Surface *picture = LoadPNG(path.c_str());
@@ -3573,6 +3580,8 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	}
 	CheckPalette();
 	if (Rasters.size() > 20000) {
+		// Every picture on screen is made again in the next frame: a likely freeze, so the play log notes it.
+		TelemetryHdCacheDropped(Rasters.size());
 		for (auto &[key, raster] : Rasters)
 			FreeRasterTextures(raster);
 		Rasters.clear();

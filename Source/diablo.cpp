@@ -1854,7 +1854,7 @@ void GameLogic()
 		const uint32_t handedBefore = MyPlayer->poe2.questsRewarded;
 		HandOutQuestBooks(*MyPlayer);
 		if ((MyPlayer->poe2.questsRewarded & ~handedBefore & ~BooksOnlyFlag) != 0)
-			RequestAutosave();
+			RequestAutosave("quest reward");
 		ShowPendingTreeNotice();
 	}
 	ProcessAutosave();

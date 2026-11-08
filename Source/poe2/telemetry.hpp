@@ -203,6 +203,43 @@ uint64_t TelemetryFramePartStart();
 /** @brief Adds the time since start to that part of the frame being drawn. */
 void TelemetryFramePartDone(FramePart part, uint64_t start);
 
+/** @brief Work that can take long in one frame, timed apart so a freeze in the play log says where its time went. */
+enum class SlowWork : uint8_t {
+	/** An autosave. */
+	Saving,
+	/** HD art read from disk the first time it shows. */
+	HdArt,
+	/** The game's own pictures made ready for the HD world (where there is no HD art). */
+	HdRaster,
+};
+inline constexpr size_t NumSlowWorks = 3;
+/** @brief Adds the time since start (from TelemetryFramePartStart) to that slow work. */
+void TelemetrySlowWorkDone(SlowWork work, uint64_t start);
+/** @brief Notes an autosave (`why`: "level up", "level entered"...) and how long it took since start (TelemetryFramePartStart). */
+void TelemetryGameSaved(std::string_view why, uint64_t start);
+/** @brief The HD world's cache of the game's own pictures filled up and was emptied. */
+void TelemetryHdCacheDropped(size_t pictures);
+
+/** @brief Times slow work from here to the end of the scope. */
+class SlowWorkScope {
+public:
+	explicit SlowWorkScope(SlowWork work)
+	    : work_(work)
+	    , start_(TelemetryFramePartStart())
+	{
+	}
+	~SlowWorkScope()
+	{
+		TelemetrySlowWorkDone(work_, start_);
+	}
+	SlowWorkScope(const SlowWorkScope &) = delete;
+	SlowWorkScope &operator=(const SlowWorkScope &) = delete;
+
+private:
+	SlowWork work_;
+	uint64_t start_;
+};
+
 /** @brief Times a part of drawing a frame from here to the end of the scope. */
 class FramePartScope {
 public:
