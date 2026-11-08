@@ -9,8 +9,10 @@
 #include "headless_mode.hpp"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
+#include "monster.h"
 #include "options.h"
 #include "poe2/vfx.hpp"
+#include "tables/monstdat.h"
 
 namespace devilution {
 namespace {
@@ -223,6 +225,59 @@ TEST_F(Poe2VfxDebrisTest, NothingIsThrownWithoutTheEffects)
 	GetOptions().Graphics.modernEffects.SetValue(false);
 	EXPECT_FALSE(vfx::DebrisEnabled());
 	GetOptions().Graphics.modernEffects.SetValue(true);
+}
+
+TEST_F(Poe2VfxDebrisTest, TheUndeadShedBoneInsteadOfBlood)
+{
+	LoadMonsterData();
+	// A monster of a kind standing on a tile, as far as the effects look.
+	const auto place = [](size_t slot, _monster_id kind, Point tile) {
+		LevelMonsterTypes[slot].type = kind;
+		Monster &monster = Monsters[slot];
+		monster = {};
+		monster.levelType = static_cast<uint8_t>(slot);
+		monster.position.tile = tile;
+		dMonster[tile.x][tile.y] = static_cast<int16_t>(slot + 1);
+	};
+	ASSERT_EQ(MonstersData[MT_WSKELAX].monsterClass, MonsterClass::Undead);
+	ASSERT_NE(MonstersData[MT_FIEND].monsterClass, MonsterClass::Undead);
+	place(0, MT_WSKELAX, { 42, 40 });
+	place(1, MT_FIEND, { 46, 40 });
+
+	// A big bloody hit on a skeleton: pale chips of bone with rubble's physics, never pure white.
+	vfx::Impact({ 42, 40 }, vfx::Element::Blood, 1.2F);
+	ASSERT_GT(debris::Count(), 0U);
+	const size_t bone = debris::Count();
+	for (size_t i = 0; i < bone; i++) {
+		const debris::Piece piece = debris::At(i);
+		EXPECT_EQ(piece.kind, DebrisKind::Rubble);
+		EXPECT_GT(piece.colour[0], 150);
+		EXPECT_GT(piece.colour[2], 120);
+		EXPECT_LT(piece.colour[0], 255);
+		EXPECT_LT(piece.colour[1], 255);
+		EXPECT_LT(piece.colour[2], 255);
+	}
+
+	// The same hit on a living monster flings dark red drops.
+	vfx::Impact({ 46, 40 }, vfx::Element::Blood, 1.2F);
+	ASSERT_GT(debris::Count(), bone);
+	for (size_t i = bone; i < debris::Count(); i++) {
+		const debris::Piece piece = debris::At(i);
+		EXPECT_EQ(piece.kind, DebrisKind::Droplet);
+		EXPECT_LT(piece.colour[0], 130);
+		EXPECT_GT(piece.colour[0], piece.colour[1] * 4);
+	}
+
+	// And on bare floor, blood as before.
+	vfx::Clear();
+	vfx::Impact({ 50, 44 }, vfx::Element::Blood, 1.2F);
+	ASSERT_GT(debris::Count(), 0U);
+	EXPECT_EQ(debris::At(0).kind, DebrisKind::Droplet);
+
+	dMonster[42][40] = 0;
+	dMonster[46][40] = 0;
+	Monsters[0] = {};
+	Monsters[1] = {};
 }
 
 TEST_F(Poe2VfxDebrisTest, APieceIsNeverThrownInsideAWall)

@@ -286,6 +286,7 @@ bool DebrisEnabled();
 namespace debris_test {
 
 struct Piece {
+	DebrisKind kind;
 	float x, y, z;
 	/** @brief Its speed over the floor in tiles a second, and upward in pixels a second. */
 	float vx, vy, vz;
@@ -294,6 +295,7 @@ struct Piece {
 	/** @brief Stopped and lying still, fading out. */
 	bool resting;
 	float alpha;
+	std::array<uint8_t, 3> colour;
 };
 
 /** @brief Throws one piece from a point, whatever the options say (the hits go through DebrisEnabled). */

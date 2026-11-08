@@ -1021,16 +1021,47 @@ void ThrowDroplets(Vec at, float speed, int count)
 	}
 }
 
+/** @brief Pale chips of bone knocked off an undead body: rubble's physics in bone's colour, never pure white. */
+void ThrowBoneChips(Vec at, float speed, int count)
+{
+	float cx;
+	float cy;
+	WorldToFloor(at, cx, cy);
+	for (int i = 0; i < count; i++) {
+		float vx;
+		float vy;
+		FloorVelocity(DebrisRandom(0, 2 * Pi), DebrisRandom(0.6F, 2.F) * speed, vx, vy);
+		const float shade = DebrisRandom(0.85F, 1.05F);
+		const Rgb bone { static_cast<uint8_t>(214 * shade), static_cast<uint8_t>(204 * shade), static_cast<uint8_t>(180 * shade) };
+		ThrowDebris(DebrisKind::Rubble, cx, cy, DebrisRandom(14, 28), vx, vy, DebrisRandom(140, 280), DebrisRandom(1.6F, 2.8F), DebrisMaxLife, bone);
+	}
+}
+
+/** @brief The monster standing on a tile (or moving into or out of it), if any. */
+const Monster *MonsterOn(Point tile)
+{
+	if (!InDungeonBounds(tile))
+		return nullptr;
+	const int id = dMonster[tile.x][tile.y];
+	if (id == 0)
+		return nullptr;
+	return &Monsters[std::abs(id) - 1];
+}
+
+/** @brief What flies off a hurt or dying body: dark drops of blood, or chips of bone off the undead (skeletons don't bleed). */
+void ThrowGore(Vec at, const Monster *monster, float speed, int count)
+{
+	if (monster != nullptr && monster->data().monsterClass == MonsterClass::Undead)
+		ThrowBoneChips(at, speed, count);
+	else
+		ThrowDroplets(at, speed, count);
+}
+
 /** @brief Whether the monster on a tile wears armour enough for steel to spark on it (and its armour isn't broken). */
 bool ArmouredAt(Point tile)
 {
-	if (!InDungeonBounds(tile))
-		return false;
-	const int id = dMonster[tile.x][tile.y];
-	if (id == 0)
-		return false;
-	const Monster &monster = Monsters[std::abs(id) - 1];
-	return monster.poe2.armourBreakTicks == 0 && MonsterArmourPercent(monster) > LightArmourMaxPercent;
+	const Monster *monster = MonsterOn(tile);
+	return monster != nullptr && monster->poe2.armourBreakTicks == 0 && MonsterArmourPercent(*monster) > LightArmourMaxPercent;
 }
 
 /** @brief Moves a piece over the floor for a step, turning it back off any wall it runs into. */
@@ -1316,9 +1347,13 @@ void BloodImpact(Vec pos, float size, const Colours &c)
 	AddRing(pos + Vec { 0, -16 }, 0, 18 * size, 120, 0, c.mid, 0.7F, true, false);
 	Spray(pos, Scaled(22 * size), 60, 200 * size, 400, 800, Shape::Chunk, { 150, 10, 10 }, { 70, 0, 0 }, 2.5F, 2, 80, 220, 700, 0.5F, 1);
 	AddRing(pos, TileRadius * 0.6F * size, TileRadius * 0.9F * size, 3500, 0, { 70, 0, 0 }, 0.5F, true, true, true, 0.35F);
-	// A big bloody hit flings a few drops that bounce and settle.
-	if (size >= 0.8F)
-		ThrowDroplets(pos, 1.F, DebrisCount(3 * size));
+	// A big bloody hit flings a few drops that bounce and settle (chips of bone off the undead).
+	if (size >= 0.8F) {
+		float x;
+		float y;
+		WorldToFloor(pos, x, y);
+		ThrowGore(pos, MonsterOn({ static_cast<int>(std::floor(x + 0.5F)), static_cast<int>(std::floor(y + 0.5F)) }), 1.F, DebrisCount(3 * size));
+	}
 }
 
 /** @brief Bone shattering: a dull pale flash, a ring of dust thrown out over the floor, bone chips, splinters and dust. */
@@ -2598,8 +2633,9 @@ void OnModeChange(const Monster &monster, MonsterMode from, MonsterMode to, Vec 
 		HolyImpact(feet, 0.6F * big, { { 220, 255, 220 }, { 90, 230, 110 }, { 30, 120, 50 } });
 		break;
 	case MonsterMode::Death:
-		// A few drops of blood fly off the body, bounce and settle (more off a rare, more again off a unique or boss).
-		ThrowDroplets(feet, rank >= Rank::Unique ? 1.4F : 1.F, DebrisCount(rank >= Rank::Unique ? 8 : (rank == Rank::Rare ? 6 : 4)));
+		// A few drops of blood fly off the body, bounce and settle (more off a rare, more again off a unique or boss); the
+		// undead shed chips of bone instead.
+		ThrowGore(feet, &monster, rank >= Rank::Unique ? 1.4F : 1.F, DebrisCount(rank >= Rank::Unique ? 8 : (rank == Rank::Rare ? 6 : 4)));
 		switch (rank) {
 		case Rank::Normal:
 			break;
@@ -5487,7 +5523,7 @@ size_t Count()
 Piece At(size_t index)
 {
 	const DebrisPiece &piece = Debris[index];
-	return { piece.x, piece.y, piece.z, piece.vx, piece.vy, piece.vz, piece.bounces, piece.wallHits, piece.restAt >= 0, DebrisAlpha(piece) };
+	return { piece.kind, piece.x, piece.y, piece.z, piece.vx, piece.vy, piece.vz, piece.bounces, piece.wallHits, piece.restAt >= 0, DebrisAlpha(piece), { piece.colour.r, piece.colour.g, piece.colour.b } };
 }
 
 } // namespace debris_test
@@ -6027,8 +6063,11 @@ void DrawDebris()
 			DebrisShadow(floor, piece.size, piece.z, alpha);
 			// A tumbling chip: a few uneven corners round a lighter middle, lit from the upper left.
 			const Vec c = ToScreen(at);
-			const Rgb lit = Mix(piece.colour, { 128, 118, 102 }, 0.45F);
-			const Rgb shade = Mix(piece.colour, { 40, 36, 32 }, 0.5F);
+			const auto scaled = [&](float s) {
+				return Rgb { static_cast<uint8_t>(std::min(piece.colour.r * s, 235.F)), static_cast<uint8_t>(std::min(piece.colour.g * s, 235.F)), static_cast<uint8_t>(std::min(piece.colour.b * s, 235.F)) };
+			};
+			const Rgb lit = scaled(1.25F);
+			const Rgb shade = scaled(0.75F);
 			const int middle = Dark.add(c, lit, alpha);
 			uint32_t seed = piece.seed;
 			const int corners = piece.corners;
