@@ -50,6 +50,7 @@ namespace hd {
 float SubFrame = 0;
 bool SubFrameBackward = false;
 Caster CurrentCaster = Caster::None;
+OutlineLook CurrentOutlineLook;
 Point CurrentTile;
 Point CurrentTileOrigin;
 bool HaveTile = false;
@@ -111,6 +112,8 @@ struct Draw {
 	bool lightmapped;
 	/** @brief The game drew an outline round it just before it (its smooth outline is made with its HD art). */
 	bool outlined = false;
+	/** @brief For an outline: how it shows in HD. */
+	OutlineLook outlineLook {};
 };
 
 /** @brief The part of a shadow picture that isn't empty, in texture coordinates (0 to 1): across from u0 to u1, down from vTop. */
@@ -119,6 +122,17 @@ struct CastPart {
 	float u1 = 1;
 	float vTop = 0;
 };
+
+/** @brief The kinds of smooth outline made round a sprite. */
+enum class OutlineCut : uint8_t {
+	/** @brief As thick as the game's: one game pixel. */
+	Line,
+	/** @brief Round rare and unique monsters. */
+	Thick,
+	/** @brief A soft glow that fades out away from the sprite, adding light to what is under it. */
+	Glow,
+};
+constexpr size_t NumOutlineCuts = 3;
 
 /** @brief A smooth outline made for a sprite: white, with its shape in the alpha, and where it sits over the sprite. */
 struct Outline {
@@ -149,17 +163,21 @@ struct Raster {
 	CastPart sharpPart;
 	CastPart softPart;
 	bool castTried = false;
-	/** @brief The smooth outline round the game's own pixels, scaled up (for sprites without HD art). */
-	Outline outline;
+	/** @brief The smooth outlines round the game's own pixels, scaled up (for sprites without HD art), by OutlineCut. */
+	std::array<Outline, NumOutlineCuts> outlines;
 	/** @brief The first row of the sprite's body, for how far its shadow reaches. */
 	int bodyTop = 0;
 };
 
 void FreeRasterTextures(Raster &raster)
 {
-	for (SDL_Texture *texture : { raster.texture, raster.shadowTexture, raster.packTexture, raster.castTexture, raster.castSoft, raster.outline.texture }) {
+	for (SDL_Texture *texture : { raster.texture, raster.shadowTexture, raster.packTexture, raster.castTexture, raster.castSoft }) {
 		if (texture != nullptr)
 			SDL_DestroyTexture(texture);
+	}
+	for (Outline &outline : raster.outlines) {
+		if (outline.texture != nullptr)
+			SDL_DestroyTexture(outline.texture);
 	}
 	raster.texture = nullptr;
 	raster.shadowTexture = nullptr;
@@ -167,7 +185,7 @@ void FreeRasterTextures(Raster &raster)
 	raster.castTexture = nullptr;
 	raster.castSoft = nullptr;
 	raster.castTried = false;
-	raster.outline = {};
+	raster.outlines = {};
 }
 
 /**
@@ -188,17 +206,19 @@ struct Flow {
 struct HdArt {
 	SDL_Texture *texture = nullptr;
 	bool missing = false;
-	/** @brief The picture's name, for sprite art (its outline is made from the picture). */
+	/** @brief The picture's name, for sprite art (its outlines are made from the picture). */
 	std::string name;
-	Outline outline;
+	/** @brief Its smooth outlines, by OutlineCut. */
+	std::array<Outline, NumOutlineCuts> outlines;
 	/** @brief For tile art with flowing lava or water in it. */
 	std::unique_ptr<Flow> flow;
 };
 
 std::vector<Draw> Draws;
-/** @brief The last outline recorded, until the sprite it goes round is: its pixels, and where it is drawn (unpadded). */
+/** @brief The last outline recorded, until the sprite it goes round is: its pixels, where it is drawn (unpadded), and how it looks. */
 const uint8_t *PendingOutline = nullptr;
 Point PendingOutlineAt;
+OutlineLook PendingOutlineLook;
 /** @brief The per-pixel light levels of this frame's draws, copied as they are drawn. */
 std::vector<uint8_t> LightArena;
 /** @brief The light level of each pixel of the 8-bit world, from the draw that covers it. */
@@ -408,8 +428,10 @@ void DestroyTextures()
 		for (auto &[name, art] : Art) {
 			if (art.texture != nullptr)
 				SDL_DestroyTexture(art.texture);
-			if (art.outline.texture != nullptr)
-				SDL_DestroyTexture(art.outline.texture);
+			for (const Outline &outline : art.outlines) {
+				if (outline.texture != nullptr)
+					SDL_DestroyTexture(outline.texture);
+			}
 		}
 		for (auto &[key, raster] : Rasters)
 			FreeRasterTextures(raster);
@@ -500,17 +522,34 @@ SDL_Surface *WithoutPaintedShadow(SDL_Surface *surface)
 	return rgba;
 }
 
-/** @brief Outlines are as thick as the game's: one game pixel. */
-constexpr float OutlineWidth = 1.F;
+/** @brief The cut an outline is drawn in: thick round rares and bosses, else the game's width. Glows are drawn under it. */
+OutlineCut OutlineCutFor(const OutlineLook &look)
+{
+	return look.thick ? OutlineCut::Thick : OutlineCut::Line;
+}
+
+/** @brief How far each cut of outline reaches past the sprite, in game pixels. */
+float OutlineReach(OutlineCut cut)
+{
+	switch (cut) {
+	case OutlineCut::Thick:
+		return 1.75F;
+	case OutlineCut::Glow:
+		return 4.5F;
+	default:
+		return 1.F;
+	}
+}
 
 /**
- * @brief Makes a smooth outline: a band OutlineWidth game pixels wide round the `body` pixels, its outer edge
- * anti-aliased, and left off where the sprite covers (`cover`, 0 to 255), since outlines are drawn over their sprite.
+ * @brief Makes a smooth outline: a band OutlineReach(cut) game pixels wide round the `body` pixels, its outer edge
+ * anti-aliased (a glow fades out across all of it), and left off where the sprite covers (`cover`, 0 to 255), since
+ * outlines are drawn over their sprite.
  *
  * Both are width x height, at scaleX x scaleY pixels to the game pixel. The band reaches as far as the nearest body
  * pixel is, so it goes round in curves instead of the stair steps of the pixels it goes round.
  */
-Outline MakeOutline(SDL_Renderer *renderer, const std::vector<uint8_t> &body, const std::vector<uint8_t> &cover, int width, int height, float scaleX, float scaleY)
+Outline MakeOutline(SDL_Renderer *renderer, const std::vector<uint8_t> &body, const std::vector<uint8_t> &cover, int width, int height, float scaleX, float scaleY, OutlineCut cut)
 {
 	Outline outline;
 	outline.tried = true;
@@ -531,7 +570,7 @@ Outline MakeOutline(SDL_Renderer *renderer, const std::vector<uint8_t> &body, co
 	}
 	if (bodyRight < 0)
 		return outline;
-	const float radius = OutlineWidth * scaleX;
+	const float radius = OutlineReach(cut) * scaleX;
 	const int pad = static_cast<int>(std::ceil(radius)) + 1;
 	const int reach = pad + 1;
 	// The area worked on, from (x0, y0) in the picture, pad pixels round the body.
@@ -577,7 +616,14 @@ Outline MakeOutline(SDL_Renderer *renderer, const std::vector<uint8_t> &body, co
 			}
 			if (nearest >= Far)
 				continue;
-			const float ring = std::clamp(radius + 1.F - std::sqrt(static_cast<float>(nearest)), 0.F, 1.F);
+			const float distance = std::sqrt(static_cast<float>(nearest));
+			float ring = std::clamp(radius + 1.F - distance, 0.F, 1.F);
+			if (cut == OutlineCut::Glow) {
+				// Full under the line, then fading out softly to nothing at its reach.
+				const float line = OutlineReach(OutlineCut::Line) * scaleX;
+				const float fade = std::clamp(1.F - (distance - line) / (radius + 1.F - line), 0.F, 1.F);
+				ring = fade * fade;
+			}
 			const int px = x0 + x;
 			const int py = y0 + y;
 			const float covered = px >= 0 && py >= 0 && px < width && py < height ? cover[static_cast<size_t>(py) * width + px] / 255.F : 0.F;
@@ -604,7 +650,8 @@ Outline MakeOutline(SDL_Renderer *renderer, const std::vector<uint8_t> &body, co
 	outline.texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, cutWidth, cutHeight);
 	if (outline.texture == nullptr)
 		return outline;
-	SDL_SetTextureBlendMode(outline.texture, SDL_BLENDMODE_BLEND);
+	// A glow adds light to what is under it; an outline covers it.
+	SDL_SetTextureBlendMode(outline.texture, cut == OutlineCut::Glow ? SDL_BLENDMODE_ADD : SDL_BLENDMODE_BLEND);
 #if SDL_VERSION_ATLEAST(2, 0, 12)
 	SDL_SetTextureScaleMode(outline.texture, SDL_ScaleModeLinear);
 #endif
@@ -618,8 +665,8 @@ Outline MakeOutline(SDL_Renderer *renderer, const std::vector<uint8_t> &body, co
 	return outline;
 }
 
-/** @brief The outline round a sprite's HD art, from its picture's edge, without the shadow the maker painted. */
-Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const Draw &sprite)
+/** @brief An outline round a sprite's HD art, from its picture's edge, without the shadow the maker painted. */
+Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const Draw &sprite, OutlineCut cut)
 {
 	Outline none;
 	none.tried = true;
@@ -653,7 +700,7 @@ Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const D
 		SDL_FreeSurface(rgba);
 	if (!locked)
 		return none;
-	return MakeOutline(renderer, body, cover, width, height, static_cast<float>(width) / static_cast<float>(sprite.width), static_cast<float>(height) / static_cast<float>(sprite.height));
+	return MakeOutline(renderer, body, cover, width, height, static_cast<float>(width) / static_cast<float>(sprite.width), static_cast<float>(height) / static_cast<float>(sprite.height), cut);
 }
 
 /**
@@ -687,8 +734,12 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 	}
 	if (withoutShadow)
 		surface = WithoutPaintedShadow(surface);
-	if (outlined != nullptr)
-		art.outline = OutlineFromPicture(renderer, surface, *outlined);
+	if (outlined != nullptr) {
+		const OutlineCut cut = OutlineCutFor(outlined->outlineLook);
+		art.outlines[static_cast<size_t>(cut)] = OutlineFromPicture(renderer, surface, *outlined, cut);
+		if (outlined->outlineLook.glow)
+			art.outlines[static_cast<size_t>(OutlineCut::Glow)] = OutlineFromPicture(renderer, surface, *outlined, OutlineCut::Glow);
+	}
 	art.texture = SDL_CreateTextureFromSurface(renderer, surface);
 	SDL_FreeSurface(surface);
 	if (art.texture != nullptr) {
@@ -1257,8 +1308,8 @@ constexpr float OutlineBudgetMs = 2.F;
 uint64_t OutlineBudgetEnd = 0;
 bool OutlineMadeThisFrame = false;
 
-/** @brief The outline round HD art that was loaded without one: its picture is loaded again for it. */
-Outline MakeArtOutline(SDL_Renderer *renderer, const HdArt &art, const Draw &sprite)
+/** @brief An outline round HD art that was loaded without it: its picture is loaded again for it. */
+Outline MakeArtOutline(SDL_Renderer *renderer, const HdArt &art, const Draw &sprite, OutlineCut cut)
 {
 	Outline none;
 	none.tried = true;
@@ -1267,16 +1318,16 @@ Outline MakeArtOutline(SDL_Renderer *renderer, const HdArt &art, const Draw &spr
 	SDL_Surface *picture = LoadPNG(path.c_str());
 	if (picture == nullptr)
 		return none;
-	Outline outline = OutlineFromPicture(renderer, picture, sprite);
+	Outline outline = OutlineFromPicture(renderer, picture, sprite, cut);
 	SDL_FreeSurface(picture);
 	return outline;
 }
 
 /**
- * @brief The outline round a sprite drawn from the game's own pixels, made at the HD art's size so its outer edge is
+ * @brief An outline round a sprite drawn from the game's own pixels, made at the HD art's size so its outer edge is
  * smooth. As the game's, it goes round the sprite's colours, not its painted shadow (palette colour 0).
  */
-Outline MakeRasterOutline(SDL_Renderer *renderer, const Draw &sprite)
+Outline MakeRasterOutline(SDL_Renderer *renderer, const Draw &sprite, OutlineCut cut)
 {
 	const Point position { 0, sprite.height - 1 };
 	Raster plain = PlainRaster(sprite, position);
@@ -1293,7 +1344,7 @@ Outline MakeRasterOutline(SDL_Renderer *renderer, const Draw &sprite)
 			body[i] = plain.alpha[from] != 0 && plain.index[from] != 0 ? 1 : 0;
 		}
 	}
-	return MakeOutline(renderer, body, cover, width, height, static_cast<float>(Scale), static_cast<float>(Scale));
+	return MakeOutline(renderer, body, cover, width, height, static_cast<float>(Scale), static_cast<float>(Scale), cut);
 }
 
 /** @brief Whether this frame may still make an outline: always one, then as many as fit in OutlineBudgetMs. */
@@ -1302,29 +1353,32 @@ bool MayMakeOutline()
 	return !OutlineMadeThisFrame || SDL_GetPerformanceCounter() < OutlineBudgetEnd;
 }
 
-/** @brief The smooth outline round what a sprite draw shows, or nullptr when this frame has no time left to make it. */
-const Outline *SmoothOutline(SDL_Renderer *renderer, const Draw &sprite)
+/** @brief A smooth outline round what a sprite draw shows, or nullptr when this frame has no time left to make it. */
+const Outline *SmoothOutline(SDL_Renderer *renderer, const Draw &sprite, OutlineCut cut)
 {
+	const auto index = static_cast<size_t>(cut);
 	if (sprite.light >= 0) {
 		const ArtChoice choice = CachedArt(renderer, sprite);
 		if (choice.art != nullptr) {
-			if (!choice.art->outline.tried) {
+			Outline &outline = choice.art->outlines[index];
+			if (!outline.tried) {
 				if (!MayMakeOutline())
 					return nullptr;
-				choice.art->outline = MakeArtOutline(renderer, *choice.art, sprite);
+				outline = MakeArtOutline(renderer, *choice.art, sprite, cut);
 				OutlineMadeThisFrame = true;
 			}
-			return &choice.art->outline;
+			return &outline;
 		}
 	}
 	Raster &raster = FallbackRaster(sprite, false);
-	if (!raster.outline.tried) {
+	Outline &outline = raster.outlines[index];
+	if (!outline.tried) {
 		if (!MayMakeOutline())
 			return nullptr;
-		raster.outline = MakeRasterOutline(renderer, sprite);
+		outline = MakeRasterOutline(renderer, sprite, cut);
 		OutlineMadeThisFrame = true;
 	}
-	return &raster.outline;
+	return &outline;
 }
 
 /** @brief The global fade and brightness, as how much of each channel the screen palette keeps. */
@@ -1716,28 +1770,101 @@ const Draw *OutlinedSprite(size_t index)
 	return nullptr;
 }
 
+/** @brief How long the outline of the thing under the cursor takes to fade in, in ms (so it doesn't pop on). */
+constexpr float HoverFadeMs = 140.F;
+/** @brief How long a glow takes to swell and settle again, in ms: slow, like breathing. */
+constexpr uint32_t GlowBreathMs = 2400;
+/** @brief How much of a glow shows, settled and swollen. */
+constexpr float GlowLow = 0.35F;
+constexpr float GlowHigh = 0.8F;
+/** @brief An outline not drawn for this long (ms) is gone, and the cursor coming back to its thing fades it in again. */
+constexpr uint32_t OutlineGoneMs = 150;
+
+/** @brief How a thing's outline was last drawn, and for the cursor's: since when it fades in, and from what. */
+struct ShownOutline {
+	/** @brief Its colour (lit) and how much of it showed, when (ms), and whether it was the cursor's. */
+	Colour3 colour {};
+	float alpha = 0;
+	uint32_t at = 0;
+	bool seen = false;
+	bool hovered = false;
+	uint32_t hoverSince = 0;
+	Colour3 fromColour {};
+	float fromAlpha = 0;
+};
+
+/** @brief Each thing's outline as last drawn, by OutlineThing. */
+std::unordered_map<uint32_t, ShownOutline> ShownOutlines;
+
+/**
+ * @brief The outline of a thing as it shows now. The cursor's fades in over HoverFadeMs: from the outline that thing
+ * had (a rank's or a ground item's, in its colour), or from nothing.
+ */
+void FadeOutline(const OutlineLook &look, uint32_t now, Colour3 &colour, float &alpha)
+{
+	ShownOutline &shown = ShownOutlines[look.thing];
+	const bool showing = shown.seen && now - shown.at <= OutlineGoneMs;
+	if (look.hovered) {
+		if (!showing || !shown.hovered) {
+			shown.hoverSince = now;
+			shown.fromColour = showing ? shown.colour : colour;
+			shown.fromAlpha = showing ? shown.alpha : 0.F;
+		}
+		const float t = std::clamp(static_cast<float>(now - shown.hoverSince) / HoverFadeMs, 0.F, 1.F);
+		const float eased = t * t * (3 - 2 * t);
+		for (int c = 0; c < 3; c++)
+			colour[c] = shown.fromColour[c] + (colour[c] - shown.fromColour[c]) * eased;
+		alpha = shown.fromAlpha + (alpha - shown.fromAlpha) * eased;
+	}
+	shown.colour = colour;
+	shown.alpha = alpha;
+	shown.at = now;
+	shown.seen = true;
+	shown.hovered = look.hovered;
+}
+
 /**
  * @brief Draws an outline of an item, monster or townsperson smooth, round the HD art its sprite shows or round the
- * game's own pixels scaled up, in the outline's colour; the game's own pixels until that outline is made.
+ * game's own pixels scaled up, in the outline's colour; the game's own pixels until that outline is made. Its look
+ * (OutlineLook) makes it thick, puts a slow glow under it, or fades it in under the cursor.
  */
 void DrawOutline(SDL_Renderer *renderer, size_t index, const Shading &glow, float toLogical)
 {
 	const Draw &draw = Draws[index];
+	const OutlineLook &look = draw.outlineLook;
 	const Draw *sprite = draw.style == SpriteStyle::OutlineSkipZero ? OutlinedSprite(index) : nullptr;
-	const Outline *outline = sprite != nullptr ? SmoothOutline(renderer, *sprite) : nullptr;
+	const Outline *outline = sprite != nullptr ? SmoothOutline(renderer, *sprite, OutlineCutFor(look)) : nullptr;
 	if (outline == nullptr || outline->texture == nullptr) {
 		DrawShaded(renderer, draw, glow, toLogical, true);
 		return;
 	}
+	const SDL_Color &gameColour = logical_palette[draw.outlineColor];
+	const Colour3 &light = glow.colours[0];
+	Colour3 colour { gameColour.r / 255.F * light[0], gameColour.g / 255.F * light[1], gameColour.b / 255.F * light[2] };
+	float alpha = 1.F;
+	const uint32_t now = SDL_GetTicks();
+	if (look.thing != 0)
+		FadeOutline(look, now, colour, alpha);
 	const SDL_FRect at = DestOf(*sprite, toLogical);
 	const float unit = static_cast<float>(Scale) * toLogical;
-	const SDL_FRect dest { at.x + outline->place.x * unit, at.y + outline->place.y * unit, outline->place.w * unit, outline->place.h * unit };
-	if (!OnScreen(dest, 0))
-		return;
-	const SDL_Color &colour = logical_palette[draw.outlineColor];
-	const Colour3 &light = glow.colours[0];
-	SDL_SetTextureColorMod(outline->texture, ColourByte(colour.r / 255.F * light[0]), ColourByte(colour.g / 255.F * light[1]), ColourByte(colour.b / 255.F * light[2]));
-	SDL_RenderCopyF(renderer, outline->texture, nullptr, &dest);
+	const auto drawCut = [&](const Outline &cut, float strength) {
+		const SDL_FRect dest { at.x + cut.place.x * unit, at.y + cut.place.y * unit, cut.place.w * unit, cut.place.h * unit };
+		if (strength <= 0 || !OnScreen(dest, 0))
+			return;
+		SDL_SetTextureColorMod(cut.texture, ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]));
+		SDL_SetTextureAlphaMod(cut.texture, ColourByte(strength));
+		SDL_RenderCopyF(renderer, cut.texture, nullptr, &dest);
+	};
+	if (look.glow) {
+		// The glow is made when there is time for it, like the outline; until then the outline shows alone.
+		const Outline *halo = SmoothOutline(renderer, *sprite, OutlineCut::Glow);
+		if (halo != nullptr && halo->texture != nullptr) {
+			constexpr float TwoPi = 6.2831853F;
+			const float breath = 0.5F - 0.5F * std::cos(TwoPi * static_cast<float>(now % GlowBreathMs) / static_cast<float>(GlowBreathMs));
+			drawCut(*halo, alpha * (GlowLow + (GlowHigh - GlowLow) * breath));
+		}
+	}
+	drawCut(*outline, alpha);
 }
 
 #if SDL_VERSION_ATLEAST(2, 0, 18)
@@ -3157,6 +3284,7 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 	if (IsOutline(style)) {
 		PendingOutline = clx.pixelData();
 		PendingOutlineAt = at;
+		PendingOutlineLook = CurrentOutlineLook;
 	} else if (PendingOutline != nullptr) {
 		outlined = PendingOutline == clx.pixelData() && PendingOutlineAt == at;
 		PendingOutline = nullptr;
@@ -3186,6 +3314,8 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 	    .tileOrigin = CurrentTileOrigin + Displacement { RecordRegion.x, RecordRegion.y },
 	    .lightmapped = lightmap != nullptr,
 	    .outlined = outlined,
+	    // A sprite with an outline keeps its outline's look, so its art's outlines are made in that cut as it loads.
+	    .outlineLook = IsOutline(style) ? CurrentOutlineLook : (outlined ? PendingOutlineLook : OutlineLook {}),
 	});
 }
 
@@ -3389,6 +3519,10 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 
 	FrameLit = false;
 	OutlineMadeThisFrame = false;
+	if (ShownOutlines.size() > 256) {
+		const uint32_t now = SDL_GetTicks();
+		std::erase_if(ShownOutlines, [now](const auto &shown) { return now - shown.second.at > 1000; });
+	}
 	OutlineBudgetEnd = SDL_GetPerformanceCounter() + static_cast<uint64_t>(static_cast<double>(SDL_GetPerformanceFrequency()) * OutlineBudgetMs / 1000);
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 	// HD Lighting works out its own light, in colour and stopped by walls.
