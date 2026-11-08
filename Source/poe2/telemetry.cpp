@@ -51,6 +51,7 @@
 #include "poe2/telemetry_events.hpp"
 #include "poe2/tree_telemetry.hpp"
 #include "poe2/waystones.hpp"
+#include "qol/stash.h"
 #include "tables/misdat.h"
 #include "utils/file_util.h"
 #include "utils/format.hpp"
@@ -265,7 +266,7 @@ uint32_t LastSwarmLogMs = 0;
 std::string LastBuild;
 uint32_t LastBuildCheckMs = 0;
 uint32_t LastExperience = 0;
-int LastGold = 0;
+int64_t LastGold = 0;
 
 /** @brief An event kept in memory: written ones were in the readable log already, the rest only go out on a crash. */
 struct RecentEvent {
@@ -1297,6 +1298,19 @@ void TrackBuild(const Player &player, uint32_t now)
 	WriteBuildEvent(player, LogLevel::Normal);
 }
 
+/**
+ * @brief The hero's gold. In POE2 gold isn't an item: what's picked up or sold for goes to the league's purse, kept with
+ * the stash (AddGoldToInventory), so that counts too: counting the bag alone read "gold 0" in every session of Curtis's
+ * play logs from 2026-10-20 on.
+ */
+int64_t HeroGold(const Player &player)
+{
+	int64_t gold = player._pGold;
+	if (gbIsPoe2 && &player == MyPlayer)
+		gold += Stash.gold;
+	return gold;
+}
+
 void TrackGains(const Player &player)
 {
 	if (player._pExperience > LastExperience) {
@@ -1304,16 +1318,17 @@ void TrackGains(const Player &player)
 		Count([&](TelemetryCounts &counts) { counts.experience += gained; });
 	}
 	LastExperience = player._pExperience;
-	if (player._pGold > LastGold) {
-		const int gained = player._pGold - LastGold;
+	const int64_t gold = HeroGold(player);
+	if (gold > LastGold) {
+		const int gained = static_cast<int>(gold - LastGold);
 		Count([&](TelemetryCounts &counts) { counts.gold += gained; });
-	} else if (player._pGold < LastGold) {
-		// Spent in a shop, or put in the stash.
-		const int spent = LastGold - player._pGold;
+	} else if (gold < LastGold) {
+		// Spent in a shop (or, outside POE2, put in the stash).
+		const int spent = static_cast<int>(LastGold - gold);
 		Count([&](TelemetryCounts &counts) { counts.goldSpent += spent; });
-		Event(LogChannel::Loot, LogLevel::Normal, "gold_out").add("p", player.getId()).add("amount", spent).add("left", player._pGold);
+		Event(LogChannel::Loot, LogLevel::Normal, "gold_out").add("p", player.getId()).add("amount", spent).add("left", gold);
 	}
-	LastGold = player._pGold;
+	LastGold = gold;
 }
 
 void TrackStalls(uint32_t now)
@@ -1692,7 +1707,7 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	PauseStartMs = 0;
 	LastBuildCheckMs = 0;
 	LastExperience = player._pExperience;
-	LastGold = player._pGold;
+	LastGold = HeroGold(player);
 	StartOfGame = { player._pName, std::string(player.getClassName()), player.getCharacterLevel(), loaded };
 	const std::string_view mode = gbIsPoe2 ? "POE2" : (gbIsHellfire ? "Hellfire" : "Diablo");
 	WriteText("game", std::format("{:s} {:s}: level {:d} {:s}, life {:d}/{:d}, mana {:d}/{:d}, mode {:s}", loaded ? "loaded" : "new game", player._pName, player.getCharacterLevel(), player.getClassName(), player._pHitPoints.whole(), player._pMaxHP.whole(), player._pMana.whole(), player._pMaxMana.whole(), mode), true);
@@ -1825,6 +1840,12 @@ void WriteSummaryEvents(double minutes)
 }
 
 } // namespace
+
+void TelemetryStashLoaded()
+{
+	if (MyPlayer != nullptr)
+		LastGold = HeroGold(*MyPlayer);
+}
 
 void TelemetryGameEnded()
 {

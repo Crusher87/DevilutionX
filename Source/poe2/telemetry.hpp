@@ -83,6 +83,8 @@ void TelemetryStep(std::string_view step);
 void TelemetryMissingSprite(std::string_view what);
 
 void TelemetryGameStarted(const Player &player, bool loaded);
+/** @brief The stash (and with it POE2's gold purse) was read from disk: its gold is the new starting point, not a gain. */
+void TelemetryStashLoaded();
 void TelemetryGameEnded();
 void TelemetryLevelEntered();
 /** @brief Names what is about to hit the player (a monster or a trap) for the hit that follows. */

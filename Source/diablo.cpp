@@ -3608,6 +3608,7 @@ void LoadGameLevelStash()
 	gbIsHellfireSaveGame = gbIsHellfire;
 	LoadStash();
 	gbIsHellfireSaveGame = isHellfireSaveGame;
+	TelemetryStashLoaded();
 }
 
 std::expected<void, std::string> LoadGameLevelDungeon(bool firstflag, lvl_entry lvldir, const Player &myPlayer)

@@ -9,6 +9,7 @@
 #include "diablo.h"
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
+#include "inv.h"
 #include "items.h"
 #include "monster.h"
 #include "player.h"
@@ -17,8 +18,10 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/tree_telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "qol/stash.h"
 #include "spells.h"
 #include "storm/storm_net.hpp"
+#include "stores.h"
 #include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 #include "utils/file_util.h"
@@ -477,6 +480,30 @@ TEST_F(Poe2TelemetryTest, BuildLineBlockIsZeroWithoutAShield)
 	player._pClass = HeroClass::Warrior;
 	player.poe2.shieldBlockChance = 28;
 	EXPECT_NE(TelemetryBuildText(player).find("block 28%"), std::string::npos) << TelemetryBuildText(player);
+}
+
+TEST_F(Poe2TelemetryTest, GoldPickedUpIntoTheLeaguePurseIsCounted)
+{
+	// Curtis's play logs from 2026-10-20 on: "gold 0 (0/min)" for hours of play. POE2 gold goes straight to the league's
+	// purse (Stash.gold), not the bag the play log watched.
+	Player &player = *MyPlayer;
+	Stash.gold = 1000;
+	TelemetryStashLoaded();
+	TelemetryTick();
+	EXPECT_NE(TelemetryStatsText().find(", gold 0 ("), std::string::npos) << "a loaded purse isn't a gain: " << TelemetryStatsText();
+
+	Item pile {};
+	MakeGoldStack(pile, 250);
+	ASSERT_TRUE(GoldAutoPlace(player, pile));
+	ASSERT_EQ(Stash.gold, 1250);
+	ASSERT_EQ(player._pGold, 0);
+	TelemetryTick();
+	EXPECT_NE(TelemetryStatsText().find(", gold 250 ("), std::string::npos) << TelemetryStatsText();
+
+	TakePlrsMoney(100);
+	TelemetryTick();
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"gold_out\",\"area\":\"town\",\"p\":0,\"amount\":100,\"left\":1150"), std::string::npos) << ReadLatestEvents();
+	Stash = {};
 }
 
 } // namespace
