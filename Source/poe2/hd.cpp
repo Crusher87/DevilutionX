@@ -7,6 +7,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <span>
 #include <string>
@@ -169,12 +170,29 @@ void FreeRasterTextures(Raster &raster)
 	raster.outline = {};
 }
 
+/**
+ * @brief The part of a tile's HD art where the game's lava or water flows (its palette's moving colours): those
+ * pixels show the game's own moving colours, scaled up, and are painted again whenever the palette moves.
+ */
+struct Flow {
+	/** @brief The part of the art that flows, in its pixels (Scale times the game's). */
+	SDL_Rect rect {};
+	/** @brief The game's palette index of each of its game pixels. */
+	std::vector<uint8_t> index;
+	/** @brief The art as made over that part (RGBA), and how much of each pixel the flowing colour covers (0-255). */
+	std::vector<uint8_t> still;
+	std::vector<uint8_t> weight;
+	uint32_t paletteVersion = 0;
+};
+
 struct HdArt {
 	SDL_Texture *texture = nullptr;
 	bool missing = false;
 	/** @brief The picture's name, for sprite art (its outline is made from the picture). */
 	std::string name;
 	Outline outline;
+	/** @brief For tile art with flowing lava or water in it. */
+	std::unique_ptr<Flow> flow;
 };
 
 std::vector<Draw> Draws;
@@ -249,6 +267,8 @@ struct ArtChoice {
 	bool tileArt = false;
 	/** @brief The sprite art shown, when it is a sprite's. */
 	HdArt *art = nullptr;
+	/** @brief The tile art shown, when lava or water flows in it. */
+	HdArt *flowing = nullptr;
 };
 struct ArtChoiceKey {
 	const uint8_t *data;
@@ -980,16 +1000,129 @@ Raster &FallbackRaster(const Draw &draw, bool keepTable)
 }
 
 /**
+ * @brief The last of the palette's moving colours (they start at 1) on this level: the lava in the Caves and the
+ * Crypt, the Hive's ponds. 0 where none move. (Hell's lava moves through its light tables instead, which its HD art
+ * doesn't follow yet.)
+ */
+int LastFlowingColour()
+{
+	if (!*GetOptions().Graphics.colorCycling)
+		return 0;
+	switch (leveltype) {
+	case DTYPE_CAVES:
+	case DTYPE_CRYPT:
+		return 31;
+	case DTYPE_NEST:
+		return 15;
+	default:
+		return 0;
+	}
+}
+
+/**
+ * @brief Where lava or water flows in a tile's art (the game pixels in the palette's moving colours, 1 to lastFlowing),
+ * and what is needed to show the game's own moving colours there. The art's own pixels along the lava's edge stay
+ * half showing, so its rock meets the lava softly. nullptr when nothing in the tile flows.
+ */
+std::unique_ptr<Flow> FindFlow(const SDL_Surface *surface, const Raster &raster, int lastFlowing)
+{
+	const auto flows = [&](int x, int y) {
+		const size_t i = static_cast<size_t>(y) * raster.width + x;
+		return raster.alpha[i] != 0 && raster.index[i] >= 1 && raster.index[i] <= lastFlowing;
+	};
+	int left = raster.width;
+	int top = raster.height;
+	int right = -1;
+	int bottom = -1;
+	for (int y = 0; y < raster.height; y++) {
+		for (int x = 0; x < raster.width; x++) {
+			if (!flows(x, y))
+				continue;
+			left = std::min(left, x);
+			right = std::max(right, x);
+			top = std::min(top, y);
+			bottom = std::max(bottom, y);
+		}
+	}
+	if (right < 0)
+		return nullptr;
+	auto flow = std::make_unique<Flow>();
+	const int gameWidth = right - left + 1;
+	const int gameHeight = bottom - top + 1;
+	flow->rect = SDL_Rect { left * Scale, top * Scale, gameWidth * Scale, gameHeight * Scale };
+	flow->index.resize(static_cast<size_t>(gameWidth) * gameHeight);
+	for (int y = 0; y < gameHeight; y++) {
+		for (int x = 0; x < gameWidth; x++)
+			flow->index[static_cast<size_t>(y) * gameWidth + x] = raster.index[static_cast<size_t>(top + y) * raster.width + left + x];
+	}
+	// Rock: a drawn game pixel that doesn't flow. Past the tile's edge, or where it draws nothing, the lava goes on
+	// in the tile next to it.
+	const auto rock = [&](int artX, int artY) {
+		if (artX < 0 || artY < 0 || artX >= raster.width * Scale || artY >= raster.height * Scale)
+			return false;
+		const int x = artX / Scale;
+		const int y = artY / Scale;
+		return raster.alpha[static_cast<size_t>(y) * raster.width + x] != 0 && !flows(x, y);
+	};
+	const int width = flow->rect.w;
+	const int height = flow->rect.h;
+	flow->still.resize(static_cast<size_t>(width) * height * 4);
+	flow->weight.assign(static_cast<size_t>(width) * height, 0);
+	for (int y = 0; y < height; y++) {
+		const int artY = flow->rect.y + y;
+		const uint8_t *row = static_cast<const uint8_t *>(surface->pixels) + static_cast<ptrdiff_t>(artY) * surface->pitch + static_cast<ptrdiff_t>(flow->rect.x) * 4;
+		std::memcpy(&flow->still[static_cast<size_t>(y) * width * 4], row, static_cast<size_t>(width) * 4);
+		for (int x = 0; x < width; x++) {
+			const int artX = flow->rect.x + x;
+			if (!flows(artX / Scale, artY / Scale))
+				continue;
+			const bool edge = rock(artX - 1, artY) || rock(artX + 1, artY) || rock(artX, artY - 1) || rock(artX, artY + 1);
+			flow->weight[static_cast<size_t>(y) * width + x] = edge ? 128 : 255;
+		}
+	}
+	return flow;
+}
+
+/** @brief Paints the flowing part of a tile's art in the palette's colours of the moment, when the palette has moved. */
+void RefreshFlow(HdArt &art)
+{
+	Flow &flow = *art.flow;
+	if (flow.paletteVersion == PaletteVersion || art.texture == nullptr)
+		return;
+	flow.paletteVersion = PaletteVersion;
+	static std::vector<uint8_t> pixels;
+	pixels = flow.still;
+	const int width = flow.rect.w;
+	const int height = flow.rect.h;
+	const int gameWidth = width / Scale;
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			const size_t k = static_cast<size_t>(y) * width + x;
+			const int weight = flow.weight[k];
+			if (weight == 0)
+				continue;
+			const SDL_Color &colour = logical_palette[flow.index[static_cast<size_t>(y / Scale) * gameWidth + x / Scale]];
+			uint8_t *pixel = &pixels[k * 4];
+			pixel[0] = static_cast<uint8_t>(pixel[0] + (colour.r - pixel[0]) * weight / 255);
+			pixel[1] = static_cast<uint8_t>(pixel[1] + (colour.g - pixel[1]) * weight / 255);
+			pixel[2] = static_cast<uint8_t>(pixel[2] + (colour.b - pixel[2]) * weight / 255);
+		}
+	}
+	SDL_UpdateTexture(art.texture, &flow.rect, pixels.data(), width * 4);
+}
+
+/**
  * @brief A tile's HD art cut to exactly the pixels the game draws for it: the same frame can be drawn as
  * a floor triangle or a full square, and walls near the hero are see-through or half cut away.
+ * nullptr when the tile has no HD art.
  */
-SDL_Texture *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &draw)
+HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &draw)
 {
 	const std::string key = name + "#" + std::to_string(static_cast<int>(draw.mask)) + "/" + std::to_string(static_cast<int>(draw.tile)) + "/" + std::to_string(draw.height);
 	auto [it, inserted] = Art.try_emplace(key);
 	HdArt &art = it->second;
 	if (!inserted)
-		return art.texture;
+		return art.texture != nullptr ? &art : nullptr;
 	art.missing = true;
 	std::string path = "hd\\" + name + ".png";
 	std::replace(path.begin(), path.end(), '/', '\\');
@@ -1011,7 +1144,17 @@ SDL_Texture *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Dr
 				row[x * 4 + 3] = static_cast<uint8_t>(row[x * 4 + 3] * cover / 255);
 			}
 		}
-		art.texture = SDL_CreateTextureFromSurface(renderer, surface);
+		const int lastFlowing = raster.cycles ? LastFlowingColour() : 0;
+		if (lastFlowing > 0)
+			art.flow = FindFlow(surface, raster, lastFlowing);
+		if (art.flow != nullptr) {
+			// Painted again as the lava flows, so in a format of our own choosing.
+			art.texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, surface->w, surface->h);
+			if (art.texture != nullptr)
+				SDL_UpdateTexture(art.texture, nullptr, surface->pixels, surface->pitch);
+		} else {
+			art.texture = SDL_CreateTextureFromSurface(renderer, surface);
+		}
 		if (art.texture != nullptr) {
 			art.missing = false;
 			SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
@@ -1020,10 +1163,12 @@ SDL_Texture *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Dr
 			// under them show through as thin lines wherever the screen isn't drawn at exactly twice the world.
 			SDL_SetTextureScaleMode(art.texture, SDL_ScaleModeNearest);
 #endif
+		} else {
+			art.flow = nullptr;
 		}
 	}
 	SDL_FreeSurface(surface);
-	return art.texture;
+	return art.texture != nullptr ? &art : nullptr;
 }
 
 const std::string *ArtName(const Draw &draw)
@@ -1062,16 +1207,19 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 		texture = art->texture;
 	}
 	// Tiles recoloured for this level's palette, e.g. tiles/l1_p3/120, beat evening out the base ones.
+	HdArt *tileArt = nullptr;
 	if (texture == nullptr && draw.kind == DrawKind::Tile && PaletteVariant > 1) {
 		const size_t slash = name->find('/', 6);
 		if (slash != std::string::npos) {
-			texture = MaskedArt(renderer, name->substr(0, slash) + "_p" + std::to_string(PaletteVariant) + name->substr(slash), draw);
+			tileArt = MaskedArt(renderer, name->substr(0, slash) + "_p" + std::to_string(PaletteVariant) + name->substr(slash), draw);
+			texture = tileArt != nullptr ? tileArt->texture : nullptr;
 			recoloured = texture != nullptr;
 		}
 	}
 	if (texture == nullptr) {
 		if (draw.kind == DrawKind::Tile) {
-			texture = MaskedArt(renderer, *name, draw);
+			tileArt = MaskedArt(renderer, *name, draw);
+			texture = tileArt != nullptr ? tileArt->texture : nullptr;
 		} else {
 			art = &LoadArt(renderer, *name, withoutShadow, draw.outlined ? &draw : nullptr);
 			texture = art->texture;
@@ -1081,6 +1229,7 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 	choice.hdArt = texture != nullptr && draw.kind != DrawKind::Tile;
 	choice.tileArt = texture != nullptr && draw.kind == DrawKind::Tile && !recoloured;
 	choice.art = choice.hdArt ? art : nullptr;
+	choice.flowing = tileArt != nullptr && tileArt->flow != nullptr ? tileArt : nullptr;
 	if (texture != nullptr && draw.kind == DrawKind::Tile) {
 		if (recoloured)
 			RecolouredTileArtShown = true;
@@ -1429,6 +1578,8 @@ DrawTexture TextureFor(SDL_Renderer *renderer, const Draw &draw, bool paintedSha
 	ArtChoice art;
 	if (draw.light >= 0)
 		art = CachedArt(renderer, draw);
+	if (art.flowing != nullptr)
+		RefreshFlow(*art.flowing);
 	out.texture = art.texture;
 	out.hdArt = art.hdArt;
 	out.tileColours = art.tileArt;
