@@ -223,6 +223,8 @@ struct GroundBurst {
 	DamageType type;
 	MissileGraphicID effect;
 	Fixed26_6 damage;
+	/** The Hellfire Roar use it is the fire of, which hits a monster once (HellfireUse), or 0. */
+	uint16_t hellfireUse = 0;
 };
 
 /** @brief A skill that goes off again: a repeat, an echo, a strike of Multistrike or a trigger. */
@@ -258,6 +260,8 @@ struct SporePod {
 };
 
 std::vector<GroundBurst> Bursts;
+/** @brief The last use Hellfire Roar empowered: its bursts hit each monster once (audit-drafts-bow.md 8.2). */
+uint16_t HellfireUse = 0;
 std::vector<PendingUse> Pending;
 std::vector<Stand> Stands;
 std::vector<SporePod> SporePods;
@@ -846,8 +850,14 @@ void ProcessBursts(Player &player)
 		BreakObjectsInArea(player, copy.center, copy.radius);
 		std::vector<Monster *> targets;
 		ForEachMonsterNear(copy.center, copy.radius, [&](Monster &monster) { targets.push_back(&monster); });
-		for (Monster *monster : targets)
+		for (Monster *monster : targets) {
+			if (copy.hellfireUse != 0) {
+				if (monster->poe2.hellfireUseHit == copy.hellfireUse)
+					continue;
+				monster->poe2.hellfireUseHit = copy.hellfireUse;
+			}
 			DealExtra(player, *monster, copy.type, copy.damage);
+		}
 		Bursts[i].pulsesLeft--;
 		if (Bursts[i].pulsesLeft <= 0) {
 			Bursts.erase(Bursts.begin() + static_cast<std::ptrdiff_t>(i));
@@ -2302,6 +2312,8 @@ void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixe
 		state.cryHits[index] = static_cast<uint8_t>(state.cryHits[index] - paid);
 		state.cryUsedThisTick[index] = true;
 		state.cryShareThisTick[index] = static_cast<uint8_t>(paid * 100 / std::max(swings, 1));
+		if (cry == EmpoweringCry::Hellfire && ++HellfireUse == 0)
+			HellfireUse = 1;
 		return static_cast<int>(state.cryShareThisTick[index]);
 	};
 	const auto percentOf = [](WeaponSkill cry) {
@@ -2309,8 +2321,11 @@ void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixe
 		return data != nullptr ? static_cast<int>(data->damagePercent) : 0;
 	};
 	const Point tile = monster.position.tile;
-	if (const int share = spend(EmpoweringCry::Hellfire); share > 0)
+	// Each monster takes one of a use's fire bursts, however many monsters round it the use hit (audit-drafts-bow.md 8.2).
+	if (const int share = spend(EmpoweringCry::Hellfire); share > 0) {
 		AddBurst(tile, HellfireBurstRadius, 0, DamageType::Fire, MissileGraphicID::MagmaBallExplosion, Fixed26_6::fromRaw(std::max(Percent(Percent(dealt.raw(), percentOf(WeaponSkill::HellfireRoar)), share), 1)));
+		Bursts.back().hellfireUse = HellfireUse;
+	}
 	if ((tags & ST_Slam) != 0) {
 		if (const int share = spend(EmpoweringCry::Quaking); share > 0) {
 			const TableSkillData *slam = skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;

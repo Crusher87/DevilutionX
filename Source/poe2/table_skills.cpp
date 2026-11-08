@@ -251,7 +251,7 @@ const TableSkillData Table[] = {
 	{ WS::KindlingArrow, "Kindling Arrow", "A slow fire arrow that explodes on the first enemy it hits; burning enemies take more", 20, 16, TW::Bow, 0, Projectiles, 95, 1, 1, 0, 0, 0, DT::Fire, MissileID::Arrow, MG::FireArrowExplosion, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Firebolt), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 100, 0 },
 	{ WS::WhirlingVolley, "Whirling Volley", "Spin forward three tiles, loosing sixteen arrows in a ring where you stop; each enemy takes one", 25, 18, TW::Bow, 0, Dash, 135, 3, 0, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::MetalHit, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::Jester), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 0, 0 },
 	{ WS::LodestoneSalvo, "Lodestone Salvo", "Eight bolts of lightning fall on the enemies near the target, at most two on each; shocked enemies take more", 25, 18, TW::Bow, 0, Burst, 115, 8, 3, 0, 0, 0, DT::Lightning, MissileID::Null, MG::Lightning, 0, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::LightningWall), TableCurve::LightningArrow, 0, GrantedRider::None, 0, 0, 0 },
-	{ WS::SwampGasArrow, "Swamp Gas Arrow", "An arrow that leaves a cloud of poison gas where it lands; fire sets the cloud off in a burst of flame", 25, 18, TW::Bow, 0, Projectiles, 130, 1, 1, 80, 10, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_LandingZone, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::FireCloud), TableCurve::LightningArrow, 0, GrantedRider::None, 25, 0, 0 },
+	{ WS::SwampGasArrow, "Swamp Gas Arrow", "An arrow that leaves a cloud of poison gas where it lands; a fire hit or a burning enemy in it sets off one burst of flame, and the cloud stays", 25, 18, TW::Bow, 0, Projectiles, 130, 1, 1, 80, 10, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_LandingZone, TableZone::PoisonGround, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::FireCloud), TableCurve::LightningArrow, 0, GrantedRider::None, 20, 0, 0 },
 	// The draft gems' Dagger batch (Q48, build order 4). The bomb, the web and the sentry are thrown (TF_Lobbed, as Acid
 	// Flask); Blades of Ice, Ember Fang and Winter's Edge land as their element (convertPercent).
 	{ WS::FireBlast, "Fire Blast", "Throws a fire bomb that bursts where it lands", 1, 6, TW::Dagger, 0, Zone, 60, 0, 1, 0, 0, 0, DT::Fire, MissileID::Null, MG::FireArrowExplosion, TF_Lobbed, TableZone::None, TableCurse::None, TableBuff::None, TT_Dagger, Icon(SpellIcon::Fireball), TableCurve::Boneshatter, 0, GrantedRider::None, 0, 0, 0 },
@@ -304,6 +304,8 @@ struct SkillZone {
 	bool holyGround = false;
 	/** An Explosive Arrow burst the poison cloud in fire: it ends now. */
 	bool detonated = false;
+	/** Fire set off a Swamp Gas Arrow cloud's one burst; the cloud stays (audit-drafts-bow.md 8.1). */
+	bool swampBurst = false;
 	/** A draft gem's burst that goes off once when its delay ends (Arreat Crash's rings, Cinder Strike's balls). */
 	bool burstOnce = false;
 	/** Such a burst hits only what is further than this from its centre, a ring; -1 for all within its radius. */
@@ -1470,15 +1472,23 @@ bool IsDetonatablePoison(WeaponSkill skill)
 	return IsAnyOf(skill, WeaponSkill::BloatedPods, WeaponSkill::ThornvineArrow, WeaponSkill::WitchsBog, WeaponSkill::AcidFlask, WeaponSkill::VenomSentry, WeaponSkill::SwampGasArrow);
 }
 
-/** @brief Fire set off a Swamp Gas Arrow cloud: it bursts in flame (SwampGasBurstRadius, SwampGasBurstPercent of its hit) and ends. */
+/**
+ * @brief Fire set off a Swamp Gas Arrow cloud: it bursts in flame (SwampGasBurstRadius, SwampGasBurstPercent of its hit),
+ * once a cloud, and the cloud keeps poisoning for its time (audit-drafts-bow.md 8.1).
+ */
 void DetonateSwampGas(SkillZone &zone)
 {
-	zone.detonated = true;
+	if (zone.swampBurst)
+		return;
+	zone.swampBurst = true;
 	const Fixed26_6 burst = Fixed26_6::fromRaw(std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(zone.damage.raw()) * SwampGasBurstPercent / 100), 1));
 	PendingDetonations.push_back({ zone.center, SwampGasBurstRadius, burst, WeaponSkill::SwampGasArrow });
 }
 
-/** @brief Explosive Arrow's blast touched these poison zones: each bursts in fire for the blast's damage in its own area and ends. */
+/**
+ * @brief Explosive Arrow's blast touched these poison zones: each bursts in fire for the blast's damage in its own area and
+ * ends; a Swamp Gas Arrow cloud makes its own one burst and stays.
+ */
 void DetonatePoisonClouds(Point center, int radius, Fixed26_6 damage)
 {
 	for (SkillZone &zone : Zones) {
@@ -2921,12 +2931,14 @@ bool ProcessDraftZone(Player &player, const TableSkillData &data, SkillZone &zon
 			vfx::Impact(zone.center, vfx::Element::Fire, 0.6F);
 		return true;
 	case WeaponSkill::SwampGasArrow:
-		// A burning monster in the cloud, or one a fire hit just struck, sets it off; else it poisons as poisoned ground.
-		for (const Monster *monster : MonstersNear(zone.center, std::max(radius, 1))) {
-			if (monster->poe2.igniteTicks > 0 || monster->poe2.fireHitTicks > 0) {
-				DetonateSwampGas(zone);
-				done = true;
-				return true;
+		// A burning monster in the cloud, or one a fire hit just struck, sets off its one burst; it poisons as poisoned
+		// ground all the while.
+		if (!zone.swampBurst) {
+			for (const Monster *monster : MonstersNear(zone.center, std::max(radius, 1))) {
+				if (monster->poe2.igniteTicks > 0 || monster->poe2.fireHitTicks > 0) {
+					DetonateSwampGas(zone);
+					break;
+				}
 			}
 		}
 		return false;
@@ -3367,7 +3379,7 @@ std::string TableSkillExtraNote(WeaponSkill skill)
 	case WeaponSkill::PalmOfTheFrozenNorth:
 		return std::format("The lance hits for {:d}% of the palm, {:d} tiles, through 3 enemies; freeze builds {:d} times as fast", PalmLancePercent, PalmLanceTiles, TableAilmentPercent(*data) / 100);
 	case WeaponSkill::HellfireRoar:
-		return std::format("For {:d} swings within {:d} seconds, every enemy a melee use hits bursts into fire for {:d}% of the hit, radius {:d}; a slow use spends a swing for each its time is worth",
+		return std::format("For {:d} swings within {:d} seconds, every enemy a melee use hits bursts into fire for {:d}% of the hit, radius {:d}, burning each enemy once a use; a slow use spends a swing for each its time is worth",
 		    static_cast<int>(data->count), data->duration / TicksPerSecond, static_cast<int>(data->damagePercent), HellfireBurstRadius);
 	case WeaponSkill::FrostforgedHammer:
 		return std::format("The sides take {:d}%; every {:s} blow freezes the enemy in front for {:.0f} second", FrostforgedSidePercent, "third", FrostforgedFreezeTicks / static_cast<double>(TicksPerSecond));
@@ -3439,7 +3451,7 @@ std::string TableSkillExtraNote(WeaponSkill skill)
 	case WeaponSkill::LodestoneSalvo:
 		return std::format("{:d} bolts fall on the enemies within {:d} of the target, at most {:d} on each; a shocked enemy takes {:d}% more", static_cast<int>(data->count), static_cast<int>(data->radius), LodestoneBoltsPerMonster, LodestoneShockedPercent - 100);
 	case WeaponSkill::SwampGasArrow:
-		return std::format("The arrow hits for {:d}%; its cloud within {:d} poisons for {:d}% a second for {:d} seconds, {:d} clouds at most; fire in it bursts the cloud within {:d} for {:d}%",
+		return std::format("The arrow hits for {:d}%; its cloud within {:d} poisons for {:d}% a second for {:d} seconds, {:d} clouds at most; a fire hit or a burning enemy in it sets off one fire burst within {:d} for {:d}%, and the cloud stays",
 		    SwampGasArrowPercent, static_cast<int>(data->radius), TablePoisonPercentPerSecond(*data), data->duration / TicksPerSecond, SwampGasClouds, SwampGasBurstRadius, SwampGasBurstPercent);
 	case WeaponSkill::FanOfBlades:
 		return std::format("Each blade that hits bleeds the enemy for {:d}% of its hit over {:d} seconds; the strongest bleed counts", FanOfBladesBleedPercent, FanOfBladesBleedTicks / TicksPerSecond);

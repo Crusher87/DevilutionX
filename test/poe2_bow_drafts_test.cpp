@@ -316,7 +316,8 @@ TEST_F(Poe2BowDraftsTest, BowDraftsAreDexterityGemsAtTheirTiers)
 	EXPECT_EQ(swamp.flags, static_cast<uint32_t>(TF_LandingZone));
 	EXPECT_EQ(swamp.radius, 1);
 	EXPECT_EQ(swamp.duration, 80);
-	EXPECT_EQ(TablePoisonPercentPerSecond(swamp), 25);
+	// 25% lowered to 20% with the burst that keeps the cloud (Curtis, audit-drafts-bow.md 8.1).
+	EXPECT_EQ(TablePoisonPercentPerSecond(swamp), 20);
 	EXPECT_EQ(SwampGasArrowPercent, 30);
 	EXPECT_EQ(SwampGasClouds, 3);
 	EXPECT_EQ(SwampGasBurstRadius, 2);
@@ -630,25 +631,44 @@ TEST_F(Poe2BowDraftsTest, SwampGasArrowLeavesACloudThatFireSetsOff)
 	EXPECT_GT(monster.poe2.poisonTicks, 0);
 	EXPECT_EQ(monster.poe2.hinderTicks, 0);
 	EXPECT_EQ(SkillZoneCount(), 1U);
-	// A burning monster in it sets it off: a fire burst, and the cloud is gone.
+	// A burning monster in it sets off its fire burst, once; the cloud stays and keeps poisoning (audit-drafts-bow.md 8.1).
 	Monster &aside = PlaceMonster(1, { 46, 40 });
 	Heal(monster);
 	monster.poe2.igniteTicks = 40;
 	Zones(player, 1);
-	EXPECT_EQ(SkillZoneCount(), 0U);
+	EXPECT_EQ(SkillZoneCount(), 1U);
 	EXPECT_TRUE(Hurt(monster));
 	EXPECT_TRUE(Hurt(aside));
 	EXPECT_GT(aside.poe2.fireHitTicks, 0);
-	// A fresh fire hit does too.
+	// The monster still burns in it, and fresh fire hits come, but there is no second burst out to the one beside it.
+	Heal(aside);
+	monster.poe2.igniteTicks = 40;
+	monster.poe2.poisonTicks = 0;
+	ApplyMonsterDamage(DamageType::Fire, monster, Fixed26_6::fromInt(1));
+	Zones(player, 12);
+	EXPECT_FALSE(Hurt(aside));
+	EXPECT_EQ(SkillZoneCount(), 1U);
+	EXPECT_GT(monster.poe2.poisonTicks, 0);
+	// The cloud lasts its whole time after its burst: 25 ticks have gone since the arrow was loosed.
+	int lived = 25;
+	while (SkillZoneCount() > 0 && lived < 200) {
+		Zones(player, 1);
+		lived++;
+	}
+	EXPECT_GE(lived, Row(WeaponSkill::SwampGasArrow).duration);
+	EXPECT_LE(lived, Row(WeaponSkill::SwampGasArrow).duration + 12);
+	// A fresh fire hit sets it off too, and it stays.
 	ClearMonsters();
 	Monster &struck = PlaceMonster(0, { 44, 40 });
+	Monster &near = PlaceMonster(1, { 46, 40 });
 	Use(player, WeaponSkill::SwampGasArrow, { 44, 40 });
 	Zones(player, 12);
 	ASSERT_EQ(SkillZoneCount(), 1U);
 	ApplyMonsterDamage(DamageType::Fire, struck, Fixed26_6::fromInt(1));
 	EXPECT_EQ(struck.poe2.fireHitTicks, FireHitTicks);
 	Zones(player, 1);
-	EXPECT_EQ(SkillZoneCount(), 0U);
+	EXPECT_TRUE(Hurt(near));
+	EXPECT_EQ(SkillZoneCount(), 1U);
 	// Three clouds at most.
 	ClearMonsters();
 	for (int i = 0; i < 4; i++)
@@ -694,6 +714,17 @@ TEST_F(Poe2BowDraftsTest, BowFix3WhirlingVolleyTakesNoRingOfMissiles)
 	EXPECT_FALSE(SupportGemCanSupport(SupportGem::NovaProjectiles, volley));
 	EXPECT_TRUE(SupportGemCanSupport(SupportGem::Volley, volley));
 	EXPECT_TRUE(SupportGemCanSupport(SupportGem::NovaProjectiles, SkillSlot::ForAttack(WeaponSkill::Strafe)));
+}
+
+// audit-drafts-bow.md 8.1 (Curtis): the text says the burst goes off once and the cloud stays.
+TEST_F(Poe2BowDraftsTest, ApprovedSwampGasArrowBurstsOnceAndTheCloudStays)
+{
+	const std::string description(Row(WeaponSkill::SwampGasArrow).description);
+	EXPECT_NE(description.find("one burst of flame, and the cloud stays"), std::string::npos) << description;
+	const std::string note = TableSkillExtraNote(WeaponSkill::SwampGasArrow);
+	EXPECT_NE(note.find("poisons for 20% a second"), std::string::npos) << note;
+	EXPECT_NE(note.find("sets off one fire burst"), std::string::npos) << note;
+	EXPECT_NE(note.find("the cloud stays"), std::string::npos) << note;
 }
 
 // audit-drafts-bow.md 7.5: the tooltips say what the gems do.

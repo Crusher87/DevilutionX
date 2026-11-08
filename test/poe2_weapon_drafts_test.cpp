@@ -1279,6 +1279,30 @@ TEST_F(Poe2WeaponDraftsTest, ApprovedLowersFrostbiteBloodHarvestAndHellfire)
 	EXPECT_NEAR(static_cast<double>(Lost(beside)) / Fixed26_6::fromInt(80).raw(), 1.0, 0.1);
 }
 
+// audit-drafts-bow.md 8.2 (Curtis): a use's Hellfire bursts burn each monster once, however many of them overlap it.
+TEST_F(Poe2WeaponDraftsTest, ApprovedHellfireBurnsEachMonsterOnceAUse)
+{
+	Player &player = SetUpFight();
+	Monster &a = PlaceMonster(0, { 41, 40 });
+	Monster &b = PlaceMonster(1, { 41, 41 });
+	Monster &between = PlaceMonster(2, { 42, 40 });
+	Use(player, WeaponSkill::HellfireRoar, { 41, 40 });
+	player.poe2.tick();
+	// One use hits a and b; both bursts reach all three, but each takes one.
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::StormEdge), a, Fixed26_6::fromInt(1000));
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::StormEdge), b, Fixed26_6::fromInt(1000));
+	Supports(player, 3);
+	const double one = Fixed26_6::fromInt(80).raw();
+	for (const Monster *monster : { &a, &b, &between })
+		EXPECT_NEAR(Lost(*monster) / one, 1.0, 0.1);
+	EXPECT_NE(TableSkillExtraNote(WeaponSkill::HellfireRoar).find("each enemy once a use"), std::string::npos);
+	// The next use burns them again.
+	player.poe2.tick();
+	OnEmpoweredMeleeHit(player, SkillSlot::ForAttack(WeaponSkill::StormEdge), a, Fixed26_6::fromInt(1000));
+	Supports(player, 3);
+	EXPECT_NEAR(Lost(between) / one, 2.0, 0.2);
+}
+
 // audit-drafts-bow.md 7.4: a use that finds fewer of the cry's charges left than its swings gets only that share.
 TEST_F(Poe2WeaponDraftsTest, BowFix4ACryUseShortOfChargesGetsItsShare)
 {
@@ -1302,8 +1326,8 @@ TEST_F(Poe2WeaponDraftsTest, BowFix4ACryUseShortOfChargesGetsItsShare)
 	EXPECT_EQ(player.poe2.cryShareThisTick[static_cast<size_t>(EmpoweringCry::Hellfire)], 50);
 	EXPECT_EQ(player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::Hellfire)], 0);
 	Supports(player, 3);
-	// Half of each of the two bursts beside it, so about the one full burst.
-	EXPECT_NEAR(static_cast<double>(Lost(struck)) / full, 1.0, 0.1);
+	// Half of one burst: the use's two bursts overlap it, but burn it once (audit-drafts-bow.md 8.2).
+	EXPECT_NEAR(static_cast<double>(Lost(struck)) / full, 0.5, 0.05);
 	// Quaking Roar's two charges on a 3-swing slam: two thirds of the aftershock.
 	player.poe2.clear();
 	ClearMonsters();

@@ -192,6 +192,8 @@ struct Poe2MonsterState {
 	uint16_t grantedCastHit = 0;
 	/** @brief The Whirling Volley cast whose ring of arrows hit it, which hits it once (not saved). */
 	uint16_t volleyCastHit = 0;
+	/** @brief The Hellfire Roar use whose fire burst last hit it, which burns it once a use (not saved). */
+	uint16_t hellfireUseHit = 0;
 	/** @brief Game ticks a fire hit on it counts as fresh, for Swamp Gas Arrow's clouds (FireHitTicks; not saved). */
 	uint8_t fireHitTicks = 0;
 	/**

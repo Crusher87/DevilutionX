@@ -688,7 +688,7 @@ constexpr int LodestoneBoltsPerMonster = 2;
 constexpr int LodestoneShockedPercent = 160;
 /**
  * @brief Swamp Gas Arrow: the arrow hits for this percent; at most this many clouds; a fire hit or a burning enemy in a
- * cloud sets it off, a fire burst this far for this percent.
+ * cloud sets off its one fire burst, this far for this percent, and the cloud stays.
  */
 constexpr int SwampGasArrowPercent = 30;
 constexpr int SwampGasClouds = 3;
