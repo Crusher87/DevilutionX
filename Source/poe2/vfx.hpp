@@ -263,6 +263,48 @@ size_t PortalCount();
 /** @brief How many raindrops and snowflakes are falling (tests). */
 size_t DropCount();
 
+/** @brief What a piece of physics debris is: a chip of stone, a spark off steel, or a drop of blood. */
+enum class DebrisKind : uint8_t {
+	/** @brief A dark chip of stone knocked out of the floor (slams, the end of a fissure): blended, not glowing. */
+	Rubble,
+	/** @brief A bright spark off an armoured monster's steel: glowing, gone after a bounce or two. */
+	Spark,
+	/** @brief A dark drop of blood: blended, it barely bounces and lies a moment where it stops. */
+	Droplet,
+};
+
+/** @brief The most pieces of debris at once; a new piece past it takes the place of the oldest. */
+constexpr size_t MaxDebris = 400;
+
+/** @brief Whether hits throw physics debris: the effects are drawn and the Physics Debris option is on. */
+bool DebrisEnabled();
+
+/**
+ * @brief Tests' window on the physics debris. A piece lies on the floor in tile units (whole numbers are tile centres,
+ * fractions in between), with its height above the floor in pixels.
+ */
+namespace debris_test {
+
+struct Piece {
+	float x, y, z;
+	/** @brief Its speed over the floor in tiles a second, and upward in pixels a second. */
+	float vx, vy, vz;
+	int bounces;
+	int wallHits;
+	/** @brief Stopped and lying still, fading out. */
+	bool resting;
+	float alpha;
+};
+
+/** @brief Throws one piece from a point, whatever the options say (the hits go through DebrisEnabled). */
+void Throw(DebrisKind kind, float x, float y, float z, float vx, float vy, float vz);
+/** @brief How many pieces there are. */
+size_t Count();
+/** @brief The piece at an index, oldest first. */
+Piece At(size_t index);
+
+} // namespace debris_test
+
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 /**
  * @brief Draws the effects over the world, which was just drawn to the whole render target.

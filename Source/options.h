@@ -576,6 +576,8 @@ struct GraphicsOptions : OptionCategoryBase {
 	OptionEntryBoolean hdStrongMood;
 	/** @brief POE2 Mashup: the HD world's darkest shades a little lighter, for screens slow to brighten dark shades while they move. */
 	OptionEntryBoolean hdLiftDarks;
+	/** @brief POE2 Mashup: chips of stone, sparks and drops of blood that fly, bounce off the floor and walls and settle (looks only). */
+	OptionEntryBoolean physicsDebris;
 	/** @brief Run in fullscreen or windowed mode. */
 	OptionEntryBoolean fullscreen;
 #if !defined(USE_SDL1) || defined(__3DS__)
