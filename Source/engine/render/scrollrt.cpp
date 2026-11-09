@@ -207,18 +207,12 @@ std::optional<uint8_t> RankOutlineColor(const Monster &monster, int lightTableIn
 }
 
 /**
- * @brief POE2 Mashup: how a monster's outline shows in HD: thicker round rares and bosses (uniques and Diablo), with a
- * slow glow round bosses, and fading in under the cursor.
+ * @brief POE2 Mashup: how a monster's outline shows in HD: fading in under the cursor. Rares and bosses keep the same
+ * thin outline as magic monsters, with no glow (Curtis 2026-11-09: the thick, glowing look was too much).
  */
-hd::OutlineLook MonsterOutlineLook(const Monster &monster, int monsterId)
+hd::OutlineLook MonsterOutlineLook(int monsterId)
 {
-	hd::OutlineLook look { .hovered = monsterId == pcursmonst, .thing = hd::OutlineThing(hd::ThingKind::Monster, monsterId) };
-	if (!gbIsPoe2 || monster.isPlayerMinion())
-		return look;
-	const bool boss = monster.isUnique() || monster.type().type == MT_DIABLO;
-	look.thick = boss || GetMonsterAffixes(monster).rarity == MonsterRarity::Rare;
-	look.glow = boss;
-	return look;
+	return { .hovered = monsterId == pcursmonst, .thing = hd::OutlineThing(hd::ThingKind::Monster, monsterId) };
 }
 
 /** @brief POE2 Mashup: how an item's outline shows in HD: a slow glow round uniques and quest items, fading in under the cursor. */
@@ -1107,8 +1101,8 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 	// POE2 Mashup: a hurt monster's life bar is drawn later, with the UI.
 	if (gbIsPoe2)
 		QueueMonsterOverheadBar(monster, monsterRenderPosition, sprite);
-	// POE2 Mashup: in HD the outline is thicker round rares and bosses, glows round bosses, and fades in under the cursor.
-	const hd::OutlineScope outlineLook(MonsterOutlineLook(monster, mi));
+	// POE2 Mashup: in HD the outline fades in under the cursor.
+	const hd::OutlineScope outlineLook(MonsterOutlineLook(mi));
 	if (mi == pcursmonst) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsMonster, monsterRenderPosition, sprite);
 	} else if (const std::optional<uint8_t> rank = RankOutlineColor(monster, lightTableIndex); rank) {
