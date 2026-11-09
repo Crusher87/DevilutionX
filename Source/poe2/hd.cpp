@@ -2188,7 +2188,7 @@ void BaseWorldOf(bool right, float fx, float fy, Point tile, float &x, float &y)
 }
 
 /**
- * @brief Draws the floor half of a tile's bottom piece in the light over the floor.
+ * @brief Draws the floor half of a tile's bottom piece in the light over the floor, and the floor's edge below it.
  *
  * The half floor diamond is cut into triangles at the light samples' rows and columns, so its light matches the
  * floor next to it exactly along every edge.
@@ -2211,8 +2211,8 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 	// The half diamond's corner where its two outer edges meet, and points along those edges at fractions a and b:
 	// left half, from (0, 1/2) towards the top (1, 0) and the bottom (1, 1); right half, from (1, 1/2) towards (0, 0) and (0, 1).
 	static constexpr std::array<float, 4> Steps { 0.F, 0.25F, 0.75F, 1.F };
-	std::array<SDL_Vertex, 10> vertices;
-	std::array<Colour3, 10> colours;
+	std::array<SDL_Vertex, 11> vertices;
+	std::array<Colour3, 11> colours;
 	std::array<std::array<int, 4>, 4> at;
 	int count = 0;
 	for (int ia = 0; ia < 4; ia++) {
@@ -2236,7 +2236,7 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 			at[ia][ib] = count++;
 		}
 	}
-	std::array<int, 27> indices;
+	std::array<int, 36> indices;
 	int used = 0;
 	for (int ia = 0; ia < 3; ia++) {
 		for (int ib = 0; ib < 3; ib++) {
@@ -2254,14 +2254,35 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 			}
 		}
 	}
+	// Below the floor's front edge (a = 0), the piece holds the floor's own edge, which juts a little past the floor's
+	// shape. It goes with the floor, before any wall, so the tiles in front are drawn over it as in the game: drawn with
+	// the walls it showed on top of them as a thin dotted line.
+	{
+		const float cornerX = right ? 1.F : 0.F;
+		float wx;
+		float wy;
+		BaseWorldOf(right, cornerX, 1.F, draw.cell, wx, wy);
+		const Colour3 colour = ArtColour(BaseFloorLight(wx, wy, draw.cell, walls, behind), art);
+		colours[static_cast<size_t>(count)] = colour;
+		vertices[count] = SDL_Vertex {
+			{ dest.x + cornerX * dest.w, dest.y + dest.h },
+			{ ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), 255 },
+			{ cornerX, 1.F },
+		};
+		const int corner = count++;
+		for (int ib = 0; ib < 3; ib++) {
+			for (const int v : { corner, at[0][ib], at[0][ib + 1] })
+				indices[used++] = v;
+		}
+	}
 	SDL_RenderGeometry(renderer, art.texture, vertices.data(), count, indices.data(), used);
 	DrawAboveFull(renderer, art.texture, vertices, colours, count, indices.data(), used);
 }
 
 /**
  * @brief Draws the rest of a tile's bottom piece: the foot of its wall, above the floor's back edge, lit like the wall's
- * face, and below the floor's front edge lit like the floor. Where the piece is only floor, both are lit like the floor:
- * they hold the floor's own edge, which juts a little past the floor's shape.
+ * face. Where the piece is only floor, it is lit like the floor: it holds the floor's own edge, which juts a little past
+ * the floor's shape. (Below the front edge goes with the floor: DrawTileFloor.)
  */
 void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shading, float toLogical)
 {
@@ -2273,20 +2294,20 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 		return;
 	SDL_SetTextureColorMod(art.texture, 255, 255, 255);
 	SDL_SetTextureAlphaMod(art.texture, 255);
-	static constexpr std::array<std::array<float, 2>, 6> LeftHalf { { { 0, 0 }, { 1, 0 }, { 0, 0.5F }, { 0, 0.5F }, { 1, 1 }, { 0, 1 } } };
-	static constexpr std::array<std::array<float, 2>, 6> RightHalf { { { 0, 0 }, { 1, 0 }, { 1, 0.5F }, { 1, 0.5F }, { 1, 1 }, { 0, 1 } } };
+	static constexpr std::array<std::array<float, 2>, 3> LeftHalf { { { 0, 0 }, { 1, 0 }, { 0, 0.5F } } };
+	static constexpr std::array<std::array<float, 2>, 3> RightHalf { { { 0, 0 }, { 1, 0 }, { 1, 0.5F } } };
 	const bool right = IsRightColumn(draw);
 	const auto &corners = right ? RightHalf : LeftHalf;
 	const BackWalls walls = BackWallsOf(draw.cell);
 	const BehindWalls behind = BehindWallsOf(draw.cell, walls);
 	const bool floorOnly = IsFloorOnly(draw);
-	std::array<SDL_Vertex, 6> vertices;
-	std::array<Colour3, 6> colours;
+	std::array<SDL_Vertex, 3> vertices;
+	std::array<Colour3, 3> colours;
 	for (size_t i = 0; i < corners.size(); i++) {
 		const float fx = corners[i][0];
 		const float fy = corners[i][1];
 		Colour3 light;
-		if (i < 3 && !floorOnly) {
+		if (!floorOnly) {
 			light = ShadeAt(shading, fx);
 		} else {
 			float wx;
