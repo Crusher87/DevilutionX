@@ -1,6 +1,7 @@
 #include "poe2/hud_minions.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <utility>
@@ -24,6 +25,9 @@
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/spirit_skills.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
@@ -40,6 +44,7 @@ constexpr uint8_t BarColor = PAL16_YELLOW + 4;
 constexpr uint8_t RingTrackColor = PAL16_GRAY + 13;
 constexpr uint8_t RingColor = PAL16_YELLOW + 2;
 constexpr uint8_t HarmfulRingColor = PAL16_RED + 4;
+constexpr int GemBuffBlinkTicks = 2 * 20;
 
 Point FirstPortraitPosition()
 {
@@ -182,6 +187,55 @@ void DrawOneLineTooltip(const Surface &out, const std::string &text)
 	DrawString(out, text, { position + Displacement { 8, 2 }, { width - 16, Height - 4 } }, { .flags = UiFlags::ColorWhite | UiFlags::VerticalCenter });
 }
 
+/** @brief A skill gem's buff on the hero, with the time it lasts once cast. */
+void AddGemBuffIcon(WeaponSkill skill, int ticksLeft, int ticksTotal, int count, std::vector<TimedHudIcon> &icons)
+{
+	if (ticksLeft <= 0)
+		return;
+	const SkillSlot slot = SkillSlot::ForAttack(skill);
+	const int seconds = (ticksLeft + 19) / 20;
+	icons.push_back({ SpellIcon {}, StrCat(SkillName(slot), " (", seconds, "s)"), ticksLeft, std::max(ticksTotal, ticksLeft), false, slot, count });
+}
+
+/** @brief The time a table skill's buff lasts once cast, with its supports, as ExecuteTableSkill gives it; at most @p cap. */
+int TableBuffTicks(const Player &player, WeaponSkill skill, int cap)
+{
+	const TableSkillData *data = FindTableSkill(skill);
+	if (data == nullptr || data->duration <= 0)
+		return 0;
+	return std::clamp(SupportDurationTicks(player, SkillSlot::ForAttack(skill), data->duration), 1, cap);
+}
+
+/** @brief The war cries that empower the next hits, each with the hits it waits on (Poe2PlayerData::cryHits). */
+constexpr std::pair<WeaponSkill, EmpoweringCry> EmpoweringCries[] = {
+	{ WeaponSkill::HellfireRoar, EmpoweringCry::Hellfire },
+	{ WeaponSkill::QuakingRoar, EmpoweringCry::Quaking },
+	{ WeaponSkill::CryOfBulKathos, EmpoweringCry::BulKathos },
+	{ WeaponSkill::BulwarkRoar, EmpoweringCry::Bulwark },
+};
+
+/**
+ * @brief The skill gems' timed buffs on the hero. None of them has a cooldown, and the Spirit gems (auras, heralds,
+ * Convalescence and the banners) have their portraits already.
+ */
+void AddGemBuffIcons(const Player &player, std::vector<TimedHudIcon> &icons)
+{
+	const Poe2PlayerData &data = player.poe2;
+	AddGemBuffIcon(WeaponSkill::BattleCry, data.warcryTicks, BattleCryTicks, 0, icons);
+	for (const auto &[skill, cry] : EmpoweringCries) {
+		const auto index = static_cast<size_t>(cry);
+		// A damage cry is spent with its last hit; Bulwark Roar's block and Guard last its whole time, waves or none.
+		if (data.cryHits[index] == 0 && cry != EmpoweringCry::Bulwark)
+			continue;
+		AddGemBuffIcon(skill, data.cryTicks[index], TableBuffTicks(player, skill, UINT8_MAX), data.cryHits[index], icons);
+	}
+	AddGemBuffIcon(WeaponSkill::FrozenArmor, data.frozenArmorTicks, TableBuffTicks(player, WeaponSkill::FrozenArmor, UINT16_MAX), 0, icons);
+	AddGemBuffIcon(WeaponSkill::HolyShield, data.holyShieldTicks, TableBuffTicks(player, WeaponSkill::HolyShield, UINT16_MAX), 0, icons);
+	// Soul Harvest with no souls taken does nothing.
+	if (data.soulStacks > 0)
+		AddGemBuffIcon(WeaponSkill::SoulHarvest, data.soulTicks, TableBuffTicks(player, WeaponSkill::SoulHarvest, UINT16_MAX), data.soulStacks, icons);
+}
+
 } // namespace
 
 std::vector<TimedHudIcon> TimedHudIcons(const Player &player)
@@ -198,6 +252,7 @@ std::vector<TimedHudIcon> TimedHudIcons(const Player &player)
 	}
 	if (state.curse != ShrineCurse::None && state.curseTicks > 0)
 		icons.push_back({ SpellIcon::RedSkull, StrCat(ShrineCurseName(state.curse), ": ", ShrineCurseTooltip(state.curse, state.curseTicks)), state.curseTicks, state.curseTotal, true });
+	AddGemBuffIcons(player, icons);
 	return icons;
 }
 
@@ -278,19 +333,30 @@ void DrawMinionHud(const Surface &out)
 		}
 		position.x += portrait.size.width + PortraitGap;
 	}
-	// Shrine buffs and curses: a draining ring, and a blink for the last seconds.
+	// Shrine buffs and curses, and the skill gems' buffs: a draining ring, and a blink for the last seconds.
 	std::optional<std::string> timedHover;
 	const bool blinkOff = (SDL_GetTicks() / 250) % 2 == 1;
 	for (const TimedHudIcon &timed : TimedHudIcons(player)) {
 		const Rectangle portrait { position + Displacement { 2, 2 }, PortraitSize };
 		DrawHalfTransparentRectTo(out, portrait.position.x, portrait.position.y, portrait.size.width, portrait.size.height);
 		const Point bottomLeft { portrait.position.x, portrait.position.y + portrait.size.height - 1 };
-		if (timed.ticksLeft > ShrineBlinkTicks || !blinkOff)
-			DrawSmallSpellIcon(out, bottomLeft, timed.icon);
+		// A gem's buff lasts seconds, not minutes: it blinks for its last two.
+		const int blinkTicks = timed.skill.isEmpty() ? ShrineBlinkTicks : GemBuffBlinkTicks;
+		if (timed.ticksLeft > blinkTicks || !blinkOff) {
+			if (timed.skill.isEmpty())
+				DrawSmallSpellIcon(out, bottomLeft, timed.icon);
+			else
+				DrawSkillIcon(out, bottomLeft, timed.skill, true);
+		}
 		DrawDrainingRing(out, portrait, timed.ticksLeft, timed.ticksTotal, timed.harmful ? HarmfulRingColor : RingColor);
 		const int seconds = (timed.ticksLeft + 19) / 20;
 		DrawString(out, StrCat(seconds), { portrait.position + Displacement { 2, portrait.size.height - 14 }, { portrait.size.width - 4, 12 } },
 		    { .flags = (timed.harmful ? UiFlags::ColorRed : UiFlags::ColorWhite) | UiFlags::AlignRight | UiFlags::Outlined | UiFlags::FontSize12, .spacing = 0 });
+		// The hits or souls left, in the top corner.
+		if (timed.count > 0) {
+			DrawString(out, StrCat(timed.count), { portrait.position + Displacement { 2, 1 }, { portrait.size.width - 4, 12 } },
+			    { .flags = UiFlags::ColorWhitegold | UiFlags::Outlined | UiFlags::FontSize12, .spacing = 0 });
+		}
 		if (portrait.contains(MousePosition))
 			timedHover = timed.tooltip;
 		position.x += portrait.size.width + PortraitGap + 4;

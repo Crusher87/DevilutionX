@@ -53,8 +53,6 @@ constexpr int ShieldChargeTiles = 6;
 constexpr int EscapeShotTiles = 3;
 /** Game ticks a dash skill may take to land before it's dropped. */
 constexpr uint8_t DashSkillTimeoutTicks = 40;
-/** Battle Cry empowers melee hits for 8 seconds. */
-constexpr uint8_t BattleCryTicks = 8 * 20;
 /** Bolts Rapid Fire looses before its gem level adds more. */
 constexpr int RapidFireBolts = 6;
 constexpr int RapidFireShotTicks = 3;

@@ -24,6 +24,9 @@ enum class Element : uint8_t;
 enum class SwingStyle : uint8_t;
 } // namespace vfx
 
+/** @brief Battle Cry empowers melee hits for 8 seconds. */
+constexpr uint8_t BattleCryTicks = 8 * 20;
+
 /** @brief Where the arrows of Rain of Arrows come down, around the target. */
 constexpr std::array<Displacement, 9> RainOfArrowsVolley = { { { 0, 0 }, { 2, 0 }, { -2, 0 }, { 0, 2 }, { 0, -2 }, { 2, 2 }, { -2, -2 }, { 2, -2 }, { -2, 2 } } };
 
