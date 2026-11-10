@@ -108,6 +108,20 @@ std::expected<UniqueRule, std::string> ParseRule(std::string_view text)
 	return std::unexpected("unknown rule");
 }
 
+/** An armourSlot column: empty for any armour, else helm, body or shield. */
+std::expected<ArmourSlot, std::string> ParseArmourSlot(std::string_view text)
+{
+	if (text.empty())
+		return ArmourSlot::Any;
+	if (text == "helm")
+		return ArmourSlot::Helm;
+	if (text == "body")
+		return ArmourSlot::Body;
+	if (text == "shield")
+		return ArmourSlot::Shield;
+	return std::unexpected("unknown armour slot (helm, body or shield)");
+}
+
 std::expected<OmenTrigger, std::string> ParseTrigger(std::string_view text)
 {
 	if (const std::optional<OmenTrigger> trigger = magic_enum::enum_cast<OmenTrigger>(text))
@@ -211,9 +225,8 @@ bool LoadAugments()
 		int flag = 0;
 		reader.readInt("bossOnly", flag);
 		augment.bossOnly = flag != 0;
-		flag = 0;
-		reader.readInt("helmOnly", flag);
-		augment.helmOnly = flag != 0;
+		reader.read("armourSlot", augment.armourSlot, ParseArmourSlot);
+		reader.readString("namesake", augment.namesake);
 		Augments.push_back(std::move(augment));
 	}
 	return HasEveryRow(Filename, Augments.size(), AugmentId::Count) && BecomesRowsOfToday(Filename, Augments, &Augment::becomes);
@@ -647,6 +660,13 @@ AugmentId AugmentBeforeRuneNumbers(AugmentId id)
 	return id;
 }
 
+AugmentId AugmentBeforeSoulstoneNumbers(AugmentId id)
+{
+	if (GetRuneKind(id).has_value() || IsRuneOfLegend(CurrentAugmentId(id)))
+		return id;
+	return AugmentBeforeRuneNumbers(id);
+}
+
 std::string_view CatalystName(Catalyst catalyst)
 {
 	switch (catalyst) {
@@ -767,7 +787,18 @@ bool AugmentFitsItem(const Augment &augment, const Item &item)
 	const std::optional<AugmentKind> kind = AugmentKindOf(item);
 	if (augment.id == AugmentId::None || !kind || AugmentText(augment, *kind).empty())
 		return false;
-	return !(augment.helmOnly && *kind == AugmentKind::Armour && item._itype != ItemType::Helm);
+	if (*kind != AugmentKind::Armour)
+		return true;
+	switch (augment.armourSlot) {
+	case ArmourSlot::Helm:
+		return item._itype == ItemType::Helm;
+	case ArmourSlot::Body:
+		return item._iLoc == ILOC_ARMOR;
+	case ArmourSlot::Shield:
+		return item._itype == ItemType::Shield;
+	default:
+		return true;
+	}
 }
 
 AugmentId SocketAugment(const Poe2Craft &craft, size_t socket)
@@ -835,6 +866,9 @@ void ApplyAugments(Item &item)
 		if (IsRuneOfLegend(id))
 			continue;
 		const Augment &augment = GetAugment(id);
+		// One that doesn't fit the item (saved before its row moved to one slot) does nothing.
+		if (!AugmentFitsItem(augment, item))
+			continue;
 		apply(AugmentEffect(augment, *kind), AugmentValues(augment, *kind));
 	}
 	if (const std::optional<RuneFamily> family = BondedRuneFamily(item); family) {
@@ -855,7 +889,11 @@ std::vector<SocketLine> AugmentSocketLines(const Item &item)
 			lines.push_back({ std::string(_("Empty augment socket")) });
 			continue;
 		}
-		// Only the line for this kind of item (build spec step 5).
+		// Only the line for this kind of item (build spec step 5); greyed when it does nothing here.
+		if (kind && !AugmentFitsItem(augment, item)) {
+			lines.push_back({ StrCat(augment.name, ": ", _("does nothing here")), /*inactive=*/true });
+			continue;
+		}
 		const std::string &text = kind ? AugmentText(augment, *kind) : augment.armourText;
 		const std::string_view raised = SocketRaised(craft, i) ? std::string_view(_(" (raised)")) : std::string_view {};
 		lines.push_back({ StrCat(augment.name, raised, ": ", text) });
@@ -940,6 +978,22 @@ AugmentId RollAugmentDrop(uint32_t roll, int areaLevel, int act)
 AugmentId RollRuneOfLegend(uint32_t roll)
 {
 	return static_cast<AugmentId>(static_cast<uint32_t>(FirstRuneOfLegend) + (roll % RunesOfLegendCount));
+}
+
+AugmentId NamesakeSoulstone(std::string_view uniqueName)
+{
+	if (uniqueName.empty())
+		return AugmentId::None;
+	for (const Augment &augment : Augments) {
+		if (augment.drops && augment.becomes == AugmentId::None && augment.namesake == uniqueName)
+			return augment.id;
+	}
+	return AugmentId::None;
+}
+
+bool IsLesserSoulstone(AugmentId id)
+{
+	return id >= AugmentId::ButcherSoulstone && id <= AugmentId::BlackJadeSoulstone;
 }
 
 namespace {
@@ -1038,8 +1092,8 @@ void AddCraftRules(const Item &item, UniqueRuleTotals &totals)
 	const Poe2Craft &craft = item._iPoe2Craft;
 	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
 		const Augment &augment = GetAugment(SocketAugment(craft, i));
-		// A Rune of Legend's rule counts on the hero, once (ApplyWornRunesOfLegend).
-		if (augment.rule != UniqueRule::None && !IsRuneOfLegend(augment.id))
+		// A Rune of Legend's rule counts on the hero, once (ApplyWornRunesOfLegend); a relic's only in its kind of item.
+		if (augment.rule != UniqueRule::None && !IsRuneOfLegend(augment.id) && AugmentFitsItem(augment, item))
 			add(augment.rule, augment.ruleValue);
 	}
 	if (const std::optional<RuneFamily> family = BondedRuneFamily(item); family) {
@@ -1106,17 +1160,30 @@ std::vector<std::string> CraftingItemText(const Item &item)
 		break;
 	case IMISC_AUGMENT: {
 		const Augment &augment = GetAugment(GetAugmentId(item));
-		if (augment.weaponText == augment.armourText && augment.weaponText == augment.staffText && !augment.helmOnly) {
+		if (augment.weaponText == augment.armourText && augment.weaponText == augment.staffText && augment.armourSlot == ArmourSlot::Any) {
 			lines.emplace_back(augment.weaponText);
 		} else {
 			// A kind it does nothing in gets no line, and it won't go in one.
+			// One line for both kinds of weapon when they do the same.
+			const bool anyWeapon = !augment.weaponText.empty() && augment.staffText == augment.weaponText;
 			if (!augment.weaponText.empty())
-				lines.push_back(StrCat(_("Weapon: "), augment.weaponText));
-			if (!augment.staffText.empty() && augment.staffText != augment.weaponText)
+				lines.push_back(StrCat(anyWeapon ? _("Any weapon: ") : _("Weapon: "), augment.weaponText));
+			if (!augment.staffText.empty() && !anyWeapon)
 				lines.push_back(StrCat(_("Staff, wand or sceptre: "), augment.staffText));
-			if (!augment.armourText.empty())
-				lines.push_back(StrCat(augment.helmOnly ? _("Helmet: ") : _("Armour: "), augment.armourText));
+			if (!augment.armourText.empty()) {
+				std::string_view slot = _("Armour: ");
+				if (augment.armourSlot == ArmourSlot::Helm)
+					slot = _("Helmet: ");
+				else if (augment.armourSlot == ArmourSlot::Body)
+					slot = _("Body armour: ");
+				else if (augment.armourSlot == ArmourSlot::Shield)
+					slot = _("Shield: ");
+				lines.push_back(StrCat(slot, augment.armourText));
+			}
 		}
+		// The lore of the lesser soulstones (build spec step 6).
+		if (IsLesserSoulstone(augment.id))
+			lines.emplace_back(_("Kulle's work: it holds one of the Labyrinth's damned"));
 		if (augment.level > 1)
 			lines.push_back(FormatRuntime(_("Requires level {:d}"), augment.level));
 		if (augment.id == AugmentId::Zod)

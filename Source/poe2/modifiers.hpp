@@ -179,6 +179,26 @@ enum class ModEffect : uint8_t {
 	MaximumEnergyShield,
 	/** All elemental resistances (first value) and maximum life (second value). */
 	AllResistancesAndLife,
+	// The soulstones' effects (build spec step 6).
+	/** Increased magnitude of the poisons and bleeds the hero inflicts, in percent. */
+	PoisonMagnitude,
+	BleedMagnitude,
+	/** Increased fire, lightning and cold damage of attacks, in percent; it adds to the attack's increased damage. */
+	ElementalAttackDamage,
+	/** Percent of the monster's fire, lightning and cold resistance an attack's hit gets past. */
+	AttackElementalPenetration,
+	/** Added to the maximum fire, lightning or cold (magic) resistance. */
+	MaxFireResistance,
+	MaxLightningResistance,
+	MaxColdResistance,
+	/** Increased duration of the curses the hero casts and faster cooldowns of their skills, in percent. */
+	SkillDurationAndCooldown,
+	/** One point of maximum mana for each this many points of the item's own armour. */
+	ManaPerArmour,
+	/** Armour equal to this percent of the life lost to hits in the last RecentHitLossSeconds. */
+	ArmourFromRecentHitLoss,
+	/** Percent of the physical damage armour stops that is recouped as life. */
+	PreventedPhysicalRecoup,
 	/** Not an effect: the number of them. New effects go before it. */
 	Count,
 };

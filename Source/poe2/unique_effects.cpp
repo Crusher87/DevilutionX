@@ -480,7 +480,7 @@ Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, in
 void InflictBleed(const Player &player, Monster &monster, int32_t physical)
 {
 	Poe2MonsterState &state = monster.poe2;
-	const int32_t perTick = std::max<int32_t>(Percent(physical, BleedPercentPerSecond) / TicksPerSecond, 1);
+	const int32_t perTick = std::max<int32_t>(Percent(Percent(physical, BleedPercentPerSecond), BleedMagnitudePercent(player)) / TicksPerSecond, 1);
 	if (state.bleedTicks == 0 || perTick >= state.bleedDamagePerTick) {
 		state.bleedDamagePerTick = perTick;
 		state.bleedSource = static_cast<int8_t>(player.getId());
@@ -591,6 +591,7 @@ void ProcessUniqueRules(Player &player)
 	UniqueRuleState &state = State(player);
 	state.lowLife = IsOnLowLife(player);
 	ProcessRecoup(player);
+	ProcessRecentHitLoss(player);
 
 	if (player.isWalking()) {
 		state.stillTicks = 0;
@@ -872,6 +873,12 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	}
 	if (Rule(player, UniqueRule::NoColdDamage) > 0)
 		packets[3] = 0;
+	// Dreadjudge: increased elemental damage with attacks adds to the attack's increased damage.
+	if (const int elemental = GearElementalAttackDamage(player); elemental != 0) {
+		const int64_t increased = std::max(100 + player._pIBonusDam, 1);
+		for (size_t i = 1; i <= 3; i++)
+			packets[i] = packets[i] * std::max<int64_t>(increased + elemental, 0) / increased;
+	}
 
 	const int32_t physical = static_cast<int32_t>(packets[0]);
 	// Briarpatch stores part of the physical damage as thorns.
@@ -1334,6 +1341,9 @@ int HitPenetration(DamageType type)
 	// Storm Thesis and its kind: spells penetrate the resistance of the remembered element.
 	if (MyPlayer != nullptr) {
 		const UniqueRuleState &state = State(*MyPlayer);
+		// Blackskull: attacks get past part of the elemental resistances.
+		if (!state.lastHitBySpell)
+			penetration += GearAttackPenetration(*MyPlayer, type);
 		if (const int memory = Rule(*MyPlayer, UniqueRule::MemoryPenetration); memory > 0 && state.lastHitBySpell && state.memoryTicks > 0 && static_cast<uint8_t>(type) == state.memoryElement)
 			penetration += memory;
 	}

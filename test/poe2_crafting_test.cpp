@@ -771,20 +771,20 @@ TEST_F(Poe2CraftingTest, CraftingTablesHoldTheRowsTheCodeHad)
 	ASSERT_EQ(std::size(augments), static_cast<size_t>(LegacyAugmentCount));
 	for (const OldAugment &old : augments) {
 		// The id it became did the same until the runes rework gave it its own numbers: the runes have theirs since
-		// build spec step 5 (MigrateRuneNumbers moves a saved item's values), the soul cores and talismans until step 6.
+		// build spec step 5 and the soul cores and talismans (soulstones and relics) since step 6; MigrateRuneNumbers
+		// moves a saved item's values.
 		ASSERT_NE(CurrentAugmentId(old.id), old.id);
 		EXPECT_EQ(GetAugment(old.id).name, old.name);
 		EXPECT_FALSE(GetAugment(old.id).drops);
 		EXPECT_TRUE(GetAugment(CurrentAugmentId(old.id)).drops);
 		EXPECT_EQ(AugmentBeforeRuneNumbers(CurrentAugmentId(old.id)), old.id);
-		const bool rune = GetRuneKind(CurrentAugmentId(old.id)).has_value();
-		if (rune) {
-			const Augment &now = GetAugment(CurrentAugmentId(old.id));
-			EXPECT_TRUE(now.weaponValues != old.weaponValues || now.armourValues != old.armourValues || now.weaponEffect != old.weaponEffect || now.staffEffect != old.weaponEffect) << old.name;
-		}
-		for (const AugmentId id : { old.id, CurrentAugmentId(old.id) }) {
-			if (rune && id != old.id)
-				continue;
+		const Augment &now = GetAugment(CurrentAugmentId(old.id));
+		EXPECT_TRUE(now.weaponValues != old.weaponValues || now.armourValues != old.armourValues || now.weaponEffect != old.weaponEffect || now.staffEffect != old.weaponEffect
+		    || now.armourText != old.armourText || now.weaponText != old.weaponText)
+		    << old.name;
+		// The legacy row itself keeps the old numbers, which a save from before loads with.
+		{
+			const AugmentId id = old.id;
 			const Augment &augment = GetAugment(id);
 			EXPECT_EQ(augment.id, id);
 			EXPECT_EQ(augment.tier, old.tier) << old.name;
@@ -912,10 +912,19 @@ TEST_F(Poe2CraftingTest, CraftStateWideAugmentsRoundTrip)
 	wide.magnitude = -14;
 	wide.desecrated = true;
 	const auto wideBytes = PackCraftState(wide);
-	// The wide layout's marker since the runes took their own numbers (build spec step 5).
-	EXPECT_EQ(wideBytes[0], 0xC5);
+	// The wide layout's marker since the soulstones took their own numbers (build spec step 6); 0xC5 was step 5's.
+	EXPECT_EQ(wideBytes[0], 0xC6);
 	EXPECT_FALSE(SavedBeforeRuneNumbers(wideBytes));
+	EXPECT_FALSE(SavedBeforeSoulstoneNumbers(wideBytes));
 	EXPECT_TRUE(SavedBeforeRuneNumbers(narrowBytes));
+	EXPECT_FALSE(SavedBeforeSoulstoneNumbers(narrowBytes));
+	PackAsBeforeSoulstoneNumbers = true;
+	const auto stepFiveBytes = PackCraftState(wide);
+	PackAsBeforeSoulstoneNumbers = false;
+	EXPECT_EQ(stepFiveBytes[0], 0xC5);
+	EXPECT_FALSE(SavedBeforeRuneNumbers(stepFiveBytes));
+	EXPECT_TRUE(SavedBeforeSoulstoneNumbers(stepFiveBytes));
+	EXPECT_EQ(UnpackCraftState(stepFiveBytes), wide);
 	EXPECT_EQ(wideBytes[4], static_cast<uint8_t>(AugmentId::LesserRal));
 	EXPECT_EQ(wideBytes[5], static_cast<uint8_t>(AugmentId::RelicOfAkarat));
 	EXPECT_EQ(UnpackCraftState(wideBytes), wide);
@@ -995,7 +1004,7 @@ TEST_F(Poe2CraftingTest, LegacyCraftingItemsConvertAndGetTheirTabSlots)
 	}
 
 	// Socketed augments become today's ids; a rune does what it does now (its saved values move on load,
-	// MigrateRuneNumbers), and a talisman does the same until step 6.
+	// MigrateRuneNumbers), and the Relic of Akarat keeps the Guardian's Talisman's rule in armour (build spec step 6).
 	Item armour = Crafted(CurrencyOrb::Alchemy, MakeItem("Full Plate", 13, ITEM_QUALITY_NORMAL, 60));
 	armour = Crafted(CurrencyOrb::Artificer, armour);
 	armour = Crafted(CurrencyOrb::Artificer, armour);
@@ -1046,10 +1055,8 @@ TEST_F(Poe2CraftingTest, EveryRuneAndEssenceHasATabSlotOfItsOwn)
 		EXPECT_EQ(RuneTabSlotAugment(*slot), CurrentAugmentId(augment)) << item._iIName;
 		if (CurrentAugmentId(augment) == augment)
 			EXPECT_TRUE(runeSlots.insert(*slot).second) << item._iIName << " shares a slot";
-		// The ids still waiting for their numbers (the soulstones of step 6) never drop; the runes of step 5 do.
-		if (id >= static_cast<int>(AugmentId::ButcherSoulstone))
-			EXPECT_FALSE(GetAugment(augment).drops) << item._iIName;
-		else if (id >= static_cast<int>(AugmentId::Ral))
+		// Since step 6 every id of today drops: the runes of step 5 and the soulstones and relics.
+		if (CurrentAugmentId(augment) == augment)
 			EXPECT_TRUE(GetAugment(augment).drops) << item._iIName;
 	}
 	EXPECT_EQ(GetAugment(AugmentId::LesserRal).name, "Lesser Ral Rune");

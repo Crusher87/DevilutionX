@@ -318,10 +318,24 @@ constexpr int LegacyAugmentCount = static_cast<int>(AugmentId::GuardianTalisman)
 /** @brief A socket of the wide craft layout keeps 8 bits, the top one spare for a Zod Rune, so ids stay below 128. */
 static_assert(static_cast<int>(AugmentId::Count) <= 128);
 
+/** @brief The armour an augment's armour line works in: any helmet, body armour or shield, or only one of them. */
+enum class ArmourSlot : uint8_t {
+	Any,
+	Helm,
+	Body,
+	Shield,
+};
+
+/** @brief An augment's tier: what an item may hold one of (build spec step 6: one relic and one Horadric soulstone). */
+constexpr int RuneTier = 1;
+constexpr int SoulstoneTier = 2;
+constexpr int RelicTier = 3;
+constexpr int HoradricTier = 4;
+
 struct Augment {
 	AugmentId id = AugmentId::None;
 	std::string name;
-	/** @brief 1 for runes, 2 for soul cores, 3 for talismans; an item takes one talisman. */
+	/** @brief RuneTier, SoulstoneTier, RelicTier or HoradricTier; an item takes one relic and one Horadric soulstone. */
 	int tier = 0;
 	int dropLevel = 0;
 	/** @brief What it does in a martial weapon, in a caster weapon (a staff, wand or sceptre of the rework), and in armour. */
@@ -352,8 +366,10 @@ struct Augment {
 	int dropAct = 0;
 	/** @brief It drops only from bosses (the Runes of Legend), never as an ordinary augment. */
 	bool bossOnly = false;
-	/** @brief Of armour, it goes only in helmets (Horazon's and Jered Cain's). */
-	bool helmOnly = false;
+	/** @brief The armour its armour line works in (Horazon's and Jered Cain's runes, and most soulstones, only one kind). */
+	ArmourSlot armourSlot = ArmourSlot::Any;
+	/** @brief A soulstone's Labyrinth unique (its name in unique_monstdat.tsv), which drops it now and then; empty for none. */
+	std::string namesake;
 };
 
 /** @brief The three kinds of item an augment does something different in. */
@@ -383,7 +399,8 @@ struct RuneBond {
 [[nodiscard]] ModEffect AugmentEffect(const Augment &augment, AugmentKind kind);
 [[nodiscard]] const std::array<int16_t, 2> &AugmentValues(const Augment &augment, AugmentKind kind);
 [[nodiscard]] const std::string &AugmentText(const Augment &augment, AugmentKind kind);
-/** @brief Whether the augment does anything in the item (Ith does nothing in a staff; Horazon's goes only in a helmet). */
+/** @brief Whether the augment does anything in the item (Ith does nothing in a staff; Horazon's goes only in a helmet).
+ * A socketed one that doesn't fit, as one saved before its row moved to one slot, does nothing. */
 [[nodiscard]] bool AugmentFitsItem(const Augment &augment, const Item &item);
 /** @brief The socketed augment's id, without a Zod Rune's mark. */
 [[nodiscard]] AugmentId SocketAugment(const Poe2Craft &craft, size_t socket);
@@ -406,6 +423,11 @@ bool ConvertLegacyCraftingIds(Item &item);
  * the legacy id that becomes an id of today, else the id.
  */
 [[nodiscard]] AugmentId AugmentBeforeRuneNumbers(AugmentId id);
+/**
+ * @brief The id whose numbers the augment had before the soulstones and relics took their own (build spec step 6): for
+ * a soulstone or relic, AugmentBeforeRuneNumbers; a rune had its own numbers by then, so its own id.
+ */
+[[nodiscard]] AugmentId AugmentBeforeSoulstoneNumbers(AugmentId id);
 /** @brief Most augment sockets the item can have: 2 on body armour and two-handed weapons, 1 on other weapons and armour, 0 on jewellery. */
 int MaxAugmentSockets(const Item &item);
 /** @brief Gives the item what its socketed augments do, and its bonded line when both sockets match. Runes of Legend count on the hero instead (ApplyWornRunesOfLegend). */
@@ -433,6 +455,13 @@ bool ApplyWornRunesOfLegend(std::span<const Item> worn, Item &standIn, UniqueRul
 
 /** @brief A Rune of Legend, each as likely. */
 [[nodiscard]] AugmentId RollRuneOfLegend(uint32_t roll);
+
+/** @brief Chance in percent that a Labyrinth unique drops its own soulstone when it dies near the soulstone's level. */
+constexpr int NamesakeSoulstonePercent = 20;
+/** @brief The soulstone of a unique monster by its name in unique_monstdat.tsv; None for one without. */
+[[nodiscard]] AugmentId NamesakeSoulstone(std::string_view uniqueName);
+/** @brief The lesser soulstones: made from Zoltun Kulle's writings, each holds one of the Labyrinth's damned. */
+[[nodiscard]] bool IsLesserSoulstone(AugmentId id);
 
 /** @brief The rune families, in the order of the Runes tab's rows (Diablo 2 names, Curtis 2026-10-21). */
 enum class RuneFamily : uint8_t {

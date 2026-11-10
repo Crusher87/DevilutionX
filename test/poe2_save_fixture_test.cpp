@@ -632,10 +632,20 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 	}
 	FreeCursor();
 	const std::string saved = Snapshot();
-	// What loading makes of the socketed items with runes: today's ids, and their runes' numbers of today (build spec
-	// step 5); the soul cores and talismans do the same as before.
+	// What loading makes of the socketed items: today's ids, and their augments' numbers of today (the runes' since
+	// build spec step 5, the soulstones' and relics' since step 6).
+	std::vector<Item *> socketed = { &player.InvBody[INVLOC_CHEST], &player.InvBody[INVLOC_HAND_LEFT], &Items[ActiveItems[1]] };
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (player.InvList[i]._iPoe2Craft.sockets > 0)
+			socketed.push_back(&player.InvList[i]);
+	}
+	for (Item &item : Stash.stashList) {
+		if (item._iPoe2Craft.sockets > 0)
+			socketed.push_back(&item);
+	}
+	ASSERT_EQ(socketed.size(), 5u);
 	std::vector<std::pair<Item *, Item>> runeItems;
-	for (Item *item : { &player.InvBody[INVLOC_CHEST], &player.InvBody[INVLOC_HAND_LEFT], &Items[ActiveItems[1]] }) {
+	for (Item *item : socketed) {
 		runeItems.emplace_back(item, *item);
 		const Poe2Craft savedCraft = item->_iPoe2Craft;
 		ConvertLegacyCraftingIds(*item);
@@ -665,8 +675,8 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 		size_t i = 0;
 		for (const AugmentId augment : augments)
 			EXPECT_EQ(item._iPoe2Craft.augments[i++], static_cast<uint8_t>(augment)) << item._iIName;
-		// Today's ids pack wide, with the marker of the runes' own numbers, so they don't move again.
-		EXPECT_EQ(PackCraftState(item._iPoe2Craft)[0], 0xC5) << item._iIName;
+		// Today's ids pack wide, with the marker of the soulstones' own numbers, so they don't move again.
+		EXPECT_EQ(PackCraftState(item._iPoe2Craft)[0], 0xC6) << item._iIName;
 	};
 	expectSockets(player.InvBody[INVLOC_CHEST], { AugmentId::LesserShael, AugmentId::LordOfThePit });
 	expectSockets(player.InvBody[INVLOC_HAND_LEFT], { AugmentId::LesserRal, AugmentId::RelicOfRakkis });
@@ -790,6 +800,100 @@ TEST_F(Poe2SaveFixtureTest, ChaosResistanceSourcesSurviveASave)
 		variants.push_back(CraftingItemVariant(MyPlayer->InvList[i]));
 	EXPECT_NE(std::find(variants.begin(), variants.end(), EssenceVariant(EssenceKind::Ruin, EssenceTier::Perfect)), variants.end());
 	EXPECT_NE(std::find(variants.begin(), variants.end(), static_cast<uint8_t>(AugmentId::VenomRune)), variants.end());
+}
+
+/**
+ * Build spec step 6: a hero saved in step 5 has its soulstones' and relics' values from before they took their own
+ * numbers (Lord of the Pit's +30 life, Stareye's accuracy), while its runes have theirs of today. Loading moves only the
+ * soulstones' share; saved again, the items take the step 6 marker and load the same.
+ */
+TEST_F(Poe2SaveFixtureTest, SoulstonesSavedBeforeTheirNumbersMoveOnLoad)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Warrior;
+	CopyUtf8(info.name, "Soulstones", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(60);
+	player._pgfxnum = 0;
+	InitCursor();
+
+	// As step 5 had them: a soulstone or relic with the numbers of the old row it came from (socketed as that row,
+	// then given the id of today, as loading in step 5 did), next to a rune with its numbers of today.
+	const auto asStepFive = [](Item item, std::initializer_list<AugmentId> augments) {
+		item = Socketed(item, augments);
+		for (size_t i = 0; i < augments.size(); i++)
+			item._iPoe2Craft.augments[i] = static_cast<uint8_t>(CurrentAugmentId(static_cast<AugmentId>(item._iPoe2Craft.augments[i])));
+		return item;
+	};
+	player.InvBody[INVLOC_CHEST] = asStepFive(Make("Full Plate", 102, ITEM_QUALITY_RARE, 70), { AugmentId::LesserRal, AugmentId::HeartCore });
+	player.InvBody[INVLOC_HEAD] = asStepFive(Make("Iron Cap", 101, ITEM_QUALITY_RARE, 60), { AugmentId::KeenCore });
+	player.InvBody[INVLOC_HAND_LEFT] = asStepFive(Make("Gelid Staff", 201, ITEM_QUALITY_RARE, 80), { AugmentId::HunterTalisman });
+	ASSERT_TRUE(AutoPlaceItemInInventory(player, asStepFive(Make("Iron Cap", 103, ITEM_QUALITY_RARE, 60), { AugmentId::MindCore })));
+	const Item stepFivePlate = player.InvBody[INVLOC_CHEST];
+	const Item stepFiveCap = player.InvBody[INVLOC_HEAD];
+	Stash = {};
+	StashTabs.reset();
+	Stash.dirty = true;
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	FreeCursor();
+
+	// What loading should make of them: today's numbers for the soulstones, and the runes as they were.
+	std::vector<Item *> socketed = { &player.InvBody[INVLOC_CHEST], &player.InvBody[INVLOC_HEAD], &player.InvBody[INVLOC_HAND_LEFT] };
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (player.InvList[i]._iPoe2Craft.sockets > 0)
+			socketed.push_back(&player.InvList[i]);
+	}
+	ASSERT_EQ(socketed.size(), 4u);
+	std::vector<std::pair<Item *, Item>> originals;
+	for (Item *item : socketed) {
+		originals.emplace_back(item, *item);
+		RestoreRareItemPowers(*item);
+		MigrateRuneNumbers(*item, item->_iPoe2Craft, /*soulstonesOnly=*/true);
+	}
+	const std::string expected = Snapshot();
+	for (auto &[item, original] : originals)
+		*item = original;
+
+	// Saved with step 5's marker.
+	PackAsBeforeSoulstoneNumbers = true;
+	ASSERT_EQ(PackCraftState(stepFivePlate._iPoe2Craft)[0], 0xC5);
+	SaveAgain();
+	PackAsBeforeSoulstoneNumbers = false;
+
+	Load();
+	const std::string loaded = Snapshot();
+	EXPECT_EQ(WithoutCraftBytes(loaded), WithoutCraftBytes(expected));
+	const Item &plate = MyPlayer->InvBody[INVLOC_CHEST];
+	const Item &cap = MyPlayer->InvBody[INVLOC_HEAD];
+	// Lord of the Pit's +30 life is gone (in body armour it gives 5% increased life now); the Lesser Ral Rune's fire
+	// resistance stays.
+	EXPECT_EQ(plate._iPLHP.raw(), stepFivePlate._iPLHP.raw() - Fixed10_6::fromInt(30).raw());
+	EXPECT_EQ(plate._iPLFR, stepFivePlate._iPLFR);
+	EXPECT_EQ(plate._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::LifePercent)], 5);
+	// Stareye's +8 in armour became +15 (+150 accuracy).
+	EXPECT_EQ(cap._iPLToHit, stepFiveCap._iPLToHit - 8 + 15);
+	for (const Item *item : std::initializer_list<const Item *> { &plate, &cap, &MyPlayer->InvBody[INVLOC_HAND_LEFT] })
+		EXPECT_EQ(PackCraftState(item->_iPoe2Craft)[0], 0xC6) << item->_iIName;
+	// The Relic of Rakkis keeps its rule in a staff.
+	UniqueRuleTotals rules {};
+	AddCraftRules(MyPlayer->InvBody[INVLOC_HAND_LEFT], rules);
+	EXPECT_EQ(rules[static_cast<size_t>(UniqueRule::DamageVsRareUnique)], 15);
+
+	// Saved again with today's marker, nothing moves again.
+	SaveAgain();
+	Load();
+	EXPECT_EQ(Snapshot(), loaded);
 }
 
 } // namespace

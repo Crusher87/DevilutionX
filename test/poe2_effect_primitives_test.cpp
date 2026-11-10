@@ -14,6 +14,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/default_attack.hpp"
+#include "poe2/defenses.hpp"
 #include "poe2/effect_primitives.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/item_stats.hpp"
@@ -481,11 +482,155 @@ TEST_F(Poe2EffectPrimitivesTest, NewEffectsReadFromTheTables)
 	         "AddedCold", "FlaskRecovery", "StunBuildup", "StunThreshold", "EnergyShieldAsStunThreshold", "ArmourToFire", "ArmourToLightning", "ArmourToCold",
 	         "LifeRecoup", "EnergyShieldRecharge", "StrikeSkillLevels", "SlamSkillLevels", "WarcrySkillLevels", "CurseSkillLevels", "HeraldSkillLevels",
 	         "PlacedSkillLevels", "BowSkillLevels", "AreaSpellSkillLevels", "ElementalSpellSkillLevels", "RequirementsToStrength", "RequirementsToDexterity",
-	         "RequirementsToIntelligence" }) {
+	         "RequirementsToIntelligence", "PoisonMagnitude", "BleedMagnitude", "ElementalAttackDamage", "AttackElementalPenetration", "MaxFireResistance",
+	         "MaxLightningResistance", "MaxColdResistance", "SkillDurationAndCooldown", "ManaPerArmour", "ArmourFromRecentHitLoss", "PreventedPhysicalRecoup" }) {
 		const std::optional<ModEffect> effect = ParseModEffectName(name);
 		ASSERT_TRUE(effect.has_value()) << name;
 		EXPECT_TRUE(ModEffectBits(*effect).any()) << name;
 	}
+}
+
+// The soulstones' primitives (build spec step 6).
+
+TEST_F(Poe2EffectPrimitivesTest, PoisonsAndBleedsGrowWithMagnitude)
+{
+	Item item {};
+	ApplyModEffect(item, ModEffect::PoisonMagnitude, 25, 0);
+	ApplyModEffect(item, ModEffect::BleedMagnitude, 40, 0);
+	EXPECT_EQ(Stat(item, Poe2ItemStat::PoisonMagnitude), 25);
+	EXPECT_EQ(Stat(item, Poe2ItemStat::BleedMagnitude), 40);
+
+	Player &player = *MyPlayer;
+	EXPECT_EQ(PoisonMagnitudePercent(player), 100);
+	EXPECT_EQ(BleedMagnitudePercent(player), 100);
+	SetGearStat(player, Poe2ItemStat::PoisonMagnitude, 25);
+	SetGearStat(player, Poe2ItemStat::BleedMagnitude, 40);
+	EXPECT_EQ(PoisonMagnitudePercent(player), 125);
+	EXPECT_EQ(BleedMagnitudePercent(player), 140);
+}
+
+TEST_F(Poe2EffectPrimitivesTest, AttacksGetElementalDamageAndPenetration)
+{
+	Item item {};
+	ApplyModEffect(item, ModEffect::ElementalAttackDamage, 40, 0);
+	ApplyModEffect(item, ModEffect::AttackElementalPenetration, 25, 0);
+	EXPECT_EQ(Stat(item, Poe2ItemStat::ElementalAttackDamage), 40);
+	EXPECT_EQ(Stat(item, Poe2ItemStat::AttackElementalPenetration), 25);
+
+	Player &player = *MyPlayer;
+	SetGearStat(player, Poe2ItemStat::ElementalAttackDamage, 40);
+	SetGearStat(player, Poe2ItemStat::AttackElementalPenetration, 25);
+	EXPECT_EQ(GearElementalAttackDamage(player), 40);
+	for (const DamageType type : { DamageType::Fire, DamageType::Lightning, DamageType::Cold })
+		EXPECT_EQ(GearAttackPenetration(player, type), 25);
+	EXPECT_EQ(GearAttackPenetration(player, DamageType::Physical), 0);
+	EXPECT_EQ(GearAttackPenetration(player, DamageType::Chaos), 0);
+	// Attack hits get past the resistance; spell hits don't.
+	player.poe2.uniqueState.lastHitBySpell = false;
+	EXPECT_EQ(HitPenetration(DamageType::Fire), 25);
+	player.poe2.uniqueState.lastHitBySpell = true;
+	EXPECT_EQ(HitPenetration(DamageType::Fire), 0);
+}
+
+TEST_F(Poe2EffectPrimitivesTest, MaximumResistancesRiseByElement)
+{
+	Player &player = *MyPlayer;
+	CalcPlrItemVals(player, false);
+	const std::array<int16_t, 3> before = player.poe2.maxResistances;
+	WearRingWith(player, ModEffect::MaxFireResistance, 2);
+	EXPECT_EQ(player.poe2.maxResistances[0], before[0] + 2);
+	EXPECT_EQ(player.poe2.maxResistances[1], before[1]);
+	EXPECT_EQ(player.poe2.maxResistances[Poe2PlayerData::ColdResistanceIndex], before[Poe2PlayerData::ColdResistanceIndex]);
+	WearRingWith(player, ModEffect::MaxColdResistance, 2);
+	EXPECT_EQ(player.poe2.maxResistances[0], before[0]);
+	EXPECT_EQ(player.poe2.maxResistances[Poe2PlayerData::ColdResistanceIndex], before[Poe2PlayerData::ColdResistanceIndex] + 2);
+	WearRingWith(player, ModEffect::MaxLightningResistance, 2);
+	EXPECT_EQ(player.poe2.maxResistances[1], before[1] + 2);
+}
+
+TEST_F(Poe2EffectPrimitivesTest, SkillDurationAndCooldownRecovery)
+{
+	Player &player = *MyPlayer;
+	EXPECT_EQ(SkillDurationPercent(player), 100);
+	EXPECT_EQ(CooldownTicks(player, 100), 100);
+	SetGearStat(player, Poe2ItemStat::SkillDurationAndCooldown, 8);
+	EXPECT_EQ(SkillDurationPercent(player), 108);
+	// 8% faster recovery: 100 ticks pass in 92.
+	EXPECT_EQ(CooldownTicks(player, 100), 92);
+	EXPECT_EQ(CooldownTicks(player, 1), 1);
+	EXPECT_EQ(CooldownTicks(player, 0), 0);
+}
+
+TEST_F(Poe2EffectPrimitivesTest, AHelmetsArmourGivesMana)
+{
+	EXPECT_EQ(ManaFromItemArmour(3, 100), 33);
+	EXPECT_EQ(ManaFromItemArmour(0, 100), 0);
+	EXPECT_EQ(ManaFromItemArmour(3, 0), 0);
+
+	Player &player = *MyPlayer;
+	Item &helm = player.InvBody[INVLOC_HEAD];
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iName == "Iron Cap") {
+			InitializeItem(helm, static_cast<_item_indexes>(i));
+			break;
+		}
+	}
+	ASSERT_EQ(helm._itype, ItemType::Helm);
+	helm._iAC = 90;
+	helm._iStatFlag = true;
+	helm._iIdentified = true;
+	CalcPlrItemVals(player, false);
+	const Fixed26_6 before = player._pMaxMana;
+	DefensePoints base;
+	DefensePoints bonus;
+	ApplyModEffect(helm, ModEffect::ManaPerArmour, 3, 0);
+	SplitItemDefense(helm, base, bonus);
+	ASSERT_GT(base.armour + bonus.armour, 0);
+	CalcPlrItemVals(player, false);
+	EXPECT_EQ((player._pMaxMana - before).whole(), (base.armour + bonus.armour) / 3);
+}
+
+TEST_F(Poe2EffectPrimitivesTest, ArmourFromLifeLostToHitsLately)
+{
+	Item item {};
+	ApplyModEffect(item, ModEffect::ArmourFromRecentHitLoss, 35, 0);
+	EXPECT_EQ(Stat(item, Poe2ItemStat::ArmourFromRecentHitLoss), 35);
+
+	Player &player = *MyPlayer;
+	player._pIAC = 100;
+	// What reaches life after the shield counts.
+	AbsorbWithEnergyShield(player, Fixed26_6::fromInt(200));
+	EXPECT_EQ(player.poe2.uniqueState.hitLossSeconds[0], Fixed26_6::fromInt(200).raw());
+	EXPECT_EQ(RecentHitLossArmour(player), 0) << "Nothing without the stat";
+	const int before = ArmourRating(player);
+	SetGearStat(player, Poe2ItemStat::ArmourFromRecentHitLoss, 35);
+	EXPECT_EQ(RecentHitLossArmour(player), 70);
+	EXPECT_EQ(ArmourRating(player), before + 70);
+	// Eight seconds on, it has gone.
+	for (int tick = 0; tick < (RecentHitLossSeconds - 1) * 20; tick++)
+		ProcessRecentHitLoss(player);
+	EXPECT_EQ(RecentHitLossArmour(player), 70);
+	for (int tick = 0; tick < 20; tick++)
+		ProcessRecentHitLoss(player);
+	EXPECT_EQ(RecentHitLossArmour(player), 0);
+}
+
+TEST_F(Poe2EffectPrimitivesTest, PhysicalDamageArmourStopsIsRecouped)
+{
+	Item item {};
+	ApplyModEffect(item, ModEffect::PreventedPhysicalRecoup, 10, 0);
+	EXPECT_EQ(Stat(item, Poe2ItemStat::PreventedPhysicalRecoup), 10);
+
+	Player &player = *MyPlayer;
+	player._pIAC = 2000;
+	const Fixed26_6 hit = Fixed26_6::fromInt(100);
+	ApplyArmour(player, hit);
+	EXPECT_EQ(player.poe2.uniqueState.recoupPool, 0);
+	SetGearStat(player, Poe2ItemStat::PreventedPhysicalRecoup, 10);
+	const Fixed26_6 taken = ApplyArmour(player, hit);
+	ASSERT_LT(taken, hit);
+	EXPECT_EQ(player.poe2.uniqueState.recoupPool, (hit.raw() - taken.raw()) / 10);
+	EXPECT_EQ(player.poe2.uniqueState.recoupTicks, RecoupSeconds * 20);
 }
 
 } // namespace

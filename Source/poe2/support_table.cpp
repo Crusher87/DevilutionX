@@ -541,7 +541,7 @@ void InflictSupportBleed(const Player &player, Monster &monster, int32_t physica
 {
 	Poe2MonsterState &state = monster.poe2;
 	constexpr int Ticks = 4 * 20;
-	const int32_t perTick = std::max<int32_t>(physical * 70 / 100 / Ticks, 1);
+	const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(physical) * 70 / 100 * BleedMagnitudePercent(player) / 100 / Ticks), 1);
 	if (state.bleedTicks == 0 || perTick >= state.bleedDamagePerTick) {
 		state.bleedDamagePerTick = perTick;
 		state.bleedSource = static_cast<int8_t>(player.getId());
@@ -1026,6 +1026,8 @@ bool InflictPoison(const Player &player, Monster &monster, int32_t total, int ti
 			maxStacks += Value(player, Hit.skill, SG::TwinFangs, 0);
 		}
 	}
+	// Plaguewrath: stronger poisons from the gear.
+	total = Percent(total, PoisonMagnitudePercent(player));
 	Poe2MonsterState &state = monster.poe2;
 	const int32_t perTick = std::max<int32_t>(total / std::max(ticks, 1), 1);
 	const bool stacked = state.poisonTicks > 0 && maxStacks > 1;

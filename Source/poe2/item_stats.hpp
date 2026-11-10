@@ -107,6 +107,19 @@ enum class Poe2ItemStat : uint8_t {
 	AttackCritChance,
 	MovementSpeed,
 	MaximumEnergyShield,
+	// The soulstones' stats (build spec step 6; ModEffect has their meanings).
+	PoisonMagnitude,
+	BleedMagnitude,
+	ElementalAttackDamage,
+	AttackElementalPenetration,
+	MaxFireResistance,
+	MaxLightningResistance,
+	MaxColdResistance,
+	SkillDurationAndCooldown,
+	/** On the item itself: points of its armour for each point of maximum mana it gives (CalcPlrItemVals reads it per item). */
+	ManaPerArmour,
+	ArmourFromRecentHitLoss,
+	PreventedPhysicalRecoup,
 	Count,
 };
 

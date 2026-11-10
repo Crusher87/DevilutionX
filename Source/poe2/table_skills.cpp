@@ -30,6 +30,7 @@
 #include "poe2/attack_speed.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/monster_armour.hpp"
@@ -1270,7 +1271,8 @@ uint8_t *CurseTicks(Poe2MonsterState &state, TableCurse curse)
 void ApplyCurse(const Player &player, Monster &monster, const TableSkillData &data)
 {
 	Poe2MonsterState &state = monster.poe2;
-	const uint8_t ticks = static_cast<uint8_t>(std::min<int>(data.duration, 255));
+	// Black Jade: longer curses from the gear.
+	const uint8_t ticks = static_cast<uint8_t>(data.duration > 0 ? std::clamp<int>(data.duration * SkillDurationPercent(player) / 100, 1, 255) : 0);
 	if (static_cast<size_t>(data.curse) < state.curseFullTicks.size())
 		state.curseFullTicks[static_cast<size_t>(data.curse)] = ticks;
 	// Cast by hand, the curse has its full strength.

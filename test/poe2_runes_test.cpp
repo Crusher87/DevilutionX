@@ -32,6 +32,7 @@
 #include "quests.h"
 #include "spells.h"
 #include "storm/storm_net.hpp"
+#include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 #include "utils/str_cat.hpp"
 
@@ -189,8 +190,8 @@ TEST_F(Poe2RunesTest, StrengthsHaveTheirLevelsAndDrop)
 		EXPECT_TRUE(legend.bossOnly) << legend.name;
 		EXPECT_EQ(legend.dropAct, 3) << legend.name;
 	}
-	// The soulstones wait for step 6.
-	EXPECT_FALSE(GetAugment(AugmentId::ButcherSoulstone).drops);
+	// The soulstones have theirs since step 6.
+	EXPECT_TRUE(GetAugment(AugmentId::ButcherSoulstone).drops);
 }
 
 TEST_F(Poe2RunesTest, ARuneDoesWhatItsKindOfItemSays)
@@ -491,8 +492,8 @@ TEST_F(Poe2RunesTest, AnItemSavedBeforeTheRunesNumbersGetsThem)
 	EXPECT_EQ(loaded._iFMaxDam, now._iFMaxDam);
 	EXPECT_EQ(loaded._iPLToHit, now._iPLToHit + 3);
 	// Nothing moves for an id whose numbers didn't change.
-	Item soul = Socketed(MakeItem("Full Plate"), 1, { AugmentId::LordOfThePit });
-	EXPECT_FALSE(MigrateRuneNumbers(soul, soul._iPoe2Craft));
+	Item plain = Socketed(MakeItem("Full Plate"), 1, { AugmentId::Ral });
+	EXPECT_FALSE(MigrateRuneNumbers(plain, plain._iPoe2Craft));
 }
 
 TEST_F(Poe2RunesTest, TheGearStatsReachTheirPrimitives)
@@ -516,6 +517,200 @@ TEST_F(Poe2RunesTest, TheGearStatsReachTheirPrimitives)
 	EXPECT_EQ(IgniteMagnitudePercent(player), 100);
 	EXPECT_EQ(GearMovementSpeedPercent(player), 0);
 	gbIsPoe2 = true;
+}
+
+TEST_F(Poe2RunesTest, SoulstonesAndRelicsHaveTheirLevelsAndDrop)
+{
+	LoadMonsterData();
+	ASSERT_EQ(SoulstonesAndRelics().size(), 34u);
+	for (const AugmentId id : SoulstonesAndRelics()) {
+		const Augment &augment = GetAugment(id);
+		EXPECT_TRUE(augment.drops) << augment.name;
+		EXPECT_FALSE(augment.bossOnly) << augment.name;
+		EXPECT_GT(augment.dropWeight, 0) << augment.name;
+		EXPECT_EQ(augment.level, augment.dropLevel) << augment.name;
+		int expected = 30;
+		if (IsLesserSoulstone(id))
+			expected = 50;
+		else if (augment.tier == HoradricTier)
+			expected = 60;
+		else if (augment.tier == RelicTier)
+			expected = 45;
+		EXPECT_EQ(augment.level, expected) << augment.name;
+		EXPECT_FALSE(augment.weaponText.empty() && augment.staffText.empty() && augment.armourText.empty()) << augment.name;
+		// Every namesake is a unique monster of the game, and its soulstone is the one it drops.
+		if (augment.namesake.empty()) {
+			EXPECT_TRUE(augment.tier == RelicTier || augment.tier == HoradricTier) << augment.name;
+			continue;
+		}
+		const bool found = std::any_of(UniqueMonstersData.begin(), UniqueMonstersData.end(), [&](const UniqueMonsterData &unique) { return unique.mName == augment.namesake; });
+		EXPECT_TRUE(found) << augment.namesake;
+		EXPECT_EQ(NamesakeSoulstone(augment.namesake), id) << augment.namesake;
+	}
+	EXPECT_EQ(NamesakeSoulstone("Skeleton King"), AugmentId::LeoricSoulstone);
+	EXPECT_EQ(NamesakeSoulstone("Red Vex"), AugmentId::None);
+	EXPECT_EQ(NamesakeSoulstone(""), AugmentId::None);
+	// The legacy rows they replaced name no one.
+	EXPECT_EQ(NamesakeSoulstone("Soul Core of Heart"), AugmentId::None);
+
+	const auto counts = [](int areaLevel) {
+		std::map<AugmentId, int> seen;
+		for (uint32_t roll = 0; roll < 20000; roll++)
+			seen[RollAugmentDrop(Mix(roll + 1), areaLevel, PastStoryAct)]++;
+		return seen;
+	};
+	const std::map<AugmentId, int> at29 = counts(29);
+	const std::map<AugmentId, int> at30 = counts(30);
+	const std::map<AugmentId, int> at45 = counts(45);
+	const std::map<AugmentId, int> at50 = counts(50);
+	const std::map<AugmentId, int> at60 = counts(60);
+	EXPECT_EQ(at29.count(AugmentId::Plaguewrath), 0u);
+	EXPECT_GT(at30.count(AugmentId::Plaguewrath), 0u);
+	EXPECT_GT(at30.count(AugmentId::LordOfThePit), 0u);
+	EXPECT_EQ(at30.count(AugmentId::RelicOfRakkis), 0u);
+	EXPECT_GT(at45.count(AugmentId::RelicOfRakkis), 0u);
+	EXPECT_EQ(at45.count(AugmentId::ButcherSoulstone), 0u);
+	EXPECT_GT(at50.count(AugmentId::ButcherSoulstone), 0u);
+	EXPECT_EQ(at50.count(AugmentId::TalRashasSoulstone), 0u);
+	EXPECT_GT(at60.count(AugmentId::TalRashasSoulstone), 0u);
+	// The legacy rows never drop.
+	EXPECT_EQ(at60.count(AugmentId::HeartCore), 0u);
+	EXPECT_EQ(at60.count(AugmentId::HunterTalisman), 0u);
+	// Runes stay far commoner than any soulstone.
+	EXPECT_GT(at60.at(AugmentId::LesserRal), at60.at(AugmentId::Plaguewrath));
+}
+
+TEST_F(Poe2RunesTest, SoulstonesGoWhereTheirLinesSay)
+{
+	const Item axe = MakeItem("Splitting Greataxe");
+	const Item staff = MakeItem("Gelid Staff");
+	const Item plate = MakeItem("Full Plate");
+	const Item cap = MakeItem("Iron Cap");
+	const Item shield = MakeItem("Wooden Tower Shield");
+	ASSERT_EQ(AugmentKindOf(cap), AugmentKind::Armour);
+	ASSERT_EQ(AugmentKindOf(shield), AugmentKind::Armour);
+
+	// The Butcher's goes in martial weapons only; Leoric's in any weapon.
+	const Item axeButcher = Socketed(axe, 1, { AugmentId::ButcherSoulstone });
+	EXPECT_EQ(Stat(axeButcher, Poe2ItemStat::StrikeSkillLevels), 1);
+	EXPECT_EQ(AugmentSocketText(axeButcher)[0], "Soulstone of the Butcher: +1 to level of all strike skills");
+	Item staffSocket = Socketed(staff, 1, {});
+	EXPECT_FALSE(Insert(staffSocket, AugmentId::ButcherSoulstone));
+	EXPECT_FALSE(Insert(staffSocket, AugmentId::StareyeTheWitch));
+	EXPECT_TRUE(Insert(staffSocket, AugmentId::LeoricSoulstone));
+	EXPECT_EQ(Stat(staffSocket, Poe2ItemStat::MinionSkillLevels), 1);
+
+	// The standard soulstones each go in one kind of armour.
+	Item plateSocket = Socketed(plate, 1, {});
+	EXPECT_FALSE(Insert(plateSocket, AugmentId::GharbadSoulstone));
+	EXPECT_FALSE(Insert(plateSocket, AugmentId::SnotspillSoulstone));
+	EXPECT_FALSE(Insert(plateSocket, AugmentId::TalRashasSoulstone));
+	EXPECT_TRUE(Insert(plateSocket, AugmentId::ZharSoulstone));
+	EXPECT_EQ(Stat(plateSocket, Poe2ItemStat::ArmourToFire), 40);
+	Item capSocket = Socketed(cap, 1, {});
+	EXPECT_FALSE(Insert(capSocket, AugmentId::ZharSoulstone));
+	EXPECT_FALSE(Insert(capSocket, AugmentId::LordOfThePit));
+	EXPECT_TRUE(Insert(capSocket, AugmentId::GharbadSoulstone));
+	EXPECT_EQ(Stat(capSocket, Poe2ItemStat::ArmourToCold), 40);
+	Item shieldSocket = Socketed(shield, 1, {});
+	EXPECT_FALSE(Insert(shieldSocket, AugmentId::GharbadSoulstone));
+	EXPECT_TRUE(Insert(shieldSocket, AugmentId::SnotspillSoulstone));
+	EXPECT_EQ(Stat(shieldSocket, Poe2ItemStat::ArmourToLightning), 40);
+
+	// A greater soulstone with two lines does one thing in weapons and another in armour.
+	const Item axeWrath = Socketed(axe, 1, { AugmentId::WrathfireTheDoomed });
+	EXPECT_EQ(Stat(axeWrath, Poe2ItemStat::IgniteMagnitude), 40);
+	EXPECT_EQ(Stat(axeWrath, Poe2ItemStat::MaxFireResistance), 0);
+	const Item plateWrath = Socketed(plate, 1, { AugmentId::WrathfireTheDoomed });
+	EXPECT_EQ(Stat(plateWrath, Poe2ItemStat::MaxFireResistance), 2);
+	EXPECT_EQ(Stat(plateWrath, Poe2ItemStat::IgniteMagnitude), 0);
+	EXPECT_EQ(Stat(Socketed(plate, 1, { AugmentId::LordOfThePit }), Poe2ItemStat::LifePercent), 5);
+
+	// Relics: Rakkis's goes in weapons, Akarat's in armour.
+	Item plateRelic = Socketed(plate, 1, {});
+	EXPECT_FALSE(Insert(plateRelic, AugmentId::RelicOfRakkis));
+	EXPECT_TRUE(Insert(plateRelic, AugmentId::RelicOfAkarat));
+	Item axeRelic = Socketed(axe, 1, {});
+	EXPECT_FALSE(Insert(axeRelic, AugmentId::RelicOfAkarat));
+	EXPECT_TRUE(Insert(axeRelic, AugmentId::RelicOfRakkis));
+
+	// The item's own tooltip names where each line works.
+	const auto text = [](AugmentId id) { return CraftingItemText(Rune(id)); };
+	const auto has = [](const std::vector<std::string> &lines, std::string_view line) { return std::find(lines.begin(), lines.end(), line) != lines.end(); };
+	EXPECT_TRUE(has(text(AugmentId::LeoricSoulstone), "Any weapon: +1 to level of all minion skills"));
+	EXPECT_TRUE(has(text(AugmentId::LeoricSoulstone), "Kulle's work: it holds one of the Labyrinth's damned"));
+	EXPECT_TRUE(has(text(AugmentId::ButcherSoulstone), "Weapon: +1 to level of all strike skills"));
+	EXPECT_TRUE(has(text(AugmentId::ZharSoulstone), "Body armour: 40% of armour applies to fire damage"));
+	EXPECT_TRUE(has(text(AugmentId::SnotspillSoulstone), "Shield: 40% of armour applies to lightning damage"));
+	EXPECT_TRUE(has(text(AugmentId::GharbadSoulstone), "Helmet: 40% of armour applies to cold damage"));
+	EXPECT_TRUE(has(text(AugmentId::Plaguewrath), "Armour: +13% to cold resistance"));
+	EXPECT_FALSE(has(text(AugmentId::Plaguewrath), "Kulle's work: it holds one of the Labyrinth's damned"));
+	EXPECT_TRUE(has(text(AugmentId::TalRashasSoulstone), "Requires level 60"));
+}
+
+TEST_F(Poe2RunesTest, AnItemTakesOneRelicAndOneHoradricSoulstone)
+{
+	// Two relics in a two-handed weapon's two sockets: no.
+	Item axe = Socketed(MakeItem("Splitting Greataxe"), 2, { AugmentId::RelicOfRakkis });
+	EXPECT_FALSE(Insert(axe, AugmentId::RelicOfRakkis));
+	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 1), AugmentId::None);
+	EXPECT_TRUE(Insert(axe, AugmentId::GutshankTheQuick));
+	// A relic with a Horadric soulstone, but not two Horadric soulstones.
+	Item plate = Socketed(MakeItem("Full Plate"), 2, { AugmentId::JeredCainsSoulstone });
+	EXPECT_FALSE(Insert(plate, AugmentId::JeredCainsSoulstone));
+	EXPECT_TRUE(Insert(plate, AugmentId::RelicOfAkarat));
+	EXPECT_EQ(Stat(plate, Poe2ItemStat::PreventedPhysicalRecoup), 10);
+	// Two greater soulstones are fine.
+	const Item plain = MakeItem("Full Plate");
+	const Item other = Socketed(plain, 2, { AugmentId::Plaguewrath, AugmentId::Plaguewrath });
+	EXPECT_EQ(other._iPLMR - plain._iPLMR, 26);
+	// A Horadric soulstone needs level 60.
+	MyPlayer->setCharacterLevel(59);
+	Item cap = Socketed(MakeItem("Iron Cap"), 1, {});
+	EXPECT_FALSE(Insert(cap, AugmentId::ZoltunKullesSoulstone));
+	MyPlayer->setCharacterLevel(60);
+	EXPECT_TRUE(Insert(cap, AugmentId::ZoltunKullesSoulstone));
+}
+
+TEST_F(Poe2RunesTest, ASocketedSoulstoneThatNoLongerFitsDoesNothing)
+{
+	// A Soul Core of Heart in a helmet became a Lord of the Pit soulstone, whose armour line works in body armour only.
+	const Item bare = MakeItem("Iron Cap");
+	Item cap = Socketed(bare, 1, { AugmentId::HeartCore });
+	cap._iPoe2Craft.augments[0] = static_cast<uint8_t>(AugmentId::LordOfThePit);
+	const Item rebuilt = Rebuilt(cap);
+	EXPECT_EQ(rebuilt._iPLHP.raw(), bare._iPLHP.raw());
+	EXPECT_EQ(Stat(rebuilt, Poe2ItemStat::LifePercent), 0);
+	const std::vector<SocketLine> lines = AugmentSocketLines(rebuilt);
+	ASSERT_EQ(lines.size(), 1u);
+	EXPECT_EQ(lines[0].text, "Greater Soulstone of the Lord of the Pit: does nothing here");
+	EXPECT_TRUE(lines[0].inactive);
+}
+
+TEST_F(Poe2RunesTest, ASoulstoneSavedBeforeItsNumbersGetsThem)
+{
+	EXPECT_EQ(AugmentBeforeSoulstoneNumbers(AugmentId::LordOfThePit), AugmentId::HeartCore);
+	EXPECT_EQ(AugmentBeforeSoulstoneNumbers(AugmentId::RelicOfRakkis), AugmentId::HunterTalisman);
+	EXPECT_EQ(AugmentBeforeSoulstoneNumbers(AugmentId::LesserRal), AugmentId::LesserRal);
+	EXPECT_EQ(AugmentBeforeSoulstoneNumbers(AugmentId::Plaguewrath), AugmentId::Plaguewrath);
+
+	// Saved in step 5, a Lord of the Pit soulstone had the Soul Core of Heart's +30 life; the Ral beside it doesn't move.
+	const Item bare = MakeItem("Full Plate");
+	const Item then = Socketed(bare, 2, { AugmentId::LesserRal, AugmentId::HeartCore });
+	Item loaded = then;
+	loaded._iPoe2Craft.augments[1] = static_cast<uint8_t>(AugmentId::LordOfThePit);
+	loaded._iPLToHit += 3; // something else changed it after it dropped, which stays
+	const Poe2Craft saved = loaded._iPoe2Craft;
+	ASSERT_TRUE(MigrateRuneNumbers(loaded, saved, /*soulstonesOnly=*/true));
+	const Item now = Rebuilt(loaded);
+	EXPECT_EQ(Stat(now, Poe2ItemStat::LifePercent), 5);
+	EXPECT_EQ(loaded._iPLHP.raw(), now._iPLHP.raw());
+	EXPECT_NE(loaded._iPLHP.raw(), then._iPLHP.raw());
+	EXPECT_EQ(loaded._iPLFR, now._iPLFR);
+	EXPECT_EQ(loaded._iPLToHit, now._iPLToHit + 3);
+	// Runes alone don't move then.
+	Item runes = Socketed(MakeItem("Full Plate"), 1, { AugmentId::LesserRal });
+	EXPECT_FALSE(MigrateRuneNumbers(runes, runes._iPoe2Craft, /*soulstonesOnly=*/true));
 }
 
 } // namespace

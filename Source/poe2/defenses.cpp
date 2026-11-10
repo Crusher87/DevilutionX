@@ -13,6 +13,7 @@
 #include "poe2/area_levels.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/charms.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/modifiers.hpp"
@@ -187,8 +188,10 @@ int ArmourRating(const Player &player, bool withSpiritBuffs)
 {
 	// Barkskin adds armour from energy shield lost, up to the gear's; Defiance Banner gives more.
 	const int armour = std::max(player._pIAC + player._pIBonusAC, 0) + (withSpiritBuffs ? SpiritBuffArmour(player) : 0);
+	// Tal Rasha's Horadric soulstone: armour from the life lost to hits lately, on top.
 	return armour * (100 + FlaskArmourPercent(player)) / 100 * UniqueDefencePercent(player) / 100 * (100 + (withSpiritBuffs ? BannerDefencePercent(player) : 0)) / 100
-	    * (100 + (withSpiritBuffs ? ScavengedArmourPercent(player) : 0)) / 100;
+	    * (100 + (withSpiritBuffs ? ScavengedArmourPercent(player) : 0)) / 100
+	    + RecentHitLossArmour(player);
 }
 
 int EvasionRating(const Player &player, bool withSpiritBuffs)
@@ -219,8 +222,9 @@ Fixed26_6 ApplyArmour(const Player &player, Fixed26_6 damage)
 		return damage;
 	const int percent = ArmourReductionPercent(ArmourRating(player), damage);
 	const Fixed26_6 stopped = Fixed26_6::fromRaw(damage.raw() * percent / 100);
-	// Iron Ward stores what armour stops.
+	// Iron Ward stores what armour stops, and Jered Cain's Horadric soulstone recoups some of it.
 	OnSpiritArmourStopped(player, stopped);
+	NotePreventedPhysical(player, stopped.raw());
 	return Fixed26_6::fromRaw(damage.raw() - stopped.raw());
 }
 
@@ -251,8 +255,10 @@ ShieldLeftover AbsorbHitWithEnergyShield(Player &player, Fixed26_6 damage, Fixed
 	// Every hit that lands comes through here: Wind Dancer, Ghost Dance and Barkskin. They see the damage the shield
 	// stopped; what feeds on the shield lost sees the shield lost.
 	OnSpiritHitTaken(player, Fixed26_6::fromRaw(stopped));
-	if (lost <= 0)
+	if (lost <= 0) {
+		NoteHitLifeLoss(player, static_cast<int64_t>(damage.raw()) + chaos.raw());
 		return { damage, chaos };
+	}
 	data.energyShield -= lost;
 	TelemetryShieldAbsorbed(player, Fixed26_6::fromRaw(lost));
 	OnMetaShieldLost(player, Fixed26_6::fromRaw(lost));
@@ -264,6 +270,7 @@ ShieldLeftover AbsorbHitWithEnergyShield(Player &player, Fixed26_6 damage, Fixed
 	}
 	const ShieldLeftover left { Fixed26_6::fromRaw(damage.raw() - otherLost), Fixed26_6::fromRaw(std::max<int32_t>(chaos.raw() - chaosStopped, 0)) };
 	TelemetryHitStep(true, "after energy shield", left.damage.raw() + left.chaos.raw());
+	NoteHitLifeLoss(player, static_cast<int64_t>(left.damage.raw()) + left.chaos.raw());
 	return left;
 }
 

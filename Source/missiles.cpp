@@ -51,6 +51,7 @@
 #include "portal.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/hit_trace.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/shrines.hpp"
@@ -504,7 +505,12 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		dam >>= 2;
 	// An elemental arrow meets its element's resistance here: its hit is split into packets as if it were physical.
 	if (isAttack && gbIsPoe2) {
-		const int resistance = MonsterHitResistance(monster, damageType, SupportHitPenetration(damageType));
+		// The gear's elemental attack damage and penetration (Dreadjudge, Blackskull) reach an elemental arrow's element.
+		if (const int elemental = damageType != DamageType::Physical ? GearElementalAttackDamage(player) : 0; elemental != 0) {
+			const int64_t increased = std::max(100 + player._pIBonusDam, 1);
+			dam = static_cast<int>(static_cast<int64_t>(dam) * std::max<int64_t>(increased + elemental, 0) / increased);
+		}
+		const int resistance = MonsterHitResistance(monster, damageType, SupportHitPenetration(damageType) + GearAttackPenetration(player, damageType));
 		dam = static_cast<int>(static_cast<int64_t>(dam) * (100 - resistance) / 100);
 		TelemetryHitStep(false, "monster resistance after penetration", resistance, true);
 	}

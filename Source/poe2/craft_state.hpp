@@ -52,7 +52,8 @@ constexpr uint8_t NarrowUnrevealedModFamily = 127;
  * marker byte): one byte for each of the two sockets, and no third socket or catalyst, which only jewellery and
  * waystones have, and they have no sockets. Ids keep below 128 there: the top bit is kept for a Zod Rune. Since the
  * runes took their own numbers (build spec step 5) an item with anything in a socket saves wide, with a marker of its
- * own (SavedBeforeRuneNumbers).
+ * own (SavedBeforeRuneNumbers), and since the soulstones and relics took theirs (step 6) with another
+ * (SavedBeforeSoulstoneNumbers).
  */
 constexpr uint8_t NarrowMaxAugmentId = 15;
 
@@ -64,6 +65,13 @@ Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes)
  * values hold what its augments did then (MigrateRuneNumbers).
  */
 [[nodiscard]] bool SavedBeforeRuneNumbers(const std::array<uint8_t, CraftStateSaveSize> &bytes);
+/**
+ * @brief Whether crafting state was saved after the runes took their own numbers but before the soulstones and relics
+ * did (build spec step 6): its runes' values are today's, its soulstones' and relics' from before (MigrateRuneNumbers).
+ */
+[[nodiscard]] bool SavedBeforeSoulstoneNumbers(const std::array<uint8_t, CraftStateSaveSize> &bytes);
+/** @brief Only tests set it, to write a save of build spec step 5: the wide layout then packs with step 5's marker. */
+extern DVL_API_FOR_TEST bool PackAsBeforeSoulstoneNumbers;
 
 /** @brief Bytes the crafting extension takes in an item save: a marker, Poe2Craft::extension and a checksum. */
 constexpr size_t CraftExtensionSaveSize = 8;

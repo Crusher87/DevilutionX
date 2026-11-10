@@ -784,9 +784,11 @@ void RestoreRareItemPowers(Item &item);
  * @brief POE2 Mashup: an item saved before the runes took their own numbers (build spec step 5) keeps what else changed
  * it, and its socketed augments' share of its values becomes what they do now.
  * @param saved The crafting state as saved, before legacy ids converted.
+ * @param soulstonesOnly A save from step 5, whose runes had their numbers of today but whose soulstones and relics
+ * still had their old ones (build spec step 6, AugmentBeforeSoulstoneNumbers); otherwise AugmentBeforeRuneNumbers.
  * @return Whether its values changed.
  */
-bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved);
+bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved, bool soulstonesOnly = false);
 
 /**
  * @brief POE2 Mashup: makes one of the bundle's uniques (poe2/uniques.hpp) on its base, the way a drop of it is made.

@@ -83,6 +83,7 @@
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/default_attack.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/desecration.hpp"
@@ -3198,7 +3199,7 @@ void RestoreRareItemPowers(Item &item)
 	SetRndSeed(currentSeed);
 }
 
-bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved)
+bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved, bool soulstonesOnly)
 {
 	if (item.isEmpty() || (item.dwBuff & CF_POE2) == 0 || item._iPoe2Craft.sockets == 0 || Players.empty())
 		return false;
@@ -3206,7 +3207,8 @@ bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved)
 	Poe2Craft before = item._iPoe2Craft;
 	bool differs = false;
 	for (size_t i = 0; i < before.augments.size() && i < before.sockets; i++) {
-		const auto old = static_cast<uint8_t>(AugmentBeforeRuneNumbers(static_cast<AugmentId>(saved.augments[i])));
+		const AugmentId id = static_cast<AugmentId>(saved.augments[i]);
+		const auto old = static_cast<uint8_t>(soulstonesOnly ? AugmentBeforeSoulstoneNumbers(id) : AugmentBeforeRuneNumbers(id));
 		differs = differs || old != before.augments[i];
 		before.augments[i] = old;
 	}
@@ -3648,7 +3650,9 @@ void CalcPlrResistances(Player &player, ItemSpecialEffect iflgs, int fire, int l
 		Poe2PlayerData &data = player.poe2;
 		const int maxElemental = MaxResistance + data.rule(UniqueRule::MaxElementalResistance) + BannerMaxResistance(player);
 		// Diablo's magic resistance stands for POE2's cold (Poe2ColdResistance), at ColdResistanceIndex.
-		data.maxResistances = { static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental), static_cast<int16_t>(maxElemental + data.rule(UniqueRule::MaxColdResistance)) };
+		// The greater soulstones add to one element's maximum (build spec step 6).
+		data.maxResistances = { static_cast<int16_t>(maxElemental + GearMaxResistance(player, DamageType::Fire)), static_cast<int16_t>(maxElemental + GearMaxResistance(player, DamageType::Lightning)),
+			static_cast<int16_t>(maxElemental + data.rule(UniqueRule::MaxColdResistance) + GearMaxResistance(player, DamageType::Cold)) };
 		std::array<int, 3> uncapped { fire - penalty, lightning - penalty, magic - penalty };
 		if (const int share = data.rule(UniqueRule::ResistanceShare); share > 0) {
 			// The highest resistance that isn't over its cap also counts towards the lowest.
@@ -4107,6 +4111,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 			SplitItemDefense(item, base, bonus);
 			evasion += base.evasion + bonus.evasion;
 			energyShield += base.energyShield + bonus.energyShield;
+			// Zoltun Kulle's Horadric soulstone: mana for the helmet's own armour.
+			mana += Fixed26_6::fromInt(ManaFromItemArmour(item._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::ManaPerArmour)], base.armour + bonus.armour));
 			ac -= item._iAC - base.armour;
 			const bool counted = ItemModifiersCount(item);
 			bonusAc += bonus.armour - (counted ? GetBonusAC(item) : 0);
@@ -5465,6 +5471,15 @@ void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg)
 		const std::optional<_item_indexes> gem = PickPoe2Weighted(origin.baseLevel, [](const ItemData &data) { return data.iMiscId == IMISC_UNCUT_SKILL; });
 		if (gem)
 			DropPoe2LootItem(origin, position, sendmsg, LootCategory::Gem, std::nullopt, gem);
+	}
+	// A Labyrinth unique now and then drops its own soulstone, once it's near the soulstone's level (build spec step 6).
+	if (monster.isUnique()) {
+		const AugmentId soulstone = NamesakeSoulstone(UniqueMonstersData[static_cast<size_t>(monster.uniqueType)].mName);
+		if (soulstone != AugmentId::None && GetAugment(soulstone).dropLevel <= origin.poe2ItemLevel + BossUniqueLevelSlack && LootRandom(100) < NamesakeSoulstonePercent) {
+			const std::optional<_item_indexes> base = PickPoe2Weighted(origin.baseLevel, [](const ItemData &data) { return data.iMiscId == IMISC_AUGMENT; });
+			if (base)
+				DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency, std::nullopt, base, soulstone);
+		}
 	}
 	if (origin.source != LootSource::Boss)
 		return;

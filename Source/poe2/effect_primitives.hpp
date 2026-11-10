@@ -79,4 +79,31 @@ void ProcessRecoup(Player &player);
 /** @brief The gear's increased movement speed, in percent. */
 [[nodiscard]] int GearMovementSpeedPercent(const Player &player);
 
+// The soulstones' primitives (build spec step 6). Each is 0 (or 100 for a percent of a whole) outside POE2.
+/** @brief How long the window of ArmourFromRecentHitLoss is: the life lost to hits in the last 8 seconds. */
+constexpr int RecentHitLossSeconds = 8;
+/** @brief Percent of a poison's or a bleed's damage the hero's gear gives it: 100 plus the gear's increased magnitude. */
+[[nodiscard]] int PoisonMagnitudePercent(const Player &player);
+[[nodiscard]] int BleedMagnitudePercent(const Player &player);
+/** @brief Increased fire, lightning and cold damage of the hero's attacks from gear, in percent. */
+[[nodiscard]] int GearElementalAttackDamage(const Player &player);
+/** @brief Percent of the monster's resistance to the element (fire, lightning or cold) the hero's attack hits get past. */
+[[nodiscard]] int GearAttackPenetration(const Player &player, DamageType type);
+/** @brief What the gear adds to the maximum resistance of the element: fire, lightning or cold (magic). */
+[[nodiscard]] int GearMaxResistance(const Player &player, DamageType type);
+/** @brief Percent of a cast curse's duration the hero's gear gives it: 100 plus the gear's increased skill duration. */
+[[nodiscard]] int SkillDurationPercent(const Player &player);
+/** @brief A skill's cooldown in game ticks after the gear's faster cooldown recovery; at least 1 when it was. */
+[[nodiscard]] int CooldownTicks(const Player &player, int ticks);
+/** @brief The maximum mana an item gives for its own armour: one point per ManaPerArmour points; 0 without the stat. */
+[[nodiscard]] int ManaFromItemArmour(int manaPerArmour, int armour);
+/** @brief Notes life lost to a hit, for ArmourFromRecentHitLoss. */
+void NoteHitLifeLoss(const Player &player, int64_t lifeLostRaw);
+/** @brief Once per game tick: the life lost to hits more than RecentHitLossSeconds ago drops out (not saved). */
+void ProcessRecentHitLoss(Player &player);
+/** @brief The armour the gear gives from the life lost to hits in the last RecentHitLossSeconds. */
+[[nodiscard]] int RecentHitLossArmour(const Player &player);
+/** @brief Physical damage the hero's armour stopped: the gear's share of it is recouped as life (local hero only). */
+void NotePreventedPhysical(const Player &player, int64_t stoppedRaw);
+
 } // namespace devilution

@@ -250,7 +250,7 @@ SpiritUseResult UseGrimFeast(Player &player)
 	}
 	if (raised == 0)
 		return SpiritUseResult::Empty;
-	state.grimFeastCooldown = GrimFeastCooldownTicks;
+	state.grimFeastCooldown = static_cast<decltype(state.grimFeastCooldown)>(CooldownTicks(player, GrimFeastCooldownTicks));
 	AddVisualEffect(player.position.tile, MissileGraphicID::BloodStarRedExplosion);
 	TelemetryLog("spirit", StrCat("Grim Feast raised ", raised, " skeletons"));
 	return SpiritUseResult::Used;
@@ -587,7 +587,7 @@ void ProcessSpiritUses(Player &player)
 		const Poe2PlayerData &data = player.poe2;
 		if (--state.convalescenceTicks == 0 || data.energyShield >= data.maxEnergyShield * 64) {
 			state.convalescenceTicks = 0;
-			state.convalescenceCooldown = ConvalescenceCooldownTicks;
+			state.convalescenceCooldown = static_cast<decltype(state.convalescenceCooldown)>(CooldownTicks(player, ConvalescenceCooldownTicks));
 		}
 	} else if (state.convalescenceCooldown > 0) {
 		state.convalescenceCooldown--;

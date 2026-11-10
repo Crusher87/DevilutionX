@@ -665,9 +665,13 @@ bool InsertAugment(const Player &player, Item &item, uint8_t variant)
 		if (i == slot)
 			continue;
 		const Augment &other = GetAugment(SocketAugment(craft, i));
-		// One talisman per item.
-		if (augment.tier == 3 && other.tier == 3) {
-			Fizzle(_("An item takes only one talisman."));
+		// One relic and one Horadric soulstone per item (build spec step 6).
+		if (augment.tier == RelicTier && other.tier == RelicTier) {
+			Fizzle(_("An item takes only one relic."));
+			return false;
+		}
+		if (augment.tier == HoradricTier && other.tier == HoradricTier) {
+			Fizzle(_("An item takes only one Horadric soulstone."));
 			return false;
 		}
 		// One "+ to level of skills" augment per weapon (build spec step 5).

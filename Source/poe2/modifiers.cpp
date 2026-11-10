@@ -560,6 +560,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::FlaskRecovery:
 	case ModEffect::LifeRegenPercent:
 	case ModEffect::ManaCostAsLife:
+	case ModEffect::PreventedPhysicalRecoup:
 		return Life;
 	case ModEffect::Mana:
 	case ModEffect::ManaRegeneration:
@@ -570,6 +571,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::ManaOnKill:
 	case ModEffect::ManaLeech:
 	case ModEffect::ManaPercentOnKill:
+	case ModEffect::ManaPerArmour:
 		return Mana;
 	case ModEffect::FlatDefense:
 	case ModEffect::FlatArmour:
@@ -588,6 +590,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::ArmourToCold:
 	case ModEffect::EnergyShieldRecharge:
 	case ModEffect::MaximumEnergyShield:
+	case ModEffect::ArmourFromRecentHitLoss:
 		return Defence;
 	case ModEffect::LifeAndDefensePercent:
 		return Life | Defence;
@@ -619,6 +622,10 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::FreezeBuildup:
 	case ModEffect::ShockMagnitude:
 	case ModEffect::AttackCritChance:
+	case ModEffect::PoisonMagnitude:
+	case ModEffect::BleedMagnitude:
+	case ModEffect::ElementalAttackDamage:
+	case ModEffect::AttackElementalPenetration:
 		return Damage;
 	case ModEffect::SpellDamageAndMana:
 		return Damage | Mana;
@@ -638,12 +645,16 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::MinionResistances:
 	case ModEffect::ChaosResistance:
 	case ModEffect::MaxChaosResistance:
+	case ModEffect::MaxFireResistance:
+	case ModEffect::MaxLightningResistance:
+	case ModEffect::MaxColdResistance:
 		return Resistance;
 	case ModEffect::AllResistancesAndLife:
 		return Resistance | Life;
 	case ModEffect::AttackSpeed:
 	case ModEffect::CastSpeed:
 	case ModEffect::MovementSpeed:
+	case ModEffect::SkillDurationAndCooldown:
 		return Speed;
 	case ModEffect::MeleeSkillLevels:
 	case ModEffect::ProjectileSkillLevels:
@@ -1256,6 +1267,39 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 		item._iPLLR = static_cast<int16_t>(item._iPLLR + v0);
 		item._iPLMR = static_cast<int16_t>(item._iPLMR + v0);
 		item._iPLHP += Fixed10_6::fromInt(v1);
+		break;
+	case ModEffect::PoisonMagnitude:
+		AddPoe2Stat(item, Poe2ItemStat::PoisonMagnitude, v0);
+		break;
+	case ModEffect::BleedMagnitude:
+		AddPoe2Stat(item, Poe2ItemStat::BleedMagnitude, v0);
+		break;
+	case ModEffect::ElementalAttackDamage:
+		AddPoe2Stat(item, Poe2ItemStat::ElementalAttackDamage, v0);
+		break;
+	case ModEffect::AttackElementalPenetration:
+		AddPoe2Stat(item, Poe2ItemStat::AttackElementalPenetration, v0);
+		break;
+	case ModEffect::MaxFireResistance:
+		AddPoe2Stat(item, Poe2ItemStat::MaxFireResistance, v0);
+		break;
+	case ModEffect::MaxLightningResistance:
+		AddPoe2Stat(item, Poe2ItemStat::MaxLightningResistance, v0);
+		break;
+	case ModEffect::MaxColdResistance:
+		AddPoe2Stat(item, Poe2ItemStat::MaxColdResistance, v0);
+		break;
+	case ModEffect::SkillDurationAndCooldown:
+		AddPoe2Stat(item, Poe2ItemStat::SkillDurationAndCooldown, v0);
+		break;
+	case ModEffect::ManaPerArmour:
+		AddPoe2Stat(item, Poe2ItemStat::ManaPerArmour, v0);
+		break;
+	case ModEffect::ArmourFromRecentHitLoss:
+		AddPoe2Stat(item, Poe2ItemStat::ArmourFromRecentHitLoss, v0);
+		break;
+	case ModEffect::PreventedPhysicalRecoup:
+		AddPoe2Stat(item, Poe2ItemStat::PreventedPhysicalRecoup, v0);
 		break;
 	}
 }
