@@ -311,9 +311,30 @@ int LifeRecoupPercent(const Player &player)
 	return std::clamp(Gear(player, Poe2ItemStat::LifeRecoup), 0, 100);
 }
 
-void NoteRecoup(Player &player, int64_t damageTakenRaw)
+int LifeRecoupPercent(const Player &player, DamageType type)
 {
-	const int percent = LifeRecoupPercent(player);
+	if (!gbIsPoe2)
+		return 0;
+	int percent = LifeRecoupPercent(player);
+	switch (type) {
+	case DamageType::Fire:
+		percent += Gear(player, Poe2ItemStat::FireRecoup);
+		break;
+	case DamageType::Cold:
+		percent += Gear(player, Poe2ItemStat::ColdRecoup);
+		break;
+	case DamageType::Lightning:
+		percent += Gear(player, Poe2ItemStat::LightningRecoup);
+		break;
+	default:
+		break;
+	}
+	return std::clamp(percent, 0, 100);
+}
+
+void NoteRecoup(Player &player, int64_t damageTakenRaw, DamageType type)
+{
+	const int percent = LifeRecoupPercent(player, type);
 	if (percent <= 0 || damageTakenRaw <= 0)
 		return;
 	UniqueRuleState &state = player.poe2.uniqueState;
@@ -341,6 +362,38 @@ void ProcessRecoup(Player &player)
 	GainLife(player, heal);
 	if (state.recoupTicks == 0)
 		state.recoupPool = 0;
+}
+
+int GearGoldFindPercent(const Player &player)
+{
+	return gbIsPoe2 ? std::max(Gear(player, Poe2ItemStat::GoldFind), 0) : 0;
+}
+
+int GearManaCostPercent(const Player &player)
+{
+	if (!gbIsPoe2)
+		return 100;
+	return 100 * 100 / (100 + std::max(Gear(player, Poe2ItemStat::ManaCostEfficiency), 0));
+}
+
+int ShieldBlockAfterIncrease(int baseBlock, int increasedPercent)
+{
+	return std::max(baseBlock, 0) * (100 + std::max(increasedPercent, 0)) / 100;
+}
+
+int GearPoisonOnHitChance(const Player &player)
+{
+	return gbIsPoe2 ? std::clamp(Gear(player, Poe2ItemStat::PoisonChance), 0, 100) : 0;
+}
+
+void PoisonFromGear(Player &player, Monster &monster, SkillSlot skill, int32_t poisonBaseRaw)
+{
+	const int chance = GearPoisonOnHitChance(player);
+	if (chance <= 0 || poisonBaseRaw <= 0 || (SkillTags(skill) & ST_Attack) == 0)
+		return;
+	if (GenerateRnd(100) >= chance)
+		return;
+	InflictPoison(player, monster, static_cast<int32_t>(static_cast<int64_t>(poisonBaseRaw) * PoisonPercentPerSecond * PoisonTicks / 20 / 100), PoisonTicks);
 }
 
 } // namespace devilution

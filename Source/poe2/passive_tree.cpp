@@ -17,6 +17,7 @@
 #include "items.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/crafting_items.hpp"
 #include "poe2/jewels.hpp"
 #include "poe2/weapon_kinds.hpp"
 #include "poe2/weapon_swap.hpp"
@@ -982,7 +983,41 @@ PassiveTotals GetPassiveTotals(const Player &player)
 		for (const auto &[stat, value] : PassiveNodeStats(player, node))
 			totals[static_cast<size_t>(stat)] += value;
 	}
+	// The Essence of Sin's notable on the worn body armour counts as allocated, once (build spec step 7).
+	if (const std::optional<PassiveNodeId> notable = WornItemNotable(player); notable && !IsPassiveAllocated(player, *notable)) {
+		for (const auto &[stat, value] : Tree[*notable].stats)
+			totals[static_cast<size_t>(stat)] += value;
+	}
 	return totals;
+}
+
+bool CanBeItemNotable(const PassiveNode &node)
+{
+	return node.kind == PassiveKind::Notable && !node.ascendancyRoot && !node.stats.empty() && !IsProfaneNode(node) && !IsCapstoneNode(node);
+}
+
+std::optional<PassiveNodeId> RollItemNotable(uint32_t seed)
+{
+	std::vector<PassiveNodeId> candidates;
+	for (const PassiveNode &node : Tree) {
+		if (CanBeItemNotable(node))
+			candidates.push_back(node.id);
+	}
+	if (candidates.empty())
+		return std::nullopt;
+	return candidates[seed % candidates.size()];
+}
+
+std::optional<PassiveNodeId> WornItemNotable(const Player &player)
+{
+	const Item &body = player.InvBody[INVLOC_CHEST];
+	if (body.isEmpty() || !body._iStatFlag)
+		return std::nullopt;
+	const std::optional<uint16_t> node = SinNotable(body._iPoe2Craft);
+	// A tree reshaped since then may have moved the node: one that isn't a notable any more does nothing.
+	if (!node || *node >= Tree.size() || !CanBeItemNotable(Tree[*node]))
+		return std::nullopt;
+	return *node;
 }
 
 static_assert(static_cast<size_t>(PassiveStat::Count) <= MaxPassiveStats, "Poe2PlayerData::passiveTotals is too small");

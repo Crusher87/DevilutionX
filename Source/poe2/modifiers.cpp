@@ -380,9 +380,10 @@ std::optional<uint8_t> FindFamilyForItem(std::string_view id, ModSlot slot)
 	const uint32_t slotBit = 1U << static_cast<uint32_t>(slot);
 	if (!named || (Families[*named].slots & slotBit) != 0)
 		return named;
-	// Only the rework's families stand in, and they list only its new slots, so no older item's result changes.
+	// Only the rework's families stand in, and they list only its new slots, so no older item's result changes. The
+	// essences' own families after them never do.
 	const ModEffect effect = Families[*named].effect;
-	for (size_t i = LegacyModFamilyCount; i < Families.size(); i++) {
+	for (size_t i = LegacyModFamilyCount; i < std::min<size_t>(Families.size(), EssenceModFamilyStart); i++) {
 		if (Families[i].effect == effect && effect != ModEffect::None && (Families[i].slots & slotBit) != 0)
 			return static_cast<uint8_t>(i);
 	}
@@ -561,6 +562,9 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::LifeRegenPercent:
 	case ModEffect::ManaCostAsLife:
 	case ModEffect::PreventedPhysicalRecoup:
+	case ModEffect::FireRecoup:
+	case ModEffect::ColdRecoup:
+	case ModEffect::LightningRecoup:
 		return Life;
 	case ModEffect::Mana:
 	case ModEffect::ManaRegeneration:
@@ -572,6 +576,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::ManaLeech:
 	case ModEffect::ManaPercentOnKill:
 	case ModEffect::ManaPerArmour:
+	case ModEffect::ManaCostEfficiency:
 		return Mana;
 	case ModEffect::FlatDefense:
 	case ModEffect::FlatArmour:
@@ -591,6 +596,8 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::EnergyShieldRecharge:
 	case ModEffect::MaximumEnergyShield:
 	case ModEffect::ArmourFromRecentHitLoss:
+	case ModEffect::GlobalDefencesPercent:
+	case ModEffect::IncreasedBlock:
 		return Defence;
 	case ModEffect::LifeAndDefensePercent:
 		return Life | Defence;
@@ -626,6 +633,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::BleedMagnitude:
 	case ModEffect::ElementalAttackDamage:
 	case ModEffect::AttackElementalPenetration:
+	case ModEffect::PoisonOnHit:
 		return Damage;
 	case ModEffect::SpellDamageAndMana:
 		return Damage | Mana;
@@ -1301,6 +1309,33 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 	case ModEffect::PreventedPhysicalRecoup:
 		AddPoe2Stat(item, Poe2ItemStat::PreventedPhysicalRecoup, v0);
 		break;
+	case ModEffect::GlobalDefencesPercent:
+		AddPoe2Stat(item, Poe2ItemStat::ArmourPercent, v0);
+		AddPoe2Stat(item, Poe2ItemStat::EvasionPercent, v0);
+		AddPoe2Stat(item, Poe2ItemStat::EnergyShieldPercent, v0);
+		break;
+	case ModEffect::FireRecoup:
+		AddPoe2Stat(item, Poe2ItemStat::FireRecoup, v0);
+		break;
+	case ModEffect::ColdRecoup:
+		AddPoe2Stat(item, Poe2ItemStat::ColdRecoup, v0);
+		break;
+	case ModEffect::LightningRecoup:
+		AddPoe2Stat(item, Poe2ItemStat::LightningRecoup, v0);
+		break;
+	case ModEffect::GoldFind:
+		AddPoe2Stat(item, Poe2ItemStat::GoldFind, v0);
+		break;
+	case ModEffect::ManaCostEfficiency:
+		AddPoe2Stat(item, Poe2ItemStat::ManaCostEfficiency, v0);
+		break;
+	case ModEffect::IncreasedBlock:
+		AddPoe2Stat(item, Poe2ItemStat::IncreasedBlock, v0);
+		break;
+	case ModEffect::PoisonOnHit:
+		AddPoe2Stat(item, Poe2ItemStat::PoisonChance, v0);
+		AddPoe2Stat(item, Poe2ItemStat::PoisonMagnitude, v1);
+		break;
 	}
 }
 
@@ -1309,6 +1344,9 @@ namespace {
 /** @brief A modifier's value as its line shows it: flat energy shield is rolled in defence points, each worth EnergyShieldPerDefense. */
 int ShownModValue(const ModFamily &family, size_t stat, int value)
 {
+	// Attack critical chance is kept in tenths of a percent; its modifiers roll whole percents (Essence of Seeking).
+	if (family.effect == ModEffect::AttackCritChance && stat == 0)
+		return value / 10;
 	return family.effect == ModEffect::FlatEnergyShield && stat == 0 ? value * EnergyShieldPerDefense : value;
 }
 

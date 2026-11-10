@@ -52,8 +52,7 @@ enum class EssenceKind : uint8_t {
 	Spirit,
 	Summoning,
 	// The runes rework's kinds. The twelve above are legacy: an item that has one gets the kind essences.tsv's
-	// becomes column names when it loads (ConvertLegacyCraftingIds). Until the rework gives these their own names and
-	// modifiers, each has those of the legacy kind that becomes it.
+	// becomes column names when it loads (ConvertLegacyCraftingIds).
 	Body,
 	Mind,
 	Insulation,
@@ -68,8 +67,7 @@ enum class EssenceKind : uint8_t {
 	Command,
 	/** Chaos resistance, from armour, belts, jewellery, shields and foci (chaos damage plan step 5). */
 	Ruin,
-	// The rest of the build spec's 19 families (stash step 3). Until step 7 gives them their modifiers, each row of
-	// essences.tsv names the family of the nearest older row and never drops (its drops column is 0).
+	// The rest of the build spec's 19 families (stash step 3; their modifiers came in step 7).
 	Flames,
 	Ice,
 	Electricity,
@@ -111,21 +109,93 @@ enum class EssenceTier : uint8_t {
 	Count,
 };
 
+/** @brief What an Evil essence does besides removing a modifier (build spec step 7); None adds a modifier of its lines. */
+enum class EssenceSpecial : uint8_t {
+	None,
+	/** Socketed augments are 50% stronger, except resistances (the enchant byte's HatredEnchantBit). */
+	Hatred,
+	/** The item's next corruption gives two enchantments (DestructionMark). */
+	Destruction,
+	/** A hidden (unrevealed) desecrated modifier. */
+	Lies,
+	/** Body armour: a random notable of the passive tree (SinNotable). */
+	Sin,
+	/** Jewellery: its quality can go past 20% (PainMark). */
+	Pain,
+};
+
 struct Essence {
 	EssenceKind kind = EssenceKind::None;
 	std::string name;
-	/** @brief The modifier family it guarantees. */
+	/** @brief The modifier family it guarantees: a legacy kind's only one, and the first of a kind of today's lines. */
 	std::string family;
 	/** @brief A legacy kind: the kind it becomes when an item that has it loads. None for a kind of today. */
 	EssenceKind becomes = EssenceKind::None;
-	/** @brief Whether it drops; the kinds still waiting for their modifiers don't. */
+	/** @brief Whether it drops. */
 	bool drops = false;
+	/**
+	 * @brief The families a Lesser, plain or Greater one adds, and an Evil one that adds a modifier: the item's slot
+	 * takes one of them (one that fits, picked by the seed). Empty means family alone.
+	 */
+	std::vector<std::string> lines;
+	/** @brief The families a Perfect one adds; empty means the lines. */
+	std::vector<std::string> perfect;
+	EssenceSpecial special = EssenceSpecial::None;
+	/** @brief The first act it drops in (3 for the Evil essences), and its weight: a percent of its tiers' EssenceWeights, or for an Evil essence (one strength) the weight itself. */
+	int dropAct = 0;
+	int dropWeight = 0;
+	/** @brief Tooltip text: what a Lesser, plain or Greater one adds (an Evil one: what it does), and what a Perfect one adds. */
+	std::string text;
+	std::string perfectText;
 };
 
-/** @brief POE2 drop level of each essence tier, its weight, and the lowest modifier level it adds. */
+/** @brief POE2 drop level of each essence tier (the area level it drops from), its weight, and the lowest modifier level it adds. */
 constexpr std::array<int, 4> EssenceDropLevels = { 20, 35, 55, 72 };
 constexpr std::array<int, 4> EssenceWeights = { 100, 70, 35, 12 };
 constexpr std::array<int, 4> EssenceModLevelFloors = { 0, 20, 35, 50 };
+
+/**
+ * @brief The essence marks a craft keeps (build spec step 7). The Essence of Hatred's is the enchant byte's spare bit;
+ * the others are in Poe2Craft::extension: byte 0 holds flags, byte 1 a second enchantment (the Essence of
+ * Destruction's: its id in the low 4 bits, its roll in bits 4-6), bytes 2-3 the Essence of Sin's notable (its node id
+ * plus 1, little-endian).
+ */
+constexpr uint8_t HatredEnchantBit = 0x10;
+constexpr uint8_t EnchantIdMask = 0x0F;
+constexpr size_t EssenceFlagsByte = 0;
+constexpr uint8_t DestructionMark = 1 << 0;
+constexpr uint8_t PainMark = 1 << 1;
+constexpr size_t SecondEnchantByte = 1;
+constexpr size_t SinNotableByte = 2;
+/** @brief The quality jewellery with the Essence of Pain's mark can reach: as high as the save keeps (MaxExceptionalQuality). */
+constexpr int PainQualityLimit = 30;
+/** @brief The Essence of Hatred makes socketed augments this percent as strong, resistances aside. */
+constexpr int HatredAugmentPercent = 150;
+
+[[nodiscard]] bool HasHatredMark(const Poe2Craft &craft);
+[[nodiscard]] bool HasDestructionMark(const Poe2Craft &craft);
+[[nodiscard]] bool HasPainMark(const Poe2Craft &craft);
+/** @brief The corruption enchantment (a CorruptionEnchant id), without the Essence of Hatred's bit. */
+[[nodiscard]] uint8_t CraftEnchantId(const Poe2Craft &craft);
+/** @brief The second enchantment the Essence of Destruction gave the item at its corruption, and its roll. */
+[[nodiscard]] uint8_t SecondEnchantId(const Poe2Craft &craft);
+[[nodiscard]] uint8_t SecondEnchantRoll(const Poe2Craft &craft);
+void SetSecondEnchant(Poe2Craft &craft, uint8_t id, uint8_t roll);
+/** @brief The passive node the Essence of Sin gave the body armour; nullopt for none. */
+[[nodiscard]] std::optional<uint16_t> SinNotable(const Poe2Craft &craft);
+void SetSinNotable(Poe2Craft &craft, uint16_t node);
+/** @brief The tooltip lines of the item's essence marks (Hatred, Destruction, Sin, Pain); empty for none. */
+std::vector<std::string> EssenceMarkText(const Item &item);
+/** @brief Whether the effect is a resistance, which the Essence of Hatred doesn't strengthen. */
+[[nodiscard]] bool IsResistanceEffect(ModEffect effect);
+
+/** @brief The essence's families the item takes (index into ModifierFamilies()), for its tier: those of its slot and base that don't repeat an implicit, in the row's order. */
+[[nodiscard]] std::vector<uint8_t> EssenceFamiliesForItem(const Essence &essence, EssenceTier tier, const Item &item);
+/**
+ * @brief The essence a drop is (its variant): weighted among the kinds and tiers that drop at the area level
+ * (EssenceDropLevels) and in the act (dropAct). 0 when nothing can drop.
+ */
+[[nodiscard]] uint8_t RollEssenceDrop(uint32_t roll, int areaLevel, int act);
 
 const Essence &GetEssence(EssenceKind kind);
 EssenceKind GetEssenceKind(const Item &item);
@@ -549,6 +619,8 @@ std::vector<std::pair<CorruptionEnchant, int>> CorruptionEnchantChoices(const It
 void ApplyCorruptionEnchant(Item &item);
 /** @brief The enchantment's tooltip line, or an empty string. */
 std::string CorruptionEnchantText(const Item &item);
+/** @brief The Essence of Destruction's second enchantment's tooltip line, or an empty string. */
+std::string SecondCorruptionEnchantText(const Item &item);
 /** @brief Adds the rules of the item's talismans and enchantment to the totals. */
 void AddCraftRules(const Item &item, UniqueRuleTotals &totals);
 

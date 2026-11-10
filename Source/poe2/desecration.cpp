@@ -7,10 +7,12 @@
 #include "plrmsg.h"
 #include "poe2/bases.hpp"
 #include "poe2/craft_state.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/mix.hpp"
 #include "poe2/modifiers.hpp"
 #include "utils/format.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
 
@@ -317,7 +319,9 @@ int CraftModLimit(const Item &item, int perSide)
 
 int CraftQualityLimit(const Item &item)
 {
-	return 20 - (HasDesecratedMod(item, DesecratedModId::UncleanPerfection) ? 5 : 0);
+	// The Essence of Pain lets jewellery go past the usual 20% (build spec step 7).
+	const int limit = HasPainMark(item._iPoe2Craft) && IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet) ? PainQualityLimit : 20;
+	return limit - (HasDesecratedMod(item, DesecratedModId::UncleanPerfection) ? 5 : 0);
 }
 
 int DesecratedModEffectPercent(const Item &item)

@@ -199,6 +199,21 @@ enum class ModEffect : uint8_t {
 	ArmourFromRecentHitLoss,
 	/** Percent of the physical damage armour stops that is recouped as life. */
 	PreventedPhysicalRecoup,
+	// The essences' effects (build spec step 7).
+	/** Increased armour, evasion and energy shield from all gear, in percent (Perfect Essence of Enhancement). */
+	GlobalDefencesPercent,
+	/** Percent of the fire, cold (magic) or lightning damage of hits taken that is recouped as life. */
+	FireRecoup,
+	ColdRecoup,
+	LightningRecoup,
+	/** Increased gold from slain monsters, in percent. */
+	GoldFind,
+	/** Mana cost efficiency in percent: skills cost 100 / (100 + this) of their mana. */
+	ManaCostEfficiency,
+	/** Increased block chance of the shield that has it, in percent. */
+	IncreasedBlock,
+	/** Chance in percent for attack hits to poison (first value), and increased poison magnitude (second value). */
+	PoisonOnHit,
 	/** Not an effect: the number of them. New effects go before it. */
 	Count,
 };
@@ -322,6 +337,11 @@ struct ModFamily {
  * and an item saved before then has only these.
  */
 constexpr uint8_t LegacyModFamilyCount = 94;
+/**
+ * @brief The essences' own families (build spec step 7) start here, after the caster weapons rework's and the chaos
+ * spell families: they never roll naturally, and only the rework's families stand in for a slot (FindFamilyForItem).
+ */
+constexpr uint8_t EssenceModFamilyStart = 174;
 /** @brief Families in memory stay below the desecrated families' ids (desecration.hpp). */
 constexpr size_t MaxModFamilies = 239;
 

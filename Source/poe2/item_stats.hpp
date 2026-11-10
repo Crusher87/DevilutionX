@@ -120,6 +120,15 @@ enum class Poe2ItemStat : uint8_t {
 	ManaPerArmour,
 	ArmourFromRecentHitLoss,
 	PreventedPhysicalRecoup,
+	// The essences' stats (build spec step 7; ModEffect has their meanings).
+	FireRecoup,
+	ColdRecoup,
+	LightningRecoup,
+	GoldFind,
+	ManaCostEfficiency,
+	/** On the shield itself: CalcPlrItemVals reads it with the shield's block. */
+	IncreasedBlock,
+	PoisonChance,
 	Count,
 };
 

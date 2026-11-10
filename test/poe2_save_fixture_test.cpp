@@ -47,6 +47,7 @@
 #include "poe2/craft_state.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/desecration.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
@@ -800,6 +801,119 @@ TEST_F(Poe2SaveFixtureTest, ChaosResistanceSourcesSurviveASave)
 		variants.push_back(CraftingItemVariant(MyPlayer->InvList[i]));
 	EXPECT_NE(std::find(variants.begin(), variants.end(), EssenceVariant(EssenceKind::Ruin, EssenceTier::Perfect)), variants.end());
 	EXPECT_NE(std::find(variants.begin(), variants.end(), static_cast<uint8_t>(AugmentId::VenomRune)), variants.end());
+}
+
+/**
+ * Build spec step 7: the Evil essences' marks (Hatred's in the enchant byte, the others in the crafting extension), a
+ * Lies essence's hidden modifier and the new essence lines come back from a save, and the hero's stats with them.
+ */
+TEST_F(Poe2SaveFixtureTest, EssenceMarksSurviveASave)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Warrior;
+	CopyUtf8(info.name, "Essences", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(60);
+	player._pBaseStr = player._pStrength = 200;
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseMag = player._pMagic = 200;
+	player._pgfxnum = 0;
+	InitCursor();
+	const auto essence = [&player](Item &item, EssenceKind kind, EssenceTier tier = EssenceTier::Normal) {
+		EXPECT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Essence, player, item, EssenceVariant(kind, tier))) << static_cast<int>(kind);
+	};
+
+	// Body armour: Sin's notable, Hatred's mark and a rune it strengthens.
+	Item plate = Make("Full Plate", 102, ITEM_QUALITY_RARE, 70);
+	essence(plate, EssenceKind::Sin);
+	essence(plate, EssenceKind::Hatred);
+	player.InvBody[INVLOC_CHEST] = Socketed(plate, { AugmentId::LesserShael });
+	// A ring with Pain's mark, past 20% quality.
+	Item ring = Make("Ruby Ring", 301, ITEM_QUALITY_RARE, 70);
+	essence(ring, EssenceKind::Pain);
+	for (int i = 0; i < 15; i++)
+		ApplyCurrencyOrb(CurrencyOrb::Catalyst, player, ring, static_cast<uint8_t>(Catalyst::Vital));
+	EXPECT_GT(ItemQuality(ring), 20);
+	player.InvBody[INVLOC_RING_LEFT] = ring;
+	// A helmet Destruction gave two enchantments.
+	Item helmet = Make("Iron Cap", 101, ITEM_QUALITY_RARE, 70);
+	essence(helmet, EssenceKind::Destruction);
+	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Vaal, player, helmet));
+	EXPECT_NE(SecondEnchantId(helmet._iPoe2Craft), 0);
+	player.InvBody[INVLOC_HEAD] = helmet;
+	// An amulet with a Perfect essence's line.
+	Item amulet = Make("Gold Amulet", 401, ITEM_QUALITY_RARE, 75);
+	essence(amulet, EssenceKind::Enhancement, EssenceTier::Perfect);
+	player.InvBody[INVLOC_AMULET] = amulet;
+	// In the bag: a shield whose next corruption gives two enchantments, body armour with a hidden modifier, essences.
+	Item shield = Make("Wooden Tower Shield", 501, ITEM_QUALITY_RARE, 70);
+	essence(shield, EssenceKind::Destruction);
+	Item lies = Make("Full Plate", 601, ITEM_QUALITY_RARE, 70);
+	essence(lies, EssenceKind::Lies);
+	EXPECT_TRUE(HasUnrevealedMod(lies));
+	for (const Item &item : { shield, lies, MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Terror, EssenceTier::Normal)), MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Body, EssenceTier::Perfect)) })
+		ASSERT_TRUE(AutoPlaceItemInInventory(player, item)) << item._iIName;
+	for (Item &item : player.InvBody)
+		item._iStatFlag = !item.isEmpty();
+	CalcPlrItemVals(player, false);
+	const std::optional<PassiveNodeId> notable = WornItemNotable(player);
+	ASSERT_TRUE(notable);
+	const PassiveTotals totals = GetPassiveTotals(player);
+	const int dexterity = player._pDexterity;
+	const int armourPercent = player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::ArmourPercent)];
+	Stash = {};
+	StashTabs.reset();
+	Stash.dirty = true;
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	FreeCursor();
+	const std::string saved = Snapshot();
+	SaveAgain();
+
+	Load();
+	EXPECT_EQ(Snapshot(), saved);
+	Player &loaded = *MyPlayer;
+	for (Item &item : loaded.InvBody)
+		item._iStatFlag = !item.isEmpty();
+	CalcPlrItemVals(loaded, false);
+	EXPECT_EQ(WornItemNotable(loaded), notable);
+	EXPECT_EQ(GetPassiveTotals(loaded), totals);
+	EXPECT_EQ(loaded._pDexterity, dexterity);
+	EXPECT_EQ(loaded.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::ArmourPercent)], armourPercent);
+	EXPECT_TRUE(HasHatredMark(loaded.InvBody[INVLOC_CHEST]._iPoe2Craft));
+	EXPECT_TRUE(HasPainMark(loaded.InvBody[INVLOC_RING_LEFT]._iPoe2Craft));
+	EXPECT_EQ(ItemQuality(loaded.InvBody[INVLOC_RING_LEFT]), ItemQuality(ring));
+	EXPECT_EQ(SecondEnchantId(loaded.InvBody[INVLOC_HEAD]._iPoe2Craft), SecondEnchantId(helmet._iPoe2Craft));
+	EXPECT_EQ(SecondEnchantRoll(loaded.InvBody[INVLOC_HEAD]._iPoe2Craft), SecondEnchantRoll(helmet._iPoe2Craft));
+	EXPECT_EQ(SecondCorruptionEnchantText(loaded.InvBody[INVLOC_HEAD]), SecondCorruptionEnchantText(helmet));
+	bool shieldMarked = false;
+	bool hidden = false;
+	std::vector<std::string> names;
+	for (int i = 0; i < loaded._pNumInv; i++) {
+		const Item &item = loaded.InvList[i];
+		shieldMarked = shieldMarked || HasDestructionMark(item._iPoe2Craft);
+		hidden = hidden || HasUnrevealedMod(item);
+		names.emplace_back(item._iIName);
+	}
+	EXPECT_TRUE(shieldMarked);
+	EXPECT_TRUE(hidden);
+	EXPECT_NE(std::find(names.begin(), names.end(), "Essence of Terror"), names.end());
+	EXPECT_NE(std::find(names.begin(), names.end(), "Perfect Essence of the Body"), names.end());
+
+	// Saved again with today's code, it loads the same.
+	SaveAgain();
+	Load();
+	EXPECT_EQ(Snapshot(), saved);
 }
 
 /**

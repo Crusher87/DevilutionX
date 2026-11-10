@@ -683,6 +683,8 @@ void FinishHit()
 		// POE2's poison: 20% of the hit's physical and chaos damage a second for 2 seconds, the strongest only.
 		if (Has(player, skill, SG::Envenom) && poisonBase > 0 && GenerateRnd(100) < Value(player, skill, SG::Envenom, 0))
 			InflictPoison(player, monster, static_cast<int32_t>(static_cast<int64_t>(poisonBase) * PoisonPercentPerSecond * PoisonTicks / 20 / 100), PoisonTicks);
+		// The gear's own chance to poison (the Essence of Anguish), on attack hits.
+		PoisonFromGear(player, monster, skill, poisonBase);
 		// Anguish is a lineage's own poison, and says it stacks: up to 5.
 		if (Has(player, skill, SG::AndarielsAnguish))
 			InflictPoison(player, monster, totalBase * 10 / 100 * 4, 80, 5);

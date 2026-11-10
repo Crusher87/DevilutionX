@@ -99,8 +99,9 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 {
 	const std::vector<ModFamily> &families = ModifierFamilies();
 	// The 94 from before the caster weapons rework, then its 76 (tools/poe2_caster_affixes.tsv), then the 4 chaos spell
-	// families of the chaos wands and staves.
-	ASSERT_EQ(families.size(), 174U);
+	// families of the chaos wands and staves, then the essences' 23 (build spec step 7).
+	ASSERT_EQ(families.size(), 197U);
+	ASSERT_EQ(EssenceModFamilyStart, 174);
 	ASSERT_EQ(LegacyModFamilyCount, 94);
 	int enabled = 0;
 	for (size_t i = 0; i < families.size(); i++) {
@@ -121,8 +122,8 @@ TEST_F(Poe2ModifiersTest, TablesLoadEveryFamilyWithOrderedTiers)
 		}
 	}
 	// 57 with spell damage on staves (plan step 14), the rework's 52 (18 staff, 18 wand, 16 sceptre), chaos resistance and
-	// the chaos wands' and staves' 4.
-	EXPECT_EQ(enabled, 57 + 52 + 1 + 4);
+	// the chaos wands' and staves' 4; then for the essences (build spec step 7) added cold and minion levels, and their 23.
+	EXPECT_EQ(enabled, 57 + 52 + 1 + 4 + 2 + 23);
 
 	const std::optional<uint8_t> allRes = FindModifierFamily("all_elemental_resistance");
 	const std::optional<uint8_t> fireRes = FindModifierFamily("fire_resistance");
@@ -135,8 +136,13 @@ TEST_F(Poe2ModifiersTest, FamiliesRollNaturallyAsTheGeneratorSays)
 {
 	// Chaos plan step 2: tools/poe2_modifiers.py writes the natural column; every enabled family rolls naturally and no
 	// other one does. Chaos resistance joined them in step 14; the old chaos spell families stay off.
-	for (const ModFamily &family : ModifierFamilies())
-		EXPECT_EQ(family.natural, family.enabled) << family.id;
+	// The essences' families (build spec step 7) come only from essences: their own, and added cold and minion levels.
+	for (const ModFamily &family : ModifierFamilies()) {
+		const bool essenceOnly = IsAnyOf(family.id, "local_added_cold", "minion_skill_levels") || *FindModifierFamily(family.id) >= EssenceModFamilyStart;
+		EXPECT_EQ(family.natural, family.enabled && !essenceOnly) << family.id;
+		if (essenceOnly)
+			EXPECT_TRUE(family.enabled) << family.id;
+	}
 	EXPECT_TRUE(ModifierFamilies()[*FindModifierFamily("chaos_resistance")].natural);
 	for (const std::string_view id : { "chaos_spell_damage", "chaos_skill_levels" }) {
 		const std::optional<uint8_t> family = FindModifierFamily(id);

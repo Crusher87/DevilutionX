@@ -14,6 +14,7 @@
 #include "poe2/loot.hpp"
 #include "poe2/mix.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/support_gems.hpp"
@@ -331,6 +332,154 @@ ModRollFilter ExaltFilter(CraftOmens &omens)
 	return filter;
 }
 
+/** @brief Whether the item can take the Evil essence's mark (build spec step 7); says why not when it can't. */
+bool EssenceSpecialFits(EssenceSpecial special, const Item &item, const Poe2Craft &craft)
+{
+	switch (special) {
+	case EssenceSpecial::None:
+		return true;
+	case EssenceSpecial::Hatred:
+		if (MaxAugmentSockets(item) == 0) {
+			Fizzle(_("The Essence of Hatred works on weapons and armour."));
+			return false;
+		}
+		if (HasHatredMark(craft)) {
+			Fizzle(_("This item already has it."));
+			return false;
+		}
+		return true;
+	case EssenceSpecial::Destruction:
+		if (CorruptionEnchantChoices(item).empty()) {
+			Fizzle(_("This item can't gain enchantments."));
+			return false;
+		}
+		if (HasDestructionMark(craft)) {
+			Fizzle(_("This item already has it."));
+			return false;
+		}
+		return true;
+	case EssenceSpecial::Lies:
+		if (craft.desecrated) {
+			Fizzle(_("This item was already desecrated."));
+			return false;
+		}
+		return true;
+	case EssenceSpecial::Sin:
+		if (ItemModSlot(item) != ModSlot::BodyArmour) {
+			Fizzle(_("The Essence of Sin works on body armour."));
+			return false;
+		}
+		if (SinNotable(craft)) {
+			Fizzle(_("This item already has it."));
+			return false;
+		}
+		if (!RollItemNotable(0)) {
+			Fizzle(_("This essence does nothing."));
+			return false;
+		}
+		return true;
+	case EssenceSpecial::Pain:
+		if (IsNoneOf(item._itype, ItemType::Ring, ItemType::Amulet)) {
+			Fizzle(_("The Essence of Pain works on rings and amulets."));
+			return false;
+		}
+		if (HasPainMark(craft)) {
+			Fizzle(_("This item already has it."));
+			return false;
+		}
+		return true;
+	}
+	return false;
+}
+
+/**
+ * @brief An essence (build spec step 7). Lesser, plain and Greater ones make a magic item rare with a modifier of
+ * their lines; a Perfect one swaps a rare's random modifier for one of its own; an Evil one swaps a rare's random
+ * modifier for one of its lines or for its mark. Everything rolls from the item's crafting seed.
+ */
+bool ApplyEssence(Player &player, Item &item, Poe2Craft craft, uint8_t variant, CraftOmens &omens)
+{
+	const EssenceKind kind = EssenceVariantKind(variant);
+	const EssenceTier tier = EssenceVariantTier(variant);
+	const Essence &essence = GetEssence(kind);
+	const bool evil = IsEvilEssence(kind);
+	const bool onRare = evil || tier == EssenceTier::Perfect;
+	if (onRare && craft.rarity != ITEM_QUALITY_RARE) {
+		Fizzle(evil ? _("Evil essences need a rare item.") : _("Perfect essences need a rare item."));
+		return false;
+	}
+	if (!onRare && craft.rarity != ITEM_QUALITY_MAGIC) {
+		Fizzle(_("Essences need a magic item; Perfect ones a rare item."));
+		return false;
+	}
+	std::vector<uint8_t> families;
+	if (essence.special == EssenceSpecial::None) {
+		families = EssenceFamiliesForItem(essence, tier, item);
+		if (families.empty()) {
+			Fizzle(_("This essence does nothing on this item."));
+			return false;
+		}
+	} else if (!EssenceSpecialFits(essence.special, item, craft)) {
+		return false;
+	}
+	const uint32_t seed = CraftSeed(item, CurrencyOrb::Essence);
+	if (onRare) {
+		// The omens change only a Perfect essence, as in POE2.
+		ModSide side = ModSide::Any;
+		RemovePick pick = RemovePick::Random;
+		if (!evil) {
+			if (omens.use(OmenId::SinistralCrystallisation))
+				side = ModSide::Prefix;
+			else if (omens.use(OmenId::DextralCrystallisation))
+				side = ModSide::Suffix;
+			if (omens.use(OmenId::Severance))
+				pick = RemovePick::HighestLevel;
+		}
+		if (CraftModCount(craft) > 0)
+			RemoveMod(craft, seed, side, pick);
+	} else {
+		craft.rarity = ITEM_QUALITY_RARE;
+	}
+	switch (essence.special) {
+	case EssenceSpecial::None: {
+		// One of the families the item takes, in an order the seed picks; the next is tried when one can't go on.
+		const auto start = static_cast<size_t>(Mix(seed ^ 0xE55E7CE5U) % families.size());
+		bool added = false;
+		for (size_t i = 0; i < families.size() && !added; i++) {
+			ModRollFilter filter;
+			filter.family = static_cast<uint8_t>(families[(start + i) % families.size()] + 1);
+			filter.minModLevel = evil ? 0 : EssenceModLevelFloors[static_cast<size_t>(tier)];
+			added = AddRandomMod(item, craft, CraftSeed(item, CurrencyOrb::Essence, static_cast<uint32_t>(1 + i)), filter);
+		}
+		if (!added) {
+			Fizzle(_("This essence's modifier can't go on this item."));
+			PendingOmens.clear();
+			return false;
+		}
+		break;
+	}
+	case EssenceSpecial::Hatred:
+		craft.enchant |= HatredEnchantBit;
+		break;
+	case EssenceSpecial::Destruction:
+		craft.extension[EssenceFlagsByte] |= DestructionMark;
+		break;
+	case EssenceSpecial::Pain:
+		craft.extension[EssenceFlagsByte] |= PainMark;
+		break;
+	case EssenceSpecial::Sin:
+		SetSinNotable(craft, *RollItemNotable(Mix(seed ^ 0x5157U)));
+		break;
+	case EssenceSpecial::Lies:
+		// The removed modifier makes room, so the desecration keeps the rest; it stays hidden until an Ancient Bone reveals it.
+		if (!DesecrateCraft(item, craft, Mix(seed ^ 0x11E5U), 0))
+			return false;
+		break;
+	}
+	FinishCraft(player, item, craft, item.dwBuff);
+	return true;
+}
+
 /** @brief Orbs on items whose modifiers come from the POE2 tables, worked one modifier at a time like POE2. */
 std::optional<bool> CraftMods(CurrencyOrb orb, Player &player, Item &item, uint8_t variant, CraftOmens &omens)
 {
@@ -491,45 +640,8 @@ std::optional<bool> CraftMods(CurrencyOrb orb, Player &player, Item &item, uint8
 		DesecrationRevealItem = true;
 		return true;
 	}
-	case CurrencyOrb::Essence: {
-		const EssenceTier tier = EssenceVariantTier(variant);
-		const Essence &essence = GetEssence(EssenceVariantKind(variant));
-		// On the caster weapons rework's bases, the essence gives their family of the same effect.
-		const std::optional<uint8_t> family = FindFamilyForItem(essence.family, item);
-		if (!family) {
-			Fizzle(_("This essence does nothing."));
-			return false;
-		}
-		ModRollFilter filter;
-		filter.family = static_cast<uint8_t>(*family + 1);
-		filter.minModLevel = EssenceModLevelFloors[static_cast<size_t>(tier)];
-		if (tier == EssenceTier::Perfect) {
-			if (rarity != ITEM_QUALITY_RARE) {
-				Fizzle(_("Perfect essences need a rare item."));
-				return false;
-			}
-			ModSide side = ModSide::Any;
-			if (omens.use(OmenId::SinistralCrystallisation))
-				side = ModSide::Prefix;
-			else if (omens.use(OmenId::DextralCrystallisation))
-				side = ModSide::Suffix;
-			const RemovePick pick = omens.use(OmenId::Severance) ? RemovePick::HighestLevel : RemovePick::Random;
-			if (count > 0)
-				RemoveMod(craft, CraftSeed(item, orb), side, pick);
-		} else {
-			if (rarity != ITEM_QUALITY_MAGIC) {
-				Fizzle(_("Essences need a magic item; Perfect ones a rare item."));
-				return false;
-			}
-			craft.rarity = ITEM_QUALITY_RARE;
-		}
-		if (!AddRandomMod(item, craft, CraftSeed(item, orb, 1), filter)) {
-			Fizzle(_("This essence's modifier can't go on this item."));
-			PendingOmens.clear();
-			return false;
-		}
-		break;
-	}
+	case CurrencyOrb::Essence:
+		return ApplyEssence(player, item, craft, variant, omens);
 	default:
 		return std::nullopt;
 	}
@@ -729,6 +841,10 @@ bool CorruptV2(Player &player, Item &item, CraftOmens &omens)
 		roll -= weights[category];
 		category++;
 	}
+	// The Essence of Destruction: this corruption gives two enchantments (build spec step 7).
+	const bool destruction = HasDestructionMark(craft) && !enchants.empty();
+	if (destruction)
+		category = 2;
 	const uint32_t detail = Mix(seed ^ 0xC0221U);
 	std::string_view message = _("Corrupted. Nothing else happens.");
 	switch (category) {
@@ -753,9 +869,36 @@ bool CorruptV2(Player &player, Item &item, CraftOmens &omens)
 			}
 			pick -= weight;
 		}
-		craft.enchant = static_cast<uint8_t>(chosen);
+		// The Essence of Hatred's bit stays.
+		craft.enchant = static_cast<uint8_t>((craft.enchant & HatredEnchantBit) | static_cast<uint8_t>(chosen));
 		craft.enchantRoll = static_cast<uint8_t>((detail >> 12) & 7);
 		message = _("Corrupted. The item gains an enchantment.");
+		if (destruction) {
+			craft.extension[EssenceFlagsByte] &= static_cast<uint8_t>(~DestructionMark);
+			// A second one, of another kind where the item can have one.
+			const uint32_t more = Mix(detail ^ 0xDE57U);
+			std::vector<std::pair<CorruptionEnchant, int>> others;
+			int othersTotal = 0;
+			for (const auto &[id, weight] : enchants) {
+				if (id != chosen) {
+					others.emplace_back(id, weight);
+					othersTotal += weight;
+				}
+			}
+			if (othersTotal > 0) {
+				int second = static_cast<int>(more % static_cast<uint32_t>(othersTotal));
+				CorruptionEnchant secondChosen = others.back().first;
+				for (const auto &[id, weight] : others) {
+					if (second < weight) {
+						secondChosen = id;
+						break;
+					}
+					second -= weight;
+				}
+				SetSecondEnchant(craft, static_cast<uint8_t>(secondChosen), static_cast<uint8_t>((more >> 12) & 7));
+				message = _("Corrupted. The item gains two enchantments.");
+			}
+		}
 		break;
 	}
 	case 3:
@@ -921,7 +1064,7 @@ bool ApplyJewellerOrb(CurrencyOrb orb, Player &player, size_t row)
 	return true;
 }
 
-bool CurrencyFitsItem(CurrencyOrb orb, const Item &item)
+bool CurrencyFitsItem(CurrencyOrb orb, const Item &item, uint8_t variant)
 {
 	if (orb == CurrencyOrb::None || item.isEmpty() || JewellerSocket(orb))
 		return false;
@@ -992,6 +1135,9 @@ bool CurrencyFitsItem(CurrencyOrb orb, const Item &item)
 	case CurrencyOrb::Vaal:
 		return true;
 	case CurrencyOrb::Essence:
+		// With the essence known: Perfect and Evil ones need a rare, the others a magic item.
+		if (variant != 0)
+			return rarity == (IsEvilEssence(EssenceVariantKind(variant)) || EssenceVariantTier(variant) == EssenceTier::Perfect ? ITEM_QUALITY_RARE : ITEM_QUALITY_MAGIC);
 		return IsAnyOf(rarity, ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE);
 	default:
 		return false;

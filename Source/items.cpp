@@ -4056,8 +4056,9 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	player.poe2.shieldBlockChance = 0;
 	if (gbIsPoe2) {
 		for (const inv_body_loc hand : { INVLOC_HAND_LEFT, INVLOC_HAND_RIGHT }) {
+			// The Essence of Terror's shield line raises its block (build spec step 7).
 			if (player.InvBody[hand]._iStatFlag)
-				player.poe2.shieldBlockChance = std::max(player.poe2.shieldBlockChance, ShieldBlockChance(player.InvBody[hand]));
+				player.poe2.shieldBlockChance = std::max(player.poe2.shieldBlockChance, ShieldBlockAfterIncrease(ShieldBlockChance(player.InvBody[hand]), player.InvBody[hand]._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::IncreasedBlock)]));
 			// The caster weapons rework's Barrier, Guardian and Aegis quarterstaves block with their implicit.
 			if (player.InvBody[hand]._iStatFlag && IsQuarterstaff(player.InvBody[hand]))
 				player.poe2.shieldBlockChance = std::max<int>(player.poe2.shieldBlockChance, player.InvBody[hand]._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::BlockChance)]);
@@ -5367,12 +5368,20 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 			FinishCraftingItem(item);
 		}
 	}
+	// An essence is one of those that drop at the area's level and in its act (build spec step 7: the Evil essences
+	// from Act 3); like an augment's, the variant goes in dwBuff.
+	if (item._iMiscId == IMISC_ESSENCE) {
+		if (const uint8_t essence = RollEssenceDrop(Mix(static_cast<uint32_t>(item._iSeed) ^ 0x45535345U), origin.poe2AreaLevel, CurrentAct()); essence != 0) {
+			SetCraftingItemVariant(item, essence);
+			FinishCraftingItem(item);
+		}
+	}
 	// Diablo's uniques drop once per game; the bundle's, like POE2's, can drop again.
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer && item._iUid >= 0 && item._iUid < static_cast<int>(std::size(UniqueItemFlags)))
 		UniqueItemFlags[item._iUid] = true;
 	if (*idx == IDI_GOLD) {
-		// The Spiritual shrine (Greed) doubles it.
-		item._ivalue = std::min(item._ivalue * GoldPileMultiplier * (100 + shrine.goldPercent) / 100, GOLD_MAX_LIMIT);
+		// The Spiritual shrine (Greed) doubles it, and the gear's increased gold (the Perfect Essence of Opulence) adds.
+		item._ivalue = std::min(item._ivalue * GoldPileMultiplier * (100 + shrine.goldPercent + (!origin.pregen && MyPlayer != nullptr ? GearGoldFindPercent(*MyPlayer) : 0)) / 100, GOLD_MAX_LIMIT);
 		SetPlrHandGoldCurs(item);
 	}
 	// Uncut gems take the floor's area level, not the monster's own (Curtis 2026-10-23: Snotspill dropped a level 6 uncut
@@ -6482,7 +6491,7 @@ bool HeldCurrencyFits(const Item &item)
 		return !item.isEmpty() && !item._iIdentified && item._iMagical != ITEM_QUALITY_NORMAL;
 	if (!gbIsPoe2 || HeldCurrencyMisc < 0 || pcurs != CURSOR_OIL)
 		return false;
-	return CurrencyFitsItem(CurrencyOrbForMiscId(HeldCurrencyMisc), item);
+	return CurrencyFitsItem(CurrencyOrbForMiscId(HeldCurrencyMisc), item, static_cast<uint8_t>(HeldCurrencyVariant >> 16));
 }
 
 void SpendHeldCurrency(Player &player)
@@ -6977,6 +6986,9 @@ void PrintItemCraftState(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("Quality: +{:d}% ({:s} modifiers)"), ItemQuality(item), CatalystName(catalyst)));
 	if (craft.desecrated)
 		AddItemInfoBoxString(_("Desecrated"));
+	// What an Evil essence left on it (build spec step 7).
+	for (std::string &line : EssenceMarkText(item))
+		AddItemInfoBoxString(std::move(line));
 	// A bonded line whose sockets don't match yet is greyed (build spec step 5).
 	const InfoLineStyle style = CurrentInfoLineStyle;
 	for (SocketLine &line : AugmentSocketLines(item)) {
@@ -6991,6 +7003,9 @@ void PrintItemCorruption(const Item &item)
 	if ((item.dwBuff & CF_POE2_CORRUPTED) == 0)
 		return;
 	if (const std::string enchant = CorruptionEnchantText(item); !enchant.empty())
+		AddItemInfoBoxString(FormatRuntime(_("enchant: {:s}"), enchant));
+	// The Essence of Destruction's second enchantment (build spec step 7).
+	if (const std::string enchant = SecondCorruptionEnchantText(item); !enchant.empty())
 		AddItemInfoBoxString(FormatRuntime(_("enchant: {:s}"), enchant));
 	const int kind = static_cast<int>((item.dwBuff & CF_POE2_CORRUPT_IMPLICIT) >> 14);
 	const ItemPower power = CorruptionImplicitPower(kind);

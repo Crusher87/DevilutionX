@@ -60,8 +60,11 @@ void DealThorns(Player &player, Monster &monster);
 
 /** @brief Percent of hit damage taken that is recouped as life. */
 [[nodiscard]] int LifeRecoupPercent(const Player &player);
-/** @brief The hero took a hit's damage (raw): its recouped share joins what is still to come back. */
-void NoteRecoup(Player &player, int64_t damageTakenRaw);
+/** @brief Percent of the damage of a hit of that type taken that is recouped as life: LifeRecoupPercent, and for fire,
+ * cold and lightning the gear's own share of that element (build spec step 7, the Perfect resistance essences). */
+[[nodiscard]] int LifeRecoupPercent(const Player &player, DamageType type);
+/** @brief The hero took a hit's damage (raw) of the type: its recouped share joins what is still to come back. */
+void NoteRecoup(Player &player, int64_t damageTakenRaw, DamageType type);
 /** @brief Once per game tick: pays out what is left to recoup evenly over the RecoupSeconds since the last hit (not saved, like energy shield). */
 void ProcessRecoup(Player &player);
 
@@ -105,5 +108,20 @@ void ProcessRecentHitLoss(Player &player);
 [[nodiscard]] int RecentHitLossArmour(const Player &player);
 /** @brief Physical damage the hero's armour stopped: the gear's share of it is recouped as life (local hero only). */
 void NotePreventedPhysical(const Player &player, int64_t stoppedRaw);
+
+// The essences' primitives (build spec step 7). Each is 0 (or 100 for a percent of a whole) outside POE2.
+/** @brief The gear's increased gold from slain monsters, in percent. */
+[[nodiscard]] int GearGoldFindPercent(const Player &player);
+/** @brief The percent of their mana cost skills cost after the gear's mana cost efficiency: 100 * 100 / (100 + it). */
+[[nodiscard]] int GearManaCostPercent(const Player &player);
+/** @brief A shield's block chance after its own increased block (the Essence of Terror's shield line). */
+[[nodiscard]] int ShieldBlockAfterIncrease(int baseBlock, int increasedPercent);
+/** @brief The gear's chance in percent for attack hits to poison. */
+[[nodiscard]] int GearPoisonOnHitChance(const Player &player);
+/**
+ * @brief An attack hit landed: the gear's chance to poison, for POE2's poison of its physical and chaos damage
+ * (@p poisonBaseRaw) a second for two seconds. Rolls the game's seeded generator only when the gear has the chance.
+ */
+void PoisonFromGear(Player &player, Monster &monster, SkillSlot skill, int32_t poisonBaseRaw);
 
 } // namespace devilution

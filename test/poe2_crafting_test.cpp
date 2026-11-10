@@ -20,6 +20,7 @@
 #include "poe2/stash_layouts.hpp"
 #include "spells.h"
 #include "tables/playerdat.hpp"
+#include "utils/is_of.hpp"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -690,12 +691,16 @@ TEST_F(Poe2CraftingTest, CraftingTablesHoldTheRowsTheCodeHad)
 		EXPECT_EQ(essence.kind, old.kind);
 		EXPECT_EQ(essence.name, old.name);
 		EXPECT_EQ(essence.family, old.family);
-		// The kind it became does the same until the runes rework gives it its own numbers; it has its own name since stash
-		// step 3.
+		// The kind it became has its own name since stash step 3; since build spec step 7 Abrasion adds physical damage,
+		// Enhancement defences and the Infinite an attribute, as in POE2, and the others still the old family first.
 		const Essence &current = GetEssence(CurrentEssenceKind(old.kind));
 		EXPECT_NE(current.kind, old.kind);
 		EXPECT_NE(current.name, old.name);
-		EXPECT_EQ(current.family, old.family);
+		if (IsNoneOf(current.kind, EssenceKind::Abrasion, EssenceKind::Enhancement, EssenceKind::Infinite)) {
+			EXPECT_EQ(current.family, old.family);
+			ASSERT_FALSE(current.lines.empty());
+			EXPECT_EQ(current.lines.front(), old.family);
+		}
 		EXPECT_TRUE(current.drops);
 		EXPECT_FALSE(essence.drops);
 	}
@@ -1097,15 +1102,15 @@ TEST_F(Poe2CraftingTest, EveryRuneAndEssenceHasATabSlotOfItsOwn)
 			if (CurrentEssenceKind(essence) == essence && (!IsEvilEssence(essence) || tier == 0))
 				EXPECT_TRUE(essenceSlots.insert(*slot).second) << item._iIName << " shares a slot";
 		}
-		if (kind > static_cast<int>(EssenceKind::Ruin))
-			EXPECT_FALSE(GetEssence(essence).drops) << kind;
+		// Build spec step 7: every kind of today drops, the legacy kinds never.
+		EXPECT_EQ(GetEssence(essence).drops, CurrentEssenceKind(essence) == essence) << kind;
 	}
 	EXPECT_EQ(essenceSlots.size(), (EssenceFamilies().size() * 4) + 7);
 	EXPECT_EQ(std::string(make(essenceBase, EssenceVariant(EssenceKind::Terror, EssenceTier::Perfect))._iIName), "Essence of Terror");
 	EXPECT_EQ(std::string(make(essenceBase, EssenceVariant(EssenceKind::Infinite, EssenceTier::Lesser))._iIName), "Lesser Essence of the Infinite");
 
-	// None of the placeholders drop: a thousand drops are all of kinds of before, or the runes of step 5, never a
-	// soulstone of step 6 or a Rune of Legend, which only bosses drop.
+	// A thousand drops are never a Rune of Legend, which only bosses drop, nor an Evil essence, which needs Act 3 (a drop
+	// made without the place it fell rolls as Act 0).
 	for (uint32_t seed = 1; seed <= 1000; seed++) {
 		for (const _item_indexes base : { augmentBase, essenceBase }) {
 			Item item = {};
@@ -1113,8 +1118,9 @@ TEST_F(Poe2CraftingTest, EveryRuneAndEssenceHasATabSlotOfItsOwn)
 			item._iSeed = static_cast<int>(seed * 2654435761U);
 			item._iCreateInfo = 80;
 			FinishCraftingItem(item);
-			EXPECT_LT(GetAugmentId(item), AugmentId::TalicsRune);
-			EXPECT_LE(GetEssenceKind(item), EssenceKind::Ruin);
+			EXPECT_FALSE(IsRuneOfLegend(GetAugmentId(item)));
+			EXPECT_FALSE(IsEvilEssence(GetEssenceKind(item)));
+			EXPECT_EQ(CurrentEssenceKind(GetEssenceKind(item)), GetEssenceKind(item));
 		}
 	}
 }

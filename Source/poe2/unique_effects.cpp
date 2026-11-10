@@ -1062,7 +1062,8 @@ bool TakeFreeSkill(const Player &player)
 
 int UniqueManaCostPercent(const Player &player)
 {
-	return std::max((100 + Rule(player, UniqueRule::ManaCost)) * MapSkillCostPercent() / 100, 0);
+	// The gear's mana cost efficiency (the Perfect Essence of Alacrity) divides what is left.
+	return std::max((100 + Rule(player, UniqueRule::ManaCost)) * MapSkillCostPercent() / 100 * GearManaCostPercent(player) / 100, 0);
 }
 
 Fixed26_6 SpendableEnergyShield(const Player &player)
@@ -1431,7 +1432,7 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 	// Berserk and Mana Shield.
 	raw = ApplySpiritHitTaken(player, Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(raw, INT32_MAX / 2)))).raw();
 	state.lifeLost[0] = static_cast<int32_t>(std::min<int64_t>(state.lifeLost[0] + raw, INT32_MAX / 2));
-	NoteRecoup(player, raw);
+	NoteRecoup(player, raw, type);
 	return Fixed26_6::fromRaw(static_cast<int32_t>(raw));
 }
 

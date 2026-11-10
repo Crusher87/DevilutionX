@@ -10,15 +10,18 @@
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "poe2/bases.hpp"
 #include "poe2/desecration.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/mix.hpp"
+#include "poe2/passive_tree.hpp"
 #include "poe2/weapon_kinds.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
+#include "utils/str_split.hpp"
 #include "utils/utf8.hpp"
 
 namespace devilution {
@@ -129,6 +132,25 @@ std::expected<OmenTrigger, std::string> ParseTrigger(std::string_view text)
 	return std::unexpected("unknown omen trigger");
 }
 
+std::vector<std::string> SplitFamilyList(std::string_view text)
+{
+	std::vector<std::string> ids;
+	for (const std::string_view id : SplitByChar(text, ',')) {
+		if (!id.empty())
+			ids.emplace_back(id);
+	}
+	return ids;
+}
+
+std::expected<EssenceSpecial, std::string> ParseEssenceSpecial(std::string_view text)
+{
+	if (text.empty())
+		return EssenceSpecial::None;
+	if (const std::optional<EssenceSpecial> special = magic_enum::enum_cast<EssenceSpecial>(text))
+		return *special;
+	return std::unexpected("unknown essence special (Hatred, Destruction, Lies, Sin or Pain)");
+}
+
 bool LoadEssences()
 {
 	constexpr std::string_view Filename = "txtdata\\poe2\\essences.tsv";
@@ -153,6 +175,17 @@ bool LoadEssences()
 		int drops = 0;
 		reader.readInt("drops", drops);
 		essence.drops = drops != 0;
+		// Build spec step 7: the families each kind of item takes, the Perfect ones, and what an Evil one does.
+		std::string text;
+		reader.readString("lines", text);
+		essence.lines = SplitFamilyList(text);
+		reader.readString("perfect", text);
+		essence.perfect = SplitFamilyList(text);
+		reader.read("special", essence.special, ParseEssenceSpecial);
+		reader.readOptionalInt("dropAct", essence.dropAct);
+		reader.readOptionalInt("dropWeight", essence.dropWeight);
+		reader.readString("text", essence.text);
+		reader.readString("perfectText", essence.perfectText);
 		Essences.push_back(std::move(essence));
 	}
 	return HasEveryRow(Filename, Essences.size(), EssenceKind::Count) && BecomesRowsOfToday(Filename, Essences, &Essence::becomes);
@@ -309,21 +342,10 @@ uint8_t RollVariant(const Item &item)
 	const uint32_t roll = Mix(static_cast<uint32_t>(item._iSeed) ^ 0xE55E4CE5U);
 	const int level = DropLevel(item);
 	switch (item._iMiscId) {
-	case IMISC_ESSENCE: {
-		std::vector<std::pair<uint8_t, int>> choices;
-		for (size_t kind = 1; kind < Essences.size(); kind++) {
-			// Legacy kinds never drop; the kinds they became do, in their places. Kinds still waiting for their modifiers
-			// (build spec step 7) don't drop either.
-			if (Essences[kind].becomes != EssenceKind::None || !Essences[kind].drops)
-				continue;
-			for (size_t tier = 0; tier < EssenceDropLevels.size(); tier++) {
-				// Lesser essences drop anywhere; better ones need their level.
-				if (tier == 0 || EssenceDropLevels[tier] <= level)
-					choices.emplace_back(EssenceVariant(static_cast<EssenceKind>(kind), static_cast<EssenceTier>(tier)), EssenceWeights[tier]);
-			}
-		}
-		return PickWeighted(choices, roll);
-	}
+	case IMISC_ESSENCE:
+		// Without the place it dropped (the item spawner, a map reward's roll) its item level stands for the area level,
+		// and the Act 3 essences (the Evil ones) stay out; drops roll again with the area (DropPoe2LootItem).
+		return RollEssenceDrop(roll, level, 0);
 	case IMISC_OMEN: {
 		std::vector<std::pair<uint8_t, int>> choices;
 		for (const Omen &omen : Omens) {
@@ -431,6 +453,116 @@ EssenceKind GetEssenceKind(const Item &item)
 EssenceTier GetEssenceTier(const Item &item)
 {
 	return EssenceVariantTier(CraftingItemVariant(item));
+}
+
+uint8_t RollEssenceDrop(uint32_t roll, int areaLevel, int act)
+{
+	std::vector<std::pair<uint8_t, int>> choices;
+	for (size_t kind = 1; kind < Essences.size(); kind++) {
+		const Essence &essence = Essences[kind];
+		// Legacy kinds never drop; the kinds they became do, in their places.
+		if (essence.becomes != EssenceKind::None || !essence.drops || essence.dropWeight <= 0 || essence.dropAct > act)
+			continue;
+		if (IsEvilEssence(essence.kind)) {
+			choices.emplace_back(EssenceVariant(essence.kind, EssenceTier::Normal), essence.dropWeight);
+			continue;
+		}
+		for (size_t tier = 0; tier < EssenceDropLevels.size(); tier++) {
+			// Lesser essences drop wherever essences do; better ones need their level.
+			if (tier == 0 || EssenceDropLevels[tier] <= areaLevel)
+				choices.emplace_back(EssenceVariant(essence.kind, static_cast<EssenceTier>(tier)), std::max(EssenceWeights[tier] * essence.dropWeight / 100, 1));
+		}
+	}
+	if (choices.empty())
+		return 0;
+	return PickWeighted(choices, roll);
+}
+
+std::vector<uint8_t> EssenceFamiliesForItem(const Essence &essence, EssenceTier tier, const Item &item)
+{
+	std::vector<uint8_t> found;
+	const std::optional<ModSlot> slot = ItemModSlot(item);
+	if (!slot)
+		return found;
+	const uint32_t slotBit = 1U << static_cast<uint32_t>(*slot);
+	const uint16_t baseTags = ItemModBaseTags(item);
+	// Crafting never repeats an implicit (a Ruby Ring's fire resistance), so such a line isn't the item's.
+	const ModEffectMask implicits = ImplicitEffectBits(item);
+	const std::vector<std::string> *ids = tier == EssenceTier::Perfect && !essence.perfect.empty() ? &essence.perfect : &essence.lines;
+	const std::vector<std::string> legacy { essence.family };
+	if (ids->empty())
+		ids = &legacy;
+	for (const std::string &id : *ids) {
+		// On the caster weapons rework's bases, the essence gives their family of the same effect.
+		const std::optional<uint8_t> family = FindFamilyForItem(id, item);
+		if (!family)
+			continue;
+		const ModFamily &modFamily = ModifierFamilies()[*family];
+		if (!modFamily.enabled || (modFamily.slots & slotBit) == 0 || (modFamily.baseTags != 0 && (modFamily.baseTags & baseTags) == 0))
+			continue;
+		if ((implicits & ModEffectBits(modFamily.effect)).any())
+			continue;
+		if (std::find(found.begin(), found.end(), *family) == found.end())
+			found.push_back(*family);
+	}
+	return found;
+}
+
+bool HasHatredMark(const Poe2Craft &craft)
+{
+	return (craft.enchant & HatredEnchantBit) != 0;
+}
+
+bool HasDestructionMark(const Poe2Craft &craft)
+{
+	return (craft.extension[EssenceFlagsByte] & DestructionMark) != 0;
+}
+
+bool HasPainMark(const Poe2Craft &craft)
+{
+	return (craft.extension[EssenceFlagsByte] & PainMark) != 0;
+}
+
+uint8_t CraftEnchantId(const Poe2Craft &craft)
+{
+	return craft.enchant & EnchantIdMask;
+}
+
+uint8_t SecondEnchantId(const Poe2Craft &craft)
+{
+	return craft.extension[SecondEnchantByte] & EnchantIdMask;
+}
+
+uint8_t SecondEnchantRoll(const Poe2Craft &craft)
+{
+	return (craft.extension[SecondEnchantByte] >> 4) & 7;
+}
+
+void SetSecondEnchant(Poe2Craft &craft, uint8_t id, uint8_t roll)
+{
+	craft.extension[SecondEnchantByte] = static_cast<uint8_t>((id & EnchantIdMask) | ((roll & 7) << 4));
+}
+
+std::optional<uint16_t> SinNotable(const Poe2Craft &craft)
+{
+	const auto stored = static_cast<uint16_t>(craft.extension[SinNotableByte] | (craft.extension[SinNotableByte + 1] << 8));
+	if (stored == 0)
+		return std::nullopt;
+	return static_cast<uint16_t>(stored - 1);
+}
+
+void SetSinNotable(Poe2Craft &craft, uint16_t node)
+{
+	const auto stored = static_cast<uint16_t>(node + 1);
+	craft.extension[SinNotableByte] = static_cast<uint8_t>(stored & 0xFF);
+	craft.extension[SinNotableByte + 1] = static_cast<uint8_t>(stored >> 8);
+}
+
+bool IsResistanceEffect(ModEffect effect)
+{
+	return IsAnyOf(effect, ModEffect::FireResistance, ModEffect::ColdResistance, ModEffect::LightningResistance, ModEffect::AllResistances, ModEffect::ChaosResistance,
+	    ModEffect::MaxChaosResistance, ModEffect::MaxFireResistance, ModEffect::MaxLightningResistance, ModEffect::MaxColdResistance, ModEffect::AllResistancesAndLife,
+	    ModEffect::MinionResistances);
 }
 
 EssenceKind CurrentEssenceKind(EssenceKind kind)
@@ -856,8 +988,11 @@ void ApplyAugments(Item &item)
 	if (!kind)
 		return;
 	const Poe2Craft &craft = item._iPoe2Craft;
-	const int percent = HasDesecratedMod(item, DesecratedModId::HollowSaint) ? HollowSaintAugmentPercent : 100;
-	const auto apply = [&item, percent](ModEffect effect, const std::array<int16_t, 2> &values) {
+	const int hollowSaint = HasDesecratedMod(item, DesecratedModId::HollowSaint) ? HollowSaintAugmentPercent : 100;
+	// The Essence of Hatred makes them stronger, but not their resistances (build spec step 7).
+	const bool hatred = HasHatredMark(craft);
+	const auto apply = [&item, hollowSaint, hatred](ModEffect effect, const std::array<int16_t, 2> &values) {
+		const int percent = hatred && !IsResistanceEffect(effect) ? hollowSaint * HatredAugmentPercent / 100 : hollowSaint;
 		ApplyModEffect(item, effect, values[0] * percent / 100, values[1] * percent / 100);
 	};
 	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
@@ -1038,12 +1173,29 @@ char EnchantKind(const Item &item)
 	return ' ';
 }
 
-const EnchantData *ItemEnchant(const Item &item)
+const EnchantData *EnchantOf(uint8_t id)
 {
-	const uint8_t id = item._iPoe2Craft.enchant;
 	if (id == 0 || id >= Enchants.size())
 		return nullptr;
 	return &Enchants[id];
+}
+
+const EnchantData *ItemEnchant(const Item &item)
+{
+	// The enchant byte's 0x10 bit is the Essence of Hatred's mark.
+	return EnchantOf(CraftEnchantId(item._iPoe2Craft));
+}
+
+/** The Essence of Destruction's second enchantment, which the item's corruption gave it. */
+const EnchantData *ItemSecondEnchant(const Item &item)
+{
+	return EnchantOf(SecondEnchantId(item._iPoe2Craft));
+}
+
+/** Whether a rule is a resistance's, which the Essence of Hatred doesn't strengthen. */
+bool IsResistanceRule(UniqueRule rule)
+{
+	return magic_enum::enum_name(rule).find("Resist") != std::string_view::npos;
 }
 
 int EnchantValue(const EnchantData &enchant, uint8_t roll)
@@ -1069,10 +1221,10 @@ std::vector<std::pair<CorruptionEnchant, int>> CorruptionEnchantChoices(const It
 
 void ApplyCorruptionEnchant(Item &item)
 {
-	const EnchantData *enchant = ItemEnchant(item);
-	if (enchant == nullptr || enchant->effect == ModEffect::None)
-		return;
-	ApplyModEffect(item, enchant->effect, EnchantValue(*enchant, item._iPoe2Craft.enchantRoll), 0);
+	if (const EnchantData *enchant = ItemEnchant(item); enchant != nullptr && enchant->effect != ModEffect::None)
+		ApplyModEffect(item, enchant->effect, EnchantValue(*enchant, item._iPoe2Craft.enchantRoll), 0);
+	if (const EnchantData *second = ItemSecondEnchant(item); second != nullptr && second->effect != ModEffect::None)
+		ApplyModEffect(item, second->effect, EnchantValue(*second, SecondEnchantRoll(item._iPoe2Craft)), 0);
 }
 
 std::string CorruptionEnchantText(const Item &item)
@@ -1083,6 +1235,14 @@ std::string CorruptionEnchantText(const Item &item)
 	return FormatRuntime(enchant->text, EnchantValue(*enchant, item._iPoe2Craft.enchantRoll));
 }
 
+std::string SecondCorruptionEnchantText(const Item &item)
+{
+	const EnchantData *enchant = ItemSecondEnchant(item);
+	if (enchant == nullptr)
+		return {};
+	return FormatRuntime(enchant->text, EnchantValue(*enchant, SecondEnchantRoll(item._iPoe2Craft)));
+}
+
 void AddCraftRules(const Item &item, UniqueRuleTotals &totals)
 {
 	const auto add = [&totals](UniqueRule rule, int value) {
@@ -1090,23 +1250,53 @@ void AddCraftRules(const Item &item, UniqueRuleTotals &totals)
 		total = static_cast<int16_t>(total + value);
 	};
 	const Poe2Craft &craft = item._iPoe2Craft;
+	// The Essence of Hatred strengthens the augments' rules too, resistances aside.
+	const bool hatred = HasHatredMark(craft);
+	const auto addAugmentRule = [&add, hatred](UniqueRule rule, int value) {
+		add(rule, hatred && !IsResistanceRule(rule) ? value * HatredAugmentPercent / 100 : value);
+	};
 	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
 		const Augment &augment = GetAugment(SocketAugment(craft, i));
 		// A Rune of Legend's rule counts on the hero, once (ApplyWornRunesOfLegend); a relic's only in its kind of item.
 		if (augment.rule != UniqueRule::None && !IsRuneOfLegend(augment.id) && AugmentFitsItem(augment, item))
-			add(augment.rule, augment.ruleValue);
+			addAugmentRule(augment.rule, augment.ruleValue);
 	}
 	if (const std::optional<RuneFamily> family = BondedRuneFamily(item); family) {
 		if (const std::optional<AugmentKind> kind = AugmentKindOf(item); kind) {
 			for (const RuneBond *bond : RuneBondsFor(*family, *kind)) {
 				if (bond->rule != UniqueRule::None)
-					add(bond->rule, bond->ruleValue);
+					addAugmentRule(bond->rule, bond->ruleValue);
 			}
 		}
 	}
 	if (const EnchantData *enchant = ItemEnchant(item); enchant != nullptr && enchant->rule != UniqueRule::None)
 		add(enchant->rule, EnchantValue(*enchant, craft.enchantRoll));
+	if (const EnchantData *second = ItemSecondEnchant(item); second != nullptr && second->rule != UniqueRule::None)
+		add(second->rule, EnchantValue(*second, SecondEnchantRoll(craft)));
 	AddDesecratedRules(item, totals);
+}
+
+std::vector<std::string> EssenceMarkText(const Item &item)
+{
+	std::vector<std::string> lines;
+	const Poe2Craft &craft = item._iPoe2Craft;
+	if (HasHatredMark(craft))
+		lines.emplace_back(_("Augments in it are 50% stronger, but not resistances"));
+	if (HasDestructionMark(craft))
+		lines.emplace_back(_("Its next corruption gives two enchantments"));
+	if (HasPainMark(craft))
+		lines.push_back(FormatRuntime(_("Its quality can reach {:d}%"), PainQualityLimit));
+	if (const std::optional<uint16_t> node = SinNotable(craft); node) {
+		for (const PassiveNode &passive : PassiveTree()) {
+			if (passive.id != *node || passive.kind != PassiveKind::Notable)
+				continue;
+			lines.push_back(FormatRuntime(_("Allocates {:s}"), PassiveNodeName(passive)));
+			for (const auto &[stat, value] : passive.stats)
+				lines.push_back(PassiveStatText(stat, value));
+			break;
+		}
+	}
+	return lines;
 }
 
 void FinishCraftingItem(Item &item)
@@ -1145,12 +1335,18 @@ std::vector<std::string> CraftingItemText(const Item &item)
 		const EssenceTier tier = GetEssenceTier(item);
 		const Essence &essence = GetEssence(GetEssenceKind(item));
 		const std::optional<uint8_t> family = FindModifierFamily(essence.family);
-		const std::string_view familyName = family ? std::string_view(ModifierFamilies()[*family].name) : essence.name;
+		const std::string_view familyName = !essence.text.empty() ? std::string_view(essence.text) : family ? std::string_view(ModifierFamilies()[*family].name)
+		                                                                                                    : std::string_view(essence.name);
+		// The Evil essences (build spec step 7) work on a rare, each in its own way.
+		if (IsEvilEssence(essence.kind)) {
+			lines.push_back(FormatRuntime(_("Rare item: removes a random modifier and {:s}"), familyName));
+			break;
+		}
 		if (tier == EssenceTier::Perfect)
-			lines.push_back(FormatRuntime(_("Rare item: removes a random modifier and adds {:s}"), familyName));
+			lines.push_back(FormatRuntime(_("Rare item: removes a random modifier and adds {:s}"), !essence.perfectText.empty() ? std::string_view(essence.perfectText) : familyName));
 		else
 			lines.push_back(FormatRuntime(_("Magic item: makes it rare with {:s}"), familyName));
-		if (EssenceModLevelFloors[static_cast<size_t>(tier)] > 0)
+		if (tier != EssenceTier::Perfect && EssenceModLevelFloors[static_cast<size_t>(tier)] > 0)
 			lines.push_back(FormatRuntime(_("The modifier is at least level {:d}"), EssenceModLevelFloors[static_cast<size_t>(tier)]));
 		break;
 	}

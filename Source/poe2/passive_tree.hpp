@@ -357,8 +357,14 @@ bool CanRefundPassive(const Player &player, PassiveNodeId node, PassivePool pool
 bool RefundPassive(Player &player, PassiveNodeId node, PassivePool pool = PassivePool::Main);
 void ResetPassives(Player &player);
 
-/** @brief Sum of the stats of every allocated node; all zero in multiplayer, where passives aren't synced yet. */
+/** @brief Sum of the stats of every allocated node, and of the worn body armour's Essence of Sin notable; all zero in multiplayer, where passives aren't synced yet. */
 PassiveTotals GetPassiveTotals(const Player &player);
+/** @brief A notable an item can allocate (the Essence of Sin): a plain notable of the main tree, not a Profane Road's or a capstone. */
+[[nodiscard]] bool CanBeItemNotable(const PassiveNode &node);
+/** @brief One of the notables CanBeItemNotable allows, picked by the seed; nullopt for a tree without any. */
+[[nodiscard]] std::optional<PassiveNodeId> RollItemNotable(uint32_t seed);
+/** @brief The notable the hero's worn body armour allocates (the Essence of Sin), if it is usable. */
+[[nodiscard]] std::optional<PassiveNodeId> WornItemNotable(const Player &player);
 /** @brief The tree's total of a stat as of the last CalcPlrItemVals, for combat code that runs every hit. */
 int PassiveTotal(const Player &player, PassiveStat stat);
 /** @brief Keeps the totals for PassiveTotal. */

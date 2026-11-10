@@ -103,12 +103,14 @@ void ExpectTiers(const ModFamily &family, const std::vector<ShownTier> &expected
 TEST_F(Poe2CasterAffixesTest, FamiliesComeAfterTheOldOnesOnTheNewSlotsOnly)
 {
 	const std::vector<ModFamily> &families = ModifierFamilies();
-	// 76, then the chaos wands' and staves' 4 (chaos damage plan step 13).
-	ASSERT_EQ(families.size(), LegacyModFamilyCount + 80U);
+	// 76, then the chaos wands' and staves' 4 (chaos damage plan step 13); the essences' own come after them (build spec
+	// step 7) and never stand in for a slot.
+	ASSERT_EQ(EssenceModFamilyStart, LegacyModFamilyCount + 80U);
+	ASSERT_GE(families.size(), EssenceModFamilyStart);
 	constexpr uint32_t NewSlots = (1U << static_cast<uint32_t>(ModSlot::Staff)) | (1U << static_cast<uint32_t>(ModSlot::Wand)) | (1U << static_cast<uint32_t>(ModSlot::Sceptre));
 	constexpr uint32_t LegacySlots = (1U << static_cast<uint32_t>(ModSlot::LegacyStaff)) | (1U << static_cast<uint32_t>(ModSlot::LegacySceptre));
 	size_t tiers = 0;
-	for (size_t i = 0; i < families.size(); i++) {
+	for (size_t i = 0; i < EssenceModFamilyStart; i++) {
 		const ModFamily &family = families[i];
 		if (i < LegacyModFamilyCount) {
 			// The old families never roll on the new bases.
