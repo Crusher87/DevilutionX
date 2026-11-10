@@ -99,6 +99,7 @@ set(poe2_mod
   txtdata/poe2/caves_rooms.tsv
   txtdata/poe2/hell_rooms.tsv
   txtdata/poe2/hive_rooms.tsv
+  txtdata/poe2/crypt_rooms.tsv
   txtdata/poe2/cathedral_rooms.tsv
   txtdata/poe2/experience_bosses.tsv
   txtdata/poe2/experience_level_gap.tsv

@@ -902,6 +902,7 @@ GameplayOptions::GameplayOptions()
     , newCavesFloors("New Caves Floors", OptionEntryFlags::None, N_("New Caves Floors"), N_("On: Caves floors are built like the new Cathedral floors, from their own rooms. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , newHellFloors("New Hell Floors", OptionEntryFlags::None, N_("New Hell Floors"), N_("On: Hell floors (levels 13 to 15) are built like the new Cathedral floors, from their own rooms. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , newHiveFloors("New Hive Floors", OptionEntryFlags::None, N_("New Hive Floors"), N_("On: Hellfire's Hive floors (levels 17 to 20) are built like the new Cathedral floors, from their own rooms. Off: Hellfire's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
+    , newCryptFloors("New Crypt Floors", OptionEntryFlags::None, N_("New Crypt Floors"), N_("On: Hellfire's Crypt floors (levels 21 to 24) are built like the new Cathedral floors, from their own rooms. Off: Hellfire's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , numHealPotionPickup("Heal Potion Pickup", OptionEntryFlags::None, N_("Heal Potion Pickup"), N_("Number of Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numFullHealPotionPickup("Full Heal Potion Pickup", OptionEntryFlags::None, N_("Full Heal Potion Pickup"), N_("Number of Full Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numManaPotionPickup("Mana Potion Pickup", OptionEntryFlags::None, N_("Mana Potion Pickup"), N_("Number of Mana potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
@@ -947,6 +948,7 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&newCavesFloors,
 		&newHellFloors,
 		&newHiveFloors,
+		&newCryptFloors,
 		&autoRefillBelt,
 		&autoEquipWeapons,
 		&autoEquipArmor,

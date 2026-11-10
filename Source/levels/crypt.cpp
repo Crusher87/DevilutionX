@@ -4,10 +4,12 @@
 
 #include "engine/load_file.hpp"
 #include "engine/point.hpp"
+#include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "items.h"
 #include "levels/drlg_l1.h"
 #include "lighting.h"
+#include "poe2/cathedral_floors.hpp"
 
 namespace devilution {
 
@@ -643,14 +645,17 @@ void CryptSubstitions1(int rndper)
 	}
 }
 
+/** POE2: the blocks the random pillars and stars keep out of (CryptSubstitution). */
+const Bitset2d<DMAXX, DMAXY> *KeepOut = nullptr;
+
 void CryptSubstitions2(int rndper)
 {
-	PlaceMiniSetRandom(CryptPillar1, rndper);
-	PlaceMiniSetRandom(CryptPillar2, rndper);
-	PlaceMiniSetRandom(CryptPillar3, rndper);
-	PlaceMiniSetRandom(CryptPillar4, rndper);
-	PlaceMiniSetRandom(CryptPillar5, rndper);
-	PlaceMiniSetRandom(CryptStar, rndper);
+	PlaceMiniSetRandom(CryptPillar1, rndper, KeepOut);
+	PlaceMiniSetRandom(CryptPillar2, rndper, KeepOut);
+	PlaceMiniSetRandom(CryptPillar3, rndper, KeepOut);
+	PlaceMiniSetRandom(CryptPillar4, rndper, KeepOut);
+	PlaceMiniSetRandom(CryptPillar5, rndper, KeepOut);
+	PlaceMiniSetRandom(CryptStar, rndper, KeepOut);
 
 	for (const ReplaceTile pair : Substition1Floor) {
 		PlaceMiniSetRandom1x1(pair.search, pair.replace, rndper);
@@ -679,10 +684,11 @@ void InitCryptPieces()
 	}
 }
 
-void SetCryptRoom()
-{
-	const Point position = SelectChamber();
+namespace {
 
+/** Na-Krul's prison, here or in one of Hellfire's chambers. */
+void SetCryptRoomAt(Point position)
+{
 	UberRow = 2 * position.x + 6;
 	UberCol = 2 * position.y + 8;
 	IsUberRoomOpened = false;
@@ -695,15 +701,25 @@ void SetCryptRoom()
 	PlaceDunTiles(dunData.get(), position, 0);
 }
 
-void SetCornerRoom()
+void SetCornerRoomAt(Point position)
 {
-	const Point position = SelectChamber();
-
 	auto dunData = LoadFileInMem<uint16_t>("nlevels\\l5data\\cornerstone.dun");
 
 	SetPiece = { position, GetDunSize(dunData.get()) };
 
 	PlaceDunTiles(dunData.get(), position, 0);
+}
+
+} // namespace
+
+void SetCryptRoom()
+{
+	SetCryptRoomAt(SelectChamber());
+}
+
+void SetCornerRoom()
+{
+	SetCornerRoomAt(SelectChamber());
 }
 
 void FixCryptDirtTiles()
@@ -752,8 +768,9 @@ bool PlaceCryptStairs(lvl_entry entry)
 	return success;
 }
 
-void CryptSubstitution()
+void CryptSubstitution(const Bitset2d<DMAXX, DMAXY> *keepOut)
 {
+	KeepOut = keepOut;
 	for (const ReplaceTile pair : Statues) {
 		PlaceMiniSetRandom1x1(pair.search, pair.replace, 10);
 	}
@@ -801,6 +818,7 @@ void CryptSubstitution()
 		ApplyCryptShadowsPatterns();
 		break;
 	}
+	KeepOut = nullptr;
 }
 
 void SetCryptSetPieceRoom()
@@ -837,6 +855,99 @@ void PlaceCryptLights()
 					break;
 				}
 			}
+		}
+	}
+}
+
+bool CryptNeedsQuestRoom()
+{
+	return currlevel == 24 || CornerStone.isAvailable();
+}
+
+void PlaceCryptQuestRoom(Point position)
+{
+	if (currlevel == 24)
+		SetCryptRoomAt(position);
+	else if (CornerStone.isAvailable())
+		SetCornerRoomAt(position);
+}
+
+bool PlaceCryptFunnelStairs(const CathedralPlan &plan, lvl_entry entry)
+{
+	// The stairs up go into the arrival room's north wall, with two blocks of rock behind it.
+	if (!plan.stairsUp)
+		return false;
+	const Miniset &stairsUp = currlevel != 21 ? L5STAIRSUPHF : L5STAIRSTOWN;
+	const Point up = *plan.stairsUp + Displacement { 0, -3 };
+	if (!stairsUp.matches(up))
+		return false;
+	stairsUp.place(up, true);
+	if (entry == ENTRY_MAIN || entry == ENTRY_TWARPDN)
+		ViewPosition = up.megaToWorld() + Displacement { 3, 5 };
+
+	// Level 24 ends in Na-Krul's prison.
+	if (currlevel == 24)
+		return true;
+	if (!plan.stairsDown || !L5STAIRSDOWN.matches(*plan.stairsDown))
+		return false;
+	L5STAIRSDOWN.place(*plan.stairsDown, true);
+	if (entry == ENTRY_PREV)
+		ViewPosition = plan.stairsDown->megaToWorld() + Displacement { 3, 7 };
+	return true;
+}
+
+void StampCryptMarks(const CathedralPlan &plan)
+{
+	const auto leaking = [](uint8_t tile) -> std::optional<uint8_t> {
+		// Only walls bleed here; a floor block gets its own pool below.
+		for (const ReplaceTile pair : LeakingTiles) {
+			if (pair.search == tile && pair.search != Floor)
+				return pair.replace;
+		}
+		return std::nullopt;
+	};
+	const auto stamp = [](Point block, uint8_t tile) {
+		dungeon[block.x][block.y] = tile;
+		Protected.set(block.x, block.y);
+	};
+	for (const CathedralProp &prop : plan.props) {
+		const Point block = prop.block;
+		const Point north = block + Displacement { 0, -1 };
+		const Point west = block + Displacement { -1, 0 };
+		switch (prop.kind) {
+		case '+':
+			if (dungeon[block.x][block.y] == Floor)
+				stamp(block, CryptStar.replace[1][1]);
+			break;
+		case 'Q':
+			// A carved demon or succubus, in the wall behind.
+			if (dungeon[north.x][north.y] == HWall)
+				stamp(north, FlipCoin() ? HDemon : HSuccubus);
+			else if (dungeon[west.x][west.y] == VWall)
+				stamp(west, FlipCoin() ? VDemon : VSuccubus);
+			break;
+		case 'B': {
+			// Blood running down the wall behind: one wall block or two, and now and then a pool at its foot, so no
+			// two runs look the same.
+			const bool fromNorth = leaking(dungeon[north.x][north.y]).has_value();
+			const Point wall = fromNorth ? north : west;
+			const std::optional<uint8_t> blood = leaking(dungeon[wall.x][wall.y]);
+			if (!blood)
+				break;
+			stamp(wall, *blood);
+			if (FlipCoin()) {
+				const Displacement along = fromNorth ? Displacement { FlipCoin() ? -1 : 1, 0 } : Displacement { 0, FlipCoin() ? -1 : 1 };
+				const Point next = wall + along;
+				const uint8_t plain = fromNorth ? HWall : VWall;
+				if (dungeon[next.x][next.y] == plain && !Protected.test(next.x, next.y))
+					stamp(next, fromNorth ? HWall4 : VWall4);
+			}
+			if (FlipCoin(3) && dungeon[block.x][block.y] == Floor)
+				stamp(block, Floor4);
+			break;
+		}
+		default:
+			break;
 		}
 	}
 }

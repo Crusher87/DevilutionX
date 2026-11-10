@@ -44,7 +44,7 @@ struct FloorRecord {
 	uint16_t visits = 0;
 	/** The builder and rooms of the floor's current build are settled (see Poe2FloorBuildFor). */
 	bool stamped = false;
-	/** Built by the new floor builder (poe2/cathedral_floors.hpp): the Cathedral's, Catacombs', Caves', Hell's or the Hive's. */
+	/** Built by the new floor builder (poe2/cathedral_floors.hpp): the Cathedral's, Catacombs', Caves', Hell's, the Hive's or the Crypt's. */
 	bool cathedralFunnel = false;
 	/** The designed rooms this build had to leave out, so building it again gives the same floor. */
 	uint64_t avoidRooms = 0;
@@ -107,7 +107,8 @@ bool BuiltFromOtherRooms(int level, bool isSetLevel)
 	const bool caves = type == DTYPE_CAVES;
 	const bool hell = type == DTYPE_HELL;
 	const bool hive = type == DTYPE_NEST;
-	return record.roomsStamp != CathedralRoomsStamp(catacombs, caves, hell, hive);
+	const bool crypt = type == DTYPE_CRYPT;
+	return record.roomsStamp != CathedralRoomsStamp(catacombs, caves, hell, hive, crypt);
 }
 
 /**
@@ -477,8 +478,11 @@ Poe2FloorBuild Poe2FloorBuildFor(int level)
 		const bool caves = leveltype == DTYPE_CAVES;
 		const bool hell = leveltype == DTYPE_HELL;
 		const bool hive = leveltype == DTYPE_NEST;
+		const bool crypt = leveltype == DTYPE_CRYPT;
 		bool wanted = *GetOptions().Gameplay.newCathedralFloors;
-		if (hive)
+		if (crypt)
+			wanted = *GetOptions().Gameplay.newCryptFloors;
+		else if (hive)
 			wanted = *GetOptions().Gameplay.newHiveFloors;
 		else if (hell)
 			wanted = *GetOptions().Gameplay.newHellFloors;
@@ -488,9 +492,9 @@ Poe2FloorBuild Poe2FloorBuildFor(int level)
 			wanted = *GetOptions().Gameplay.newCatacombsFloors;
 		// A kept floor that was never settled was built before its dungeon had the new builder: it stays Diablo's.
 		record->cathedralFunnel = !record->kept && wanted;
-		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs, caves || hive, hell, hive) : 0;
+		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs, caves || hive, hell, hive, crypt) : 0;
 		record->roomsPending = record->cathedralFunnel;
-		record->roomsStamp = record->cathedralFunnel ? CathedralRoomsStamp(catacombs, caves, hell, hive) : 0;
+		record->roomsStamp = record->cathedralFunnel ? CathedralRoomsStamp(catacombs, caves, hell, hive, crypt) : 0;
 	}
 	return { record->cathedralFunnel, record->avoidRooms };
 }

@@ -675,6 +675,8 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean newHellFloors;
 	/** @brief Hellfire's Hive floors built the same way, from their own rooms (POE2 Mashup). */
 	OptionEntryBoolean newHiveFloors;
+	/** @brief Hellfire's Crypt floors built the same way, from their own rooms (POE2 Mashup). */
+	OptionEntryBoolean newCryptFloors;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */
