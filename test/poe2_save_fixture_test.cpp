@@ -1010,5 +1010,74 @@ TEST_F(Poe2SaveFixtureTest, SoulstonesSavedBeforeTheirNumbersMoveOnLoad)
 	EXPECT_EQ(Snapshot(), loaded);
 }
 
+/**
+ * A white item of an old Diablo base (no POE2 base, so no implicits) keeps the lines its runes give through a save: the
+ * save holds only the crafting, and loading rebuilds the POE2 stats from it.
+ */
+TEST_F(Poe2SaveFixtureTest, RunesInAWhiteOldBaseSurviveASave)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Warrior;
+	CopyUtf8(info.name, "WhiteRunes", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(20);
+	player._pBaseStr = player._pStrength = 200;
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseMag = player._pMagic = 200;
+	player._pgfxnum = 0;
+	InitCursor();
+
+	constexpr size_t Leech = static_cast<size_t>(Poe2ItemStat::LifeLeech);
+	// A white Short Sword as a drop makes it, worn, and another in the bag.
+	const Item worn = Socketed(Make("Short Sword", 202, ITEM_QUALITY_NORMAL, 10), { AugmentId::LesserAmn });
+	const Item bagged = Socketed(Make("Short Sword", 203, ITEM_QUALITY_NORMAL, 10), { AugmentId::LesserAmn });
+	for (const Item *item : { &worn, &bagged }) {
+		ASSERT_EQ(item->_iMagical, ITEM_QUALITY_NORMAL);
+		ASSERT_EQ(ItemBaseMeta(*item), nullptr);
+		ASSERT_EQ(item->_iPoe2Craft.sockets, 1);
+		ASSERT_EQ(item->_iPoe2Stats[Leech], 2);
+	}
+	player.InvBody[INVLOC_HAND_LEFT] = worn;
+	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	ASSERT_TRUE(AutoPlaceItemInInventory(player, bagged));
+	CalcPlrItemVals(player, false);
+	const int heroLeech = player.poe2.itemStats[Leech];
+	EXPECT_GE(heroLeech, 2);
+	Stash = {};
+	StashTabs.reset();
+	Stash.dirty = true;
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	FreeCursor();
+	const std::string saved = Snapshot();
+	SaveAgain();
+
+	Load();
+	EXPECT_EQ(Snapshot(), saved);
+	EXPECT_EQ(MyPlayer->InvBody[INVLOC_HAND_LEFT]._iPoe2Stats[Leech], 2);
+	MyPlayer->InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	CalcPlrItemVals(*MyPlayer, false);
+	EXPECT_EQ(MyPlayer->poe2.itemStats[Leech], heroLeech);
+	bool found = false;
+	for (int i = 0; i < MyPlayer->_pNumInv; i++) {
+		const Item &item = MyPlayer->InvList[i];
+		if (item.IDidx != bagged.IDidx)
+			continue;
+		found = true;
+		EXPECT_EQ(item._iPoe2Stats[Leech], 2);
+	}
+	EXPECT_TRUE(found);
+}
+
 } // namespace
 } // namespace devilution

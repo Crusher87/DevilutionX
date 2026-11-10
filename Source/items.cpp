@@ -3175,8 +3175,9 @@ std::string GetRareItemName(const Item &item)
 
 void RestoreRareItemPowers(Item &item)
 {
-	// Normal items too when their base has implicits: their POE2 stats aren't saved either.
-	if ((item._iMagical == ITEM_QUALITY_NORMAL && ItemBaseMeta(item) == nullptr) || Players.empty())
+	// Normal items too when their base has implicits or they hold crafting (an old base's runes): their POE2 stats
+	// aren't saved either.
+	if ((item._iMagical == ITEM_QUALITY_NORMAL && ItemBaseMeta(item) == nullptr && item._iPoe2Craft.isEmpty()) || Players.empty())
 		return;
 	const uint32_t currentSeed = GetLCGEngineState();
 	Item regenerated;
