@@ -310,8 +310,13 @@ void PresentLayeredFrame(SDL_Surface *surface)
 	TelemetryDrawStep(nullptr);
 	{
 		const FramePartScope part(FramePart::UiLayer);
-		if (UpdateUiOverlay())
+		// POE2 Mashup: item pictures in the UI show their HD art over it, so the UI keeps what was under them.
+		hd::PrepareUiSprites();
+		const bool overlay = UpdateUiOverlay();
+		hd::RestoreUiSprites();
+		if (overlay)
 			SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
+		hd::RenderUiSprites(renderer);
 	}
 	// POE2 Mashup: a panel's HD preview (the monster spawner's) goes over the UI.
 	if (hd::Active())

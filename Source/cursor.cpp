@@ -59,6 +59,7 @@
 #include "poe2/aim.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/crafting_items.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/rune_icons.hpp"
 #include "poe2/skill_gems.hpp"
@@ -589,6 +590,8 @@ ClxSprite SmallItemSprite(size_t index)
 		cell.BlitFrom(*picture, MakeSdlRect(0, 0, picture->w(), picture->h()),
 		    { (INV_SLOT_SIZE_PX - picture->w()) / 2, (INV_SLOT_SIZE_PX - picture->h()) / 2 });
 		cached.emplace(SurfaceToClx(cell, 1, 1));
+		// In HD it shows the full picture's HD art, shrunk the same way.
+		hd::RegisterFittedUiSprite((*cached)[0], sprite);
 	}
 	return (*cached)[0];
 }
