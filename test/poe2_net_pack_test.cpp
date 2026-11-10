@@ -295,10 +295,11 @@ TEST_F(Poe2NetPackTest, AHeroWithCraftedGearJoinsWithTheSameStats)
 {
 	if (!haveMainData_)
 		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
-	InitCursor();
 	gbIsMultiplayer = true;
 	Player &hero = *MyPlayer;
+	// CreatePlayer loads and frees the cursor pictures itself, so they load only after it.
 	CreatePlayer(hero, HeroClass::Warrior);
+	InitCursor();
 	hero.setCharacterLevel(60);
 	CopyUtf8(hero._pName, "Crafter", sizeof(hero._pName));
 	hero._pBaseStr = 200;
@@ -323,6 +324,7 @@ TEST_F(Poe2NetPackTest, AHeroWithCraftedGearJoinsWithTheSameStats)
 	EXPECT_EQ(other.InvBody[INVLOC_HEAD]._iPoe2Craft, hero.InvBody[INVLOC_HEAD]._iPoe2Craft);
 	EXPECT_EQ(other._pIAC, hero._pIAC);
 	EXPECT_EQ(other._pMaxHP, hero._pMaxHP);
+	FreeCursor();
 }
 
 } // namespace
