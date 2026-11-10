@@ -27,6 +27,7 @@
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
 #include "tables/misdat.h"
+#include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
 
@@ -355,7 +356,7 @@ void DrawMonsterBanner(const Surface &out)
 	// A bound demon says which essences it holds, in its crystal and out of it.
 	std::string held = BoundDemonEssenceText(monster);
 	if (!held.empty())
-		held = StrCat(IsBoundDemon(monster) ? "Bound in crystal. Holds " : "Holds ", held);
+		held = FormatRuntime(IsBoundDemon(monster) ? _("Bound in crystal. Holds {:s}") : _("Holds {:s}"), held);
 
 	const int width = std::min(MaxWidth, out.w() - 60);
 	int x = (out.w() - width) / 2;

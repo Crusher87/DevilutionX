@@ -416,6 +416,11 @@ bool ProcessBoundDemon(Monster &monster)
 	}
 	if (monster.poe2.boundWakeTicks == 0)
 		return false;
+	// Killed in its second out of the crystal: it dies at once, with no roar.
+	if (monster.hasNoLife() || monster.mode == MonsterMode::Death) {
+		monster.poe2.boundWakeTicks = 0;
+		return false;
+	}
 	monster.poe2.boundWakeTicks--;
 	if (monster.poe2.boundWakeTicks > 0) {
 		monster.animInfo.processAnimation();

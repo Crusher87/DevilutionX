@@ -276,6 +276,26 @@ TEST_F(Poe2BoundDemonsTest, NothingHurtsItUntilItsCrystalBreaksThenItWakesInASec
 	EXPECT_LT(demon.hitPoints, life);
 }
 
+TEST_F(Poe2BoundDemonsTest, KilledDuringItsWakeItDiesAtOnce)
+{
+	for (const bool deathMode : { true, false }) {
+		Monster &demon = DemonHolding(EssenceKind::Body);
+		ASSERT_TRUE(IsBoundDemon(demon));
+		BreakBoundCrystal(demon);
+		ASSERT_EQ(demon.poe2.boundWakeTicks, BoundDemonWakeTicks);
+		EXPECT_TRUE(ProcessBoundDemon(demon));
+		EXPECT_TRUE(ProcessBoundDemon(demon));
+		// Killed before it is free (its life gone, and its death started or about to be).
+		demon.hitPoints = Fixed26_6::fromInt(0);
+		if (deathMode)
+			demon.mode = MonsterMode::Death;
+		EXPECT_FALSE(ProcessBoundDemon(demon)) << deathMode;
+		EXPECT_EQ(demon.poe2.boundWakeTicks, 0) << deathMode;
+		EXPECT_EQ(demon.activeForTicks, 0) << "a corpse doesn't roar and come for the hero";
+		EXPECT_FALSE(ProcessBoundDemon(demon));
+	}
+}
+
 TEST_F(Poe2BoundDemonsTest, ItsEssencesGiveItTheirPowers)
 {
 	// The Body: 40% more life than the same rare monster out of a crystal.
