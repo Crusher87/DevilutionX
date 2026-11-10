@@ -115,6 +115,51 @@ enum class ModEffect : uint8_t {
 	/** Increased chaos spell damage, and levels of chaos skills: on the chaos wands and staves only (ModBaseChaosSpell). */
 	ChaosSpellDamage,
 	ChaosSkillLevels,
+	// The effect primitives of build spec step 4: runes, soulstones, relics and essences name them (effect_primitives.hpp).
+	/** Percent of an attack hit's damage leeched as life or mana, up to MaxLeechPercent in all. */
+	LifeLeech,
+	ManaLeech,
+	/** Physical damage, a range, dealt back to a monster whose melee hit lands. */
+	Thorns,
+	/** Percent of maximum life or mana recovered on a kill. */
+	LifePercentOnKill,
+	ManaPercentOnKill,
+	/** Percent of each hit's damage gained as extra damage of the element; cold meets magic resistance. */
+	FireAsExtra,
+	LightningAsExtra,
+	ColdAsExtra,
+	/** Cold damage, a range, added to melee hits; it meets magic resistance. */
+	AddedCold,
+	/** Increased flask recovery in percent. */
+	FlaskRecovery,
+	/** Increased stun buildup in percent. */
+	StunBuildup,
+	/** Added to the stun threshold, in points of life. */
+	StunThreshold,
+	/** Percent of maximum energy shield added to the stun threshold. */
+	EnergyShieldAsStunThreshold,
+	/** Percent of armour that applies to fire, lightning or cold (magic) hits. */
+	ArmourToFire,
+	ArmourToLightning,
+	ArmourToCold,
+	/** Percent of hit damage taken recouped as life over RecoupSeconds. */
+	LifeRecoup,
+	/** Faster energy shield recharge in percent. */
+	EnergyShieldRecharge,
+	/** Levels of the skills with a tag: Strike, Slam, Warcry, Curse, Herald, Placed (totems), Bow, area spells, elemental spells. */
+	StrikeSkillLevels,
+	SlamSkillLevels,
+	WarcrySkillLevels,
+	CurseSkillLevels,
+	HeraldSkillLevels,
+	PlacedSkillLevels,
+	BowSkillLevels,
+	AreaSpellSkillLevels,
+	ElementalSpellSkillLevels,
+	/** Percent of the item's other attribute requirements that become requirements of this attribute. */
+	RequirementsToStrength,
+	RequirementsToDexterity,
+	RequirementsToIntelligence,
 	/** Not an effect: the number of them. New effects go before it. */
 	Count,
 };

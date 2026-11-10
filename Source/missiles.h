@@ -353,6 +353,8 @@ void AddLightningControl(Missile &missile, AddMissileParameter &parameter);
 void AddLightning(Missile &missile, AddMissileParameter &parameter);
 void AddMissileExplosion(Missile &missile, AddMissileParameter &parameter);
 void AddVisualEffect(Missile &missile, AddMissileParameter &parameter);
+/** @brief POE2 Mashup: the destination x that makes a weapon explosion cold; 1 is fire and anything else lightning. */
+constexpr int WeaponExplosionCold = 3;
 void AddWeaponExplosion(Missile &missile, AddMissileParameter &parameter);
 
 /**

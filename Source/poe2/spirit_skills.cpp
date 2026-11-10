@@ -15,6 +15,7 @@
 #include "monster.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_resources.hpp"
 #include "poe2/shrines.hpp"
@@ -361,6 +362,8 @@ void OnSpiritMeleeHit(Player &player)
 void ReflectMeleeHit(Player &player, Monster &monster, Fixed26_6 damage)
 {
 	OnSpiritMeleeHitTaken(player, monster);
+	// The gear's thorns hit the attacker back.
+	DealThorns(player, monster);
 	// The Abandoned shrine (Thorned) sends a share of the hit back.
 	ShrineReflectHit(player, monster, damage.raw());
 	if (!gbIsPoe2 || &player != MyPlayer || damage <= 0 || monster.hasNoLife() || monster.mode == MonsterMode::Death || !Active(player, PersistentSkill::Reflect))

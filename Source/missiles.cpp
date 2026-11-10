@@ -2619,14 +2619,18 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 void AddWeaponExplosion(Missile &missile, AddMissileParameter &parameter)
 {
 	bool isFireExplosion = parameter.dst.x == 1;
+	// POE2 Mashup: the gear's added cold, which meets magic resistance.
+	const bool isColdExplosion = parameter.dst.x == WeaponExplosionCold;
 
 	if (missile._midam > 0) {
-		DamageType damageType = isFireExplosion ? DamageType::Fire : DamageType::Lightning;
+		DamageType damageType = isFireExplosion ? DamageType::Fire : (isColdExplosion ? DamageType::Cold : DamageType::Lightning);
 		CheckMissileCol(missile, damageType, missile._midam, missile._midam, false, missile.position.tile, true);
 	}
 
 	if (isFireExplosion)
 		missile.setAnimation(MissileGraphicID::MagmaBallExplosion);
+	else if (isColdExplosion)
+		missile.setAnimation(MissileGraphicID::BlueFlareExplosion);
 	else
 		missile.setAnimation(MissileGraphicID::ChargedBolt);
 	missile.duration = missile._miAnimLen - 1;

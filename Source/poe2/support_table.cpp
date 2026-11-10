@@ -669,6 +669,8 @@ void FinishHit()
 		player._pManaBase = std::min(player._pManaBase + mana, player._pMaxManaBase);
 		RedrawComponent(PanelDrawComponent::Mana);
 	}
+	// The gear's leech (runes), on attack hits.
+	LeechFromHit(player, skill, total);
 
 	const bool alive = CanHit(monster);
 	if (alive) {

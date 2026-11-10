@@ -70,6 +70,7 @@ set(tests
   poe2_item_levels_test
   poe2_modifiers_test
   poe2_crafting_test
+  poe2_effect_primitives_test
   poe2_caster_golden_test
   poe2_weapon_kinds_test
   poe2_caster_stats_test

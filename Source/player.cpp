@@ -57,6 +57,7 @@
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/attack_speed.hpp"
 #include "poe2/experience.hpp"
 #include "poe2/gem_levels.hpp"
@@ -1033,6 +1034,13 @@ bool DoAttack(Player &player)
 				const auto [minLightning, maxLightning] = SwingElementDamage(player, true);
 				int elementalDamage = didhit ? RandomIntBetween(minLightning, maxLightning) : 0;
 				AddMissile(position, { 2, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, elementalDamage, 0);
+			}
+		}
+		// POE2 Mashup: the gear's added cold (runes), which meets magic resistance.
+		if (gbIsPoe2 && !SupportMeleeIsPhysicalOnly(player)) {
+			if (const auto [minCold, maxCold] = AddedColdDamage(player); maxCold > 0) {
+				const int coldDamage = didhit ? RandomIntBetween(minCold, maxCold) : 0;
+				AddMissile(position, { WeaponExplosionCold, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, coldDamage, 0);
 			}
 		}
 
@@ -3142,7 +3150,8 @@ void StartPlrHit(Player &player, Fixed26_6 dam, bool forcehit)
 		// POE2 Mashup: POE2's light stun, a chance from the hit's share of the hero's life, so walking through a pack
 		// doesn't lock the hero in place but a big hit usually does (Curtis 2026-10-21).
 		if (!forcehit) {
-			const int64_t stunDamage = static_cast<int64_t>(dam.raw()) * 100 / std::max(UniqueStunThresholdPercent(player), 1);
+			// The gear's stun threshold (soulstones, runes) adds to the hero's life for this.
+			const int64_t stunDamage = StunDamageAgainstLife(player, dam.raw(), UniqueStunThresholdPercent(player));
 			const int chance = LightStunChance(stunDamage, player._pMaxHP.raw());
 			if (chance == 0 || GenerateRnd(100) >= chance)
 				return;

@@ -3955,6 +3955,10 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	passives[static_cast<size_t>(PassiveStat::ArmorPercent)] += gearStat(Poe2ItemStat::ArmourPercent);
 	passives[static_cast<size_t>(PassiveStat::EvasionPercent)] += gearStat(Poe2ItemStat::EvasionPercent);
 	passives[static_cast<size_t>(PassiveStat::EnergyShieldPercent)] += gearStat(Poe2ItemStat::EnergyShieldPercent);
+	// The effect primitives the tree also has (runes, soulstones): what reads the tree's total reads the gear's too.
+	passives[static_cast<size_t>(PassiveStat::FlaskRecovery)] += gearStat(Poe2ItemStat::FlaskRecovery);
+	passives[static_cast<size_t>(PassiveStat::StunBuildup)] += gearStat(Poe2ItemStat::StunBuildup);
+	passives[static_cast<size_t>(PassiveStat::EnergyShieldRecharge)] += gearStat(Poe2ItemStat::EnergyShieldRecharge);
 	CachePassiveTotals(player, passives);
 	const auto passive = [&passives](PassiveStat stat) { return passives[static_cast<size_t>(stat)]; };
 	dam += PassiveWeaponDamage(player, passives);

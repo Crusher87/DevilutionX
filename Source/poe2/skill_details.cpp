@@ -15,6 +15,7 @@
 #include "player.h"
 #include "poe2/attack_speed.hpp"
 #include "poe2/default_attack.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
@@ -197,6 +198,9 @@ void AddWeaponHit(HitEstimate &hit, const Player &player, SkillSlot skill, int l
 		hit.parts.push_back(WholePart(DamageType::Fire, ScaleWhole(player._pIFMinDam, elements), ScaleWhole(player._pIFMaxDam, elements)));
 	if (player._pILMaxDam > 0)
 		hit.parts.push_back(WholePart(DamageType::Lightning, ScaleWhole(player._pILMinDam, elements), ScaleWhole(player._pILMaxDam, elements)));
+	// The gear's added cold lands on melee hits only.
+	if (const auto [minCold, maxCold] = AddedColdDamage(player); maxCold > 0 && !ShootsArrows(player))
+		hit.parts.push_back(WholePart(DamageType::Cold, ScaleWhole(minCold, elements), ScaleWhole(maxCold, elements)));
 }
 
 /** @brief The base of a spell-like skill, from Magic and the gem level (Ice Bolt, table spells), each roll cut to whole points. */

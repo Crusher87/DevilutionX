@@ -16,6 +16,7 @@
 #include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_armour.hpp"
@@ -589,6 +590,7 @@ void ProcessUniqueRules(Player &player)
 		return;
 	UniqueRuleState &state = State(player);
 	state.lowLife = IsOnLowLife(player);
+	ProcessRecoup(player);
 
 	if (player.isWalking()) {
 		state.stillTicks = 0;
@@ -1386,7 +1388,8 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 		raw = raw * (100 - std::min(overcap / 10, cap)) / 100;
 	}
 	if (IsElemental(type)) {
-		if (const int share = Rule(player, UniqueRule::ArmourVsElements); share > 0)
+		// A unique's armour against all elements, and the gear's against one (soulstones).
+		if (const int share = ArmourAppliesToElementPercent(player, type); share > 0)
 			raw -= raw * ArmourReductionPercent(ArmourRating(player) * share / 100, Fixed26_6::fromRaw(static_cast<int32_t>(raw))) / 100;
 		if (state.stolenMod == static_cast<int>(MonsterMod::Resistant) + 1)
 			raw = raw * 80 / 100;
@@ -1412,6 +1415,7 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 	// Berserk and Mana Shield.
 	raw = ApplySpiritHitTaken(player, Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(raw, INT32_MAX / 2)))).raw();
 	state.lifeLost[0] = static_cast<int32_t>(std::min<int64_t>(state.lifeLost[0] + raw, INT32_MAX / 2));
+	NoteRecoup(player, raw);
 	return Fixed26_6::fromRaw(static_cast<int32_t>(raw));
 }
 
