@@ -5958,6 +5958,12 @@ void RecreateItemBase(const Player &player, Item &item, _item_indexes idx, uint1
 		// POE2 Mashup: starting gear keeps the quality currency gave it (Curtis 2026-10-23).
 		InitializeItem(item, idx, static_cast<int>((dwBuff & CF_POE2_QUALITY) >> std::countr_zero(static_cast<uint32_t>(CF_POE2_QUALITY))));
 		item._iSeed = iseed;
+		// POE2 Mashup: and the sockets, runes and corruption crafting gave it, which InitializeItem wiped.
+		item._iPoe2Craft = craft;
+		if (gbIsPoe2 && !item._iPoe2Craft.isEmpty()) {
+			ApplyAugments(item);
+			ApplyCorruptionEnchant(item);
+		}
 		gbIsHellfire = tmpIsHellfire;
 		return;
 	}

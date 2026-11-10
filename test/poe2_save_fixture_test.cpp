@@ -1079,5 +1079,48 @@ TEST_F(Poe2SaveFixtureTest, RunesInAWhiteOldBaseSurviveASave)
 	EXPECT_TRUE(found);
 }
 
+
+/** Starting gear (made without a seed) keeps the socket and rune an Artificer's Orb and a rune gave it through a save. */
+TEST_F(Poe2SaveFixtureTest, StartingGearKeepsItsRunesThroughASave)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Warrior;
+	CopyUtf8(info.name, "StartRunes", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player._pgfxnum = 0;
+	InitCursor();
+
+	constexpr size_t Leech = static_cast<size_t>(Poe2ItemStat::LifeLeech);
+	Item &sword = player.InvBody[INVLOC_HAND_LEFT];
+	ASSERT_FALSE(sword.isEmpty());
+	ASSERT_EQ(sword._iCreateInfo, 0);
+	sword = Socketed(sword, { AugmentId::LesserAmn });
+	ASSERT_EQ(sword._iPoe2Craft.sockets, 1);
+	ASSERT_EQ(sword._iPoe2Stats[Leech], 2);
+	Stash = {};
+	StashTabs.reset();
+	Stash.dirty = true;
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	FreeCursor();
+	SaveAgain();
+
+	Load();
+	const Item &loaded = MyPlayer->InvBody[INVLOC_HAND_LEFT];
+	EXPECT_EQ(loaded._iCreateInfo, 0);
+	EXPECT_EQ(loaded._iPoe2Craft.sockets, 1);
+	EXPECT_EQ(loaded._iPoe2Stats[Leech], 2);
+}
+
 } // namespace
 } // namespace devilution
