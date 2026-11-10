@@ -182,7 +182,7 @@ const TableSkillData Table[] = {
 	{ WS::PlagueArrow, "Plague Arrow", "An arrow that bursts into poison on the first enemy it hits", 1, 8, TW::Bow, 0, Projectiles, 90, 1, 1, 0, 0, 0, DT::Physical, MissileID::Arrow, MG::AcidSplat, TF_PoisonBurst, TableZone::None, TableCurse::None, TableBuff::None, TT_Bow, Icon(SpellIcon::DoomSerpents), TableCurve::LightningArrow, 0 },
 	// Skill-balance Q29: 200% a burst, was 160%, and a monster takes one burst a cast (RuptureHexes).
 	{ WS::HexRupture, "Hex Rupture", "Bursts the curses half run out on enemies around the target", 20, 12, TW::None, 1, HexBurst, 350, 0, 3, 0, 0, 0, DT::Chaos, MissileID::Null, MG::BloodHit, TF_Spell, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
-	{ WS::BoneSpikes, "Bone Spikes", "Bones burst out of the ground in a line ahead of you, one spike wide and then two, staggering what they hit", 3, 8, TW::None, 1, Line, 80, 5, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
+	{ WS::BoneSpikes, "Bone Spikes", "Bones burst out of the ground in a cone ahead of you, staggering what they hit", 3, 8, TW::None, 1, Line, 80, 5, 0, 0, 0, 0, DT::Physical, MissileID::Null, MG::BoneHit, TF_Spell | TF_Stun, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312 },
 	{ WS::BoneSpear, "Bone Spear", "A heavy spear of bone that flies through every enemy in its path and builds up twice the stun", 10, 12, TW::None, 1, Projectiles, 220, 1, 0, 0, 0, 0, DT::Physical, MissileID::OrangeFlare, MG::BoneHit, TF_Spell | TF_Pierce, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BoneSpirit), TableCurve::Fireball, 312, GrantedRider::StunBuildup },
 	{ WS::BloodNova, "Blood Nova", "A ring of blood bursts out around you and leaves enemies bleeding; costs 5% of your life", 15, 10, TW::None, 1, Around, 110, 0, 2, 0, 0, 0, DT::Physical, MissileID::Null, MG::BloodHit, TF_Spell | TF_LifeCost | TF_Bleed, TableZone::None, TableCurse::None, TableBuff::None, TT_Occult, Icon(SpellIcon::BloodBoil), TableCurve::Fireball, 312 },
 	// The poison skills plan (Curtis 2026-11-02, poison-skills-numbers.md): the Rogue's dagger and bow poisons, then the
@@ -3082,30 +3082,36 @@ bool PoisonedBy(const Monster &monster, const Player &player)
 	return monster.poe2.poisonTicks > 0 && monster.poe2.poisonSource == static_cast<int8_t>(player.getId());
 }
 
-Displacement BoneSpikesSide(Direction dir)
+std::vector<BoneSpikesTile> BoneSpikesTiles(Point from, Point target, int length)
 {
-	const Displacement left { Left(Left(dir)) };
-	const Displacement right { Right(Right(dir)) };
-	// Lower on the screen is a larger x + y; further right on it, a larger x - y.
-	const int leftLow = left.deltaX + left.deltaY;
-	const int rightLow = right.deltaX + right.deltaY;
-	if (leftLow != rightLow)
-		return leftLow > rightLow ? left : right;
-	return left.deltaX - left.deltaY > right.deltaX - right.deltaY ? left : right;
-}
-
-std::vector<BoneSpikesTile> BoneSpikesTiles(Point from, Direction dir, int length)
-{
+	// Aimed at the target itself, not only one of the eight directions; at the hero's own feet, the way he faces it.
+	const Direction dir = GetDirection(from, target);
+	const Displacement ahead { dir };
+	const Displacement aim = target != from ? target - from : ahead;
+	const int64_t aimLength = (static_cast<int64_t>(aim.deltaX) * aim.deltaX) + (static_cast<int64_t>(aim.deltaY) * aim.deltaY);
 	std::vector<BoneSpikesTile> tiles;
-	const Displacement side = BoneSpikesSide(dir);
-	const auto open = [](Point at) { return InDungeonBounds(at) && !IsTileSolid(at); };
 	for (int step = 1; step <= length; step++) {
-		const Point at = from + Displacement { dir } * step;
-		if (!open(at))
-			break;
-		tiles.push_back({ at, step, false });
-		if (step > BoneSpikesSingleTiles && open(at + side))
-			tiles.push_back({ at + side, step, true });
+		// The row: the tiles `step` steps out, with how far each is off the aim (larger is nearer the middle).
+		std::vector<std::pair<int64_t, Point>> row;
+		for (int y = -step; y <= step; y++) {
+			for (int x = -step; x <= step; x++) {
+				if (std::max(std::abs(x), std::abs(y)) != step)
+					continue;
+				const int64_t dot = (static_cast<int64_t>(x) * aim.deltaX) + (static_cast<int64_t>(y) * aim.deltaY);
+				const int64_t offset = (static_cast<int64_t>(x) * x) + (static_cast<int64_t>(y) * y);
+				const bool straightAhead = step == 1 && Displacement { x, y } == ahead;
+				if (!straightAhead && (dot <= 0 || dot * dot * 100 < BoneSpikesConeCosSquaredPercent * offset * aimLength))
+					continue;
+				const Point at = from + Displacement { x, y };
+				if (!InDungeonBounds(at) || IsTileSolid(at) || LastTileInSight(from, at) != at)
+					continue;
+				// Nearness to the middle: the cosine squared, scaled to whole numbers (dot is positive in the cone).
+				row.emplace_back(std::max<int64_t>(dot, 0) * std::max<int64_t>(dot, 0) * 1000 / std::max<int64_t>(offset * aimLength, 1), at);
+			}
+		}
+		std::stable_sort(row.begin(), row.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+		for (size_t i = 0; i < row.size(); i++)
+			tiles.push_back({ row[i].second, step, i == 0 });
 	}
 	return tiles;
 }
@@ -3837,11 +3843,11 @@ void ExecuteTableSkill(Player &player, const TableSkillData &unsupported, Point 
 				hit.push_back(&monster);
 		};
 		if ((data.flags & TF_Spell) != 0) {
-			// Bone Spikes: a clump of bone bursts up on each of its tiles as the line rolls out, one wide and then two, and
-			// each enemy on it takes the spell's hit once.
+			// Bone Spikes (Curtis 2026-11-10): a clump of bone bursts up on each tile of a cone toward the target, row
+			// after row as it fans out, and each enemy in it takes the spell's hit once, however many spikes are round it.
 			Point end = tile;
-			for (const BoneSpikesTile &spike : BoneSpikesTiles(tile, dir, data.count)) {
-				if (!spike.beside)
+			for (const BoneSpikesTile &spike : BoneSpikesTiles(tile, target, data.count)) {
+				if (spike.middle)
 					end = spike.tile;
 				AddVisualEffect(spike.tile, data.effect, spike.step * 2, spike.step == 1 ? 4 : 0);
 				vfx::BoneSpikes(spike.tile, spike.step * 2 * gnTickDelay, 0.55F + 0.05F * static_cast<float>(spike.step));

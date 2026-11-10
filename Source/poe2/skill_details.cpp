@@ -1095,9 +1095,9 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(shape, "Extra projectiles", std::format("+{:d}", extraProjectiles));
 	if (table != nullptr && table->radius > 0)
 		Value(shape, "Area radius", std::format("{:d} tiles", static_cast<int>(table->radius)));
-	// Bone Spikes' line: one spike wide, then two.
+	// Bone Spikes' cone.
 	if (table != nullptr && table->shape == TableShape::Line && (table->flags & TF_Spell) != 0)
-		Value(shape, "Line", std::format("{:d} tiles: one wide for {:d}, then two wide", static_cast<int>(table->count), BoneSpikesSingleTiles));
+		Value(shape, "Cone", std::format("{:d} tiles long", static_cast<int>(table->count)));
 	if (table != nullptr && (table->flags & TF_PoisonBurst) != 0)
 		Text(shape, Kind::Note, std::format("The first hit bursts: it poisons all there and hits the others for {:d}%", PlagueArrowSplashPercent));
 	if (const std::string note = table != nullptr ? TableSkillExtraNote(table->skill) : std::string(); !note.empty())

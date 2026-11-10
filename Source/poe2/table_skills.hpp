@@ -50,7 +50,7 @@ enum class TableShape : uint8_t {
 	Burst,
 	/** Dashes `count` tiles at the target, then hits everything within the radius. */
 	Dash,
-	/** Hits monsters along a line `count` tiles long, wave after wave. */
+	/** Hits monsters along a line `count` tiles long, wave after wave; a spell's (Bone Spikes) is a cone that long. */
 	Line,
 	/** Leaves a zone on the ground (see TableZone). */
 	Zone,
@@ -238,10 +238,11 @@ constexpr float PlagueArrowSplashSize = 1.4F;
 constexpr int HexRuptureMaxBursts = 10;
 constexpr int HexRuptureBurstRadius = 1;
 /**
- * @brief Bone Spikes' line (Curtis 2026-11-01): one spike wide for its first this many tiles, then two abreast to its end,
- * the row's count of tiles from the hero.
+ * @brief How wide Bone Spikes' cone is (Curtis 2026-11-10): a tile is in it when the cosine of its angle off the aim is
+ * at least the square root of this percent, about 23 degrees either side. Along the grid it is 1, 1, 3, 3 and 5 tiles
+ * wide.
  */
-constexpr int BoneSpikesSingleTiles = 3;
+constexpr int BoneSpikesConeCosSquaredPercent = 85;
 
 /** @brief What a granted skill's hits do besides damage (caster-weapons-plan-v2.md 6.12). */
 enum class GrantedRider : uint8_t {
@@ -344,24 +345,19 @@ struct TableSkillData {
 /** @brief A doom burst or a hex poison the curses' supports have ready; once per game tick for the local player. */
 void ProcessCurseSupports(Player &player);
 
-/** @brief One tile of a Bone Spikes line: where, how many steps out from the hero, and whether it's the second column's. */
+/** @brief One tile of a Bone Spikes cone: where, how many steps out from the hero, and whether it's its row's middle. */
 struct BoneSpikesTile {
 	Point tile;
 	int step;
-	bool beside;
+	bool middle;
 };
 /**
- * @brief The side of a Bone Spikes line its second column runs on, square to the line on the screen: the side nearer
- * the viewer (lower on the screen), so its spikes stand in front of the line's, not hidden behind them. A line straight
- * up or down the screen takes the screen's right.
+ * @brief The tiles a Bone Spikes cast bursts on: a cone from the hero toward the target, out to `length` steps, nearest
+ * row first and each row from its middle out. A tile is in it when it lies within BoneSpikesConeCosSquaredPercent of the
+ * aim, and the tile straight ahead always is. Only tiles the hero can see: never past a wall. The spikes are drawn on
+ * exactly these tiles. Whole numbers only, so every machine in a game gets the same tiles.
  */
-[[nodiscard]] Displacement BoneSpikesSide(Direction dir);
-/**
- * @brief The tiles a Bone Spikes cast bursts on, nearest first: one a step for the first BoneSpikesSingleTiles steps,
- * then the step's tile and the one beside it (BoneSpikesSide), out to `length` steps. A wall or the dungeon's edge ends
- * the line; a wall beside it only drops that spike. The spikes are drawn on exactly these tiles.
- */
-[[nodiscard]] std::vector<BoneSpikesTile> BoneSpikesTiles(Point from, Direction dir, int length);
+[[nodiscard]] std::vector<BoneSpikesTile> BoneSpikesTiles(Point from, Point target, int length);
 
 /**
  * @brief What a per-target granted skill (TF_PerTarget) deals each monster but its first: this percent of the spell base
