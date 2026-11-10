@@ -49,6 +49,7 @@ set(tests
   poe2_caves_floors_test
   poe2_hell_floors_test
   poe2_hive_floors_test
+  poe2_crypt_floors_test
   poe2_cathedral_floors_test
   poe2_cathedral_objects_test
   poe2_floors_test

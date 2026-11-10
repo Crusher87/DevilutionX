@@ -1,11 +1,11 @@
 """Writes a designed-rooms list for the new floor builder from a room collection's rooms.json.
 
-The collection pages (Cathedral, Catacombs, Caves, Hell and Hive Room Collections) are drawn from the same rooms.json,
+The collection pages (Cathedral, Catacombs, Caves, Hell, Hive and Crypt Room Collections) are drawn from the same rooms.json,
 so the game builds exactly the rooms Curtis picked.
-Usage: python3 tools/cathedral_rooms_tsv.py rooms.json [picks.json] [--catacombs | --caves | --hell | --hive]
+Usage: python3 tools/cathedral_rooms_tsv.py rooms.json [picks.json] [--catacombs | --caves | --hell | --hive | --crypt]
 picks.json (optional) maps a room id to "keep", "change" or "cut"; cut rooms are left out.
 --catacombs writes catacombs_rooms.tsv instead of cathedral_rooms.tsv, --caves caves_rooms.tsv, --hell hell_rooms.tsv,
---hive hive_rooms.tsv.
+--hive hive_rooms.tsv, --crypt crypt_rooms.tsv (the Crypt's marks Q, B and + are read as they are).
 The Hell page draws chained bodies as 'N', impaled souls as 'I' and headless bodies as 'h'; the game reads them as the
 Cathedral's 'T', 'Y' and 'D'. The Hive page draws hive growth as 'g' (the Caves' gate), hanging bodies as 'N' and
 bodies on spikes as 'I'; the game reads them as 'w', 'T' and 'Y'.
@@ -33,6 +33,7 @@ def main():
     caves = '--caves' in sys.argv
     hell = '--hell' in sys.argv
     hive = '--hive' in sys.argv
+    crypt = '--crypt' in sys.argv
     data = json.load(open(args[0]))
     picks = json.load(open(args[1])) if len(args) > 1 else {}
     out = ['id\tfamily\troles\tmemorable\tpillarsBehind\treward\toptions\tgrid']
@@ -51,7 +52,7 @@ def main():
         roles = ','.join(ROLES[role] for role in r['roles'])
         out.append('\t'.join([r['id'], r['family'], roles, '1' if r.get('memorable') else '0',
                               '1' if r.get('pillarsBehind') else '0', (r.get('base') or '').replace(' ', ''), options, grid]))
-    name = 'catacombs' if catacombs else 'caves' if caves else 'hell' if hell else 'hive' if hive else 'cathedral'
+    name = 'catacombs' if catacombs else 'caves' if caves else 'hell' if hell else 'hive' if hive else 'crypt' if crypt else 'cathedral'
     path = 'mods/poe2/txtdata/poe2/' + name + '_rooms.tsv'
     with open(path, 'w', newline='\r\n') as f:
         f.write('\n'.join(out) + '\n')

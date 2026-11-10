@@ -798,6 +798,11 @@ void AddCryptBook(_object_id ot, int v2, Point position)
 
 void AddCryptStoryBook(int s)
 {
+	// POE2: on the new Crypt floors the book goes on the Reading chapel's or the Archive's stand when there is one.
+	if (const std::optional<Point> stand = CathedralStoryBookSpot()) {
+		AddCryptBook(OBJ_L5BOOKS, s, *stand);
+		return;
+	}
 	std::optional<Point> position = GetRandomObjectPosition({ 3, 2 });
 	if (!position)
 		return;
@@ -4170,7 +4175,10 @@ void InitObjects()
 			InitRndBarrels();
 		}
 		if (leveltype == DTYPE_CRYPT) {
-			InitRndLocBigObj(10, 15, OBJ_L5SARC);
+			// POE2: the designed rooms' props go first here too, and their sarcophagi come out of the usual 10 to 15.
+			AddCathedralRoomObjects();
+			const int designedSarcophagi = CathedralDesignedSarcophagi();
+			InitRndLocBigObj(std::max(0, 10 - designedSarcophagi), std::max(1, 15 - designedSarcophagi), OBJ_L5SARC);
 			AddCryptObjects(0, 0, MAXDUNX, MAXDUNY);
 			InitRndBarrels();
 		}

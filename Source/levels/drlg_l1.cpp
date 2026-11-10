@@ -1177,8 +1177,12 @@ bool PlaceStairs(lvl_entry entry)
 	return PlaceCathedralStairs(entry);
 }
 
-/** The tail of a Cathedral or Crypt floor's build, after its walls and stairs are in. */
-void FinishLevel(const Bitset2d<DMAXX, DMAXY> *keepLampsOut = nullptr)
+/**
+ * The tail of a Cathedral or Crypt floor's build, after its walls and stairs are in.
+ * @param cryptPlan POE2: a new Crypt floor's plan, whose carvings, blood and stars go in once the corners are fixed
+ * (FixCornerTiles takes Hellfire's succubus tile for a dirt corner).
+ */
+void FinishLevel(const Bitset2d<DMAXX, DMAXY> *keepLampsOut = nullptr, const CathedralPlan *cryptPlan = nullptr)
 {
 	for (int j = 0; j < DMAXY; j++) {
 		for (int i = 0; i < DMAXX; i++) {
@@ -1200,7 +1204,10 @@ void FinishLevel(const Bitset2d<DMAXX, DMAXY> *keepLampsOut = nullptr)
 	FixCornerTiles();
 
 	if (leveltype == DTYPE_CRYPT) {
-		CryptSubstitution();
+		if (cryptPlan != nullptr)
+			StampCryptMarks(*cryptPlan);
+		// The designed rooms keep Hellfire's random pillars and floor stars out; they bring their own.
+		CryptSubstitution(keepLampsOut);
 	} else {
 		Substitution();
 		ApplyShadowsPatterns();
@@ -1341,17 +1348,25 @@ bool PlaceCathedralFunnelStairs(const CathedralPlan &plan, lvl_entry entry)
 	return true;
 }
 
-/** POE2: a new Cathedral floor (poe2/cathedral_floors.hpp). */
+/** POE2: a new Cathedral or Crypt floor (poe2/cathedral_floors.hpp). */
 void GenerateCathedralFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
 {
 	if (LevelSeeds[currlevel])
 		SetRndSeed(*LevelSeeds[currlevel]);
 
+	const bool crypt = leveltype == DTYPE_CRYPT;
 	CathedralRequest request;
+	request.crypt = crypt;
 	request.forbidden = avoidRooms;
-	request.questPiece = SetPieceFile() != nullptr;
-	request.questPieceIsWayDown = request.questPiece && !Quests[Q_BUTCHER].IsAvailable() && !(Quests[Q_SKELKING].IsAvailable() && !UseMultiplayerQuests());
-	request.water = Quests[Q_PWATER].IsAvailable();
+	if (crypt) {
+		// Na-Krul's prison ends the main way on level 24; the Cornerstone's room is a hall off it on level 21.
+		request.questPiece = CryptNeedsQuestRoom();
+		request.questPieceIsWayDown = currlevel == 24;
+	} else {
+		request.questPiece = SetPieceFile() != nullptr;
+		request.questPieceIsWayDown = request.questPiece && !Quests[Q_BUTCHER].IsAvailable() && !(Quests[Q_SKELKING].IsAvailable() && !UseMultiplayerQuests());
+		request.water = Quests[Q_PWATER].IsAvailable();
+	}
 
 	CathedralPlan &plan = CurrentCathedralPlan();
 	while (true) {
@@ -1364,21 +1379,25 @@ void GenerateCathedralFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
 		SetPiece = {};
 		DungeonMask = plan.mask;
 		MakeDmt();
-		if (plan.questPiece)
+		if (plan.questPiece && crypt) {
+			// Hellfire's small quest rooms stand well inside their hall, with floor all round.
+			PlaceCryptQuestRoom(*plan.questPiece + Displacement { 2, 2 });
+		} else if (plan.questPiece) {
 			InitSetPiece(WorldTilePosition { static_cast<WorldTileCoord>(plan.questPiece->x), static_cast<WorldTileCoord>(plan.questPiece->y) });
+		}
 		FixTilesPatterns();
 		if (!StampCathedralDoorways(plan))
 			continue;
 		StampCathedralLines(plan);
 		FloodTransparencyValues(13);
-		if (PlaceCathedralFunnelStairs(plan, entry))
+		if (crypt ? PlaceCryptFunnelStairs(plan, entry) : PlaceCathedralFunnelStairs(plan, entry))
 			break;
 	}
 
 	SetCathedralFunnelFloor(true);
-	Poe2NoteFloorRooms(currlevel, plan.usedRooms);
+	Poe2NoteFloorRooms(currlevel, plan.usedRooms | (crypt ? CryptRoomsMark : 0));
 	TelemetryLog("floor", DescribeCathedralPlan(plan));
-	FinishLevel(&plan.designed);
+	FinishLevel(&plan.designed, crypt ? &plan : nullptr);
 }
 
 void GenerateLevel(lvl_entry entry)
@@ -1431,14 +1450,28 @@ void Pass3()
 
 } // namespace
 
-void PlaceMiniSetRandom(const Miniset &miniset, int rndper)
+void PlaceMiniSetRandom(const Miniset &miniset, int rndper, const Bitset2d<DMAXX, DMAXY> *keepOut)
 {
 	const WorldTileCoord sw = miniset.size.width;
 	const WorldTileCoord sh = miniset.size.height;
 
+	const auto keptOut = [&](WorldTileCoord sx, WorldTileCoord sy) {
+		if (keepOut == nullptr)
+			return false;
+		for (WorldTileCoord y = 0; y < sh; y++) {
+			for (WorldTileCoord x = 0; x < sw; x++) {
+				if (keepOut->test(sx + x, sy + y))
+					return true;
+			}
+		}
+		return false;
+	};
+
 	for (WorldTileCoord sy = 0; sy < DMAXY - sh; sy++) {
 		for (WorldTileCoord sx = 0; sx < DMAXX - sw; sx++) {
 			if (!miniset.matches({ sx, sy }, false))
+				continue;
+			if (keptOut(sx, sy))
 				continue;
 			// BUGFIX: This code is copied from Cave and should not be applied for crypt
 			if (!CanReplaceTile(miniset.replace[0][0], { sx, sy }))
@@ -1486,8 +1519,8 @@ void CreateL5Dungeon(uint32_t rseed, lvl_entry entry)
 	UberCol = 0;
 
 	SetCathedralFunnelFloor(false);
-	// POE2: the new Cathedral floors, for a floor whose build was settled on them (single player for now).
-	const Poe2FloorBuild build = gbIsPoe2 && !gbIsMultiplayer && leveltype == DTYPE_CATHEDRAL ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
+	// POE2: the new Cathedral and Crypt floors, for a floor whose build was settled on them (single player for now).
+	const Poe2FloorBuild build = gbIsPoe2 && !gbIsMultiplayer && IsAnyOf(leveltype, DTYPE_CATHEDRAL, DTYPE_CRYPT) ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
 	if (build.cathedralFunnel)
 		GenerateCathedralFunnelLevel(entry, build.avoidRooms);
 	else
