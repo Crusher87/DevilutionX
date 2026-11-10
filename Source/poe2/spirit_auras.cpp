@@ -410,6 +410,7 @@ void OnAuraMeleeHitTaken(Player &player, Monster &monster)
 	const int thorns = player.poe2.spiritState.platingStacks * ScavengedPlatingThorns(GemLevel(player, PersistentSkill::ScavengedPlating));
 	TelemetryNoteDamageSource("Scavenged Plating");
 	AddVisualEffect(monster.position.tile, MissileGraphicID::MetalHit);
+	vfx::ThornsHit(monster);
 	// Thorns aren't a hit: armour doesn't reduce them.
 	SpiritHitMonster(player, monster, DamageType::Physical, Fixed26_6::fromInt(thorns), 100, true);
 }

@@ -813,6 +813,7 @@ void ShrineReflectHit(Player &player, Monster &monster, int32_t damageTakenRaw)
 		return;
 	TelemetryNoteDamageSource("Thorned shrine");
 	ApplyMonsterDamage(DamageType::Physical, monster, reflected);
+	vfx::ThornsHit(monster);
 	monster.tag(player);
 	if (monster.hasNoLife())
 		M_StartKill(monster, player);

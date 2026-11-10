@@ -5185,6 +5185,7 @@ Fixed26_6 ApplyTableSkillDefences(Monster &monster, Player &player, Fixed26_6 da
 	if (monster.poe2.ironMaidenTicks > 0 && !monster.hasNoLife() && &player == MyPlayer) {
 		ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(damage.raw() * TableCurseStrength(monster, TableCurse::IronMaiden) / 100));
 		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
+		vfx::ThornsHit(monster);
 		if (monster.hasNoLife())
 			M_StartKill(monster, player);
 	}

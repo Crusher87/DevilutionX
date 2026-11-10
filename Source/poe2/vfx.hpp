@@ -29,6 +29,7 @@
 #include "engine/clx_sprite.hpp"
 
 namespace devilution {
+struct Monster;
 struct Object;
 } // namespace devilution
 
@@ -152,6 +153,14 @@ void Volley(Point from, Point toward, int arrows, bool feathers);
  * only a faint touch on it: a dim glow and a few small sparks of that element.
  */
 void Cut(Point tile, Element element);
+/**
+ * @brief Thorns striking back at a monster that hit the hero (the gear's thorns, Iron Maiden, Reflect, Scavenged
+ * Plating, a Thorned shrine): dark red spikes stab out of its body all round and draw back in, as POE2 shows thorns.
+ * One monster shows it at most once every ThornsCueGapMs, and only a few show at once, so a crowd stays readable.
+ */
+void ThornsHit(const Monster &monster);
+/** @brief The least time between two thorns bursts on the same monster, in ms. */
+constexpr int ThornsCueGapMs = 450;
 /** @brief Lightning arcing between two tiles. */
 void Arc(Point from, Point to, Element element);
 /**
@@ -260,6 +269,8 @@ size_t ShapeCount();
 size_t AmbientCount();
 /** @brief How many town portals are standing or folding shut (tests). */
 size_t PortalCount();
+/** @brief How many thorns bursts are showing (tests). */
+size_t ThornsCueCount();
 /** @brief How many raindrops and snowflakes are falling (tests). */
 size_t DropCount();
 

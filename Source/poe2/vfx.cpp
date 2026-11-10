@@ -513,6 +513,34 @@ struct LobFx {
 	float drips = 0;
 };
 std::vector<LobFx> Lobs;
+
+/** @brief One spike of a thorns burst: its direction on the screen, its length and width, and how soon it stabs out. */
+struct ThornSpike {
+	Vec dir;
+	float length;
+	float width;
+	float delay;
+};
+
+/**
+ * @brief Thorns striking back at a monster: dark red spikes stabbing out of its body all round and drawing back in, as
+ * POE2 shows thorns on the enemy they hurt.
+ */
+struct ThornsFx {
+	/** @brief The middle of the monster's body, where the spikes come out of. */
+	Vec body;
+	float age = 0;
+	float life;
+	float scale;
+	std::vector<ThornSpike> spikes;
+};
+std::vector<ThornsFx> ThornBursts;
+/** @brief How long a thorns burst lasts, in ms: the stab, a moment held, then drawn back in. */
+constexpr float ThornsLifeMs = 340;
+/** @brief At most this many bursts at once, however many monsters are hit. */
+constexpr size_t MaxThornBursts = 10;
+/** @brief When each monster may show a burst again (AmbientTime), so one shows it at most every ThornsCueGapMs. */
+std::array<float, MaxMonsters> ThornsReadyAt {};
 /** @brief Glows that last one frame (projectile heads). */
 std::vector<Ring> FrameGlows;
 /** @brief A projectile's body this frame, drawn instead of its classic sprite: a bright head and a tapering tail. */
@@ -3666,6 +3694,8 @@ void Clear()
 	IceSpikes.clear();
 	Miasmas.clear();
 	Lobs.clear();
+	ThornBursts.clear();
+	ThornsReadyAt.fill(0);
 	Sweeps.clear();
 	FrameGlows.clear();
 	FrameComets.clear();
@@ -4263,6 +4293,61 @@ void Cut(Point tile, Element element)
 		Spray(pos, Scaled(3), 30, 80, 200, 360, Shape::Shard, c.core, c.mid, 2.F, 1.F, 20, 70, 300, 1.F, 0.5F);
 		break;
 	}
+}
+
+void ThornsHit(const Monster &monster)
+{
+	const Point tile = monster.position.tile;
+	TelemetryEffect("vfx", "ThornsHit", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	// One burst a monster now and then, and only so many at once: a crowd hitting the hero stays readable.
+	const size_t id = monster.getId();
+	if (id >= ThornsReadyAt.size() || AmbientTime < ThornsReadyAt[id] || ThornBursts.size() >= MaxThornBursts)
+		return;
+	ThornsReadyAt[id] = AmbientTime + static_cast<float>(ThornsCueGapMs);
+	float height = 72;
+	if (monster.animInfo.sprites)
+		height = std::min(static_cast<float>(monster.animInfo.currentSprite().height()), 128.F);
+	ThornsFx fx;
+	// The spikes come out of the middle of its body.
+	fx.body = TileCentre(tile) - Vec { 0, height * 0.4F };
+	fx.scale = std::clamp(height / 80.F, 0.8F, 1.4F);
+	fx.life = ThornsLifeMs;
+	// Long and short spikes in turn, all the way round, a little uneven so no two bursts look the same.
+	constexpr int Spikes = 9;
+	const float turn = Random(0, 2 * Pi);
+	for (int i = 0; i < Spikes; i++) {
+		const float angle = turn + 2 * Pi * static_cast<float>(i) / Spikes + Random(-0.2F, 0.2F);
+		ThornSpike spike;
+		// Flattened a little, as the floor is.
+		const Vec way { std::cos(angle), std::sin(angle) * 0.8F };
+		spike.dir = way * (1 / Length(way));
+		spike.length = Random(17, 25) * (i % 2 == 0 ? 1.F : 0.65F) * Length(way);
+		spike.width = Random(4.5F, 6.F);
+		spike.delay = Random(0, 35);
+		fx.spikes.push_back(spike);
+	}
+	// A few red splinters snap off the points.
+	for (int i = 0; i < Scaled(4); i++) {
+		const float angle = Random(0, 2 * Pi);
+		Particle p;
+		p.pos = TileCentre(tile);
+		p.z = height * 0.4F;
+		p.vel = Vec { std::cos(angle), std::sin(angle) * 0.5F } * Random(90, 170);
+		p.vz = Random(20, 80);
+		p.gravity = 400;
+		p.drag = 2.5F;
+		p.life = Random(160, 260);
+		p.size0 = 3;
+		p.size1 = 1.5F;
+		p.c0 = { 220, 40, 36 };
+		p.c1 = { 90, 8, 12 };
+		p.alpha = 0.7F;
+		p.shape = Shape::Shard;
+		AddParticle(p);
+	}
+	ThornBursts.push_back(std::move(fx));
 }
 
 void Arc(Point from, Point to, Element element)
@@ -5465,6 +5550,7 @@ void Advance(float ms)
 	AdvanceIceSpikes(ms);
 	AdvanceMiasmas(ms);
 	AdvanceLobs(ms);
+	Age(ThornBursts, ms);
 	for (Bolt &bolt : Bolts) {
 		bolt.reseedTimer += ms;
 		if (bolt.reseedTimer >= 50) {
@@ -5491,7 +5577,12 @@ float FarthestParticleFrom(const Missile &missile)
 
 size_t ShapeCount()
 {
-	return Rings.size() + Sigils.size() + Rituals.size() + Bolts.size() + Cracks.size() + Sweeps.size() + IceSpikes.size() + Beams.size() + Miasmas.size() + Lobs.size();
+	return Rings.size() + Sigils.size() + Rituals.size() + Bolts.size() + Cracks.size() + Sweeps.size() + IceSpikes.size() + Beams.size() + Miasmas.size() + Lobs.size() + ThornBursts.size();
+}
+
+size_t ThornsCueCount()
+{
+	return ThornBursts.size();
 }
 
 size_t AmbientCount()
@@ -8261,6 +8352,48 @@ void DrawLobs()
 	}
 }
 
+/**
+ * @brief The thorns bursts: dark red spikes stabbing out of a body all round, held a moment and drawn back in, each with
+ * a thin red sheen along its lit side. Only a dim red glow at the heart: no flash.
+ */
+void DrawThorns()
+{
+	constexpr Rgb Root { 60, 6, 10 };
+	constexpr Rgb Shade { 116, 12, 18 };
+	constexpr Rgb Face { 168, 22, 26 };
+	constexpr Rgb Lit { 226, 52, 44 };
+	constexpr Rgb Tip { 255, 128, 104 };
+	for (const ThornsFx &fx : ThornBursts) {
+		const float t = fx.age / fx.life;
+		// Drawn back in over the last half, fading as they go.
+		const float back = std::clamp((t - 0.5F) / 0.5F, 0.F, 1.F);
+		const float alpha = 1 - back * back;
+		SoftDisc(Glowing, fx.body, 13 * fx.scale, { 190, 18, 22 }, 0.28F * alpha, false);
+		for (const ThornSpike &spike : fx.spikes) {
+			const float local = fx.age - spike.delay;
+			if (local <= 0)
+				continue;
+			const float reach = std::min(EaseOutBack(local / 75.F), 1.08F) * (1 - back);
+			const float length = spike.length * fx.scale * reach;
+			if (length < 1)
+				continue;
+			const Vec side = Vec { -spike.dir.y, spike.dir.x } * (spike.width * 0.5F * fx.scale);
+			const Vec root = fx.body + spike.dir * (4 * fx.scale);
+			const Vec tip = root + spike.dir * length;
+			const float a = 0.95F * alpha;
+			// Two faces, shadowed and lit, meeting along its spine.
+			const int r0 = Dark.add(ToScreen(root - side), Root, a);
+			const int r1 = Dark.add(ToScreen(root), Face, a);
+			const int r2 = Dark.add(ToScreen(root + side), Shade, a);
+			const int shadeTip = Dark.add(ToScreen(tip), Shade, a);
+			const int litTip = Dark.add(ToScreen(tip), Lit, a);
+			Dark.tri(r0, r1, shadeTip);
+			Dark.tri(r1, r2, litTip);
+			SoftLine(Glowing, root + side * 0.5F, tip, 1.5F * fx.scale, Lit, Tip, 0.2F * alpha, 0.5F * alpha);
+		}
+	}
+}
+
 void DrawHalos()
 {
 	const float t = AmbientTime;
@@ -8844,7 +8977,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
+	if (Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
 		FrontFresh = false;
 		return;
 	}
@@ -8877,6 +9010,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawRings();
 	DrawComets();
 	DrawLobs();
+	DrawThorns();
 	DrawBolts();
 	DrawSweeps();
 	DrawQuestMarks();

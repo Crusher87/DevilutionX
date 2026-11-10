@@ -9,6 +9,7 @@
 #include "engine/assets.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
+#include "headless_mode.hpp"
 #include "items.h"
 #include "missiles.h"
 #include "monster.h"
@@ -22,6 +23,7 @@
 #include "poe2/passive_tree.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/unique_rules.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "spells.h"
 #include "storm/storm_net.hpp"
@@ -146,9 +148,14 @@ TEST_F(Poe2EffectPrimitivesTest, ThornsHitMeleeAttackersBack)
 	monster.position.tile = { 41, 40 };
 	monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(1000);
 
+	// The thorns show on the monster they hurt (the effects need a screen).
+	HeadlessMode = false;
+	vfx::Clear();
+
 	// No thorns, no damage.
 	DealThorns(player, monster);
 	EXPECT_EQ(monster.hitPoints.whole(), 1000);
+	EXPECT_EQ(vfx::ThornsCueCount(), 0U);
 
 	SetGearStat(player, Poe2ItemStat::ThornsMin, 6);
 	SetGearStat(player, Poe2ItemStat::ThornsMax, 9);
@@ -158,6 +165,9 @@ TEST_F(Poe2EffectPrimitivesTest, ThornsHitMeleeAttackersBack)
 	const int dealt = 1000 - monster.hitPoints.whole();
 	EXPECT_GE(dealt, 6);
 	EXPECT_LE(dealt, 9);
+	EXPECT_EQ(vfx::ThornsCueCount(), 1U);
+	vfx::Clear();
+	HeadlessMode = true;
 }
 
 TEST_F(Poe2EffectPrimitivesTest, KillsRecoverFlatAndPercentLifeAndMana)

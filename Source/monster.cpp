@@ -103,6 +103,7 @@
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "quests.h"
@@ -1319,6 +1320,7 @@ Fixed26_6 CheckReflect(Monster &monster, Player &player, Fixed26_6 dam)
 	const Fixed26_6 mdam = dam * RandomIntBetween(20, 30, true) / 100;
 	TelemetryNoteDamageSource("reflect");
 	ApplyMonsterDamage(DamageType::Physical, monster, mdam);
+	vfx::ThornsHit(monster);
 	if (monster.hasNoLife())
 		M_StartKill(monster, player);
 	else
@@ -1463,6 +1465,7 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		const int mdam = (GenerateRnd(3) + 1) << 6;
 		TelemetryNoteDamageSource("thorns");
 		ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(mdam));
+		vfx::ThornsHit(monster);
 		if (monster.hasNoLife())
 			M_StartKill(monster, player);
 		else

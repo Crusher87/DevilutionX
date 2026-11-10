@@ -26,6 +26,7 @@
 #include "poe2/support_table.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "utils/is_of.hpp"
 
 namespace devilution {
@@ -375,6 +376,7 @@ void ReflectMeleeHit(Player &player, Monster &monster, Fixed26_6 damage)
 	ApplyMonsterDamage(DamageType::Physical, monster, reflected);
 	monster.tag(player);
 	AddVisualEffect(monster.position.tile, MissileGraphicID::Reflect);
+	vfx::ThornsHit(monster);
 	if (monster.hasNoLife())
 		M_StartKill(monster, player);
 }

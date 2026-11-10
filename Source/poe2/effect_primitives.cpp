@@ -14,6 +14,7 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
 #include "poe2/unique_rules.hpp"
+#include "poe2/vfx.hpp"
 
 namespace devilution {
 
@@ -245,6 +246,7 @@ void DealThorns(Player &player, Monster &monster)
 		return;
 	TelemetryNoteDamageSource("thorns");
 	ApplyMonsterDamage(DamageType::Physical, monster, damage);
+	vfx::ThornsHit(monster);
 	monster.tag(player);
 	if (monster.hasNoLife())
 		M_StartKill(monster, player);

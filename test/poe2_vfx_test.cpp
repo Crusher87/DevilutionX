@@ -16,6 +16,7 @@
 #include "headless_mode.hpp"
 #include "levels/gendung.h"
 #include "missiles.h"
+#include "monster.h"
 #include "poe2/player_data.hpp"
 #include "poe2/vfx.hpp"
 #include "tables/misdat.h"
@@ -114,6 +115,43 @@ TEST_F(Poe2VfxTest, AnImpactSpraysParticlesThatDieOut)
 		vfx::Advance(50);
 	EXPECT_EQ(vfx::ParticleCount(), 0U);
 	EXPECT_EQ(vfx::ShapeCount(), 0U);
+}
+
+// Thorns show as a short burst of red spikes on the monster they hurt; one monster shows it at most every
+// ThornsCueGapMs, and only a few show at once, so a crowd hitting the hero stays readable.
+TEST_F(Poe2VfxTest, ThornsShowBrieflyAndNotTooOften)
+{
+	Monster &first = Monsters[3];
+	Monster &second = Monsters[4];
+	first.position.tile = { 40, 40 };
+	second.position.tile = { 41, 40 };
+	vfx::ThornsHit(first);
+	EXPECT_EQ(vfx::ThornsCueCount(), 1U);
+	EXPECT_GT(vfx::ParticleCount(), 0U);
+	// The same monster again at once: still the one burst. Another monster shows its own.
+	vfx::ThornsHit(first);
+	EXPECT_EQ(vfx::ThornsCueCount(), 1U);
+	vfx::ThornsHit(second);
+	EXPECT_EQ(vfx::ThornsCueCount(), 2U);
+	// It's short: gone before the monster may show another.
+	vfx::Advance(400);
+	EXPECT_EQ(vfx::ThornsCueCount(), 0U);
+	vfx::ThornsHit(first);
+	EXPECT_EQ(vfx::ThornsCueCount(), 0U);
+	vfx::Advance(static_cast<float>(vfx::ThornsCueGapMs - 400));
+	vfx::ThornsHit(first);
+	EXPECT_EQ(vfx::ThornsCueCount(), 1U);
+	// A crowd all at once shows only so many.
+	vfx::Clear();
+	for (size_t i = 0; i < 20; i++) {
+		Monsters[i].position.tile = { 40, 40 };
+		vfx::ThornsHit(Monsters[i]);
+	}
+	EXPECT_GT(vfx::ThornsCueCount(), 1U);
+	EXPECT_LE(vfx::ThornsCueCount(), 10U);
+	for (int i = 0; i < 20; i++)
+		vfx::Advance(50);
+	EXPECT_EQ(vfx::ThornsCueCount(), 0U);
 }
 
 TEST_F(Poe2VfxTest, ASigilLastsAsLongAsItCharges)
