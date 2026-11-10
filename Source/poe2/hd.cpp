@@ -3351,11 +3351,15 @@ void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites)
 		if (base.size() > ext.size() && base.ends_with(ext))
 			base.resize(base.size() - ext.size());
 	}
+	const bool itemPictures = base.starts_with("data/inv/objcurs");
 	const auto registerList = [&](ClxSpriteList list, size_t direction) {
 		for (size_t frame = 0; frame < list.numSprites(); frame++) {
 			char name[32];
 			std::snprintf(name, sizeof(name), "/d%zu_f%02zu", direction, frame);
 			SpriteNames[list[frame].pixelData()] = SpriteName { base + name, list[frame].width(), list[frame].height() };
+			// Item pictures are drawn in the UI as well (RenderUiSprites).
+			if (itemPictures)
+				RegisterUiSprite(list[frame].pixelData(), base + name, list[frame].width(), list[frame].height());
 		}
 	};
 	if (sprites.isSheet()) {

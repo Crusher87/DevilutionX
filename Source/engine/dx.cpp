@@ -296,8 +296,13 @@ void PresentLayeredFrame(SDL_Surface *surface)
 	TelemetryDrawStep(nullptr);
 	{
 		const FramePartScope part(FramePart::UiLayer);
-		if (UpdateUiOverlay())
+		// POE2 Mashup: item pictures in the UI show their HD art over it, so the UI keeps what was under them.
+		hd::PrepareUiSprites();
+		const bool overlay = UpdateUiOverlay();
+		hd::RestoreUiSprites();
+		if (overlay)
 			SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
+		hd::RenderUiSprites(renderer);
 	}
 	SkillLabCapturePresented(renderer);
 }

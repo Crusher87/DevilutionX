@@ -191,6 +191,30 @@ inline void RecordSprite(const Surface &out, Point position, ClxSprite clx, cons
 	RecordSpriteHook(out, position, clx, trn, style, outlineColor, lightmap);
 }
 
+using RecordUiSpriteFn = void (*)(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn);
+
+/**
+ * @brief Notes a picture drawn in the UI (set by the HD renderer; null without it). Item pictures (inventory, stash,
+ * belt, shops, the cursor) are shown with their HD art over the UI (PrepareUiSprites, RenderUiSprites).
+ */
+extern RecordUiSpriteFn RecordUiSpriteHook;
+
+/** @brief An item picture frame (data/inv/objcurs) and its HD art's name. */
+void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height);
+
+/** @brief A one-cell shrunken copy of an item picture: it shows the full picture's HD art, shrunk the same way. */
+void RegisterFittedUiSprite(ClxSprite small, ClxSprite full);
+
+/**
+ * @brief Before the UI overlay is made from the UI frame: where an item picture with HD art still shows, the frame
+ * shows what was under it instead, since its HD art goes over the UI (RenderUiSprites). RestoreUiSprites puts it back.
+ */
+void PrepareUiSprites();
+void RestoreUiSprites();
+
+/** @brief Draws the HD art of this frame's item pictures over the UI, where their own pixels still show. */
+void RenderUiSprites(SDL_Renderer *renderer);
+
 /** @brief Names every frame of a loaded sprite file, so its HD art can be found. */
 void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);
 
