@@ -2156,14 +2156,14 @@ uint16_t ClampMaxDam(const Item &item, uint16_t maxDam)
 	return maxDam;
 }
 
-int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int iseed, int id, int dur, int mdur, int ch, int mch, int ivalue, uint32_t ibuff, int toHit, int maxDam)
+int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int iseed, int id, int dur, int mdur, int ch, int mch, int ivalue, uint32_t ibuff, int toHit, int maxDam, const Poe2Craft &craft)
 {
 	if (ActiveItemCount >= MAXITEMS)
 		return -1;
 
 	Item item;
 
-	RecreateItem(*MyPlayer, item, idx, icreateinfo, iseed, ivalue, ibuff);
+	RecreateItem(*MyPlayer, item, idx, icreateinfo, iseed, ivalue, ibuff, craft);
 	if (id != 0)
 		item._iIdentified = true;
 	item._iMaxDur = mdur;

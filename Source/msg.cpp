@@ -5,6 +5,7 @@
  */
 #include "msg.h"
 
+#include <array>
 #include <climits>
 #include <cmath>
 #include <cstdint>
@@ -1111,6 +1112,8 @@ bool DeltaGetItem(const TCmdGItem &message, uint8_t bLevel)
 				delta.item.wValue = message.item.wValue;
 				delta.item.dwBuff = message.item.dwBuff;
 				delta.item.wToHit = message.item.wToHit;
+				memcpy(delta.item.craft, message.item.craft, sizeof(delta.item.craft));
+				memcpy(delta.item.craftExtension, message.item.craftExtension, sizeof(delta.item.craftExtension));
 			}
 			break;
 		}
@@ -1395,7 +1398,8 @@ int SyncDropItem(Point position, const TItem &item)
 	    Swap16LE(item.wValue),
 	    Swap32LE(item.dwBuff),
 	    Swap16LE(item.wToHit),
-	    Swap16LE(item.wMaxDam));
+	    Swap16LE(item.wMaxDam),
+	    NetItemCraft(item));
 }
 
 int SyncDropEar(Point position, const TEar &ear)
@@ -2744,6 +2748,32 @@ void PrepareItemForNetwork(const Item &item, TItem &messageItem)
 	messageItem.wToHit = Swap16LE(item._iPLToHit);
 	messageItem.wMaxDam = Swap16LE(item._iMaxDam);
 	messageItem.dwBuff = Swap32LE(item.dwBuff);
+	// POE2 Mashup: and its crafting state (build spec step 9), as the item save keeps it; zeros for none.
+	std::array<uint8_t, CraftStateSaveSize> craft {};
+	std::array<uint8_t, CraftExtensionSaveSize> extension {};
+	if ((item.dwBuff & CF_POE2) != 0) {
+		craft = PackCraftState(item._iPoe2Craft);
+		if (const auto packed = PackCraftExtension(item._iPoe2Craft))
+			extension = *packed;
+	}
+	memcpy(messageItem.craft, craft.data(), sizeof(messageItem.craft));
+	memcpy(messageItem.craftExtension, extension.data(), sizeof(messageItem.craftExtension));
+}
+
+static_assert(sizeof(TItem) == 23 + CraftStateSaveSize + CraftExtensionSaveSize, "a network item is Diablo's 23 bytes and the crafting state");
+
+Poe2Craft NetItemCraft(const TItem &messageItem)
+{
+	if ((Swap32LE(messageItem.dwBuff) & CF_POE2) == 0)
+		return {};
+	std::array<uint8_t, CraftStateSaveSize> craft;
+	std::array<uint8_t, CraftExtensionSaveSize> extension;
+	memcpy(craft.data(), messageItem.craft, craft.size());
+	memcpy(extension.data(), messageItem.craftExtension, extension.size());
+	// Zeros, or bytes that don't check out, give no crafting: the item recreates from its seed alone, as before.
+	Poe2Craft result = UnpackCraftState(craft);
+	UnpackCraftExtension(extension, result);
+	return result;
 }
 
 void PrepareEarForNetwork(const Item &item, TEar &ear)
@@ -2757,7 +2787,7 @@ void RecreateItem(const Player &player, const TItem &messageItem, Item &item)
 	const uint32_t dwBuff = Swap32LE(messageItem.dwBuff);
 	RecreateItem(player, item,
 	    static_cast<_item_indexes>(Swap16LE(messageItem.wIndx)), Swap16LE(messageItem.wCI),
-	    Swap32LE(messageItem.dwSeed), Swap16LE(messageItem.wValue), dwBuff);
+	    Swap32LE(messageItem.dwSeed), Swap16LE(messageItem.wValue), dwBuff, NetItemCraft(messageItem));
 	if (messageItem.bId != 0)
 		item._iIdentified = true;
 	item._iMaxDur = messageItem.bMDur;

@@ -12,6 +12,7 @@
 #include "items.h"
 #include "monster.h"
 #include "objects.h"
+#include "poe2/craft_state.hpp"
 #include "portal.h"
 #include "quests.h"
 
@@ -580,6 +581,12 @@ struct TItem {
 	uint32_t dwBuff;
 	uint16_t wToHit;
 	uint16_t wMaxDam;
+	/**
+	 * POE2 Mashup: the crafting state the item's seed can't rebuild (sockets, runes, essence marks...), in the item
+	 * save's own layout (PackCraftState, PackCraftExtension). All zero for an item without any: it recreates as before.
+	 */
+	uint8_t craft[CraftStateSaveSize];
+	uint8_t craftExtension[CraftExtensionSaveSize];
 };
 
 struct TEar {
@@ -755,6 +762,8 @@ extern int dwRecCount;
 
 void PrepareItemForNetwork(const Item &item, TItem &messageItem);
 void PrepareEarForNetwork(const Item &item, TEar &ear);
+/** @brief POE2 Mashup: the crafting state a network item carries; none for an item without POE2 crafting. */
+Poe2Craft NetItemCraft(const TItem &messageItem);
 void RecreateItem(const Player &player, const TItem &messageItem, Item &item);
 void msg_send_drop_pkt(uint8_t pnum, leaveinfo_t reason);
 bool msg_wait_resync();

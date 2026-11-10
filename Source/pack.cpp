@@ -246,7 +246,8 @@ void PackNetPlayer(PlayerNetPack &packed, const Player &player)
 		PackNetItem(player.InvBody[i], packed.InvBody[i]);
 
 	packed._pNumInv = player._pNumInv;
-	for (int i = 0; i < packed._pNumInv; i++)
+	// Never past the bag: a bad count is sent as it is for the other side to refuse, but writes nothing out of bounds.
+	for (int i = 0; i < std::min<int>(packed._pNumInv, InventoryGridCells); i++)
 		PackNetItem(player.InvList[i], packed.InvList[i]);
 
 	for (int i = 0; i < InventoryGridCells; i++)
