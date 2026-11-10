@@ -1,18 +1,22 @@
 #include <gtest/gtest.h>
 
+#include "cursor.h"
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "inv.h"
 #include "items.h"
 #include "levels/gendung.h"
 #include "monster.h"
+#include "panels/gemcutting_panel.hpp"
 #include "player.h"
+#include "poe2/gemcutting.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/support_table.hpp"
 #include "spells.h"
+#include "storm/storm_net.hpp"
 #include "tables/playerdat.hpp"
 
 namespace devilution {
@@ -333,6 +337,88 @@ TEST_F(Poe2SpiritTest, SkullsGrantSpiritOnce)
 	EXPECT_EQ(MaxSpirit(player), 40);
 	EXPECT_FALSE(UseSpiritSkull(player, skull));
 	EXPECT_EQ(MaxSpirit(player), 40);
+}
+
+// Breaking a skull opens the gem cutter on the Uncut Spirit Gem it leaves, so the Spirit gem is picked there and then
+// (Curtis 2026-11-10: he never noticed the gem). Closing the cutter leaves the gem uncut in the bag. A gem that falls at
+// the hero's feet from a full bag waits there, and the cutter stays shut.
+class Poe2SpiritSkullTest : public Poe2SpiritTest {
+public:
+	/** Placing an item in the bag needs the cursor graphics from the game's MPQ. */
+	static void SetUpTestSuite()
+	{
+		LoadCoreArchives();
+		LoadGameArchives();
+		haveCursors_ = HaveMainData();
+		if (haveCursors_)
+			InitCursor();
+	}
+
+	static bool haveCursors_;
+};
+
+bool Poe2SpiritSkullTest::haveCursors_ = false;
+
+TEST_F(Poe2SpiritSkullTest, BrokenSkullOpensTheCutterOnItsGem)
+{
+	if (!haveCursors_)
+		GTEST_SKIP() << "needs the game's MPQ for the cursor graphics";
+	Player &player = *MyPlayer;
+	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+	InspectPlayer = MyPlayer;
+	leveltype = DTYPE_CATHEDRAL;
+	pcurs = CURSOR_HAND;
+	player.position.tile = { 40, 40 };
+	for (int i = 0; i < MAXITEMS; i++)
+		ActiveItems[i] = static_cast<uint8_t>(i);
+	ActiveItemCount = 0;
+	const auto skull = [](std::string_view name) {
+		Item item;
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iMiscId == IMISC_SPIRIT_SKULL && AllItemsList[i].iName == name)
+				InitializeItem(item, static_cast<_item_indexes>(i));
+		}
+		return item;
+	};
+	// The Uncut Spirit Gem's picture is on Hellfire's cursor sheet, which spawn.mpq lacks: it borrows the skull's.
+	const auto skullPicture = static_cast<item_cursor_graphic>(skull("Skull of the Archbishop")._iCurs);
+	for (ItemData &data : AllItemsList) {
+		if (data.iMiscId == IMISC_UNCUT_SPIRIT)
+			data.iCurs = skullPicture;
+	}
+
+	ASSERT_TRUE(AutoPlaceItemInInventory(player, skull("Skull of the Archbishop")));
+	ASSERT_EQ(player._pNumInv, 1);
+	ASSERT_TRUE(UseInvItem(INVITEM_INV_FIRST));
+	EXPECT_EQ(MaxSpirit(player), 40);
+	ASSERT_EQ(player._pNumInv, 1);
+	EXPECT_EQ(player.InvList[0]._iMiscId, IMISC_UNCUT_SPIRIT);
+	EXPECT_EQ(UncutGemKind(player.InvList[0]), UncutKind::Spirit);
+	EXPECT_TRUE(IsGemcuttingOpen());
+	CloseGemcutting();
+	EXPECT_FALSE(IsGemcuttingOpen());
+	ASSERT_EQ(player._pNumInv, 1);
+	EXPECT_TRUE(IsUncutGem(player.InvList[0]));
+	EXPECT_EQ(ActiveItemCount, 0);
+
+	// A full bag, and a skull on the belt: its gem falls at the hero's feet.
+	const Item filler = player.InvList[0];
+	while (AutoPlaceItemInInventory(player, filler)) { }
+	const int full = player._pNumInv;
+	player.SpdList[3] = skull("Catacomb Lord's Skull");
+	const int spirit = MaxSpirit(player);
+	ASSERT_TRUE(UseInvItem(INVITEM_BELT_FIRST + 3));
+	EXPECT_GT(MaxSpirit(player), spirit);
+	EXPECT_TRUE(player.SpdList[3].isEmpty());
+	EXPECT_EQ(player._pNumInv, full);
+	ASSERT_EQ(ActiveItemCount, 1);
+	EXPECT_EQ(Items[ActiveItems[0]]._iMiscId, IMISC_UNCUT_SPIRIT);
+	EXPECT_FALSE(IsGemcuttingOpen());
+	ActiveItemCount = 0;
+	for (int x = 30; x < 50; x++) {
+		for (int y = 30; y < 50; y++)
+			dItem[x][y] = 0;
+	}
 }
 
 TEST_F(Poe2SpiritTest, PurityGrantsResistances)

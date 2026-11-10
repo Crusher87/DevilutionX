@@ -2595,8 +2595,11 @@ bool UseInvItem(int cii)
 				player.RemoveSpdBarItem(c);
 			else
 				player.RemoveInvItem(c);
-			// The skull leaves a gem to spend the Spirit on.
-			GiveUncutSpiritGem(player);
+			// The skull leaves a gem to spend the Spirit on, and the gem cutter opens on it so the Spirit gem is picked
+			// there and then (Curtis 2026-11-10: he never noticed the gem). One that fell at his feet waits to be picked up;
+			// closing the cutter leaves the gem uncut in the bag.
+			if (const std::optional<int> gem = GiveUncutSpiritGem(player); gem && &player == MyPlayer)
+				OpenGemcutting(false, *gem);
 		}
 		return true;
 	}

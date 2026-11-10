@@ -679,10 +679,10 @@ bool UseSpiritSkull(Player &player, const Item &item)
 	return true;
 }
 
-void GiveUncutSpiritGem(Player &player)
+std::optional<int> GiveUncutSpiritGem(Player &player)
 {
 	if (!gbIsPoe2 || &player != MyPlayer)
-		return;
+		return std::nullopt;
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		if (AllItemsList[i].iMiscId != IMISC_UNCUT_SPIRIT || AllItemsList[i].dropRate == 0)
 			continue;
@@ -692,7 +692,14 @@ void GiveUncutSpiritGem(Player &player)
 		SetUncutGemLevel(gem, MaxGemLevelForCharacter(player.getCharacterLevel()));
 		gem._iIdentified = true;
 		SetupItem(gem);
-		if (!AutoPlaceItemInInventory(player, gem, true) && ActiveItemCount < MAXITEMS) {
+		std::optional<int> inBag;
+		if (AutoPlaceItemInInventory(player, gem, true)) {
+			for (int j = 0; j < player._pNumInv; j++) {
+				const Item &placed = player.InvList[j];
+				if (placed.IDidx == gem.IDidx && placed._iSeed == gem._iSeed && placed._iCreateInfo == gem._iCreateInfo)
+					inBag = j;
+			}
+		} else if (ActiveItemCount < MAXITEMS) {
 			// A full bag: it lands at the hero's feet.
 			const int ii = AllocateItem();
 			Items[ii] = gem;
@@ -701,8 +708,9 @@ void GiveUncutSpiritGem(Player &player)
 		}
 		EventPlrMsg(_("An Uncut Spirit Gem forms from the skull's energies."), UiFlags::ColorWhitegold);
 		TelemetryLog("spirit", "the skull gave an Uncut Spirit Gem");
-		return;
+		return inBag;
 	}
+	return std::nullopt;
 }
 
 namespace {
