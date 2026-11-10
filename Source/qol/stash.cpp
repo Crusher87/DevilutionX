@@ -40,6 +40,7 @@
 #include "stores.h"
 #include "utils/display.h"
 #include "utils/format_int.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/sdl_compat.h"
@@ -1027,7 +1028,7 @@ std::optional<unsigned> FirstFreeSlot(unsigned page, unsigned first, unsigned co
 	return std::nullopt;
 }
 
-/** Room for more of the item on a currency stack of the Currency tab. */
+/** Room for more of the item on a stack of the Currency, Runes or Essences tab. */
 int StoredStackRoom(const Item &stack, const Item &item)
 {
 	if (!CanStackWith(stack, item))
@@ -1079,6 +1080,10 @@ std::optional<PremadePlacement> GetPremadePlacement(StashTabKind kind, const Ite
 			return std::nullopt;
 		return PremadePlacement { .fixedSlot = slot };
 	}
+	case StashTabKind::Runes:
+		return PremadePlacement { .fixedSlot = RuneTabSlot(item) };
+	case StashTabKind::Essences:
+		return PremadePlacement { .fixedSlot = EssenceTabSlot(item) };
 	default:
 		return PremadePlacement { .fixedSlot = std::nullopt, .first = 0, .count = capacity };
 	}
@@ -1087,6 +1092,9 @@ std::optional<PremadePlacement> GetPremadePlacement(StashTabKind kind, const Ite
 /** The premade tab would keep the item in this slot. */
 bool IsPremadeSlotRight(StashTabKind kind, unsigned slot, const Item &item)
 {
+	// The Essences tab's tall slot holds the gear its essences are used on.
+	if (kind == StashTabKind::Essences && slot == EssenceCraftSlot)
+		return EssenceCraftSlotTakes(item);
 	const std::optional<PremadePlacement> placement = GetPremadePlacement(kind, item);
 	if (!placement)
 		return false;
@@ -1095,13 +1103,17 @@ bool IsPremadeSlotRight(StashTabKind kind, unsigned slot, const Item &item)
 	return slot >= placement->first && slot < placement->first + placement->count;
 }
 
-/** Stores a repaired item: its own premade tab first, then any tab, splitting stacks too big for a blank tab. */
+/**
+ * Stores a repaired item: the premade tab it was on, then any premade tab that takes it (an augment or essence from the
+ * Currency tab of a stash saved before stash tabs version 4 goes to the Runes or Essences tab), then any tab, splitting
+ * stacks too big for a blank tab.
+ */
 void PlaceRepairedItem(Item item, unsigned page)
 {
 	if (StashTabs.kind(page) != StashTabKind::Blank && StoreInPremadeTab(page, item))
 		return;
 	for (unsigned other = 0; other < StashTabs.count() && !item.isEmpty(); other++) {
-		if (StashTabs.kind(other) == StashTabKind::Currency)
+		if (IsAnyOf(StashTabs.kind(other), StashTabKind::Currency, StashTabKind::Runes, StashTabKind::Essences))
 			StoreInPremadeTab(other, item);
 	}
 	while (!item.isEmpty()) {
@@ -1234,6 +1246,15 @@ void CombineStoredShards(unsigned page, unsigned slot)
 }
 
 } // namespace
+
+bool StoreInEssenceCraftSlot(unsigned page, Item &item)
+{
+	if (StashTabs.kind(page) != StashTabKind::Essences || !EssenceCraftSlotTakes(item) || StashTabSlotItem(page, EssenceCraftSlot) != StashStruct::EmptyCell)
+		return false;
+	PutInSlot(page, EssenceCraftSlot, item);
+	item.clear();
+	return true;
+}
 
 bool StoreInPremadeTab(unsigned page, Item &item)
 {

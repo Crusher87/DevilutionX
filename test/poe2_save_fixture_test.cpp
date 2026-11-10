@@ -254,6 +254,18 @@ public:
 		return out;
 	}
 
+	/** The snapshot without the names of runes and essences, which take their rows' names of today when they load. */
+	static std::string WithoutCraftingNames(const std::string &snapshot)
+	{
+		std::string out;
+		for (std::string line : Lines(snapshot)) {
+			if (line.find(": Rune (row ") != std::string::npos || line.find(": Essence (row ") != std::string::npos)
+				line = line.substr(0, line.find('"'));
+			out += line + "\n";
+		}
+		return out;
+	}
+
 	static Item MakeBase(std::string_view name)
 	{
 		Item item {};
@@ -575,17 +587,30 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 	};
 	for (const Item &item : bag)
 		ASSERT_TRUE(AutoPlaceItemInInventory(player, item)) << item._iIName;
-	// The stash: a rune and an essence in the currency tab, and armour with a soul core.
+	// The stash, as a stash of stash tabs version 3 has it: armour with a soul core on a blank tab, and a rune and an
+	// essence in the Currency tab's old places for them (40 + id - 1, and 70 + 4 * (kind - 1) + tier).
 	Stash = {};
 	StashTabs.reset();
-	const std::vector<Item> stash = {
-		MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::StormRune)),
-		MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Warding, EssenceTier::Greater)),
-		Socketed(Make("Leather Vest", 401, ITEM_QUALITY_RARE, 50), { AugmentId::MindCore }),
+	StashTabs.tabs.resize(DefaultBlankStashTabs + 4);
+	unsigned currencyPage = 0;
+	for (unsigned page = 0; page < StashTabs.count(); page++) {
+		if (StashTabs.kind(page) == StashTabKind::Currency)
+			currencyPage = page;
+	}
+	const auto putInSlot = [](unsigned page, unsigned slot, const Item &item) {
+		Stash.stashList.push_back(item);
+		const Point cell { static_cast<int>(slot % 10), static_cast<int>((slot % 100) / 10) };
+		Stash.stashList.back().position = cell;
+		Stash.stashGrids[StashGridKey(page, slot / 100)][cell.x][cell.y] = static_cast<StashStruct::StashCell>(Stash.stashList.size());
 	};
-	for (const Item &item : stash)
-		ASSERT_TRUE(AutoPlaceItemInStash(item, true)) << item._iIName;
+	Stash.SetPage(0);
+	ASSERT_TRUE(AutoPlaceItemInStash(Socketed(Make("Leather Vest", 401, ITEM_QUALITY_RARE, 50), { AugmentId::MindCore }), true));
+	putInSlot(currencyPage, 40 + static_cast<unsigned>(AugmentId::StormRune) - 1, MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::StormRune)));
+	putInSlot(currencyPage, 70 + (4 * (static_cast<unsigned>(EssenceKind::Warding) - 1)) + static_cast<unsigned>(EssenceTier::Greater),
+	    MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Warding, EssenceTier::Greater)));
+	ASSERT_EQ(Stash.stashList.size(), 3u);
 	Stash.dirty = true;
+	StashTabsSaveVersion = 3;
 	// The town floor: a rune and a sword with one.
 	leveltype = DTYPE_TOWN;
 	currlevel = 0;
@@ -607,17 +632,18 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 	}
 	FreeCursor();
 	const std::string saved = Snapshot();
-	std::vector<std::optional<unsigned>> stashSlots;
-	for (const Item &item : Stash.stashList)
-		stashSlots.push_back(CurrencyFixedSlot(item));
 	pfile_write_hero(/*writeGameData=*/false);
 	sfile_write_stash();
+	StashTabsSaveVersion = StashTabsVersion;
 	pfile_save_level();
 
 	Load();
 	const std::string loaded = Snapshot();
-	// Every item came back with the same stats and names.
-	EXPECT_EQ(WithoutCraftBytes(loaded), WithoutCraftBytes(saved));
+	// Every item came back with the same stats, and runes and essences with their rows' names of today.
+	EXPECT_EQ(WithoutCraftingNames(WithoutCraftBytes(loaded)), WithoutCraftingNames(WithoutCraftBytes(saved)));
+	EXPECT_NE(loaded.find("\"Lesser Ort Rune\""), std::string::npos);
+	EXPECT_EQ(loaded.find("\"Storm Rune\""), std::string::npos);
+	EXPECT_NE(loaded.find("\"Greater Essence of Enhancement\""), std::string::npos);
 	// And today's ids.
 	const auto expectSockets = [](const Item &item, std::initializer_list<AugmentId> augments) {
 		ASSERT_EQ(item._iPoe2Craft.sockets, augments.size()) << item._iIName;
@@ -651,16 +677,34 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 	EXPECT_NE(std::find(augments.begin(), augments.end(), AugmentId::RelicOfAkarat), augments.end());
 	EXPECT_NE(std::find(essences.begin(), essences.end(), EssenceVariant(EssenceKind::Body, EssenceTier::Lesser)), essences.end());
 	EXPECT_NE(std::find(essences.begin(), essences.end(), EssenceVariant(EssenceKind::Command, EssenceTier::Perfect)), essences.end());
-	ASSERT_EQ(Stash.stashList.size(), stashSlots.size());
+	ASSERT_EQ(Stash.stashList.size(), 3u);
+	// The stash got the Runes and Essences tabs, and they moved there from the Currency tab (stash step 3).
+	ASSERT_EQ(StashTabs.count(), DefaultStashTabs);
+	std::optional<unsigned> runesPage;
+	std::optional<unsigned> essencesPage;
+	for (unsigned page = 0; page < StashTabs.count(); page++) {
+		if (StashTabs.kind(page) == StashTabKind::Runes)
+			runesPage = page;
+		if (StashTabs.kind(page) == StashTabKind::Essences)
+			essencesPage = page;
+	}
+	ASSERT_TRUE(runesPage && essencesPage);
+	EXPECT_TRUE(StashTabItems(currencyPage).empty()) << "The Currency tab's old places are empty";
 	for (size_t i = 0; i < Stash.stashList.size(); i++) {
 		const Item &item = Stash.stashList[i];
 		EXPECT_EQ(CurrentAugmentId(GetAugmentId(item)), GetAugmentId(item));
 		EXPECT_EQ(CurrentEssenceKind(GetEssenceKind(item)), GetEssenceKind(item));
-		// The currency tab keeps them in the places they had.
-		EXPECT_EQ(CurrencyFixedSlot(item), stashSlots[i]) << item._iIName;
-		if (item._iClass == ICLASS_ARMOR)
+		if (const std::optional<unsigned> slot = RuneTabSlot(item))
+			EXPECT_EQ(StashTabSlotItem(*runesPage, *slot), i) << item._iIName;
+		else if (const std::optional<unsigned> essenceSlot = EssenceTabSlot(item))
+			EXPECT_EQ(StashTabSlotItem(*essencesPage, *essenceSlot), i) << item._iIName;
+		if (item._iClass == ICLASS_ARMOR) {
 			expectSockets(item, { AugmentId::TheDefiler });
+			EXPECT_EQ(StashTabItems(0).size(), 1u) << "The vest stays on its blank tab";
+		}
 	}
+	EXPECT_EQ(GetAugmentId(Stash.stashList[1]), AugmentId::LesserOrt);
+	EXPECT_EQ(GetEssenceKind(Stash.stashList[2]), EssenceKind::Enhancement);
 	ASSERT_EQ(ActiveItemCount, 2);
 	EXPECT_EQ(GetAugmentId(Items[ActiveItems[0]]), AugmentId::LesserThul);
 	expectSockets(Items[ActiveItems[1]], { AugmentId::LesserOhm });

@@ -3302,9 +3302,10 @@ void LoadStash()
 				usedPages = std::max(usedPages, StashGridPage(key) + 1);
 		}
 		StashTabs.ensureCount(usedPages);
-		// Stashes from before premade tabs get one of each at the end.
-		if (tabsVersion < 2)
-			StashTabs.addMissingPremadeTabs();
+		// Stashes from before premade tabs get one of each at the end, and stashes from before the Runes and Essences tabs
+		// (version 4) get those; RepairStashTabs then moves the augments and essences there from the Currency tab.
+		if (tabsVersion < 4)
+			StashTabs.addMissingPremadeTabs(tabsVersion);
 		// The open tab is set first so that it stays open as tabs are merged.
 		Stash.SetPage(openPage);
 		RepairStashTabs();
@@ -3570,7 +3571,7 @@ void SaveHeroItems(SaveWriter &saveWriter, Player &player)
 void SaveStash(SaveWriter &stashWriter)
 {
 	if (gbIsPoe2) {
-		const std::vector<uint8_t> tabs = SerializeStashTabs(StashTabs);
+		const std::vector<uint8_t> tabs = SerializeStashTabs(StashTabs, StashTabsSaveVersion);
 		SaveHelper tabsFile(stashWriter, gbIsMultiplayer ? "mpstashtabs" : "spstashtabs", sizeof(uint32_t) + tabs.size());
 		tabsFile.WriteLE<uint32_t>(static_cast<uint32_t>(tabs.size()));
 		for (const uint8_t byte : tabs)

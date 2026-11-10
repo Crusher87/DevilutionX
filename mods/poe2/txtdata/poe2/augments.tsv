@@ -1,22 +1,111 @@
-id	name	tier	dropLevel	weaponEffect	weaponValue1	weaponValue2	staffEffect	staffValue1	staffValue2	armourEffect	armourValue1	armourValue2	rule	ruleValue	weaponText	staffText	armourText	becomes
-EmberRune	Ember Rune	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance	LesserRal
-FrostRune	Frost Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance	LesserThul
-StormRune	Storm Rune	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance	LesserOrt
-IronRune	Iron Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield	LesserOhm
-WindRune	Wind Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity	LesserShael
-HeartCore	Soul Core of Heart	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life	LordOfThePit
-MindCore	Soul Core of Mind	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana	TheDefiler
-KeenCore	Soul Core of Keenness	2	30	Accuracy	12	0	Accuracy	12	0	Accuracy	8	0		0	+12% chance to hit	+12% chance to hit	+8% chance to hit	StareyeTheWitch
-HunterTalisman	Hunter's Talisman	3	45		0	0		0	0		0	0	DamageVsRareUnique	15	15% more damage against rare and unique monsters	15% more damage against rare and unique monsters	15% more damage against rare and unique monsters	RelicOfRakkis
-GuardianTalisman	Guardian's Talisman	3	45		0	0		0	0		0	0	LessHitDamage	6	6% less damage taken from hits	6% less damage taken from hits	6% less damage taken from hits	RelicOfAkarat
-LesserRal	Ember Rune	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance	
-LesserThul	Frost Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance	
-LesserOrt	Storm Rune	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance	
-LesserOhm	Iron Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield	
-LesserShael	Wind Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity	
-LordOfThePit	Soul Core of Heart	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life	
-TheDefiler	Soul Core of Mind	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana	
-StareyeTheWitch	Soul Core of Keenness	2	30	Accuracy	12	0	Accuracy	12	0	Accuracy	8	0		0	+12% chance to hit	+12% chance to hit	+8% chance to hit	
-RelicOfRakkis	Hunter's Talisman	3	45		0	0		0	0		0	0	DamageVsRareUnique	15	15% more damage against rare and unique monsters	15% more damage against rare and unique monsters	15% more damage against rare and unique monsters	
-RelicOfAkarat	Guardian's Talisman	3	45		0	0		0	0		0	0	LessHitDamage	6	6% less damage taken from hits	6% less damage taken from hits	6% less damage taken from hits	
-VenomRune	Venom Rune	1	20	ChaosResistance	10	0	ChaosResistance	10	0	ChaosResistance	10	0		0	+10% to chaos resistance	+10% to chaos resistance	+10% to chaos resistance	
+id	name	tier	dropLevel	weaponEffect	weaponValue1	weaponValue2	staffEffect	staffValue1	staffValue2	armourEffect	armourValue1	armourValue2	rule	ruleValue	weaponText	staffText	armourText	becomes	drops
+EmberRune	Ember Rune	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance	LesserRal	0
+FrostRune	Frost Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance	LesserThul	0
+StormRune	Storm Rune	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance	LesserOrt	0
+IronRune	Iron Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield	LesserOhm	0
+WindRune	Wind Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity	LesserShael	0
+HeartCore	Soul Core of Heart	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life	LordOfThePit	0
+MindCore	Soul Core of Mind	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana	TheDefiler	0
+KeenCore	Soul Core of Keenness	2	30	Accuracy	12	0	Accuracy	12	0	Accuracy	8	0		0	+12% chance to hit	+12% chance to hit	+8% chance to hit	StareyeTheWitch	0
+HunterTalisman	Hunter's Talisman	3	45		0	0		0	0		0	0	DamageVsRareUnique	15	15% more damage against rare and unique monsters	15% more damage against rare and unique monsters	15% more damage against rare and unique monsters	RelicOfRakkis	0
+GuardianTalisman	Guardian's Talisman	3	45		0	0		0	0		0	0	LessHitDamage	6	6% less damage taken from hits	6% less damage taken from hits	6% less damage taken from hits	RelicOfAkarat	0
+LesserRal	Lesser Ral Rune	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance		1
+LesserThul	Lesser Thul Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance		1
+LesserOrt	Lesser Ort Rune	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance		1
+LesserOhm	Lesser Ohm Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		1
+LesserShael	Lesser Shael Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		1
+LordOfThePit	Greater Soulstone of the Lord of the Pit	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		1
+TheDefiler	Greater Soulstone of the Defiler	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		1
+StareyeTheWitch	Greater Soulstone of Stareye the Witch	2	30	Accuracy	12	0	Accuracy	12	0	Accuracy	8	0		0	+12% chance to hit	+12% chance to hit	+8% chance to hit		1
+RelicOfRakkis	Relic of Rakkis	3	45		0	0		0	0		0	0	DamageVsRareUnique	15	15% more damage against rare and unique monsters	15% more damage against rare and unique monsters	15% more damage against rare and unique monsters		1
+RelicOfAkarat	Relic of Akarat	3	45		0	0		0	0		0	0	LessHitDamage	6	6% less damage taken from hits	6% less damage taken from hits	6% less damage taken from hits		1
+VenomRune	Venom Rune	1	20	ChaosResistance	10	0	ChaosResistance	10	0	ChaosResistance	10	0		0	+10% to chaos resistance	+10% to chaos resistance	+10% to chaos resistance		1
+Ral	Ral Rune	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance		0
+GreaterRal	Greater Ral Rune	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance		0
+PerfectRal	Perfect Ral Rune	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance		0
+Thul	Thul Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance		0
+GreaterThul	Greater Thul Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance		0
+PerfectThul	Perfect Thul Rune	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance		0
+Ort	Ort Rune	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance		0
+GreaterOrt	Greater Ort Rune	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance		0
+PerfectOrt	Perfect Ort Rune	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance		0
+Ohm	Ohm Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+GreaterOhm	Greater Ohm Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+PerfectOhm	Perfect Ohm Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+LesserAmn	Lesser Amn Rune	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+Amn	Amn Rune	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+GreaterAmn	Greater Amn Rune	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+PerfectAmn	Perfect Amn Rune	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+LesserVex	Lesser Vex Rune	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+Vex	Vex Rune	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+GreaterVex	Greater Vex Rune	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+PerfectVex	Perfect Vex Rune	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+LesserIo	Lesser Io Rune	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+Io	Io Rune	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+GreaterIo	Greater Io Rune	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+PerfectIo	Perfect Io Rune	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+LesserTir	Lesser Tir Rune	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+Tir	Tir Rune	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+GreaterTir	Greater Tir Rune	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+PerfectTir	Perfect Tir Rune	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+LesserSol	Lesser Sol Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+Sol	Sol Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+GreaterSol	Greater Sol Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+PerfectSol	Perfect Sol Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+LesserGul	Lesser Gul Rune	2	30	Accuracy	12	0	Accuracy	12	0	Accuracy	8	0		0	+12% chance to hit	+12% chance to hit	+8% chance to hit		0
+Gul	Gul Rune	2	30	Accuracy	12	0	Accuracy	12	0	Accuracy	8	0		0	+12% chance to hit	+12% chance to hit	+8% chance to hit		0
+GreaterGul	Greater Gul Rune	2	30	Accuracy	12	0	Accuracy	12	0	Accuracy	8	0		0	+12% chance to hit	+12% chance to hit	+8% chance to hit		0
+PerfectGul	Perfect Gul Rune	2	30	Accuracy	12	0	Accuracy	12	0	Accuracy	8	0		0	+12% chance to hit	+12% chance to hit	+8% chance to hit		0
+LesserFal	Lesser Fal Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+Fal	Fal Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+GreaterFal	Greater Fal Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+PerfectFal	Perfect Fal Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+LesserKo	Lesser Ko Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+Ko	Ko Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+GreaterKo	Greater Ko Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+PerfectKo	Perfect Ko Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+LesserLum	Lesser Lum Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+Lum	Lum Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+GreaterLum	Greater Lum Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+PerfectLum	Perfect Lum Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+Ith	Ith Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+GreaterIth	Greater Ith Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+PerfectIth	Perfect Ith Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+Zod	Zod Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+TalicsRune	Talic's Rune	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+MadawcsRune	Madawc's Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+KorlicsRune	Korlic's Rune	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+BulKathosRune	Bul-Kathos' Rune	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+TalRashasRune	Tal Rasha's Rune	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+HorazonsRune	Horazon's Rune	3	45		0	0		0	0		0	0	LessHitDamage	6	6% less damage taken from hits	6% less damage taken from hits	6% less damage taken from hits		0
+JeredCainsRune	Jered Cain's Rune	2	30	Accuracy	12	0	Accuracy	12	0	Accuracy	8	0		0	+12% chance to hit	+12% chance to hit	+8% chance to hit		0
+ZoltunKullesRune	Zoltun Kulle's Rune	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+ButcherSoulstone	Soulstone of the Butcher	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+LeoricSoulstone	Soulstone of Leoric	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+LazarusSoulstone	Soulstone of Lazarus	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+DoomcloudSoulstone	Soulstone of Doomcloud	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+BoneheadSoulstone	Soulstone of Bonehead Keenaxe	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+WarlordSoulstone	Soulstone of the Warlord of Blood	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+BloodmoonSoulstone	Soulstone of Bloodmoon Soulfire	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+NaKrulSoulstone	Soulstone of Na-Krul	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance		0
+HorkDemonSoulstone	Soulstone of the Hork Demon	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+ZharSoulstone	Soulstone of Zhar the Mad	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance		0
+SnotspillSoulstone	Soulstone of Snotspill	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance		0
+GharbadSoulstone	Soulstone of Gharbad the Weak	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance		0
+WitchfireSoulstone	Soulstone of Witchfire the Unholy	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+BlackJadeSoulstone	Soulstone of Black Jade	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+Plaguewrath	Greater Soulstone of Plaguewrath	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance		0
+NightwingTheCold	Greater Soulstone of Nightwing the Cold	1	10	ColdResistance	12	0	ColdResistance	12	0	ColdResistance	12	0		0	+12% to cold resistance	+12% to cold resistance	+12% to cold resistance		0
+Stormbane	Greater Soulstone of Stormbane	1	10	AddedLightning	1	14	AddedLightning	1	14	LightningResistance	12	0		0	Adds 1 to 14 lightning damage	Adds 1 to 14 lightning damage	+12% to lightning resistance		0
+WrathfireTheDoomed	Greater Soulstone of Wrathfire the Doomed	1	10	AddedFire	4	9	AddedFire	4	9	FireResistance	12	0		0	Adds 4 to 9 fire damage	Adds 4 to 9 fire damage	+12% to fire resistance		0
+Dreadjudge	Greater Soulstone of Dreadjudge	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+Bloodlust	Greater Soulstone of Bloodlust	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+GutshankTheQuick	Greater Soulstone of Gutshank the Quick	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+Blackskull	Greater Soulstone of Blackskull	1	10	PhysicalPercent	18	0	PhysicalPercent	18	0	DefensePercent	18	0		0	18% increased physical damage	18% increased physical damage	18% increased armour, evasion and energy shield		0
+HowlingireTheShade	Greater Soulstone of Howlingire the Shade	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0
+BronzefistFirestone	Greater Soulstone of Bronzefist Firestone	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+Shadowcrow	Greater Soulstone of Shadowcrow	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+Zamphir	Greater Soulstone of Zamphir	1	15	AttackSpeed	5	0	AttackSpeed	5	0	Dexterity	8	0		0	5% increased attack speed	5% increased attack speed	+8 to dexterity		0
+TalRashasSoulstone	Horadric Soulstone of Tal Rasha	3	45		0	0		0	0		0	0	LessHitDamage	6	6% less damage taken from hits	6% less damage taken from hits	6% less damage taken from hits		0
+JeredCainsSoulstone	Horadric Soulstone of Jered Cain	2	30	Life	30	0	Life	30	0	Life	30	0		0	+30 to maximum life	+30 to maximum life	+30 to maximum life		0
+ZoltunKullesSoulstone	Horadric Soulstone of Zoltun Kulle	2	30	Mana	30	0	Mana	30	0	Mana	30	0		0	+30 to maximum mana	+30 to maximum mana	+30 to maximum mana		0

@@ -40,6 +40,7 @@
 #include "plrmsg.h"
 #include "poe2/crafting_items.hpp"
 #include "poe2/item_search.hpp"
+#include "poe2/rune_icons.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/stash_tabs.hpp"
@@ -47,6 +48,7 @@
 #include "poe2/waystones.hpp"
 #include "qol/stash.h"
 #include "utils/display.h"
+#include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/sdl_compat.h"
 #include "utils/str_cat.hpp"
@@ -110,7 +112,7 @@ constexpr Size SwatchSize { 26, 18 };
 constexpr int SwatchGap = 4;
 constexpr Size ButtonSize { 90, 20 };
 /** The kinds a tab can be made, in the settings popup. */
-constexpr StashTabKind KindChoices[] = { StashTabKind::Blank, StashTabKind::Currency, StashTabKind::Gems, StashTabKind::Maps, StashTabKind::Uniques };
+constexpr StashTabKind KindChoices[] = { StashTabKind::Blank, StashTabKind::Currency, StashTabKind::Gems, StashTabKind::Maps, StashTabKind::Uniques, StashTabKind::Runes, StashTabKind::Essences };
 
 /** @brief A rectangle at a position in the stash panel. */
 Rectangle At(int x, int y, int width, int height)
@@ -797,6 +799,10 @@ struct SlotView {
 	StashStruct::StashCell index = StashStruct::EmptyCell;
 	/** The currency slot or collection entry an empty slot stands for, shown dimmed; -1 for none. */
 	int fixedSlot = -1;
+	/** The tab whose layout fixedSlot is a slot of. */
+	StashTabKind layout = StashTabKind::Currency;
+	/** The Essences tab's craft slot: it takes gear, and says so when empty. */
+	bool craftSlot = false;
 };
 
 struct ButtonView {
@@ -832,13 +838,13 @@ struct TabView {
 	bool collection = false;
 };
 
-/** UI choices on the premade tabs; not saved. */
+/** UI choices on the premade tabs; not saved. Essences have a tab of their own (stash tabs version 4). */
 enum class CurrencyPage : uint8_t {
 	General,
-	Essences,
 	Omens,
 };
 CurrencyPage OpenCurrencyPage = CurrencyPage::General;
+RunePage OpenRunePage = RunePage::Runes;
 GemFilter OpenGemFilter = GemFilter::All;
 int GemScroll = 0;
 int OpenMapTier = 1;
@@ -847,6 +853,12 @@ UniqueCategory OpenUniqueCategory = UniqueCategory::Weapons;
 int UniqueScroll = 0;
 /** Whether the Uniques tab hides the uniques not in the collection yet (Curtis 2026-10-16). */
 bool UniquesCollectedOnly = false;
+
+/** The footer of the tabs whose slots hold big stacks. */
+std::string StashSlotFooter()
+{
+	return FormatRuntime(_("Up to {:d} a slot. A click takes {:d}."), CurrencyTabStackMax, CurrencyStackMax);
+}
 
 /** @brief The button that opens the tab's settings, at the right end of a row. */
 void AddSettingsButton(TabView &view, int y, int x = 268)
@@ -883,7 +895,6 @@ void BuildCurrencyView(TabView &view, unsigned page)
 {
 	constexpr std::pair<CurrencyPage, const char *> Pages[] = {
 		{ CurrencyPage::General, N_("General") },
-		{ CurrencyPage::Essences, N_("Essences") },
 		{ CurrencyPage::Omens, N_("Omens") },
 	};
 	for (size_t i = 0; i < std::size(Pages); i++) {
@@ -898,37 +909,117 @@ void BuildCurrencyView(TabView &view, unsigned page)
 		int y = 48;
 		y = AddCurrencyRows(view, page, CurrencySection::Orbs, y);
 		y = AddCurrencyRows(view, page, CurrencySection::Catalysts, y);
-		y = AddCurrencyRows(view, page, CurrencySection::Augments, y);
+		// Runes and essences have tabs of their own now; their old sections here stay empty.
 		AddCurrencyRows(view, page, CurrencySection::Other, y);
-		break;
-	}
-	case CurrencyPage::Essences: {
-		// Rows are tiers, columns are kinds, in two blocks of six kinds.
-		const CurrencySectionRange range = GetCurrencySection(CurrencySection::Essences);
-		constexpr const char *TierNames[] = { N_("Lesser"), N_("Normal"), N_("Greater"), N_("Perfect") };
-		constexpr unsigned Tiers = std::size(TierNames);
-		// The legacy kinds' places, which hold the kinds they became.
-		const auto kinds = static_cast<unsigned>(LegacyEssenceKindCount);
-		for (unsigned block = 0; block * 6 < kinds; block++) {
-			const int top = 50 + (static_cast<int>(block) * 134);
-			view.labels.push_back({ At(15, top, 290, 12), block == 0 ? std::string(_("Essences")) : std::string(_("Essences, continued")) });
-			for (unsigned tier = 0; tier < Tiers; tier++) {
-				const int y = top + 14 + (static_cast<int>(tier) * CellPitch);
-				view.labels.push_back({ At(12, y, 62, CellSize.height), std::string(_(TierNames[tier])), UiFlags::ColorWhite | UiFlags::VerticalCenter });
-				for (unsigned column = 0; column < 6 && (block * 6) + column < kinds; column++) {
-					const unsigned kind = (block * 6) + column;
-					const unsigned slot = range.first + (kind * Tiers) + tier;
-					view.slots.push_back({ At(78 + (static_cast<int>(column) * CellPitch), y, CellSize.width, CellSize.height), StashTabSlotItem(page, slot), static_cast<int>(slot) });
-				}
-			}
-		}
 		break;
 	}
 	case CurrencyPage::Omens:
 		AddCurrencyRows(view, page, CurrencySection::Omens, 50);
 		break;
 	}
-	view.labels.push_back({ At(10, 326, 300, 14), std::string(_("Up to 5000 a slot. A click takes 20.")), UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
+	view.labels.push_back({ At(10, 326, 300, 14), StashSlotFooter(), UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
+}
+
+/** The column heads of a block of four strengths. */
+void AddStrengthHeads(TabView &view, int x, int y)
+{
+	constexpr const char *Heads[] = { N_("L"), N_("N"), N_("G"), N_("P") };
+	for (int i = 0; i < 4; i++)
+		view.labels.push_back({ At(x + (i * CellPitch), y, CellSize.width, 12), std::string(_(Heads[i])), UiFlags::ColorWhite | UiFlags::AlignCenter });
+}
+
+void BuildRunesView(TabView &view, unsigned page)
+{
+	for (uint8_t i = 0; i < static_cast<uint8_t>(RunePage::Count); i++) {
+		const auto runePage = static_cast<RunePage>(i);
+		constexpr int Widths[] = { 42, 90, 120 };
+		int x = 8;
+		for (uint8_t j = 0; j < i; j++)
+			x += Widths[j] + 2;
+		view.buttons.push_back({ .rect = At(x, HeaderY, Widths[i], 18), .text = std::string(RunePageName(runePage)),
+		    .selected = OpenRunePage == runePage, .onClick = [runePage] { OpenRunePage = runePage; } });
+	}
+	AddSettingsButton(view, HeaderY);
+	const auto addSlot = [&view, page](int x, int y, unsigned slot) {
+		view.slots.push_back({ At(x, y, CellSize.width, CellSize.height), StashTabSlotItem(page, slot), static_cast<int>(slot), StashTabKind::Runes });
+	};
+	switch (OpenRunePage) {
+	case RunePage::Runes: {
+		// A row for each family, a column for each strength, in two blocks (Curtis's picture 1).
+		const StashSlotRange range = GetRunePage(RunePage::Runes);
+		constexpr int Families = static_cast<int>(RuneFamily::Count);
+		constexpr int LeftRows = (Families + 1) / 2;
+		constexpr int Top = 64;
+		for (int block = 0; block < 2; block++) {
+			const int left = block == 0 ? 10 : 164;
+			AddStrengthHeads(view, left + 28, 50);
+			for (int row = 0; row < LeftRows; row++) {
+				const int family = (block * LeftRows) + row;
+				if (family >= Families)
+					break;
+				const int y = Top + (row * CellPitch);
+				view.labels.push_back({ At(left, y, 28, CellSize.height), std::string(RuneFamilyName(static_cast<RuneFamily>(family))), UiFlags::ColorWhite | UiFlags::VerticalCenter });
+				for (unsigned strength = 0; strength < RuneRowSlots; strength++) {
+					if (RuneOf(static_cast<RuneFamily>(family), static_cast<RuneStrength>(strength)) == AugmentId::None)
+						continue;
+					addSlot(left + 28 + (static_cast<int>(strength) * CellPitch), y, range.first + (static_cast<unsigned>(family) * RuneRowSlots) + strength);
+				}
+			}
+		}
+		break;
+	}
+	case RunePage::RunesOfLegend: {
+		const StashSlotRange range = GetRunePage(RunePage::RunesOfLegend);
+		view.labels.push_back({ At(15, 50, 290, 12), std::string(_("One of each worn at a time")), UiFlags::ColorButtonpushed });
+		for (int i = 0; i < RunesOfLegendCount; i++)
+			addSlot(15 + ((i % 8) * (CellPitch + 6)), 66, range.first + static_cast<unsigned>(i));
+		break;
+	}
+	case RunePage::SoulstonesAndRelics: {
+		const StashSlotRange range = GetRunePage(RunePage::SoulstonesAndRelics);
+		const size_t count = SoulstonesAndRelics().size();
+		for (size_t i = 0; i < count; i++)
+			addSlot(15 + (static_cast<int>(i % 10) * CellPitch), 50 + (static_cast<int>(i / 10) * CellPitch), range.first + static_cast<unsigned>(i));
+		break;
+	}
+	default:
+		break;
+	}
+	view.labels.push_back({ At(10, 326, 300, 14), StashSlotFooter(), UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
+}
+
+void BuildEssencesView(TabView &view, unsigned page)
+{
+	AddSettingsButton(view, HeaderY);
+	view.labels.push_back({ At(10, HeaderY + 2, 250, 14), std::string(_("Gear in the middle takes the essences")), UiFlags::ColorButtonpushed });
+	const auto addSlot = [&view, page](int x, int y, unsigned slot) {
+		view.slots.push_back({ At(x, y, CellSize.width, CellSize.height), StashTabSlotItem(page, slot), static_cast<int>(slot), StashTabKind::Essences });
+	};
+	// The 19 families in rows of four strengths, ten on the left and nine on the right (Curtis's picture 2).
+	const size_t families = EssenceFamilies().size();
+	const size_t leftRows = (families + 1) / 2;
+	constexpr int Top = 62;
+	for (int block = 0; block < 2; block++) {
+		const int left = block == 0 ? 10 : 194;
+		AddStrengthHeads(view, left, 49);
+		for (size_t row = 0; row < leftRows; row++) {
+			const size_t family = (static_cast<size_t>(block) * leftRows) + row;
+			if (family >= families)
+				break;
+			for (unsigned tier = 0; tier < static_cast<unsigned>(EssenceTier::Count); tier++)
+				addSlot(left + (static_cast<int>(tier) * CellPitch), Top + (static_cast<int>(row) * CellPitch), EssenceFamilySlotsFirst + (static_cast<unsigned>(family) * 4) + tier);
+		}
+	}
+	// The tall slot in the middle holds the gear the essences go on.
+	view.slots.push_back({ .rect = At(131, Top, (2 * CellPitch) - 1, (4 * CellPitch) - 1), .index = StashTabSlotItem(page, EssenceCraftSlot), .fixedSlot = -1,
+	    .layout = StashTabKind::Essences, .craftSlot = true });
+	// The Evil essences below it, two to a row.
+	view.labels.push_back({ At(128, Top + (4 * CellPitch) + 4, 64, 12), std::string(_("Evil")), UiFlags::ColorWhitegold | UiFlags::AlignCenter });
+	const unsigned evils = static_cast<unsigned>(EssenceKind::Count) - static_cast<unsigned>(FirstEvilEssence);
+	for (unsigned i = 0; i < evils; i++) {
+		const int x = i + 1 == evils && evils % 2 == 1 ? 131 + (CellPitch / 2) : 131 + (static_cast<int>(i % 2) * CellPitch);
+		addSlot(x, Top + (4 * CellPitch) + 18 + (static_cast<int>(i / 2) * CellPitch), EssenceEvilSlotsFirst + i);
+	}
 }
 
 /** Lines of the Gems tab: a heading, or a row of up to ten gems. */
@@ -1212,6 +1303,12 @@ TabView BuildTabView()
 	case StashTabKind::Uniques:
 		BuildUniquesView(view, page);
 		break;
+	case StashTabKind::Runes:
+		BuildRunesView(view, page);
+		break;
+	case StashTabKind::Essences:
+		BuildEssencesView(view, page);
+		break;
 	default:
 		BuildBlankView(view, page);
 		break;
@@ -1269,11 +1366,13 @@ int SlotCursor(const SlotView &slot, bool collection)
 		return static_cast<size_t>(slot.fixedSlot) < entries.size() ? entries[static_cast<size_t>(slot.fixedSlot)].cursor : -1;
 	}
 	Item sample;
-	return MakeCurrencySlotItem(static_cast<unsigned>(slot.fixedSlot), sample) ? sample._iCurs : -1;
+	return MakePremadeSlotItem(slot.layout, static_cast<unsigned>(slot.fixedSlot), sample) ? sample._iCurs : -1;
 }
 
 std::string SlotName(const SlotView &slot, bool collection)
 {
+	if (slot.craftSlot)
+		return std::string(_("Gear to use essences on"));
 	if (slot.fixedSlot < 0)
 		return {};
 	if (collection) {
@@ -1281,7 +1380,23 @@ std::string SlotName(const SlotView &slot, bool collection)
 		return static_cast<size_t>(slot.fixedSlot) < entries.size() ? entries[static_cast<size_t>(slot.fixedSlot)].name : std::string {};
 	}
 	Item sample;
-	return MakeCurrencySlotItem(static_cast<unsigned>(slot.fixedSlot), sample) ? std::string(sample._iIName) : std::string {};
+	return MakePremadeSlotItem(slot.layout, static_cast<unsigned>(slot.fixedSlot), sample) ? std::string(sample._iIName) : std::string {};
+}
+
+/** The rune an empty Runes tab slot stands for, drawn greyed; None for other slots. */
+AugmentId EmptySlotRune(const SlotView &slot)
+{
+	if (slot.layout != StashTabKind::Runes || slot.fixedSlot < 0)
+		return AugmentId::None;
+	const AugmentId id = RuneTabSlotAugment(static_cast<unsigned>(slot.fixedSlot));
+	return IsDrawnRune(id) ? id : AugmentId::None;
+}
+
+/** The count in a slot's top left corner. */
+void DrawSlotCount(const Surface &out, const SlotView &slot, int count, bool dim)
+{
+	DrawString(out, StrCat(count), { slot.rect.position + Displacement { 2, 1 }, { slot.rect.size.width, 12 } },
+	    { .flags = (dim ? UiFlags::ColorButtonpushed : UiFlags::ColorWhite) | UiFlags::Outlined });
 }
 
 void DrawSlot(const Surface &out, const SlotView &slot, bool collection)
@@ -1296,6 +1411,16 @@ void DrawSlot(const Surface &out, const SlotView &slot, bool collection)
 		frame = empty ? SocketRimColor : CollectedFrameColor;
 	DrawFrame(out, slot.rect, frame);
 	if (empty) {
+		if (slot.craftSlot) {
+			DrawString(out, _("Gear"), slot.rect, { .flags = UiFlags::ColorButtonpushed | UiFlags::AlignCenter | UiFlags::VerticalCenter });
+			return;
+		}
+		// An empty rune slot shows its rune greyed, with none in the corner (Curtis's picture 1).
+		if (const AugmentId rune = EmptySlotRune(slot); rune != AugmentId::None) {
+			DrawRuneIcon(out, slot.rect, rune, /*dim=*/true);
+			DrawSlotCount(out, slot, 0, /*dim=*/true);
+			return;
+		}
 		if (!HeadlessMode)
 			DrawPicture(out, SlotCursor(slot, collection), slot.rect, collection ? MissingTrn() : DimTrn(), std::nullopt);
 		return;
@@ -1306,11 +1431,16 @@ void DrawSlot(const Surface &out, const SlotView &slot, bool collection)
 	std::optional<uint8_t> outline;
 	if (pcursstashitem == slot.index)
 		outline = GetOutlineColor(item, true);
-	DrawPicture(out, item._iCurs, slot.rect, item._iStatFlag ? nullptr : GetInfravisionTRN(), outline);
-	if (const int count = StoredStackCount(item); IsStackable(item) && count > 1) {
-		DrawString(out, StrCat(count), { slot.rect.position + Displacement { 2, 1 }, { slot.rect.size.width, 12 } },
-		    { .flags = UiFlags::ColorWhite | UiFlags::Outlined });
+	if (IsDrawnRuneItem(item)) {
+		if (outline)
+			DrawFrame(out, slot.rect, *outline);
+		DrawRuneIcon(out, slot.rect, GetAugmentId(item), /*dim=*/false);
+	} else {
+		DrawPicture(out, item._iCurs, slot.rect, item._iStatFlag ? nullptr : GetInfravisionTRN(), outline);
 	}
+	// The Runes tab shows every count, as its empty slots show none.
+	if (const int count = StoredStackCount(item); IsStackable(item) && (count > 1 || slot.layout == StashTabKind::Runes))
+		DrawSlotCount(out, slot, count, /*dim=*/false);
 	if (StashSearch.searching())
 		DrawItemSearchMark(out, slot.rect, StashSearch.matches(item));
 }
@@ -1356,6 +1486,11 @@ void DrawEmptySlotTooltip(const Surface &out, const TabView &view)
 	for (const SlotView &slot : view.slots) {
 		if (!slot.rect.contains(MousePosition) || slot.index != StashStruct::EmptyCell)
 			continue;
+		if (slot.craftSlot) {
+			DrawTooltip(out, { { 0, 0 }, { out.w(), out.h() } }, MousePosition, SlotName(slot, false), UiFlags::ColorWhite,
+			    { { std::string(_("Put a magic or rare item here, then right-click an essence")), UiFlags::ColorButtonpushed } });
+			return;
+		}
 		const std::string name = SlotName(slot, view.collection);
 		if (name.empty())
 			return;
@@ -1396,6 +1531,32 @@ bool HandlePremadeSlotClick(const TabView &view, bool isShiftHeld, bool isCtrlHe
 	Player &player = *MyPlayer;
 	const unsigned page = Stash.GetPage();
 	const auto slot = std::find_if(view.slots.begin(), view.slots.end(), [](const SlotView &s) { return s.rect.contains(MousePosition); });
+	// The Essences tab's craft slot takes gear; held gear swaps with what is there.
+	if (!player.HoldItem.isEmpty() && slot != view.slots.end() && slot->craftSlot) {
+		if (!EssenceCraftSlotTakes(player.HoldItem)) {
+			EventPlrMsg(_("Only gear goes here."), UiFlags::ColorWhite);
+			return true;
+		}
+		Item held = player.HoldItem;
+		Item taken;
+		if (slot->index != StashStruct::EmptyCell && slot->index < Stash.stashList.size())
+			taken = TakeFromStash(slot->index);
+		if (!StoreInEssenceCraftSlot(page, held)) {
+			// Nothing was lost: what was taken goes back.
+			if (!taken.isEmpty())
+				StoreInEssenceCraftSlot(page, taken);
+			return true;
+		}
+		TelemetryItemAction(player, "stash", player.HoldItem, StashTabLogName(page));
+		PlaySFX(ItemInvSnds[ItemCAnimTbl[player.HoldItem._iCurs]]);
+		player.HoldItem = taken;
+		if (!taken.isEmpty()) {
+			TelemetryItemAction(player, "unstash", taken, StashTabLogName(page));
+			player.HoldItem._iStatFlag = player.CanUseItem(player.HoldItem);
+		}
+		NewCursor(player.HoldItem);
+		return true;
+	}
 	if (!player.HoldItem.isEmpty()) {
 		if (const std::string_view refusal = StashTabRefusal(page, player.HoldItem); !refusal.empty()) {
 			EventPlrMsg(refusal, UiFlags::ColorWhite);

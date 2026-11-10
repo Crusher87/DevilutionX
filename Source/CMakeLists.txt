@@ -56,6 +56,7 @@ set(libdevilutionx_SRCS
   poe2/hd.cpp
   poe2/hd_light.cpp
   poe2/loot_filter.cpp
+  poe2/rune_icons.cpp
   poe2/stash_layouts.cpp
   poe2/stash_tabs.cpp
   portal.cpp

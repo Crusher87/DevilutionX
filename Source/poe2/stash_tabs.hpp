@@ -6,7 +6,7 @@
  * A blank tab is a free grid. Its affinities limit what it takes: a blank tab with the Currency affinity only takes
  * currency, one with none takes anything. Each affinity belongs to one tab at a time, as in POE2.
  *
- * The premade tabs (Currency, Gems, Maps and Uniques) lay their items out themselves, like POE2's special tabs.
+ * The premade tabs (Currency, Gems, Maps, Uniques, Runes and Essences) lay their items out themselves, like POE2's special tabs.
  * Each item on one sits in one numbered slot, whatever its size. A tab's slots fill its own 10x10 grid first
  * and then extra grids saved under keys from ExtraStashGridBase, so the stash file keeps its format.
  */
@@ -57,6 +57,10 @@ enum class StashTabKind : uint8_t {
 	Maps,
 	/** One slot for each unique, a collection. */
 	Uniques,
+	/** A slot for each rune by family and strength, each Rune of Legend, soulstone and relic (stash tabs version 4). */
+	Runes,
+	/** A slot for each essence by family and strength, the Evil essences, and a slot for an item to use them on (version 4). */
+	Essences,
 	Count,
 };
 
@@ -65,6 +69,8 @@ constexpr StashTabKind PremadeStashTabKinds[] = {
 	StashTabKind::Gems,
 	StashTabKind::Maps,
 	StashTabKind::Uniques,
+	StashTabKind::Runes,
+	StashTabKind::Essences,
 };
 
 constexpr unsigned MaxStashTabs = 100;
@@ -110,8 +116,12 @@ struct StashTabSet {
 	bool addTab(StashTabKind kind = StashTabKind::Blank);
 	/** @brief Adds a blank tab past the limit, only so that stored items are never lost. */
 	bool addOverflowTab();
-	/** @brief Adds a premade tab of each kind the stash has none of, at the end, for stashes from before premade tabs. */
-	void addMissingPremadeTabs();
+	/**
+	 * @brief Adds a premade tab of each kind the stash has none of, at the end, for stashes from before that kind.
+	 * @param savedVersion The stash tabs version the stash was saved with: only the kinds newer than it are added, so a
+	 * premade tab the player made blank stays blank.
+	 */
+	void addMissingPremadeTabs(uint8_t savedVersion = 0);
 	[[nodiscard]] StashTabKind kind(unsigned page) const;
 	/** @brief Makes the tab another kind if the stash may have another of it; the caller checks it's empty. Premade tabs have no affinities. */
 	bool setKind(unsigned page, StashTabKind kind);
@@ -166,10 +176,19 @@ uint8_t StashTabPaletteColor(uint8_t color);
 /** @brief Light tab colours get dark text. */
 bool IsLightStashTabColor(uint8_t color);
 
-/** @brief Version 2 adds each tab's kind after the version 1 tabs, version 3 each tab's view options after that. */
-constexpr uint8_t StashTabsVersion = 3;
+/**
+ * @brief Version 2 adds each tab's kind after the version 1 tabs, version 3 each tab's view options after that.
+ * Version 4 has the same bytes as version 3, with the Runes and Essences kinds: a stash saved before it gets those tabs
+ * on load, and its augments and essences move to them from the Currency tab.
+ */
+constexpr uint8_t StashTabsVersion = 4;
+/** @brief The version that brought the premade tab kind. */
+uint8_t StashTabKindVersion(StashTabKind kind);
 
-std::vector<uint8_t> SerializeStashTabs(const StashTabSet &tabs);
+/** @brief Writes the tabs in the format of the version (the latest unless a test writes an older stash); kinds newer than it are written blank. */
+std::vector<uint8_t> SerializeStashTabs(const StashTabSet &tabs, uint8_t version = StashTabsVersion);
+/** @brief The version the stash save writes its tabs with; only tests change it, to write an older stash. */
+extern DVL_API_FOR_TEST uint8_t StashTabsSaveVersion;
 /**
  * @brief Reads tabs written by SerializeStashTabs, of this or an older version; leaves tabs untouched and returns false on bad data.
  * @param version Set to the version the data was written with.

@@ -1,9 +1,9 @@
 /**
  * @file poe2/stash_layouts.hpp
  *
- * POE2 Mashup premade stash tabs: what goes in which slot of the Currency tab, how the Gems and Maps tabs group
- * their items, and the unique collection of the Uniques tab. The slot numbers are saved with the stash, so new
- * kinds of currency take unused slots and nothing moves.
+ * POE2 Mashup premade stash tabs: what goes in which slot of the Currency, Runes and Essences tabs, how the Gems and
+ * Maps tabs group their items, and the unique collection of the Uniques tab. The slot numbers are saved with the
+ * stash, so new kinds of currency take unused slots and nothing moves.
  */
 #pragma once
 
@@ -15,6 +15,8 @@
 #include <vector>
 
 #include "items.h"
+#include "poe2/crafting_items.hpp"
+#include "poe2/stash_tabs.hpp"
 
 namespace devilution {
 
@@ -24,9 +26,14 @@ namespace devilution {
 enum class CurrencySection : uint8_t {
 	Orbs,
 	Catalysts,
+	/**
+	 * Slots 40-49, where augments were before they got the Runes tab (stash tabs version 4). They stay empty and are
+	 * never given to anything else: a stash saved before version 4 has augments there, which move on load.
+	 */
 	Augments,
 	/** Currency without a slot of its own (oils, skulls, books): first free slot. */
 	Other,
+	/** Slots 70-119, where essences were before the Essences tab; empty and never reused, as Augments. */
 	Essences,
 	Omens,
 	Count,
@@ -54,9 +61,56 @@ std::optional<unsigned> CurrencyFixedSlot(const Item &item);
 /** @brief Makes a fresh item of the slot's kind, for its picture and name; false for slots without a kind. */
 bool MakeCurrencySlotItem(unsigned slot, Item &item);
 
-/** @brief How many are in a stack on the Currency tab, where stacks go to CurrencyTabStackMax. */
+/** @brief How many are in a stack on the Currency, Runes or Essences tab, where stacks go to CurrencyTabStackMax. */
 int StoredStackCount(const Item &item);
 void SetStoredStackCount(Item &item, int count);
+
+// --- Runes tab (stash tabs version 4) ---
+
+/** @brief The Runes tab's pages; each owns a range of slots. */
+enum class RunePage : uint8_t {
+	/** A row of four slots for each rune family (RuneFamily order): Lesser, plain, Greater and Perfect. */
+	Runes,
+	RunesOfLegend,
+	SoulstonesAndRelics,
+	Count,
+};
+
+constexpr unsigned RuneTabSlots = 200;
+/** @brief The slots of a rune family's row, one for each strength. */
+constexpr unsigned RuneRowSlots = 4;
+
+struct StashSlotRange {
+	unsigned first;
+	unsigned count;
+};
+
+StashSlotRange GetRunePage(RunePage page);
+std::string_view RunePageName(RunePage page);
+/** @brief The Runes tab slot of an augment item; none for anything else. */
+std::optional<unsigned> RuneTabSlot(const Item &item);
+/** @brief The augment a Runes tab slot holds; None for an unused slot. */
+AugmentId RuneTabSlotAugment(unsigned slot);
+
+// --- Essences tab (stash tabs version 4) ---
+
+constexpr unsigned EssenceTabSlots = 100;
+/** @brief The families' slots: four for each of EssenceFamilies(), by strength. */
+constexpr unsigned EssenceFamilySlotsFirst = 0;
+/** @brief The Evil essences' slots, in EssenceKind order. */
+constexpr unsigned EssenceEvilSlotsFirst = 80;
+/** @brief The tall slot in the middle: an item to use the tab's essences on. */
+constexpr unsigned EssenceCraftSlot = 99;
+
+/** @brief The Essences tab slot of an essence; none for anything else. */
+std::optional<unsigned> EssenceTabSlot(const Item &item);
+/** @brief The essence variant an Essences tab slot holds; 0 for an unused slot and the craft slot. */
+uint8_t EssenceTabSlotVariant(unsigned slot);
+/** @brief Whether the item can sit in the Essences tab's craft slot: gear essences can be used on. */
+bool EssenceCraftSlotTakes(const Item &item);
+
+/** @brief Makes a fresh item of the kind a premade tab's slot holds, for its dimmed picture and name; false for slots without a kind. */
+bool MakePremadeSlotItem(StashTabKind kind, unsigned slot, Item &item);
 
 // --- Gems tab ---
 

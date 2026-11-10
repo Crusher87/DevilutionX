@@ -24,6 +24,7 @@
 namespace devilution {
 
 StashTabSet StashTabs;
+uint8_t StashTabsSaveVersion = StashTabsVersion;
 
 namespace {
 
@@ -93,9 +94,11 @@ bool StashTabSet::addOverflowTab()
 	return true;
 }
 
-void StashTabSet::addMissingPremadeTabs()
+void StashTabSet::addMissingPremadeTabs(uint8_t savedVersion)
 {
 	for (const StashTabKind kind : PremadeStashTabKinds) {
+		if (StashTabKindVersion(kind) <= savedVersion)
+			continue;
 		if (std::none_of(tabs.begin(), tabs.end(), [kind](const StashTab &tab) { return tab.kind == kind; }))
 			addTab(kind);
 	}
@@ -315,8 +318,25 @@ std::string_view StashTabKindName(StashTabKind kind)
 		return _("Maps");
 	case StashTabKind::Uniques:
 		return _("Uniques");
+	case StashTabKind::Runes:
+		return _("Runes");
+	case StashTabKind::Essences:
+		return _("Essences");
 	default:
 		return _("Blank");
+	}
+}
+
+uint8_t StashTabKindVersion(StashTabKind kind)
+{
+	switch (kind) {
+	case StashTabKind::Blank:
+		return 1;
+	case StashTabKind::Runes:
+	case StashTabKind::Essences:
+		return 4;
+	default:
+		return 2;
 	}
 }
 
@@ -332,6 +352,10 @@ uint8_t DefaultStashTabColorFor(StashTabKind kind)
 		return 3;
 	case StashTabKind::Uniques:
 		return 7;
+	case StashTabKind::Runes:
+		return 11;
+	case StashTabKind::Essences:
+		return 6;
 	default:
 		return DefaultStashTabColor;
 	}
@@ -368,6 +392,10 @@ unsigned PremadeTabCapacity(StashTabKind kind)
 		return MapTabSlots;
 	case StashTabKind::Uniques:
 		return std::min<unsigned>(static_cast<unsigned>(UniqueCollectionSlots()), MaxSlots);
+	case StashTabKind::Runes:
+		return RuneTabSlots;
+	case StashTabKind::Essences:
+		return EssenceTabSlots;
 	default:
 		return 0;
 	}
@@ -377,7 +405,13 @@ bool PremadeTabTakes(StashTabKind kind, const Item &item)
 {
 	switch (kind) {
 	case StashTabKind::Currency:
-		return GetStashAffinity(item) == StashAffinity::Currency;
+		// Augments and essences have tabs of their own (stash tabs version 4); the Currency tab's old places for them
+		// stay empty.
+		return GetStashAffinity(item) == StashAffinity::Currency && !RuneTabSlot(item) && !EssenceTabSlot(item);
+	case StashTabKind::Runes:
+		return RuneTabSlot(item).has_value();
+	case StashTabKind::Essences:
+		return EssenceTabSlot(item).has_value();
 	case StashTabKind::Gems:
 		return GetStashAffinity(item) == StashAffinity::Gems;
 	case StashTabKind::Maps:
@@ -400,10 +434,11 @@ bool IsLightStashTabColor(uint8_t color)
 	return color / StashTabColumns == 2;
 }
 
-std::vector<uint8_t> SerializeStashTabs(const StashTabSet &tabs)
+std::vector<uint8_t> SerializeStashTabs(const StashTabSet &tabs, uint8_t version)
 {
+	version = std::clamp<uint8_t>(version, 1, StashTabsVersion);
 	std::vector<uint8_t> data;
-	data.push_back(StashTabsVersion);
+	data.push_back(version);
 	data.push_back(static_cast<uint8_t>(tabs.count()));
 	for (const StashTab &tab : tabs.tabs) {
 		data.push_back(tab.color);
@@ -412,9 +447,13 @@ std::vector<uint8_t> SerializeStashTabs(const StashTabSet &tabs)
 		data.push_back(static_cast<uint8_t>(length));
 		data.insert(data.end(), tab.name.begin(), tab.name.begin() + static_cast<std::ptrdiff_t>(length));
 	}
-	// Version 2: the kinds, after the version 1 data.
+	if (version < 2)
+		return data;
+	// Version 2: the kinds, after the version 1 data; a kind the version doesn't know is written blank.
 	for (const StashTab &tab : tabs.tabs)
-		data.push_back(static_cast<uint8_t>(tab.kind));
+		data.push_back(static_cast<uint8_t>(StashTabKindVersion(tab.kind) <= version ? tab.kind : StashTabKind::Blank));
+	if (version < 3)
+		return data;
 	// Version 3: view options, one bit each.
 	for (const StashTab &tab : tabs.tabs)
 		data.push_back(tab.bigPictures ? 1 : 0);

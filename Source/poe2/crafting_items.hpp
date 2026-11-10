@@ -9,6 +9,8 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -66,13 +68,40 @@ enum class EssenceKind : uint8_t {
 	Command,
 	/** Chaos resistance, from armour, belts, jewellery, shields and foci (chaos damage plan step 5). */
 	Ruin,
+	// The rest of the build spec's 19 families (stash step 3). Until step 7 gives them their modifiers, each row of
+	// essences.tsv names the family of the nearest older row and never drops (its drops column is 0).
+	Flames,
+	Ice,
+	Electricity,
+	/** POE2's Essence of Sorcery; the legacy kind Sorcery above became Alacrity. */
+	SpellSorcery,
+	Seeking,
+	Opulence,
+	/** The seven Evil essences: one strength each, which their variants keep as Normal. */
+	Terror,
+	Hatred,
+	Destruction,
+	Lies,
+	Sin,
+	Pain,
+	Anguish,
 	Count,
 };
 
 /** @brief The essence kinds before the runes rework: the currency stash keeps a slot for each, holding what it became. */
 constexpr int LegacyEssenceKindCount = static_cast<int>(EssenceKind::Summoning);
-/** @brief An essence's variant: the kind's low 4 bits, the tier in bits 4-5 and the kind's 5th bit in bit 6, so 31 kinds fit and older variants read the same. */
-static_assert(static_cast<int>(EssenceKind::Count) <= 32);
+/** @brief The first Evil essence; it and the kinds after it have one strength. */
+constexpr EssenceKind FirstEvilEssence = EssenceKind::Terror;
+/**
+ * @brief An essence's variant: the kind's low 4 bits, the tier in bits 4-5, the kind's 5th bit in bit 6 and its 6th in
+ * bit 7, so 63 kinds fit and older variants read the same.
+ */
+static_assert(static_cast<int>(EssenceKind::Count) <= 64);
+/** @brief Whether the kind is one of the seven Evil essences. */
+[[nodiscard]] constexpr bool IsEvilEssence(EssenceKind kind)
+{
+	return kind >= FirstEvilEssence && kind < EssenceKind::Count;
+}
 
 enum class EssenceTier : uint8_t {
 	Lesser,
@@ -89,6 +118,8 @@ struct Essence {
 	std::string family;
 	/** @brief A legacy kind: the kind it becomes when an item that has it loads. None for a kind of today. */
 	EssenceKind becomes = EssenceKind::None;
+	/** @brief Whether it drops; the kinds still waiting for their modifiers don't. */
+	bool drops = false;
 };
 
 /** @brief POE2 drop level of each essence tier, its weight, and the lowest modifier level it adds. */
@@ -182,6 +213,103 @@ enum class AugmentId : uint8_t {
 	RelicOfAkarat,
 	/** Chaos resistance in every slot (chaos damage plan step 5). */
 	VenomRune,
+	// The full sets of the build spec's steps 5 and 6 (stash step 3). Until steps 5 and 6 give them their numbers, each
+	// row of augments.tsv copies those of the nearest older row and never drops (its drops column is 0).
+	// The rune families' other strengths: a family is Lesser, plain, Greater and Perfect (Ith has no Lesser).
+	Ral,
+	GreaterRal,
+	PerfectRal,
+	Thul,
+	GreaterThul,
+	PerfectThul,
+	Ort,
+	GreaterOrt,
+	PerfectOrt,
+	Ohm,
+	GreaterOhm,
+	PerfectOhm,
+	LesserAmn,
+	Amn,
+	GreaterAmn,
+	PerfectAmn,
+	LesserVex,
+	Vex,
+	GreaterVex,
+	PerfectVex,
+	LesserIo,
+	Io,
+	GreaterIo,
+	PerfectIo,
+	LesserTir,
+	Tir,
+	GreaterTir,
+	PerfectTir,
+	LesserSol,
+	Sol,
+	GreaterSol,
+	PerfectSol,
+	LesserGul,
+	Gul,
+	GreaterGul,
+	PerfectGul,
+	LesserFal,
+	Fal,
+	GreaterFal,
+	PerfectFal,
+	LesserKo,
+	Ko,
+	GreaterKo,
+	PerfectKo,
+	LesserLum,
+	Lum,
+	GreaterLum,
+	PerfectLum,
+	Ith,
+	GreaterIth,
+	PerfectIth,
+	Zod,
+	// The Runes of Legend.
+	TalicsRune,
+	MadawcsRune,
+	KorlicsRune,
+	BulKathosRune,
+	TalRashasRune,
+	HorazonsRune,
+	JeredCainsRune,
+	ZoltunKullesRune,
+	// Soulstones that add levels to a skill type.
+	ButcherSoulstone,
+	LeoricSoulstone,
+	LazarusSoulstone,
+	DoomcloudSoulstone,
+	BoneheadSoulstone,
+	WarlordSoulstone,
+	BloodmoonSoulstone,
+	NaKrulSoulstone,
+	HorkDemonSoulstone,
+	// The other soulstones.
+	ZharSoulstone,
+	SnotspillSoulstone,
+	GharbadSoulstone,
+	WitchfireSoulstone,
+	BlackJadeSoulstone,
+	// Greater soulstones (LordOfThePit, TheDefiler and StareyeTheWitch above are three more).
+	Plaguewrath,
+	NightwingTheCold,
+	Stormbane,
+	WrathfireTheDoomed,
+	Dreadjudge,
+	Bloodlust,
+	GutshankTheQuick,
+	Blackskull,
+	HowlingireTheShade,
+	BronzefistFirestone,
+	Shadowcrow,
+	Zamphir,
+	// Horadric soulstones.
+	TalRashasSoulstone,
+	JeredCainsSoulstone,
+	ZoltunKullesSoulstone,
 	Count,
 };
 
@@ -211,6 +339,8 @@ struct Augment {
 	std::string armourText;
 	/** @brief A legacy id: the id it becomes when an item that has it loads. None for an id of today. */
 	AugmentId becomes = AugmentId::None;
+	/** @brief Whether it drops; the ids still waiting for their numbers don't. */
+	bool drops = false;
 };
 
 const Augment &GetAugment(AugmentId id);
@@ -219,8 +349,9 @@ AugmentId GetAugmentId(const Item &item);
 AugmentId CurrentAugmentId(AugmentId id);
 /**
  * @brief Gives a loading item the ids of today in place of legacy ones (an augment or essence it is, and the augments
- * in its sockets), and renames a crafting item it changed. Saves from before the runes rework hold only legacy ids.
- * @return Whether it changed the item.
+ * in its sockets), and gives an augment or essence the name its row has today. Saves from before the runes rework hold
+ * only legacy ids.
+ * @return Whether it changed the item's ids.
  */
 bool ConvertLegacyCraftingIds(Item &item);
 /** @brief Most augment sockets the item can have: 2 on body armour and two-handed weapons, 1 on other weapons and armour, 0 on jewellery. */
@@ -229,6 +360,51 @@ int MaxAugmentSockets(const Item &item);
 void ApplyAugments(Item &item);
 /** @brief The tooltip lines of the item's sockets. */
 std::vector<std::string> AugmentSocketText(const Item &item);
+
+/** @brief The rune families, in the order of the Runes tab's rows (Diablo 2 names, Curtis 2026-10-21). */
+enum class RuneFamily : uint8_t {
+	Ral,
+	Thul,
+	Ort,
+	Ohm,
+	Amn,
+	Vex,
+	Io,
+	Tir,
+	Sol,
+	Gul,
+	Fal,
+	Ko,
+	Lum,
+	Ith,
+	Shael,
+	Zod,
+	/** The chaos damage plan's rune, which has no family in the spec. */
+	Venom,
+	Count,
+};
+
+/** @brief A rune's strength, the Runes tab's columns: Lesser, plain, Greater and Perfect, as essence tiers are. */
+using RuneStrength = EssenceTier;
+
+struct RuneKind {
+	RuneFamily family;
+	RuneStrength strength;
+};
+
+/** @brief The rune's family and strength; none for soul cores, soulstones, relics and Runes of Legend. */
+[[nodiscard]] std::optional<RuneKind> GetRuneKind(AugmentId id);
+/** @brief The rune of the family at the strength; None where the family has no such strength (Ith has no Lesser). */
+[[nodiscard]] AugmentId RuneOf(RuneFamily family, RuneStrength strength);
+std::string_view RuneFamilyName(RuneFamily family);
+/** @brief Whether the id is a Rune of Legend. */
+[[nodiscard]] bool IsRuneOfLegend(AugmentId id);
+constexpr AugmentId FirstRuneOfLegend = AugmentId::TalicsRune;
+constexpr int RunesOfLegendCount = 8;
+/** @brief The soulstones and relics, in the order of the Runes tab's third page. */
+[[nodiscard]] std::span<const AugmentId> SoulstonesAndRelics();
+/** @brief The Essences tab's family order (the build spec's step 7 list): 19 families of 4 strengths. */
+[[nodiscard]] std::span<const EssenceKind> EssenceFamilies();
 
 enum class Catalyst : uint8_t {
 	None,

@@ -134,6 +134,9 @@ bool LoadEssences()
 		// what names it gives (its family isn't natural), so it reaches the family through the roll filter.
 		reader.readString("family", essence.family);
 		reader.read("becomes", essence.becomes, ParseBecomes<EssenceKind>);
+		int drops = 0;
+		reader.readInt("drops", drops);
+		essence.drops = drops != 0;
 		Essences.push_back(std::move(essence));
 	}
 	return HasEveryRow(Filename, Essences.size(), EssenceKind::Count) && BecomesRowsOfToday(Filename, Essences, &Essence::becomes);
@@ -197,6 +200,9 @@ bool LoadAugments()
 		reader.readString("staffText", augment.staffText);
 		reader.readString("armourText", augment.armourText);
 		reader.read("becomes", augment.becomes, ParseBecomes<AugmentId>);
+		int drops = 0;
+		reader.readInt("drops", drops);
+		augment.drops = drops != 0;
 		Augments.push_back(std::move(augment));
 	}
 	return HasEveryRow(Filename, Augments.size(), AugmentId::Count) && BecomesRowsOfToday(Filename, Augments, &Augment::becomes);
@@ -236,8 +242,9 @@ uint8_t RollVariant(const Item &item)
 	case IMISC_ESSENCE: {
 		std::vector<std::pair<uint8_t, int>> choices;
 		for (size_t kind = 1; kind < Essences.size(); kind++) {
-			// Legacy kinds never drop; the kinds they became do, in their places.
-			if (Essences[kind].becomes != EssenceKind::None)
+			// Legacy kinds never drop; the kinds they became do, in their places. Kinds still waiting for their modifiers
+			// (build spec step 7) don't drop either.
+			if (Essences[kind].becomes != EssenceKind::None || !Essences[kind].drops)
 				continue;
 			for (size_t tier = 0; tier < EssenceDropLevels.size(); tier++) {
 				// Lesser essences drop anywhere; better ones need their level.
@@ -258,7 +265,7 @@ uint8_t RollVariant(const Item &item)
 	case IMISC_AUGMENT: {
 		std::vector<std::pair<uint8_t, int>> choices;
 		for (const Augment &augment : Augments) {
-			if (augment.id != AugmentId::None && augment.becomes == AugmentId::None && (augment.tier == 1 || augment.dropLevel <= level))
+			if (augment.id != AugmentId::None && augment.becomes == AugmentId::None && augment.drops && (augment.tier == 1 || augment.dropLevel <= level))
 				choices.emplace_back(static_cast<uint8_t>(augment.id), 4 - augment.tier);
 		}
 		return PickWeighted(choices, roll);
@@ -325,12 +332,15 @@ const Essence &GetEssence(EssenceKind kind)
 uint8_t EssenceVariant(EssenceKind kind, EssenceTier tier)
 {
 	const auto k = static_cast<uint8_t>(kind);
-	return static_cast<uint8_t>((k & 0xF) | (static_cast<uint8_t>(tier) << 4) | ((k & 0x10) << 2));
+	// An Evil essence has one strength, kept as Normal so that its name has no tier.
+	if (IsEvilEssence(kind))
+		tier = EssenceTier::Normal;
+	return static_cast<uint8_t>((k & 0xF) | (static_cast<uint8_t>(tier) << 4) | ((k & 0x30) << 2));
 }
 
 EssenceKind EssenceVariantKind(uint8_t variant)
 {
-	const auto kind = static_cast<uint8_t>((variant & 0xF) | ((variant >> 2) & 0x10));
+	const auto kind = static_cast<uint8_t>((variant & 0xF) | ((variant >> 2) & 0x30));
 	return kind < static_cast<uint8_t>(EssenceKind::Count) ? static_cast<EssenceKind>(kind) : EssenceKind::None;
 }
 
@@ -391,6 +401,150 @@ AugmentId CurrentAugmentId(AugmentId id)
 	return becomes != AugmentId::None ? becomes : id;
 }
 
+namespace {
+
+using AI = AugmentId;
+
+/** Each family's runes by strength; None where the family has no such strength. */
+constexpr std::array<std::array<AugmentId, 4>, static_cast<size_t>(RuneFamily::Count)> RuneTable { {
+	{ AI::LesserRal, AI::Ral, AI::GreaterRal, AI::PerfectRal },
+	{ AI::LesserThul, AI::Thul, AI::GreaterThul, AI::PerfectThul },
+	{ AI::LesserOrt, AI::Ort, AI::GreaterOrt, AI::PerfectOrt },
+	{ AI::LesserOhm, AI::Ohm, AI::GreaterOhm, AI::PerfectOhm },
+	{ AI::LesserAmn, AI::Amn, AI::GreaterAmn, AI::PerfectAmn },
+	{ AI::LesserVex, AI::Vex, AI::GreaterVex, AI::PerfectVex },
+	{ AI::LesserIo, AI::Io, AI::GreaterIo, AI::PerfectIo },
+	{ AI::LesserTir, AI::Tir, AI::GreaterTir, AI::PerfectTir },
+	{ AI::LesserSol, AI::Sol, AI::GreaterSol, AI::PerfectSol },
+	{ AI::LesserGul, AI::Gul, AI::GreaterGul, AI::PerfectGul },
+	{ AI::LesserFal, AI::Fal, AI::GreaterFal, AI::PerfectFal },
+	{ AI::LesserKo, AI::Ko, AI::GreaterKo, AI::PerfectKo },
+	{ AI::LesserLum, AI::Lum, AI::GreaterLum, AI::PerfectLum },
+	// Ith comes in three strengths, plain to Perfect.
+	{ AI::None, AI::Ith, AI::GreaterIth, AI::PerfectIth },
+	// Shael is the Wind Rune of today, in one strength until step 5 says otherwise.
+	{ AI::LesserShael, AI::None, AI::None, AI::None },
+	// Zod raises another rune a strength; it has one strength itself.
+	{ AI::None, AI::Zod, AI::None, AI::None },
+	{ AI::VenomRune, AI::None, AI::None, AI::None },
+} };
+
+constexpr AugmentId SoulstoneOrder[] = {
+	// Skill soulstones.
+	AI::ButcherSoulstone,
+	AI::LeoricSoulstone,
+	AI::LazarusSoulstone,
+	AI::DoomcloudSoulstone,
+	AI::BoneheadSoulstone,
+	AI::WarlordSoulstone,
+	AI::BloodmoonSoulstone,
+	AI::NaKrulSoulstone,
+	AI::HorkDemonSoulstone,
+	// The other standard ones.
+	AI::ZharSoulstone,
+	AI::SnotspillSoulstone,
+	AI::GharbadSoulstone,
+	AI::WitchfireSoulstone,
+	AI::BlackJadeSoulstone,
+	// Greater soulstones.
+	AI::Plaguewrath,
+	AI::NightwingTheCold,
+	AI::Stormbane,
+	AI::WrathfireTheDoomed,
+	AI::LordOfThePit,
+	AI::TheDefiler,
+	AI::Dreadjudge,
+	AI::StareyeTheWitch,
+	AI::Bloodlust,
+	AI::GutshankTheQuick,
+	AI::Blackskull,
+	AI::HowlingireTheShade,
+	AI::BronzefistFirestone,
+	AI::Shadowcrow,
+	AI::Zamphir,
+	// Horadric soulstones.
+	AI::TalRashasSoulstone,
+	AI::JeredCainsSoulstone,
+	AI::ZoltunKullesSoulstone,
+	// Holy Relics.
+	AI::RelicOfRakkis,
+	AI::RelicOfAkarat,
+};
+
+using EK = EssenceKind;
+
+constexpr EssenceKind EssenceFamilyOrder[] = {
+	EK::Body,
+	EK::Mind,
+	EK::Enhancement,
+	EK::Abrasion,
+	EK::Flames,
+	EK::Ice,
+	EK::Electricity,
+	EK::Ruin,
+	EK::Battle,
+	EK::SpellSorcery,
+	EK::Haste,
+	EK::Infinite,
+	EK::Seeking,
+	EK::Alacrity,
+	EK::Opulence,
+	EK::Command,
+	EK::Insulation,
+	EK::Thawing,
+	EK::Grounding,
+};
+
+static_assert(static_cast<int>(AugmentId::ZoltunKullesRune) - static_cast<int>(FirstRuneOfLegend) + 1 == RunesOfLegendCount);
+
+} // namespace
+
+std::optional<RuneKind> GetRuneKind(AugmentId id)
+{
+	if (id == AugmentId::None)
+		return std::nullopt;
+	id = CurrentAugmentId(id);
+	for (size_t family = 0; family < RuneTable.size(); family++) {
+		for (size_t strength = 0; strength < RuneTable[family].size(); strength++) {
+			if (RuneTable[family][strength] == id)
+				return RuneKind { static_cast<RuneFamily>(family), static_cast<RuneStrength>(strength) };
+		}
+	}
+	return std::nullopt;
+}
+
+AugmentId RuneOf(RuneFamily family, RuneStrength strength)
+{
+	const auto f = static_cast<size_t>(family);
+	const auto t = static_cast<size_t>(strength);
+	if (f >= RuneTable.size() || t >= RuneTable[f].size())
+		return AugmentId::None;
+	return RuneTable[f][t];
+}
+
+std::string_view RuneFamilyName(RuneFamily family)
+{
+	constexpr std::string_view Names[] = { "Ral", "Thul", "Ort", "Ohm", "Amn", "Vex", "Io", "Tir", "Sol", "Gul", "Fal", "Ko", "Lum", "Ith", "Shael", "Zod", "Venom" };
+	static_assert(std::size(Names) == static_cast<size_t>(RuneFamily::Count));
+	const auto index = static_cast<size_t>(family);
+	return index < std::size(Names) ? Names[index] : std::string_view {};
+}
+
+bool IsRuneOfLegend(AugmentId id)
+{
+	return id >= FirstRuneOfLegend && static_cast<int>(id) < static_cast<int>(FirstRuneOfLegend) + RunesOfLegendCount;
+}
+
+std::span<const AugmentId> SoulstonesAndRelics()
+{
+	return SoulstoneOrder;
+}
+
+std::span<const EssenceKind> EssenceFamilies()
+{
+	return EssenceFamilyOrder;
+}
+
 bool ConvertLegacyCraftingIds(Item &item)
 {
 	if (item.isEmpty())
@@ -404,8 +558,13 @@ bool ConvertLegacyCraftingIds(Item &item)
 		SetCraftingItemVariant(item, EssenceVariant(CurrentEssenceKind(kind), GetEssenceTier(item)));
 		renamed = true;
 	}
-	if (renamed)
+	if (renamed) {
 		FinishCraftingItem(item);
+	} else if (GetAugmentId(item) != AugmentId::None || GetEssenceKind(item) != EssenceKind::None) {
+		// The name of today, so a row the rework renamed (Ember Rune became Lesser Ral Rune) shows its new name. Not a
+		// change of the item's id, so not reported.
+		FinishCraftingItem(item);
+	}
 	bool socketed = false;
 	Poe2Craft &craft = item._iPoe2Craft;
 	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
@@ -632,7 +791,8 @@ void FinishCraftingItem(Item &item)
 	std::string name;
 	switch (item._iMiscId) {
 	case IMISC_ESSENCE:
-		name = StrCat(EssenceTierName(GetEssenceTier(item)), "Essence of ", GetEssence(GetEssenceKind(item)).name);
+		// The Evil essences have one strength, so their names have none.
+		name = StrCat(IsEvilEssence(GetEssenceKind(item)) ? std::string_view {} : EssenceTierName(GetEssenceTier(item)), "Essence of ", GetEssence(GetEssenceKind(item)).name);
 		break;
 	case IMISC_OMEN:
 		name = std::string(GetOmen(GetOmenId(item)).name);

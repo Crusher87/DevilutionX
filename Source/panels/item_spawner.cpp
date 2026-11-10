@@ -597,6 +597,11 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 					// A legacy kind is listed as the kind it became.
 					if (CurrentEssenceKind(static_cast<EssenceKind>(kind)) != static_cast<EssenceKind>(kind))
 						continue;
+					// An Evil essence has one strength.
+					if (IsEvilEssence(static_cast<EssenceKind>(kind))) {
+						addVariant(EssenceVariant(static_cast<EssenceKind>(kind), EssenceTier::Normal));
+						continue;
+					}
 					for (uint8_t tier = 0; tier < static_cast<uint8_t>(EssenceTier::Count); tier++)
 						addVariant(EssenceVariant(static_cast<EssenceKind>(kind), static_cast<EssenceTier>(tier)));
 				}

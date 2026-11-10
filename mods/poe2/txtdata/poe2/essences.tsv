@@ -1,26 +1,39 @@
-id	name	family	becomes
-Vigor	Vigor	maximum_life	Body
-Clarity	Clarity	maximum_mana	Mind
-Ember	Ember	fire_resistance	Insulation
-Frost	Frost	cold_resistance	Thawing
-Storm	Storm	lightning_resistance	Grounding
-Might	Might	local_increased_physical	Abrasion
-Celerity	Celerity	attack_speed	Haste
-Sorcery	Sorcery	cast_speed	Alacrity
-Precision	Precision	accuracy_rating	Battle
-Warding	Warding	all_elemental_resistance	Enhancement
-Spirit	Spirit	spirit_flat	Infinite
-Summoning	Summoning	minion_damage	Command
-Body	Vigor	maximum_life	
-Mind	Clarity	maximum_mana	
-Insulation	Ember	fire_resistance	
-Thawing	Frost	cold_resistance	
-Grounding	Storm	lightning_resistance	
-Abrasion	Might	local_increased_physical	
-Haste	Celerity	attack_speed	
-Alacrity	Sorcery	cast_speed	
-Battle	Precision	accuracy_rating	
-Enhancement	Warding	all_elemental_resistance	
-Infinite	Spirit	spirit_flat	
-Command	Summoning	minion_damage	
-Ruin	Ruin	chaos_resistance	
+id	name	family	becomes	drops
+Vigor	Vigor	maximum_life	Body	0
+Clarity	Clarity	maximum_mana	Mind	0
+Ember	Ember	fire_resistance	Insulation	0
+Frost	Frost	cold_resistance	Thawing	0
+Storm	Storm	lightning_resistance	Grounding	0
+Might	Might	local_increased_physical	Abrasion	0
+Celerity	Celerity	attack_speed	Haste	0
+Sorcery	Sorcery	cast_speed	Alacrity	0
+Precision	Precision	accuracy_rating	Battle	0
+Warding	Warding	all_elemental_resistance	Enhancement	0
+Spirit	Spirit	spirit_flat	Infinite	0
+Summoning	Summoning	minion_damage	Command	0
+Body	Body	maximum_life		1
+Mind	Mind	maximum_mana		1
+Insulation	Insulation	fire_resistance		1
+Thawing	Thawing	cold_resistance		1
+Grounding	Grounding	lightning_resistance		1
+Abrasion	Abrasion	local_increased_physical		1
+Haste	Haste	attack_speed		1
+Alacrity	Alacrity	cast_speed		1
+Battle	Battle	accuracy_rating		1
+Enhancement	Enhancement	all_elemental_resistance		1
+Infinite	the Infinite	spirit_flat		1
+Command	Command	minion_damage		1
+Ruin	Ruin	chaos_resistance		1
+Flames	Flames	fire_resistance		0
+Ice	Ice	cold_resistance		0
+Electricity	Electricity	lightning_resistance		0
+SpellSorcery	Sorcery	cast_speed		0
+Seeking	Seeking	accuracy_rating		0
+Opulence	Opulence	all_elemental_resistance		0
+Terror	Terror	maximum_life		0
+Hatred	Hatred	all_elemental_resistance		0
+Destruction	Destruction	local_increased_physical		0
+Lies	Lies	spirit_flat		0
+Sin	Sin	minion_damage		0
+Pain	Pain	all_elemental_resistance		0
+Anguish	Anguish	local_increased_physical		0

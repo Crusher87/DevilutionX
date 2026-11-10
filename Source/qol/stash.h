@@ -128,6 +128,8 @@ bool PremadeTabHasRoom(unsigned page, const Item &item);
  * @return Whether all of it went in.
  */
 bool StoreInPremadeTab(unsigned page, Item &item);
+/** @brief POE2 Mashup: puts gear in the Essences tab's empty craft slot, to use the tab's essences on; false if it can't go there. */
+bool StoreInEssenceCraftSlot(unsigned page, Item &item);
 /** @brief POE2 Mashup: what taking the stash item gives: a currency stack bigger than an inventory stack gives a full inventory stack. */
 Item PeekStashTake(uint16_t index);
 /** @brief POE2 Mashup: takes PeekStashTake's item out of the stash. */
