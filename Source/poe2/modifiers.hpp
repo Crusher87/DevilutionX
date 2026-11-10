@@ -160,6 +160,25 @@ enum class ModEffect : uint8_t {
 	RequirementsToStrength,
 	RequirementsToDexterity,
 	RequirementsToIntelligence,
+	// The runes' effects (build spec step 5).
+	/** Increased magnitude of the ignites the hero inflicts, in percent. */
+	IgniteMagnitude,
+	/** Increased freeze buildup, in percent; adds to the tree's. */
+	FreezeBuildup,
+	/** Increased magnitude of the shocks the hero inflicts, in percent. */
+	ShockMagnitude,
+	/** Life regenerated per second, in hundredths of a percent of maximum life. */
+	LifeRegenPercent,
+	/** Percent of skills' mana costs paid with life instead. */
+	ManaCostAsLife,
+	/** Added to the chance of attacks to crit, in tenths of a percent. */
+	AttackCritChance,
+	/** Increased movement speed, in percent. */
+	MovementSpeed,
+	/** Added to maximum energy shield, in the points shown (not defence points). */
+	MaximumEnergyShield,
+	/** All elemental resistances (first value) and maximum life (second value). */
+	AllResistancesAndLife,
 	/** Not an effect: the number of them. New effects go before it. */
 	Count,
 };
@@ -297,6 +316,9 @@ void LoadModifierData();
 
 /** @brief A modifier effect by its name in the data; MagicResistance, ColdResistance's name before the cold rename, still reads. */
 std::optional<ModEffect> ParseModEffectName(std::string_view name);
+/** @brief Whether the effect adds levels to skills (a "+level" effect, which a weapon holds only one of in its sockets). */
+[[nodiscard]] bool IsSkillLevelEffect(ModEffect effect);
+
 /** @brief A unique rule by its name in the data; MaxMagicResistance, MaxColdResistance's old name, still reads. */
 std::optional<UniqueRule> ParseUniqueRuleName(std::string_view name);
 

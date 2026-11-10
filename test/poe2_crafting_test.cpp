@@ -770,12 +770,21 @@ TEST_F(Poe2CraftingTest, CraftingTablesHoldTheRowsTheCodeHad)
 	};
 	ASSERT_EQ(std::size(augments), static_cast<size_t>(LegacyAugmentCount));
 	for (const OldAugment &old : augments) {
-		// The id it became does the same until the runes rework gives it its own numbers.
+		// The id it became did the same until the runes rework gave it its own numbers: the runes have theirs since
+		// build spec step 5 (MigrateRuneNumbers moves a saved item's values), the soul cores and talismans until step 6.
 		ASSERT_NE(CurrentAugmentId(old.id), old.id);
 		EXPECT_EQ(GetAugment(old.id).name, old.name);
 		EXPECT_FALSE(GetAugment(old.id).drops);
 		EXPECT_TRUE(GetAugment(CurrentAugmentId(old.id)).drops);
+		EXPECT_EQ(AugmentBeforeRuneNumbers(CurrentAugmentId(old.id)), old.id);
+		const bool rune = GetRuneKind(CurrentAugmentId(old.id)).has_value();
+		if (rune) {
+			const Augment &now = GetAugment(CurrentAugmentId(old.id));
+			EXPECT_TRUE(now.weaponValues != old.weaponValues || now.armourValues != old.armourValues || now.weaponEffect != old.weaponEffect || now.staffEffect != old.weaponEffect) << old.name;
+		}
 		for (const AugmentId id : { old.id, CurrentAugmentId(old.id) }) {
+			if (rune && id != old.id)
+				continue;
 			const Augment &augment = GetAugment(id);
 			EXPECT_EQ(augment.id, id);
 			EXPECT_EQ(augment.tier, old.tier) << old.name;
@@ -878,7 +887,7 @@ TEST_F(Poe2CraftingTest, EssenceVariantsKeepTheirMeaning)
 
 TEST_F(Poe2CraftingTest, CraftStateWideAugmentsRoundTrip)
 {
-	// Ids up to 15 save as before the runes rework: three 4-bit sockets and the catalyst.
+	// Legacy ids save as before the runes rework: three 4-bit sockets and the catalyst.
 	Poe2Craft narrow;
 	narrow.sockets = 2;
 	narrow.augments = { 3, 9, 0 };
@@ -890,7 +899,7 @@ TEST_F(Poe2CraftingTest, CraftStateWideAugmentsRoundTrip)
 	EXPECT_EQ(narrowBytes[5], 0x40);
 	EXPECT_EQ(UnpackCraftState(narrowBytes), narrow);
 
-	// Above 15, the two sockets take a byte each.
+	// Today's ids: the two sockets take a byte each.
 	Poe2Craft wide;
 	wide.explicitMods = true;
 	wide.rarity = ITEM_QUALITY_RARE;
@@ -903,7 +912,10 @@ TEST_F(Poe2CraftingTest, CraftStateWideAugmentsRoundTrip)
 	wide.magnitude = -14;
 	wide.desecrated = true;
 	const auto wideBytes = PackCraftState(wide);
-	EXPECT_EQ(wideBytes[0], 0xC3);
+	// The wide layout's marker since the runes took their own numbers (build spec step 5).
+	EXPECT_EQ(wideBytes[0], 0xC5);
+	EXPECT_FALSE(SavedBeforeRuneNumbers(wideBytes));
+	EXPECT_TRUE(SavedBeforeRuneNumbers(narrowBytes));
 	EXPECT_EQ(wideBytes[4], static_cast<uint8_t>(AugmentId::LesserRal));
 	EXPECT_EQ(wideBytes[5], static_cast<uint8_t>(AugmentId::RelicOfAkarat));
 	EXPECT_EQ(UnpackCraftState(wideBytes), wide);
@@ -982,7 +994,8 @@ TEST_F(Poe2CraftingTest, LegacyCraftingItemsConvertAndGetTheirTabSlots)
 		EXPECT_EQ(EssenceTabSlotVariant(*slot), CraftingItemVariant(item));
 	}
 
-	// Socketed augments become today's ids and do the same.
+	// Socketed augments become today's ids; a rune does what it does now (its saved values move on load,
+	// MigrateRuneNumbers), and a talisman does the same until step 6.
 	Item armour = Crafted(CurrencyOrb::Alchemy, MakeItem("Full Plate", 13, ITEM_QUALITY_NORMAL, 60));
 	armour = Crafted(CurrencyOrb::Artificer, armour);
 	armour = Crafted(CurrencyOrb::Artificer, armour);
@@ -994,8 +1007,13 @@ TEST_F(Poe2CraftingTest, LegacyCraftingItemsConvertAndGetTheirTabSlots)
 	EXPECT_EQ(converted._iPoe2Craft.augments[0], static_cast<uint8_t>(AugmentId::LesserOhm));
 	EXPECT_EQ(converted._iPoe2Craft.augments[1], static_cast<uint8_t>(AugmentId::RelicOfAkarat));
 	const Item rebuilt = Rebuilt(converted);
-	EXPECT_EQ(rebuilt._iPLAC, armour._iPLAC);
 	ExpectSameMods(rebuilt, armour);
+	// A save of it from then moves to the Lesser Ohm Rune's numbers of today.
+	Item loaded = armour;
+	loaded._iPoe2Craft = converted._iPoe2Craft;
+	EXPECT_TRUE(MigrateRuneNumbers(loaded, armour._iPoe2Craft));
+	EXPECT_EQ(loaded._iPLAC, rebuilt._iPLAC);
+	EXPECT_EQ(loaded._iAC, rebuilt._iAC);
 	UniqueRuleTotals before {};
 	UniqueRuleTotals after {};
 	AddCraftRules(armour, before);
@@ -1028,17 +1046,20 @@ TEST_F(Poe2CraftingTest, EveryRuneAndEssenceHasATabSlotOfItsOwn)
 		EXPECT_EQ(RuneTabSlotAugment(*slot), CurrentAugmentId(augment)) << item._iIName;
 		if (CurrentAugmentId(augment) == augment)
 			EXPECT_TRUE(runeSlots.insert(*slot).second) << item._iIName << " shares a slot";
-		// The ids still waiting for their numbers never drop.
-		if (id > static_cast<int>(AugmentId::VenomRune))
+		// The ids still waiting for their numbers (the soulstones of step 6) never drop; the runes of step 5 do.
+		if (id >= static_cast<int>(AugmentId::ButcherSoulstone))
 			EXPECT_FALSE(GetAugment(augment).drops) << item._iIName;
+		else if (id >= static_cast<int>(AugmentId::Ral))
+			EXPECT_TRUE(GetAugment(augment).drops) << item._iIName;
 	}
 	EXPECT_EQ(GetAugment(AugmentId::LesserRal).name, "Lesser Ral Rune");
 	EXPECT_EQ(GetAugment(AugmentId::PerfectLum).name, "Perfect Lum Rune");
 	EXPECT_EQ(GetAugment(AugmentId::Zod).name, "Zod Rune");
 	EXPECT_EQ(GetAugment(AugmentId::TalicsRune).name, "Talic's Rune");
 	EXPECT_EQ(GetAugment(AugmentId::Zamphir).name, "Greater Soulstone of Zamphir");
-	// A row a step 5 worker fills in copies the nearest older row's numbers until then.
+	// Step 5 gave the strengths of a family the same effect, stronger each time.
 	EXPECT_EQ(GetAugment(AugmentId::PerfectRal).weaponEffect, GetAugment(AugmentId::LesserRal).weaponEffect);
+	EXPECT_GT(GetAugment(AugmentId::PerfectRal).weaponValues[0], GetAugment(AugmentId::LesserRal).weaponValues[0]);
 
 	// Rune kinds go both ways; Ith has no Lesser.
 	for (int family = 0; family < static_cast<int>(RuneFamily::Count); family++) {
@@ -1076,7 +1097,8 @@ TEST_F(Poe2CraftingTest, EveryRuneAndEssenceHasATabSlotOfItsOwn)
 	EXPECT_EQ(std::string(make(essenceBase, EssenceVariant(EssenceKind::Terror, EssenceTier::Perfect))._iIName), "Essence of Terror");
 	EXPECT_EQ(std::string(make(essenceBase, EssenceVariant(EssenceKind::Infinite, EssenceTier::Lesser))._iIName), "Lesser Essence of the Infinite");
 
-	// None of the placeholders drop: a thousand drops are all of kinds of before.
+	// None of the placeholders drop: a thousand drops are all of kinds of before, or the runes of step 5, never a
+	// soulstone of step 6 or a Rune of Legend, which only bosses drop.
 	for (uint32_t seed = 1; seed <= 1000; seed++) {
 		for (const _item_indexes base : { augmentBase, essenceBase }) {
 			Item item = {};
@@ -1084,7 +1106,7 @@ TEST_F(Poe2CraftingTest, EveryRuneAndEssenceHasATabSlotOfItsOwn)
 			item._iSeed = static_cast<int>(seed * 2654435761U);
 			item._iCreateInfo = 80;
 			FinishCraftingItem(item);
-			EXPECT_LE(GetAugmentId(item), AugmentId::VenomRune);
+			EXPECT_LT(GetAugmentId(item), AugmentId::TalicsRune);
 			EXPECT_LE(GetEssenceKind(item), EssenceKind::Ruin);
 		}
 	}

@@ -22,6 +22,8 @@ struct Poe2MonsterState {
 	/** @brief Flammability fades this many ticks after the last fire hit. */
 	uint8_t flammabilityTicks = 0;
 	uint8_t shockTicks = 0;
+	/** @brief The shock's increased magnitude, in percent, from the gear of the hero who shocked it (runes). */
+	uint8_t shockBonus = 0;
 	int regenRemainder = 0;
 	uint8_t chillTicks = 0;
 	/** @brief How much a chill slows the monster, in percent. */

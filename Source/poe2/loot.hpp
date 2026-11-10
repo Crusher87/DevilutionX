@@ -229,6 +229,8 @@ constexpr int GoldPileMultiplier = 4;
 /** @brief Extra chances a boss gives on top of its rolls: a guaranteed rare, maybe currency, maybe a unique. */
 constexpr int BossBonusCurrencyPercent = 35;
 constexpr int BossBonusUniquePercent = 8;
+/** @brief The chance a quest boss of Act 3 or later (or a map's) drops a Rune of Legend, each of the eight as likely. */
+constexpr int BossRuneOfLegendPercent = 25;
 
 /** @brief The rarity a dropped item was given, stored on the item so it comes back the same when loaded. */
 std::optional<item_quality> GetLootRarity(const Item &item);

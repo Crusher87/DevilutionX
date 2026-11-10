@@ -710,8 +710,14 @@ int AttackCritChance(const Player &player)
 bool RollAttackCrit(const Player &player)
 {
 	const int chance = AttackCritChance(player);
-	if (chance <= 0 || GenerateRnd(100) >= chance)
+	// The gear's tenths of a percent (Gul runes bonded) roll in per mille; without them the roll is as before.
+	const int tenths = chance < 100 ? GearAttackCritTenths(player) : 0;
+	if (tenths > 0) {
+		if (GenerateRnd(1000) >= (chance * 10) + tenths)
+			return false;
+	} else if (chance <= 0 || GenerateRnd(100) >= chance) {
 		return false;
+	}
 	if (gbIsPoe2 && Rule(player, UniqueRule::CritActionSpeed) > 0)
 		State(player).critSpeedTicks = 2 * TicksPerSecond;
 	return true;

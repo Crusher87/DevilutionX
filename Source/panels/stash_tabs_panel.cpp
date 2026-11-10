@@ -854,10 +854,10 @@ int UniqueScroll = 0;
 /** Whether the Uniques tab hides the uniques not in the collection yet (Curtis 2026-10-16). */
 bool UniquesCollectedOnly = false;
 
-/** The footer of the tabs whose slots hold big stacks. */
-std::string StashSlotFooter()
+/** The footer of the tabs whose slots hold big stacks; a click takes a bag stack's worth (10 of the runes tab's). */
+std::string StashSlotFooter(int clickTakes = CurrencyStackMax)
 {
-	return FormatRuntime(_("Up to {:d} a slot. A click takes {:d}."), CurrencyTabStackMax, CurrencyStackMax);
+	return FormatRuntime(_("Up to {:d} a slot. A click takes {:d}."), CurrencyTabStackMax, clickTakes);
 }
 
 /** @brief The button that opens the tab's settings, at the right end of a row. */
@@ -985,7 +985,7 @@ void BuildRunesView(TabView &view, unsigned page)
 	default:
 		break;
 	}
-	view.labels.push_back({ At(10, 326, 300, 14), StashSlotFooter(), UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
+	view.labels.push_back({ At(10, 326, 300, 14), StashSlotFooter(RuneStackMax), UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
 }
 
 void BuildEssencesView(TabView &view, unsigned page)

@@ -599,13 +599,55 @@ bool AddSocket(const Player &player, Item &item)
 	return true;
 }
 
-/** @brief An augment goes in an empty socket, or replaces the last one; corrupted items allow it. */
+/** @brief Zod Rune: the first socketed rune it can raise goes up one strength, once, and not past the hero's level. */
+bool RaiseSocketedRune(const Player &player, Item &item)
+{
+	Poe2Craft craft = item._iPoe2Craft;
+	int neededLevel = 0;
+	bool anyRune = false;
+	for (size_t i = 0; i < craft.sockets && i < 2; i++) {
+		const AugmentId id = CurrentAugmentId(SocketAugment(craft, i));
+		const AugmentId next = NextRuneStrength(id);
+		if (GetRuneKind(id).has_value() && !IsRuneOfLegend(id) && id != AugmentId::Zod)
+			anyRune = true;
+		if (next == AugmentId::None || SocketRaised(craft, i))
+			continue;
+		const int level = GetAugment(next).level;
+		if (level > player.getCharacterLevel()) {
+			neededLevel = neededLevel == 0 ? level : std::min(neededLevel, level);
+			continue;
+		}
+		craft.augments[i] = static_cast<uint8_t>(next);
+		craft.raised = static_cast<uint8_t>(craft.raised | (1U << i));
+		FinishCraft(player, item, craft, item.dwBuff);
+		return true;
+	}
+	if (neededLevel != 0)
+		Fizzle(FormatRuntime(_("You need level {:d} to raise this rune."), neededLevel));
+	else if (anyRune)
+		Fizzle(_("This rune can't be raised further."));
+	else
+		Fizzle(_("A Zod Rune raises a rune in this item's sockets."));
+	return false;
+}
+
+/** @brief An augment goes in an empty socket, or replaces the last one, which is destroyed; corrupted items allow it. */
 bool InsertAugment(const Player &player, Item &item, uint8_t variant)
 {
 	const Augment &augment = GetAugment(static_cast<AugmentId>(variant));
 	Poe2Craft craft = item._iPoe2Craft;
 	if (augment.id == AugmentId::None || craft.sockets == 0) {
 		Fizzle(_("Augments go in an item's augment sockets; Artificer's Orbs add them."));
+		return false;
+	}
+	if (augment.level > player.getCharacterLevel()) {
+		Fizzle(FormatRuntime(_("You need level {:d} for this."), augment.level));
+		return false;
+	}
+	if (augment.id == AugmentId::Zod)
+		return RaiseSocketedRune(player, item);
+	if (!AugmentFitsItem(augment, item)) {
+		Fizzle(FormatRuntime(_("{:s} does nothing in this item."), augment.name));
 		return false;
 	}
 	size_t slot = craft.sockets - 1U;
@@ -615,17 +657,36 @@ bool InsertAugment(const Player &player, Item &item, uint8_t variant)
 			break;
 		}
 	}
-	// One talisman per item.
-	if (augment.tier == 3) {
-		for (size_t i = 0; i < craft.sockets; i++) {
-			if (i != slot && GetAugment(static_cast<AugmentId>(craft.augments[i])).tier == 3) {
-				Fizzle(_("An item takes only one talisman."));
-				return false;
-			}
+	if (slot >= craft.augments.size())
+		return false;
+	const std::optional<AugmentKind> kind = AugmentKindOf(item);
+	const bool skillLevels = kind && *kind != AugmentKind::Armour && IsSkillLevelEffect(AugmentEffect(augment, *kind));
+	for (size_t i = 0; i < craft.sockets; i++) {
+		if (i == slot)
+			continue;
+		const Augment &other = GetAugment(SocketAugment(craft, i));
+		// One talisman per item.
+		if (augment.tier == 3 && other.tier == 3) {
+			Fizzle(_("An item takes only one talisman."));
+			return false;
+		}
+		// One "+ to level of skills" augment per weapon (build spec step 5).
+		if (skillLevels && IsSkillLevelEffect(AugmentEffect(other, *kind))) {
+			Fizzle(_("A weapon takes only one augment that adds skill levels."));
+			return false;
+		}
+		if (IsRuneOfLegend(augment.id) && other.id == augment.id) {
+			Fizzle(_("This item already holds that rune."));
+			return false;
 		}
 	}
+	const AugmentId replaced = SocketAugment(craft, slot);
 	craft.augments[slot] = variant;
+	if (slot < 2)
+		craft.raised = static_cast<uint8_t>(craft.raised & ~(1U << slot));
 	FinishCraft(player, item, craft, item.dwBuff);
+	if (replaced != AugmentId::None)
+		EventPlrMsg(FormatRuntime(_("{:s} was destroyed."), GetAugment(replaced).name));
 	return true;
 }
 

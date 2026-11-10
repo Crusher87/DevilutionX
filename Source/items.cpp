@@ -95,6 +95,7 @@
 #include "poe2/loot.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/map_play.hpp"
+#include "poe2/mix.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/profane_roads.hpp"
@@ -3197,6 +3198,83 @@ void RestoreRareItemPowers(Item &item)
 	SetRndSeed(currentSeed);
 }
 
+bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved)
+{
+	if (item.isEmpty() || (item.dwBuff & CF_POE2) == 0 || item._iPoe2Craft.sockets == 0 || Players.empty())
+		return false;
+	// The sockets as they were: the ids whose numbers their augments had then.
+	Poe2Craft before = item._iPoe2Craft;
+	bool differs = false;
+	for (size_t i = 0; i < before.augments.size() && i < before.sockets; i++) {
+		const auto old = static_cast<uint8_t>(AugmentBeforeRuneNumbers(static_cast<AugmentId>(saved.augments[i])));
+		differs = differs || old != before.augments[i];
+		before.augments[i] = old;
+	}
+	before.raised = 0;
+	if (!differs)
+		return false;
+	const uint32_t rngState = GetLCGEngineState();
+	Item oldNumbers;
+	RecreateItem(Players[0], oldNumbers, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, before);
+	const bool legacy = IsLegacyScaleItem(item, oldNumbers);
+	const LegacyModScales legacyScales(legacy);
+	if (legacy) {
+		oldNumbers = {};
+		RecreateItem(Players[0], oldNumbers, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, before);
+	}
+	Item newNumbers;
+	RecreateItem(Players[0], newNumbers, item.IDidx, item._iCreateInfo, item._iSeed, item._ivalue, item.dwBuff, item._iPoe2Craft);
+	SetRndSeed(rngState);
+	bool changed = false;
+	// What shrines, oils and quality did stays; only the augments' share moves.
+	const auto carry = [&changed](auto &field, int now, int before) {
+		using Field = std::remove_reference_t<decltype(field)>;
+		if (now == before)
+			return;
+		field = static_cast<Field>(std::clamp<int>(field + now - before, std::numeric_limits<Field>::min(), std::numeric_limits<Field>::max()));
+		changed = true;
+	};
+	carry(item._iAC, newNumbers._iAC, oldNumbers._iAC);
+	carry(item._iPLAC, newNumbers._iPLAC, oldNumbers._iPLAC);
+	carry(item._iMinDam, newNumbers._iMinDam, oldNumbers._iMinDam);
+	carry(item._iMaxDam, newNumbers._iMaxDam, oldNumbers._iMaxDam);
+	carry(item._iPLDam, newNumbers._iPLDam, oldNumbers._iPLDam);
+	carry(item._iPLDamMod, newNumbers._iPLDamMod, oldNumbers._iPLDamMod);
+	carry(item._iPLToHit, newNumbers._iPLToHit, oldNumbers._iPLToHit);
+	carry(item._iFMinDam, newNumbers._iFMinDam, oldNumbers._iFMinDam);
+	carry(item._iFMaxDam, newNumbers._iFMaxDam, oldNumbers._iFMaxDam);
+	carry(item._iLMinDam, newNumbers._iLMinDam, oldNumbers._iLMinDam);
+	carry(item._iLMaxDam, newNumbers._iLMaxDam, oldNumbers._iLMaxDam);
+	carry(item._iMinStr, newNumbers._iMinStr, oldNumbers._iMinStr);
+	carry(item._iMinMag, newNumbers._iMinMag, oldNumbers._iMinMag);
+	carry(item._iMinDex, newNumbers._iMinDex, oldNumbers._iMinDex);
+	carry(item._iPLStr, newNumbers._iPLStr, oldNumbers._iPLStr);
+	carry(item._iPLMag, newNumbers._iPLMag, oldNumbers._iPLMag);
+	carry(item._iPLDex, newNumbers._iPLDex, oldNumbers._iPLDex);
+	// Life and mana are fixed point.
+	const auto carryFixed = [&changed](Fixed10_6 &field, Fixed10_6 now, Fixed10_6 before) {
+		if (now.raw() == before.raw())
+			return;
+		field = Fixed10_6::fromRaw(static_cast<int16_t>(std::clamp<int>(field.raw() + now.raw() - before.raw(), INT16_MIN, INT16_MAX)));
+		changed = true;
+	};
+	carryFixed(item._iPLHP, newNumbers._iPLHP, oldNumbers._iPLHP);
+	carryFixed(item._iPLMana, newNumbers._iPLMana, oldNumbers._iPLMana);
+	carry(item._iPLFR, newNumbers._iPLFR, oldNumbers._iPLFR);
+	carry(item._iPLLR, newNumbers._iPLLR, oldNumbers._iPLLR);
+	carry(item._iPLMR, newNumbers._iPLMR, oldNumbers._iPLMR);
+	if (item._iMaxDam < item._iMinDam)
+		item._iMaxDam = item._iMinDam;
+	// Flags the old augments gave go, and the new ones' come.
+	const auto gone = static_cast<ItemSpecialEffect>(static_cast<uint32_t>(oldNumbers._iFlags) & ~static_cast<uint32_t>(newNumbers._iFlags));
+	const auto added = static_cast<ItemSpecialEffect>(static_cast<uint32_t>(newNumbers._iFlags) & ~static_cast<uint32_t>(oldNumbers._iFlags));
+	if (gone != ItemSpecialEffect::None || added != ItemSpecialEffect::None) {
+		item._iFlags = static_cast<ItemSpecialEffect>((static_cast<uint32_t>(item._iFlags) & ~static_cast<uint32_t>(gone)) | static_cast<uint32_t>(added));
+		changed = true;
+	}
+	return changed;
+}
+
 bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed, int quality)
 {
 	const Poe2Unique *unique = Poe2UniqueFor(uid);
@@ -3842,6 +3920,10 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 		worn.push_back(&mirroredImplicit);
 		break;
 	}
+	// POE2 Mashup: each Rune of Legend the hero wears counts once, however many worn items hold one (build spec step 5).
+	Item runesOfLegend;
+	if (gbIsPoe2 && ApplyWornRunesOfLegend(player.InvBody, runesOfLegend, uniqueRules))
+		worn.push_back(&runesOfLegend);
 
 	// POE2 Mashup: a sceptre held with another weapon adds its modifiers and Spirit but not its damage (Curtis 2026-10-16).
 	const Item *offhandSceptre = nullptr;
@@ -3959,6 +4041,7 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 	passives[static_cast<size_t>(PassiveStat::FlaskRecovery)] += gearStat(Poe2ItemStat::FlaskRecovery);
 	passives[static_cast<size_t>(PassiveStat::StunBuildup)] += gearStat(Poe2ItemStat::StunBuildup);
 	passives[static_cast<size_t>(PassiveStat::EnergyShieldRecharge)] += gearStat(Poe2ItemStat::EnergyShieldRecharge);
+	passives[static_cast<size_t>(PassiveStat::FreezeBuildup)] += gearStat(Poe2ItemStat::FreezeBuildup);
 	CachePassiveTotals(player, passives);
 	const auto passive = [&passives](PassiveStat stat) { return passives[static_cast<size_t>(stat)]; };
 	dam += PassiveWeaponDamage(player, passives);
@@ -4040,6 +4123,8 @@ void CalcPlrItemVals(Player &player, bool loadgfx)
 			evasionPercent += implicit.evasionPercent;
 		}
 		evasion += evasion * (passive(PassiveStat::EvasionPercent) + evasionPercent) / 100;
+		// Flat maximum energy shield from runes (Amn in a staff) is global, so the increases raise it too.
+		energyShield += std::max(gearStat(Poe2ItemStat::MaximumEnergyShield), 0);
 		energyShield += energyShield * passive(PassiveStat::EnergyShieldPercent) / 100;
 	}
 	ac += ac * passive(PassiveStat::ArmorPercent) / 100;
@@ -5200,7 +5285,7 @@ std::optional<_item_indexes> PickPoe2EndgameItem(const Poe2LootOrigin &origin)
 	return PickPoe2Weighted(origin.baseLevel, [miscId](const ItemData &data) { return data.iMiscId == miscId; });
 }
 
-void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg, LootCategory category, std::optional<item_quality> rarity = std::nullopt, std::optional<_item_indexes> forcedIdx = std::nullopt)
+void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg, LootCategory category, std::optional<item_quality> rarity = std::nullopt, std::optional<_item_indexes> forcedIdx = std::nullopt, AugmentId forcedAugment = AugmentId::None)
 {
 	if (ActiveItemCount >= MAXITEMS)
 		return;
@@ -5267,6 +5352,15 @@ void DropPoe2LootItem(const Poe2LootOrigin &origin, Point position, bool sendmsg
 	// A flask's tier comes from its item level: the area's, like POE2's flasks, so the higher tiers drop in the endgame.
 	const int createLevel = IsFlaskBase(*idx) ? FlaskDropLevel(origin.equipmentLevel, itemLevel) : itemLevel;
 	SetupAllItems(*MyPlayer, item, *idx, AdvanceRndSeed(), createLevel, 1, IsAnyOf(category, LootCategory::Equipment, LootCategory::Jewel), origin.pregen, uidOffset);
+	// An augment is one of those that drop at the area's level and in its act (build spec step 5: the runes' strengths
+	// by area level, the Zod Rune from Act 3); the variant goes in dwBuff, so peers get the same one.
+	if (item._iMiscId == IMISC_AUGMENT) {
+		const AugmentId augment = forcedAugment != AugmentId::None ? forcedAugment : RollAugmentDrop(Mix(static_cast<uint32_t>(item._iSeed) ^ 0x52554E45U), origin.poe2AreaLevel, CurrentAct());
+		if (augment != AugmentId::None) {
+			SetCraftingItemVariant(item, static_cast<uint8_t>(augment));
+			FinishCraftingItem(item);
+		}
+	}
 	// Diablo's uniques drop once per game; the bundle's, like POE2's, can drop again.
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && !gbIsMultiplayer && item._iUid >= 0 && item._iUid < static_cast<int>(std::size(UniqueItemFlags)))
 		UniqueItemFlags[item._iUid] = true;
@@ -5380,6 +5474,13 @@ void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg)
 		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency);
 	if (LootRandom(100) < BossBonusUniquePercent)
 		DropPoe2LootItem(origin, position, sendmsg, LootCategory::Equipment, ITEM_QUALITY_UNIQUE);
+	// The Runes of Legend drop only from the bosses of Act 3 and later (build spec step 5).
+	if (CurrentAct() >= 3 && LootRandom(100) < BossRuneOfLegendPercent) {
+		const AugmentId legend = RollRuneOfLegend(static_cast<uint32_t>(LootRandom(RunesOfLegendCount)));
+		const std::optional<_item_indexes> base = PickPoe2Weighted(origin.baseLevel, [](const ItemData &data) { return data.iMiscId == IMISC_AUGMENT; });
+		if (base)
+			DropPoe2LootItem(origin, position, sendmsg, LootCategory::Currency, std::nullopt, base, legend);
+	}
 }
 
 void DropPoe2ChestItem(Point position, item_quality rarity, bool sendmsg, std::string_view name)
@@ -6861,8 +6962,13 @@ void PrintItemCraftState(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("Quality: +{:d}% ({:s} modifiers)"), ItemQuality(item), CatalystName(catalyst)));
 	if (craft.desecrated)
 		AddItemInfoBoxString(_("Desecrated"));
-	for (const std::string &line : AugmentSocketText(item))
-		AddItemInfoBoxString(line);
+	// A bonded line whose sockets don't match yet is greyed (build spec step 5).
+	const InfoLineStyle style = CurrentInfoLineStyle;
+	for (SocketLine &line : AugmentSocketLines(item)) {
+		CurrentInfoLineStyle = line.inactive ? InfoLineStyle::InactiveMod : style;
+		AddItemInfoBoxString(std::move(line.text));
+	}
+	CurrentInfoLineStyle = style;
 }
 
 void PrintItemCorruption(const Item &item)

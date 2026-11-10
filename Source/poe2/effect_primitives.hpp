@@ -65,4 +65,18 @@ void NoteRecoup(Player &player, int64_t damageTakenRaw);
 /** @brief Once per game tick: pays out what is left to recoup evenly over the RecoupSeconds since the last hit (not saved, like energy shield). */
 void ProcessRecoup(Player &player);
 
+// The runes' primitives (build spec step 5). Each is 0 (or 100 for a percent of a whole) outside POE2.
+/** @brief The percent of its usual damage the hero's ignites deal: 100 plus the gear's increased magnitude. */
+[[nodiscard]] int IgniteMagnitudePercent(const Player &player);
+/** @brief The gear's increased magnitude of the shocks the hero inflicts, in percent. */
+[[nodiscard]] int ShockMagnitudeBonus(const Player &player);
+/** @brief Life the gear regenerates a second, in hundredths of a percent of maximum life. */
+[[nodiscard]] int GearLifeRegenPerTenThousand(const Player &player);
+/** @brief Percent of skills' mana costs the gear pays with life instead, at most 100. */
+[[nodiscard]] int GearManaCostAsLifePercent(const Player &player);
+/** @brief The gear's added chance for attacks to crit, in tenths of a percent. */
+[[nodiscard]] int GearAttackCritTenths(const Player &player);
+/** @brief The gear's increased movement speed, in percent. */
+[[nodiscard]] int GearMovementSpeedPercent(const Player &player);
+
 } // namespace devilution

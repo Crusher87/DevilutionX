@@ -36,6 +36,7 @@
 #include "poe2/economy.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/rune_fusing.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/tears.hpp"
 #include "qol/stash.h"
@@ -666,6 +667,66 @@ void GambleEnter()
 	const int line = CurrentTextLine;
 	StartStore(TalkID::Gamble);
 	CurrentTextLine = line;
+}
+
+/** The fusings on the lines of Cain's list, from RuneFusingFirstLine. */
+std::vector<RuneFusion> RuneFusingChoices;
+constexpr int RuneFusingFirstLine = 5;
+/** The line of Cain's menu that opens the fusing list. */
+constexpr int StorytellerFuseLine = 16;
+
+void StartRuneFusing()
+{
+	IsTextFullSize = true;
+	HasScrollbar = false;
+	RenderGold = true;
+	AddSText(20, 1, _("Fuse runes"), UiFlags::ColorWhitegold, false);
+	AddSLine(3);
+	RuneFusingChoices = RuneFusionsToOffer(*MyPlayer);
+	const int lastLine = BackButtonLine() - 3;
+	if (static_cast<int>(RuneFusingChoices.size()) > lastLine - RuneFusingFirstLine + 1)
+		RuneFusingChoices.resize(static_cast<size_t>(lastLine - RuneFusingFirstLine + 1));
+	for (size_t i = 0; i < RuneFusingChoices.size(); i++) {
+		const RuneFusion &fusion = RuneFusingChoices[i];
+		const int line = RuneFusingFirstLine + static_cast<int>(i);
+		AddSText(20, line, RuneFusionText(fusion), UiFlags::ColorWhite, true);
+		if (fusion.gold > 0)
+			AddSTextVal(line, fusion.gold);
+	}
+	if (RuneFusingChoices.empty()) {
+		AddSText(0, RuneFusingFirstLine + 1, _("Bring me three runes of a kind."), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
+		AddSText(0, RuneFusingFirstLine + 2, _("Five Greater runes and gold make a Perfect one."), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
+	}
+	const int line = BackButtonLine();
+	AddSLine(line - 1);
+	AddSText(0, line, _("Back"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	CurrentItemIndex = static_cast<int>(RuneFusingChoices.size());
+}
+
+void RuneFusingEnter()
+{
+	if (CurrentTextLine == BackButtonLine()) {
+		StartStore(TalkID::Storyteller);
+		CurrentTextLine = StorytellerFuseLine;
+		return;
+	}
+	const int index = CurrentTextLine - RuneFusingFirstLine;
+	if (index < 0 || index >= static_cast<int>(RuneFusingChoices.size()))
+		return;
+	const RuneFusion fusion = RuneFusingChoices[static_cast<size_t>(index)];
+	if (fusion.gold > 0 && !PlayerCanAfford(fusion.gold) && (!fusion.needsActThreeBoss || Quests[Q_DIABLO]._qactive == QUEST_DONE)) {
+		OldActiveStore = TalkID::RuneFusing;
+		OldTextLine = CurrentTextLine;
+		OldScrollPos = ScrollPos;
+		StartStore(TalkID::NoMoney);
+		return;
+	}
+	if (const std::string_view refusal = RuneFusionRefusal(*MyPlayer, fusion); !refusal.empty()) {
+		EventPlrMsg(refusal, UiFlags::ColorRed);
+		return;
+	}
+	// The fusing goes through the command system with the new rune's seed (OnFuseRunes), which redraws the list.
+	NetSendCmdFuseRunes(static_cast<uint8_t>(fusion.family), static_cast<uint8_t>(fusion.from), static_cast<uint32_t>(AdvanceRndSeed()));
 }
 
 void StartSmith()
@@ -1334,6 +1395,8 @@ void StartStoryteller()
 	AddSText(0, 12, _("Talk to Cain"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
 	// POE2 Mashup: like POE2's Una, Cain identifies everything for free.
 	AddSText(0, 14, gbIsPoe2 ? _("Identify all items") : _("Identify an item"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	if (gbIsPoe2)
+		AddSText(0, StorytellerFuseLine, _("Fuse runes"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSText(0, 18, _("Say goodbye"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSLine(5);
 }
@@ -2259,6 +2322,10 @@ void StorytellerEnter()
 		}
 		StartStore(TalkID::StorytellerIdentify);
 		break;
+	case StorytellerFuseLine:
+		if (gbIsPoe2)
+			StartStore(TalkID::RuneFusing);
+		break;
 	case 18:
 		ActiveStore = TalkID::None;
 		break;
@@ -2697,6 +2764,15 @@ void ClearSText(int s, int e)
 	}
 }
 
+void RefreshRuneFusing()
+{
+	if (ActiveStore != TalkID::RuneFusing)
+		return;
+	const int line = CurrentTextLine;
+	StartStore(TalkID::RuneFusing);
+	CurrentTextLine = line >= 0 && line < NumStoreLines && TextLine[line].isSelectable() ? line : BackButtonLine();
+}
+
 void StartStore(TalkID s)
 {
 	if (*GetOptions().Gameplay.storeUi == StoreUi::ListWithItemGraphics) {
@@ -2802,6 +2878,9 @@ void StartStore(TalkID s)
 		break;
 	case TalkID::Tears:
 		StartTears();
+		break;
+	case TalkID::RuneFusing:
+		StartRuneFusing();
 		break;
 	case TalkID::None:
 		break;
@@ -2926,6 +3005,10 @@ void StoreESC()
 	case TalkID::Gamble:
 		StartStore(TalkID::Boy);
 		CurrentTextLine = BoyGambleLine();
+		break;
+	case TalkID::RuneFusing:
+		StartStore(TalkID::Storyteller);
+		CurrentTextLine = StorytellerFuseLine;
 		break;
 	case TalkID::Tears:
 		if (TearsGiver) {
@@ -3201,6 +3284,9 @@ void StoreEnter()
 		break;
 	case TalkID::Gamble:
 		GambleEnter();
+		break;
+	case TalkID::RuneFusing:
+		RuneFusingEnter();
 		break;
 	case TalkID::Tears:
 		TearsEnter();

@@ -39,6 +39,8 @@ struct Poe2Craft {
 	/** Augment sockets (0 to 2) and what is in each (an Augment id; 0 for empty). */
 	uint8_t sockets = 0;
 	std::array<uint8_t, 3> augments {};
+	/** The sockets (bit 0, bit 1) whose rune a Zod Rune raised, which it does once per rune; saved in the wide layout. */
+	uint8_t raised = 0;
 	/** Jewellery: the catalyst its quality boosts (a Catalyst id; 0 for none). A waystone: its tier less one. */
 	uint8_t catalyst = 0;
 	/** A corruption enchantment (a CorruptionEnchant id) and its roll, 0 to 7. */

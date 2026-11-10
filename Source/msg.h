@@ -424,6 +424,10 @@ enum _cmd_id : uint8_t {
 	//
 	// body (TCmdShrineBuff)
 	CMD_POE2_SHRINEBUFF,
+	// POE2 Mashup: Cain fuses the hero's runes into one stronger rune made with the seed.
+	//
+	// body (TCmdFuseRunes)
+	CMD_POE2_FUSERUNES,
 	// Fake command; set current player for succeeding mega pkt buffer messages.
 	//
 	// body (TFakeCmdPlr)
@@ -524,6 +528,15 @@ struct TCmdShrineBuff {
 	uint8_t kind;
 	uint8_t variant;
 	uint8_t curse;
+};
+
+struct TCmdFuseRunes {
+	_cmd_id bCmd;
+	/** A RuneFamily. */
+	uint8_t family;
+	/** The RuneStrength of the runes it takes. */
+	uint8_t strength;
+	uint32_t seed;
 };
 
 struct TCmdSpawnMonster {
@@ -764,6 +777,7 @@ void ClearLastSentPlayerCmd();
 void NetSendCmd(bool bHiPri, _cmd_id bCmd);
 void NetSendCmdFreshFloor(uint8_t level, bool isSetLevel, uint32_t seed, uint16_t visits);
 void NetSendCmdShrineBuff(uint8_t kind, uint8_t variant, uint8_t curse);
+void NetSendCmdFuseRunes(uint8_t family, uint8_t strength, uint32_t seed);
 void NetSendCmdSpawnMonster(Point position, Direction dir, uint16_t typeIndex, uint16_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, uint8_t golemSpellLevel);
 void NetSendCmdLoc(uint8_t playerId, bool bHiPri, _cmd_id bCmd, Point position);
 void NetSendCmdLocParam1(bool bHiPri, _cmd_id bCmd, Point position, uint16_t wParam1);

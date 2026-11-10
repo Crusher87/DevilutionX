@@ -125,6 +125,7 @@ set(poe2_mod
   txtdata/poe2/omens.tsv
   txtdata/poe2/passive_tree.tsv
   txtdata/poe2/quest_tracker.tsv
+  txtdata/poe2/rune_bonds.tsv
   txtdata/poe2/shrines.tsv
   txtdata/poe2/skill_looks.tsv
   txtdata/poe2/skill_speed.tsv

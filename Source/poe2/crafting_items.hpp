@@ -341,7 +341,54 @@ struct Augment {
 	AugmentId becomes = AugmentId::None;
 	/** @brief Whether it drops; the ids still waiting for their numbers don't. */
 	bool drops = false;
+	/**
+	 * @brief The hero level it needs to go in a socket, and the most a Zod Rune can raise a rune to: a rune's strength
+	 * band (Lesser 1, plain 15, Greater 30, Perfect 50), and 50 for Zod and the Runes of Legend. 0 for none.
+	 */
+	int level = 0;
+	/** @brief Its weight among the augments a drop can be (dropLevel is the lowest area level it drops at). */
+	int dropWeight = 0;
+	/** @brief The first act it drops in: 3 for Zod and the Runes of Legend; 0 for any. */
+	int dropAct = 0;
+	/** @brief It drops only from bosses (the Runes of Legend), never as an ordinary augment. */
+	bool bossOnly = false;
+	/** @brief Of armour, it goes only in helmets (Horazon's and Jered Cain's). */
+	bool helmOnly = false;
 };
+
+/** @brief The three kinds of item an augment does something different in. */
+enum class AugmentKind : uint8_t {
+	/** A martial weapon. */
+	Weapon,
+	/** A caster weapon: a staff, wand or sceptre of the rework (IsCasterWeapon). */
+	Staff,
+	/** A helmet, body armour or shield. */
+	Armour,
+};
+
+/** @brief A bonded line: what a rune family adds to a two-socket item whose sockets hold the same rune (rune_bonds.tsv). */
+struct RuneBond {
+	AugmentKind kind = AugmentKind::Weapon;
+	ModEffect effect = ModEffect::None;
+	std::array<int16_t, 2> values {};
+	UniqueRule rule = UniqueRule::None;
+	int16_t ruleValue = 0;
+	/** @brief The line; a family's further rows for the same kind add effects and have none. */
+	std::string text;
+};
+
+/** @brief The kind of item the augments in its sockets act as; nullopt for one that takes none. */
+[[nodiscard]] std::optional<AugmentKind> AugmentKindOf(const Item &item);
+/** @brief What the augment does in that kind of item. */
+[[nodiscard]] ModEffect AugmentEffect(const Augment &augment, AugmentKind kind);
+[[nodiscard]] const std::array<int16_t, 2> &AugmentValues(const Augment &augment, AugmentKind kind);
+[[nodiscard]] const std::string &AugmentText(const Augment &augment, AugmentKind kind);
+/** @brief Whether the augment does anything in the item (Ith does nothing in a staff; Horazon's goes only in a helmet). */
+[[nodiscard]] bool AugmentFitsItem(const Augment &augment, const Item &item);
+/** @brief The socketed augment's id, without a Zod Rune's mark. */
+[[nodiscard]] AugmentId SocketAugment(const Poe2Craft &craft, size_t socket);
+/** @brief Whether a Zod Rune raised the rune in the socket. */
+[[nodiscard]] bool SocketRaised(const Poe2Craft &craft, size_t socket);
 
 const Augment &GetAugment(AugmentId id);
 AugmentId GetAugmentId(const Item &item);
@@ -354,12 +401,38 @@ AugmentId CurrentAugmentId(AugmentId id);
  * @return Whether it changed the item's ids.
  */
 bool ConvertLegacyCraftingIds(Item &item);
+/**
+ * @brief The id whose numbers the augment had before the runes took their own (build spec step 5): a legacy id itself,
+ * the legacy id that becomes an id of today, else the id.
+ */
+[[nodiscard]] AugmentId AugmentBeforeRuneNumbers(AugmentId id);
 /** @brief Most augment sockets the item can have: 2 on body armour and two-handed weapons, 1 on other weapons and armour, 0 on jewellery. */
 int MaxAugmentSockets(const Item &item);
-/** @brief Gives the item what its socketed augments do. */
+/** @brief Gives the item what its socketed augments do, and its bonded line when both sockets match. Runes of Legend count on the hero instead (ApplyWornRunesOfLegend). */
 void ApplyAugments(Item &item);
-/** @brief The tooltip lines of the item's sockets. */
+/** @brief A tooltip line of the item's sockets; an inactive one (a bonded line whose sockets don't match) is greyed. */
+struct SocketLine {
+	std::string text;
+	bool inactive = false;
+};
+/** @brief The tooltip lines of the item's sockets: each socket's line for the item's kind, then the bonded lines. */
+std::vector<SocketLine> AugmentSocketLines(const Item &item);
+/** @brief The texts of AugmentSocketLines. */
 std::vector<std::string> AugmentSocketText(const Item &item);
+/**
+ * @brief The Runes of Legend in the worn items: each counts once, however many items hold it (build spec answers:
+ * one of each equipped at a time). Applies their effects to the stand-in and adds their rules.
+ * @return Whether the hero wears any.
+ */
+bool ApplyWornRunesOfLegend(std::span<const Item> worn, Item &standIn, UniqueRuleTotals &rules);
+/**
+ * @brief The augment a drop is: weighted by dropWeight among the rows that drop at the area level (dropLevel) and in
+ * the act (dropAct). The bosses' Runes of Legend never roll here (RollRuneOfLegend). None when nothing can drop.
+ */
+[[nodiscard]] AugmentId RollAugmentDrop(uint32_t roll, int areaLevel, int act);
+
+/** @brief A Rune of Legend, each as likely. */
+[[nodiscard]] AugmentId RollRuneOfLegend(uint32_t roll);
 
 /** @brief The rune families, in the order of the Runes tab's rows (Diablo 2 names, Curtis 2026-10-21). */
 enum class RuneFamily : uint8_t {
@@ -405,6 +478,12 @@ constexpr int RunesOfLegendCount = 8;
 [[nodiscard]] std::span<const AugmentId> SoulstonesAndRelics();
 /** @brief The Essences tab's family order (the build spec's step 7 list): 19 families of 4 strengths. */
 [[nodiscard]] std::span<const EssenceKind> EssenceFamilies();
+/** @brief The rune whose bonded line works on the item: a two-socket item whose sockets hold the same rune; nullopt otherwise. */
+[[nodiscard]] std::optional<RuneFamily> BondedRuneFamily(const Item &item);
+/** @brief The family's bonded rows for that kind of item (rune_bonds.tsv); empty for none. */
+[[nodiscard]] std::vector<const RuneBond *> RuneBondsFor(RuneFamily family, AugmentKind kind);
+/** @brief The rune one strength stronger (a Zod Rune's raise); None for a Perfect rune or one with no stronger strength. */
+[[nodiscard]] AugmentId NextRuneStrength(AugmentId id);
 
 enum class Catalyst : uint8_t {
 	None,

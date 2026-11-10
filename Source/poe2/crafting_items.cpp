@@ -28,6 +28,8 @@ namespace {
 std::vector<Essence> Essences;
 std::vector<Omen> Omens;
 std::vector<Augment> Augments;
+/** The bonded rows of each rune family (rune_bonds.tsv). */
+std::array<std::vector<RuneBond>, static_cast<size_t>(RuneFamily::Count)> RuneBonds;
 
 /** What a table without a row for the id gives: the None row. */
 const Essence NoEssence {};
@@ -203,9 +205,64 @@ bool LoadAugments()
 		int drops = 0;
 		reader.readInt("drops", drops);
 		augment.drops = drops != 0;
+		reader.readInt("level", augment.level);
+		reader.readInt("dropWeight", augment.dropWeight);
+		reader.readInt("dropAct", augment.dropAct);
+		int flag = 0;
+		reader.readInt("bossOnly", flag);
+		augment.bossOnly = flag != 0;
+		flag = 0;
+		reader.readInt("helmOnly", flag);
+		augment.helmOnly = flag != 0;
 		Augments.push_back(std::move(augment));
 	}
 	return HasEveryRow(Filename, Augments.size(), AugmentId::Count) && BecomesRowsOfToday(Filename, Augments, &Augment::becomes);
+}
+
+std::expected<RuneFamily, std::string> ParseRuneFamily(std::string_view text)
+{
+	if (const std::optional<RuneFamily> family = magic_enum::enum_cast<RuneFamily>(text); family && *family != RuneFamily::Count)
+		return *family;
+	return std::unexpected("unknown rune family");
+}
+
+std::expected<AugmentKind, std::string> ParseAugmentKind(std::string_view text)
+{
+	if (text == "weapon")
+		return AugmentKind::Weapon;
+	if (text == "staff")
+		return AugmentKind::Staff;
+	if (text == "armour")
+		return AugmentKind::Armour;
+	return std::unexpected("unknown kind (weapon, staff or armour)");
+}
+
+bool LoadRuneBonds()
+{
+	constexpr std::string_view Filename = "txtdata\\poe2\\rune_bonds.tsv";
+	auto dataFile = DataFile::load(Filename);
+	if (!dataFile.has_value()) {
+		LogError("Couldn't load the bonded runes: {}", Filename);
+		return false;
+	}
+	dataFile->skipHeaderOrDie(Filename);
+	for (DataFileRecord record : *dataFile) {
+		RecordReader reader { record, Filename };
+		RuneFamily family = RuneFamily::Count;
+		RuneBond bond;
+		reader.read("family", family, ParseRuneFamily);
+		reader.read("kind", bond.kind, ParseAugmentKind);
+		reader.read("effect", bond.effect, ParseEffect);
+		reader.readInt("value1", bond.values[0]);
+		reader.readInt("value2", bond.values[1]);
+		reader.read("rule", bond.rule, ParseRule);
+		reader.readInt("ruleValue", bond.ruleValue);
+		reader.readString("text", bond.text);
+		if (family == RuneFamily::Count)
+			return false;
+		RuneBonds[static_cast<size_t>(family)].push_back(std::move(bond));
+	}
+	return true;
 }
 
 /** @brief Picks one of the weighted choices with the roll. */
@@ -262,14 +319,10 @@ uint8_t RollVariant(const Item &item)
 		}
 		return PickWeighted(choices, roll);
 	}
-	case IMISC_AUGMENT: {
-		std::vector<std::pair<uint8_t, int>> choices;
-		for (const Augment &augment : Augments) {
-			if (augment.id != AugmentId::None && augment.becomes == AugmentId::None && augment.drops && (augment.tier == 1 || augment.dropLevel <= level))
-				choices.emplace_back(static_cast<uint8_t>(augment.id), 4 - augment.tier);
-		}
-		return PickWeighted(choices, roll);
-	}
+	case IMISC_AUGMENT:
+		// Without the place it dropped (the item spawner, an old drop) its item level stands for the area level, and
+		// the Act 3 augments stay out; drops roll again with the area (DropPoe2LootItem).
+		return static_cast<uint8_t>(RollAugmentDrop(roll, level, 0));
 	case IMISC_ORB_CATALYST:
 		return static_cast<uint8_t>(1 + (roll % (static_cast<uint32_t>(Catalyst::Count) - 1)));
 	default:
@@ -313,6 +366,8 @@ void LoadCraftingItemData()
 	Essences.clear();
 	Omens.clear();
 	Augments.clear();
+	for (std::vector<RuneBond> &bonds : RuneBonds)
+		bonds.clear();
 	if (!gbIsPoe2)
 		return;
 	if (!LoadEssences())
@@ -321,6 +376,10 @@ void LoadCraftingItemData()
 		Omens.clear();
 	if (!LoadAugments())
 		Augments.clear();
+	if (!LoadRuneBonds()) {
+		for (std::vector<RuneBond> &bonds : RuneBonds)
+			bonds.clear();
+	}
 }
 
 const Essence &GetEssence(EssenceKind kind)
@@ -422,7 +481,7 @@ constexpr std::array<std::array<AugmentId, 4>, static_cast<size_t>(RuneFamily::C
 	{ AI::LesserLum, AI::Lum, AI::GreaterLum, AI::PerfectLum },
 	// Ith comes in three strengths, plain to Perfect.
 	{ AI::None, AI::Ith, AI::GreaterIth, AI::PerfectIth },
-	// Shael is the Wind Rune of today, in one strength until step 5 says otherwise.
+	// Shael is the Wind Rune of today, which the build spec keeps in one strength.
 	{ AI::LesserShael, AI::None, AI::None, AI::None },
 	// Zod raises another rune a strength; it has one strength itself.
 	{ AI::None, AI::Zod, AI::None, AI::None },
@@ -577,6 +636,17 @@ bool ConvertLegacyCraftingIds(Item &item)
 	return renamed || socketed;
 }
 
+AugmentId AugmentBeforeRuneNumbers(AugmentId id)
+{
+	if (id == AugmentId::None || CurrentAugmentId(id) != id)
+		return id;
+	for (int legacy = 1; legacy <= LegacyAugmentCount; legacy++) {
+		if (CurrentAugmentId(static_cast<AugmentId>(legacy)) == id)
+			return static_cast<AugmentId>(legacy);
+	}
+	return id;
+}
+
 std::string_view CatalystName(Catalyst catalyst)
 {
 	switch (catalyst) {
@@ -647,35 +717,229 @@ int MaxAugmentSockets(const Item &item)
 	return 0;
 }
 
-void ApplyAugments(Item &item)
+std::optional<AugmentKind> AugmentKindOf(const Item &item)
+{
+	if (item.isEmpty() || MaxAugmentSockets(item) == 0)
+		return std::nullopt;
+	if (item._iClass == ICLASS_WEAPON)
+		return IsCasterWeapon(item) ? AugmentKind::Staff : AugmentKind::Weapon;
+	return AugmentKind::Armour;
+}
+
+ModEffect AugmentEffect(const Augment &augment, AugmentKind kind)
+{
+	switch (kind) {
+	case AugmentKind::Weapon:
+		return augment.weaponEffect;
+	case AugmentKind::Staff:
+		return augment.staffEffect;
+	default:
+		return augment.armourEffect;
+	}
+}
+
+const std::array<int16_t, 2> &AugmentValues(const Augment &augment, AugmentKind kind)
+{
+	switch (kind) {
+	case AugmentKind::Weapon:
+		return augment.weaponValues;
+	case AugmentKind::Staff:
+		return augment.staffValues;
+	default:
+		return augment.armourValues;
+	}
+}
+
+const std::string &AugmentText(const Augment &augment, AugmentKind kind)
+{
+	switch (kind) {
+	case AugmentKind::Weapon:
+		return augment.weaponText;
+	case AugmentKind::Staff:
+		return augment.staffText;
+	default:
+		return augment.armourText;
+	}
+}
+
+bool AugmentFitsItem(const Augment &augment, const Item &item)
+{
+	const std::optional<AugmentKind> kind = AugmentKindOf(item);
+	if (augment.id == AugmentId::None || !kind || AugmentText(augment, *kind).empty())
+		return false;
+	return !(augment.helmOnly && *kind == AugmentKind::Armour && item._itype != ItemType::Helm);
+}
+
+AugmentId SocketAugment(const Poe2Craft &craft, size_t socket)
+{
+	if (socket >= craft.augments.size() || socket >= craft.sockets)
+		return AugmentId::None;
+	const uint8_t id = craft.augments[socket];
+	return id < static_cast<uint8_t>(AugmentId::Count) ? static_cast<AugmentId>(id) : AugmentId::None;
+}
+
+bool SocketRaised(const Poe2Craft &craft, size_t socket)
+{
+	return socket < 2 && (craft.raised & (1U << socket)) != 0;
+}
+
+std::optional<RuneFamily> BondedRuneFamily(const Item &item)
 {
 	const Poe2Craft &craft = item._iPoe2Craft;
-	const int percent = HasDesecratedMod(item, DesecratedModId::HollowSaint) ? HollowSaintAugmentPercent : 100;
-	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
-		const Augment &augment = GetAugment(static_cast<AugmentId>(craft.augments[i]));
-		if (item._iClass != ICLASS_WEAPON)
-			ApplyModEffect(item, augment.armourEffect, augment.armourValues[0] * percent / 100, augment.armourValues[1] * percent / 100);
-		else if (IsCasterWeapon(item))
-			ApplyModEffect(item, augment.staffEffect, augment.staffValues[0] * percent / 100, augment.staffValues[1] * percent / 100);
-		else
-			ApplyModEffect(item, augment.weaponEffect, augment.weaponValues[0] * percent / 100, augment.weaponValues[1] * percent / 100);
+	if (craft.sockets != 2)
+		return std::nullopt;
+	const AugmentId first = SocketAugment(craft, 0);
+	// Only ids of today: a legacy item that hasn't converted yet does what it did before bonded lines.
+	if (first == AugmentId::None || first != SocketAugment(craft, 1) || CurrentAugmentId(first) != first)
+		return std::nullopt;
+	const std::optional<RuneKind> rune = GetRuneKind(first);
+	if (!rune)
+		return std::nullopt;
+	return rune->family;
+}
+
+std::vector<const RuneBond *> RuneBondsFor(RuneFamily family, AugmentKind kind)
+{
+	std::vector<const RuneBond *> bonds;
+	const auto index = static_cast<size_t>(family);
+	if (index >= RuneBonds.size())
+		return bonds;
+	for (const RuneBond &bond : RuneBonds[index]) {
+		if (bond.kind == kind)
+			bonds.push_back(&bond);
 	}
+	return bonds;
+}
+
+AugmentId NextRuneStrength(AugmentId id)
+{
+	const std::optional<RuneKind> rune = GetRuneKind(id);
+	if (!rune || rune->strength == RuneStrength::Perfect)
+		return AugmentId::None;
+	return RuneOf(rune->family, static_cast<RuneStrength>(static_cast<int>(rune->strength) + 1));
+}
+
+void ApplyAugments(Item &item)
+{
+	const std::optional<AugmentKind> kind = AugmentKindOf(item);
+	if (!kind)
+		return;
+	const Poe2Craft &craft = item._iPoe2Craft;
+	const int percent = HasDesecratedMod(item, DesecratedModId::HollowSaint) ? HollowSaintAugmentPercent : 100;
+	const auto apply = [&item, percent](ModEffect effect, const std::array<int16_t, 2> &values) {
+		ApplyModEffect(item, effect, values[0] * percent / 100, values[1] * percent / 100);
+	};
+	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
+		const AugmentId id = SocketAugment(craft, i);
+		// A Rune of Legend counts on the hero, once however many are worn (ApplyWornRunesOfLegend).
+		if (IsRuneOfLegend(id))
+			continue;
+		const Augment &augment = GetAugment(id);
+		apply(AugmentEffect(augment, *kind), AugmentValues(augment, *kind));
+	}
+	if (const std::optional<RuneFamily> family = BondedRuneFamily(item); family) {
+		for (const RuneBond *bond : RuneBondsFor(*family, *kind))
+			apply(bond->effect, bond->values);
+	}
+}
+
+std::vector<SocketLine> AugmentSocketLines(const Item &item)
+{
+	std::vector<SocketLine> lines;
+	const std::optional<AugmentKind> kind = AugmentKindOf(item);
+	const Poe2Craft &craft = item._iPoe2Craft;
+	std::vector<RuneFamily> families;
+	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
+		const Augment &augment = GetAugment(SocketAugment(craft, i));
+		if (augment.id == AugmentId::None) {
+			lines.push_back({ std::string(_("Empty augment socket")) });
+			continue;
+		}
+		// Only the line for this kind of item (build spec step 5).
+		const std::string &text = kind ? AugmentText(augment, *kind) : augment.armourText;
+		const std::string_view raised = SocketRaised(craft, i) ? std::string_view(_(" (raised)")) : std::string_view {};
+		lines.push_back({ StrCat(augment.name, raised, ": ", text) });
+		if (const std::optional<RuneKind> rune = GetRuneKind(augment.id); rune && std::find(families.begin(), families.end(), rune->family) == families.end())
+			families.push_back(rune->family);
+	}
+	// A two-socket item shows the bonded line of each rune in it, greyed until both sockets match.
+	if (!kind || craft.sockets < 2)
+		return lines;
+	const std::optional<RuneFamily> bonded = BondedRuneFamily(item);
+	for (const RuneFamily family : families) {
+		for (const RuneBond *bond : RuneBondsFor(family, *kind)) {
+			if (bond->text.empty())
+				continue;
+			if (bonded == family)
+				lines.push_back({ StrCat(_("Bonded: "), bond->text) });
+			else
+				lines.push_back({ StrCat(_("Bonded: "), bond->text, _(" (match both sockets)")), /*inactive=*/true });
+		}
+	}
+	return lines;
 }
 
 std::vector<std::string> AugmentSocketText(const Item &item)
 {
 	std::vector<std::string> lines;
-	const Poe2Craft &craft = item._iPoe2Craft;
-	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
-		const Augment &augment = GetAugment(static_cast<AugmentId>(craft.augments[i]));
-		if (augment.id == AugmentId::None) {
-			lines.emplace_back(_("Empty augment socket"));
-			continue;
-		}
-		const std::string &text = item._iClass != ICLASS_WEAPON ? augment.armourText : (IsCasterWeapon(item) ? augment.staffText : augment.weaponText);
-		lines.push_back(StrCat(augment.name, ": ", text));
-	}
+	for (SocketLine &line : AugmentSocketLines(item))
+		lines.push_back(std::move(line.text));
 	return lines;
+}
+
+bool ApplyWornRunesOfLegend(std::span<const Item> worn, Item &standIn, UniqueRuleTotals &rules)
+{
+	std::array<bool, RunesOfLegendCount> counted {};
+	bool any = false;
+	for (const Item &item : worn) {
+		const std::optional<AugmentKind> kind = AugmentKindOf(item);
+		if (!kind || !item._iStatFlag)
+			continue;
+		const Poe2Craft &craft = item._iPoe2Craft;
+		for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
+			const AugmentId id = SocketAugment(craft, i);
+			if (!IsRuneOfLegend(id))
+				continue;
+			bool &seen = counted[static_cast<size_t>(id) - static_cast<size_t>(FirstRuneOfLegend)];
+			const Augment &augment = GetAugment(id);
+			if (seen || !AugmentFitsItem(augment, item))
+				continue;
+			seen = true;
+			if (!any) {
+				standIn = {};
+				standIn._itype = ItemType::Misc;
+				standIn._iClass = ICLASS_MISC;
+				standIn._iMagical = ITEM_QUALITY_NORMAL;
+				standIn._iIdentified = true;
+				standIn._iStatFlag = true;
+				any = true;
+			}
+			const std::array<int16_t, 2> &values = AugmentValues(augment, *kind);
+			ApplyModEffect(standIn, AugmentEffect(augment, *kind), values[0], values[1]);
+			if (augment.rule != UniqueRule::None) {
+				int16_t &total = rules[static_cast<size_t>(augment.rule)];
+				total = static_cast<int16_t>(total + augment.ruleValue);
+			}
+		}
+	}
+	return any;
+}
+
+AugmentId RollAugmentDrop(uint32_t roll, int areaLevel, int act)
+{
+	std::vector<std::pair<AugmentId, int>> choices;
+	for (const Augment &augment : Augments) {
+		if (augment.id == AugmentId::None || augment.becomes != AugmentId::None || !augment.drops || augment.bossOnly || augment.dropWeight <= 0)
+			continue;
+		if (augment.dropLevel <= areaLevel && augment.dropAct <= act)
+			choices.emplace_back(augment.id, augment.dropWeight);
+	}
+	return PickWeighted(choices, roll);
+}
+
+AugmentId RollRuneOfLegend(uint32_t roll)
+{
+	return static_cast<AugmentId>(static_cast<uint32_t>(FirstRuneOfLegend) + (roll % RunesOfLegendCount));
 }
 
 namespace {
@@ -773,9 +1037,18 @@ void AddCraftRules(const Item &item, UniqueRuleTotals &totals)
 	};
 	const Poe2Craft &craft = item._iPoe2Craft;
 	for (size_t i = 0; i < craft.augments.size() && i < craft.sockets; i++) {
-		const Augment &augment = GetAugment(static_cast<AugmentId>(craft.augments[i]));
-		if (augment.rule != UniqueRule::None)
+		const Augment &augment = GetAugment(SocketAugment(craft, i));
+		// A Rune of Legend's rule counts on the hero, once (ApplyWornRunesOfLegend).
+		if (augment.rule != UniqueRule::None && !IsRuneOfLegend(augment.id))
 			add(augment.rule, augment.ruleValue);
+	}
+	if (const std::optional<RuneFamily> family = BondedRuneFamily(item); family) {
+		if (const std::optional<AugmentKind> kind = AugmentKindOf(item); kind) {
+			for (const RuneBond *bond : RuneBondsFor(*family, *kind)) {
+				if (bond->rule != UniqueRule::None)
+					add(bond->rule, bond->ruleValue);
+			}
+		}
 	}
 	if (const EnchantData *enchant = ItemEnchant(item); enchant != nullptr && enchant->rule != UniqueRule::None)
 		add(enchant->rule, EnchantValue(*enchant, craft.enchantRoll));
@@ -833,15 +1106,25 @@ std::vector<std::string> CraftingItemText(const Item &item)
 		break;
 	case IMISC_AUGMENT: {
 		const Augment &augment = GetAugment(GetAugmentId(item));
-		if (augment.weaponText == augment.armourText && augment.weaponText == augment.staffText) {
+		if (augment.weaponText == augment.armourText && augment.weaponText == augment.staffText && !augment.helmOnly) {
 			lines.emplace_back(augment.weaponText);
 		} else {
-			lines.push_back(StrCat(_("Weapon: "), augment.weaponText));
-			if (augment.staffText != augment.weaponText)
+			// A kind it does nothing in gets no line, and it won't go in one.
+			if (!augment.weaponText.empty())
+				lines.push_back(StrCat(_("Weapon: "), augment.weaponText));
+			if (!augment.staffText.empty() && augment.staffText != augment.weaponText)
 				lines.push_back(StrCat(_("Staff, wand or sceptre: "), augment.staffText));
-			lines.push_back(StrCat(_("Armour: "), augment.armourText));
+			if (!augment.armourText.empty())
+				lines.push_back(StrCat(augment.helmOnly ? _("Helmet: ") : _("Armour: "), augment.armourText));
 		}
-		lines.emplace_back(_("Goes in an empty augment socket"));
+		if (augment.level > 1)
+			lines.push_back(FormatRuntime(_("Requires level {:d}"), augment.level));
+		if (augment.id == AugmentId::Zod)
+			lines.emplace_back(_("Once per rune, and not past your level"));
+		else if (IsRuneOfLegend(augment.id))
+			lines.emplace_back(_("Only one of each counts at a time"));
+		else
+			lines.emplace_back(_("Replacing a socketed augment destroys it"));
 		break;
 	}
 	case IMISC_ORB_CATALYST:

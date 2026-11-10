@@ -836,6 +836,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/table_skills.cpp
   poe2/shrines.cpp
   poe2/effect_primitives.cpp
+  poe2/rune_fusing.cpp
   poe2/summon_commands.cpp
   poe2/support_table.cpp
   poe2/support_tiers.cpp

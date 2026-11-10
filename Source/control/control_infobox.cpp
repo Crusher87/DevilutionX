@@ -321,6 +321,7 @@ UiFlags TooltipLineColor(InfoLineStyle style)
 	case InfoLineStyle::Corrupted:
 		return UiFlags::ColorRed;
 	case InfoLineStyle::Requirement:
+	case InfoLineStyle::InactiveMod:
 		return UiFlags::ColorButtonpushed;
 	case InfoLineStyle::Note:
 		return UiFlags::ColorWhitegold;
@@ -355,6 +356,7 @@ int TooltipGroup(InfoLineStyle style)
 	case InfoLineStyle::Mod:
 	case InfoLineStyle::Affix:
 	case InfoLineStyle::Corrupted:
+	case InfoLineStyle::InactiveMod:
 		return 2;
 	case InfoLineStyle::Better:
 	case InfoLineStyle::Worse:

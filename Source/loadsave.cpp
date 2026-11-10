@@ -421,9 +421,13 @@ struct LevelConversionData {
 	if ((item.dwBuff & CF_POE2) != 0)
 		UnpackCraftExtension(extensionBytes, item._iPoe2Craft);
 	// POE2 Mashup: an item saved before the runes rework gets today's augment and essence ids.
+	const Poe2Craft savedCraft = item._iPoe2Craft;
 	if (gbIsPoe2)
 		ConvertLegacyCraftingIds(item);
 	RestoreRareItemPowers(item);
+	// And one saved before the runes took their own numbers (build spec step 5) gets what its augments do now.
+	if (gbIsPoe2 && (item.dwBuff & CF_POE2) != 0 && SavedBeforeRuneNumbers(craftBytes))
+		MigrateRuneNumbers(item, savedCraft);
 	// POE2 Mashup: a caster weapon of the rework keeps the modifiers it rolled, written out, from now on.
 	LockCasterWeaponMods(item);
 	FinishFlask(item);

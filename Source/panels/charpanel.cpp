@@ -18,6 +18,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "poe2/defenses.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/jewels.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
@@ -169,6 +170,8 @@ void ShowLifeRegenInfo(const Player &player)
 		AddInfoBoxString(FormatRuntime(_("Other: {:+d}"), other));
 	if (player.poe2.lifeRegenPerMille != 0)
 		AddInfoBoxString(FormatRuntime(_(/*xgettext:no-c-format*/ "Passive tree: {:s}% of maximum life"), Tenths(player.poe2.lifeRegenPerMille)));
+	if (const int gear = GearLifeRegenPerTenThousand(player); gear != 0)
+		AddInfoBoxString(FormatRuntime(_(/*xgettext:no-c-format*/ "Gear: {:d}.{:02d}% of maximum life"), gear / 100, gear % 100));
 }
 
 constexpr unsigned AttributeHeaderEntryIndices[2] = { 5, 6 };

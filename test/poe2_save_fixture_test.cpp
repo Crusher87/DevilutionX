@@ -632,6 +632,19 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 	}
 	FreeCursor();
 	const std::string saved = Snapshot();
+	// What loading makes of the socketed items with runes: today's ids, and their runes' numbers of today (build spec
+	// step 5); the soul cores and talismans do the same as before.
+	std::vector<std::pair<Item *, Item>> runeItems;
+	for (Item *item : { &player.InvBody[INVLOC_CHEST], &player.InvBody[INVLOC_HAND_LEFT], &Items[ActiveItems[1]] }) {
+		runeItems.emplace_back(item, *item);
+		const Poe2Craft savedCraft = item->_iPoe2Craft;
+		ConvertLegacyCraftingIds(*item);
+		RestoreRareItemPowers(*item);
+		MigrateRuneNumbers(*item, savedCraft);
+	}
+	const std::string expected = Snapshot();
+	for (auto &[item, original] : runeItems)
+		*item = original;
 	pfile_write_hero(/*writeGameData=*/false);
 	sfile_write_stash();
 	StashTabsSaveVersion = StashTabsVersion;
@@ -639,8 +652,10 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 
 	Load();
 	const std::string loaded = Snapshot();
-	// Every item came back with the same stats, and runes and essences with their rows' names of today.
-	EXPECT_EQ(WithoutCraftingNames(WithoutCraftBytes(loaded)), WithoutCraftingNames(WithoutCraftBytes(saved)));
+	// Every item came back with the same stats but for its runes' share, and runes and essences with their rows' names
+	// of today.
+	EXPECT_EQ(WithoutCraftingNames(WithoutCraftBytes(loaded)), WithoutCraftingNames(WithoutCraftBytes(expected)));
+	EXPECT_NE(WithoutCraftingNames(WithoutCraftBytes(loaded)), WithoutCraftingNames(WithoutCraftBytes(saved)));
 	EXPECT_NE(loaded.find("\"Lesser Ort Rune\""), std::string::npos);
 	EXPECT_EQ(loaded.find("\"Storm Rune\""), std::string::npos);
 	EXPECT_NE(loaded.find("\"Greater Essence of Enhancement\""), std::string::npos);
@@ -648,13 +663,10 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 	const auto expectSockets = [](const Item &item, std::initializer_list<AugmentId> augments) {
 		ASSERT_EQ(item._iPoe2Craft.sockets, augments.size()) << item._iIName;
 		size_t i = 0;
-		bool wide = false;
-		for (const AugmentId augment : augments) {
+		for (const AugmentId augment : augments)
 			EXPECT_EQ(item._iPoe2Craft.augments[i++], static_cast<uint8_t>(augment)) << item._iIName;
-			wide = wide || static_cast<uint8_t>(augment) > NarrowMaxAugmentId;
-		}
-		// Ids up to 15 still pack narrow.
-		EXPECT_EQ(PackCraftState(item._iPoe2Craft)[0], wide ? 0xC3 : 0xC2) << item._iIName;
+		// Today's ids pack wide, with the marker of the runes' own numbers, so they don't move again.
+		EXPECT_EQ(PackCraftState(item._iPoe2Craft)[0], 0xC5) << item._iIName;
 	};
 	expectSockets(player.InvBody[INVLOC_CHEST], { AugmentId::LesserShael, AugmentId::LordOfThePit });
 	expectSockets(player.InvBody[INVLOC_HAND_LEFT], { AugmentId::LesserRal, AugmentId::RelicOfRakkis });

@@ -26,6 +26,8 @@ namespace {
 std::array<uint8_t, NUMLEVELS> AreaByFloor {};
 /** @brief Monster damage percent by raw dungeon level (txtdata/poe2/area_levels.tsv monsterDamagePercent). */
 std::array<uint16_t, NUMLEVELS> DamagePercentByFloor {};
+/** @brief The act of each raw dungeon level (the table's act column); 0 where the table has no row. */
+std::array<uint8_t, NUMLEVELS> ActByFloor {};
 
 } // namespace
 
@@ -33,6 +35,7 @@ void LoadAreaLevels()
 {
 	AreaByFloor.fill(0);
 	DamagePercentByFloor.fill(DefaultAreaMonsterDamagePercent);
+	ActByFloor.fill(0);
 	// The monster tables that go with the area levels; cleared outside POE2 mode too.
 	LoadMonsterLevels();
 	if (!gbIsPoe2)
@@ -53,7 +56,7 @@ void LoadAreaLevels()
 		int damagePercent = DefaultAreaMonsterDamagePercent;
 		reader.readInt("floor", floor);
 		reader.readInt("areaLevel", areaLevel);
-		// The reader goes column by column, so the act and name columns are read past.
+		// The reader goes column by column, so the name column is read past.
 		int act = 0;
 		reader.readInt("act", act);
 		std::string name;
@@ -65,7 +68,30 @@ void LoadAreaLevels()
 		}
 		AreaByFloor[static_cast<size_t>(floor)] = static_cast<uint8_t>(areaLevel);
 		DamagePercentByFloor[static_cast<size_t>(floor)] = static_cast<uint16_t>(std::clamp(damagePercent, 1, 1000));
+		ActByFloor[static_cast<size_t>(floor)] = static_cast<uint8_t>(std::clamp(act, 0, 9));
 	}
+}
+
+int ActForFloor(int floor)
+{
+	if (floor < 1 || floor >= NUMLEVELS)
+		return 0;
+	return ActByFloor[static_cast<size_t>(floor)];
+}
+
+int CurrentAct(int difficulty)
+{
+	// Maps and the harder difficulties come after Act 3's story (Acts 4-6 don't exist yet).
+	if (ActiveMapTier() > 0 || difficulty > DIFF_NORMAL)
+		return PastStoryAct;
+	if (!setlevel && leveltype == DTYPE_TOWN)
+		return 0;
+	return ActForFloor(AreaFloor());
+}
+
+int CurrentAct()
+{
+	return CurrentAct(sgGameInitInfo.nDifficulty);
 }
 
 int AreaLevelForFloor(int floor)

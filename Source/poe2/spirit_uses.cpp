@@ -15,6 +15,7 @@
 #include "objects.h"
 #include "player.h"
 #include "poe2/defenses.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
@@ -512,8 +513,8 @@ int BannerDefencePercent(const Player &player)
 
 int BannerWalkSkippedFrames(const Player &player, int walkFrames)
 {
-	// Defiance Banner, and the shrines' movement speed (Acceleration, and Temporal Chains slowing).
-	const int percent = (InBanner(player, 1) ? DefianceBannerMovementPercent : 0) + GetShrineBonuses(player).movePercent;
+	// Defiance Banner, the shrines' movement speed (Acceleration, and Temporal Chains slowing) and the gear's (Korlic's Rune).
+	const int percent = (InBanner(player, 1) ? DefianceBannerMovementPercent : 0) + GetShrineBonuses(player).movePercent + GearMovementSpeedPercent(player);
 	if (percent == 0)
 		return 0;
 	// A tile takes the frames left after the usual 2 skipped; 30% faster takes 100/130 of them.

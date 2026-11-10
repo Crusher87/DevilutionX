@@ -780,6 +780,13 @@ std::string GetRareItemName(const Item &item);
  * @brief POE2 Mashup: refills the affix data that isn't saved (rare powers, regeneration) by regenerating the item from its seed.
  */
 void RestoreRareItemPowers(Item &item);
+/**
+ * @brief POE2 Mashup: an item saved before the runes took their own numbers (build spec step 5) keeps what else changed
+ * it, and its socketed augments' share of its values becomes what they do now.
+ * @param saved The crafting state as saved, before legacy ids converted.
+ * @return Whether its values changed.
+ */
+bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved);
 
 /**
  * @brief POE2 Mashup: makes one of the bundle's uniques (poe2/uniques.hpp) on its base, the way a drop of it is made.

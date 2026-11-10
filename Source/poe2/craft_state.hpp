@@ -48,15 +48,22 @@ constexpr uint8_t NarrowUnrevealedModFamily = 127;
 
 /**
  * @brief The craft save's two socket layouts. The narrow one, every item saved before the runes rework, keeps three
- * augment ids of 4 bits and the catalyst's 4. An item with an augment id above NarrowMaxAugmentId saves wide (its own
+ * augment ids of 4 bits and the catalyst's 4. An item with an augment id above NarrowMaxAugmentId saved wide (its own
  * marker byte): one byte for each of the two sockets, and no third socket or catalyst, which only jewellery and
- * waystones have, and they have no sockets. Ids keep below 128 there: the top bit is kept for a Zod Rune.
+ * waystones have, and they have no sockets. Ids keep below 128 there: the top bit is kept for a Zod Rune. Since the
+ * runes took their own numbers (build spec step 5) an item with anything in a socket saves wide, with a marker of its
+ * own (SavedBeforeRuneNumbers).
  */
 constexpr uint8_t NarrowMaxAugmentId = 15;
 
 std::array<uint8_t, CraftStateSaveSize> PackCraftState(const Poe2Craft &craft);
 /** @brief Reads crafting state from an item save; zeros from an older save, or bytes that don't check out, give none. */
 Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes);
+/**
+ * @brief Whether crafting state was saved before the runes took their own numbers (build spec step 5): its item's
+ * values hold what its augments did then (MigrateRuneNumbers).
+ */
+[[nodiscard]] bool SavedBeforeRuneNumbers(const std::array<uint8_t, CraftStateSaveSize> &bytes);
 
 /** @brief Bytes the crafting extension takes in an item save: a marker, Poe2Craft::extension and a checksum. */
 constexpr size_t CraftExtensionSaveSize = 8;

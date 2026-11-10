@@ -96,6 +96,17 @@ enum class Poe2ItemStat : uint8_t {
 	BowSkillLevels,
 	AreaSpellSkillLevels,
 	ElementalSpellSkillLevels,
+	// The runes' stats (build spec step 5; ModEffect has their meanings).
+	IgniteMagnitude,
+	FreezeBuildup,
+	ShockMagnitude,
+	/** Hundredths of a percent of maximum life a second. */
+	LifeRegenRate,
+	ManaCostAsLife,
+	/** Tenths of a percent. */
+	AttackCritChance,
+	MovementSpeed,
+	MaximumEnergyShield,
 	Count,
 };
 

@@ -2508,6 +2508,12 @@ bool HasBartucsHunger(const Player &player)
 	return gbIsPoe2 && PassiveTotal(player, PassiveStat::BartucsHunger) > 0;
 }
 
+/** @brief The share of mana costs paid in life without a life-cost support: Bartuc's Hunger's and the gear's. */
+int GearAndHungerLifePercent(const Player &player)
+{
+	return std::min((HasBartucsHunger(player) ? HungerLifePercent : 0) + GearManaCostAsLifePercent(player), 100);
+}
+
 /** @brief Takes life paid as a cost: it stops at 1 life, bypasses energy shield and isn't a hit. @return the life taken. */
 Fixed26_6 PayLife(Player &player, Fixed26_6 life)
 {
@@ -2530,9 +2536,8 @@ int SupportLifeManaPercent(const Player &player, SkillSlot skill)
 		return 0;
 	if (Has(player, skill, SG::BartucsBloodletting))
 		return 50;
-	if (HasBartucsHunger(player))
-		return 100 - HungerLifePercent;
-	return 100;
+	// Bartuc's Hunger and the gear's share (Tir runes bonded) add up.
+	return 100 - GearAndHungerLifePercent(player);
 }
 
 void PaySupportLifeCost(Player &player, SkillSlot skill, int manaCost)
@@ -2544,8 +2549,8 @@ void PaySupportLifeCost(Player &player, SkillSlot skill, int manaCost)
 		life = manaCost * 120 / 100;
 	else if (Has(player, skill, SG::BartucsBloodletting))
 		life = manaCost / 2;
-	else if (HasBartucsHunger(player))
-		life = std::max(manaCost * HungerLifePercent / 100, 1);
+	else if (const int percent = GearAndHungerLifePercent(player); percent > 0)
+		life = std::max(manaCost * percent / 100, 1);
 	if (life <= 0)
 		return;
 	const Fixed26_6 cost = PayLife(player, Fixed26_6::fromInt(life));

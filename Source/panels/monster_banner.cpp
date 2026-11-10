@@ -119,7 +119,7 @@ std::vector<Debuff> MonsterDebuffs(const Monster &monster)
 	else if (state.chillTicks > 0)
 		add(SpellIcon::Nova, SpellType::Spell, Cold, PercentText(state.chillPercent * 10));
 	if (state.shockTicks > 0)
-		add(SpellIcon::ChargedBolt, SpellType::Skill, Lightning, PercentText(ShockDamagePercent * MapExposurePercent() / 10));
+		add(SpellIcon::ChargedBolt, SpellType::Skill, Lightning, PercentText(ShockedDamagePercent(monster) * MapExposurePercent() / 10));
 	if (state.electrocuteTicks > 0)
 		add(SpellIcon::Lightning, SpellType::Skill, Lightning, SecondsText(state.electrocuteTicks));
 	if (state.poisonTicks > 0)

@@ -71,6 +71,36 @@ int GainAsExtraPercent(const Player &player, DamageType type)
 	}
 }
 
+int IgniteMagnitudePercent(const Player &player)
+{
+	return gbIsPoe2 ? std::max(100 + Gear(player, Poe2ItemStat::IgniteMagnitude), 0) : 100;
+}
+
+int ShockMagnitudeBonus(const Player &player)
+{
+	return gbIsPoe2 ? std::max(Gear(player, Poe2ItemStat::ShockMagnitude), 0) : 0;
+}
+
+int GearLifeRegenPerTenThousand(const Player &player)
+{
+	return gbIsPoe2 ? std::max(Gear(player, Poe2ItemStat::LifeRegenRate), 0) : 0;
+}
+
+int GearManaCostAsLifePercent(const Player &player)
+{
+	return gbIsPoe2 ? std::clamp(Gear(player, Poe2ItemStat::ManaCostAsLife), 0, 100) : 0;
+}
+
+int GearAttackCritTenths(const Player &player)
+{
+	return gbIsPoe2 ? std::max(Gear(player, Poe2ItemStat::AttackCritChance), 0) : 0;
+}
+
+int GearMovementSpeedPercent(const Player &player)
+{
+	return gbIsPoe2 ? Gear(player, Poe2ItemStat::MovementSpeed) : 0;
+}
+
 bool AvoidsAilments(const Player &player)
 {
 	return gbIsPoe2 && GetShrineBonuses(player).avoidAilments;

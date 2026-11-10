@@ -1318,10 +1318,10 @@ TEST_F(Poe2StashTabsTest, RunesAndEssencesHaveTheirOwnTabs)
 	EXPECT_NE(StashTabSlotItem(essences, EssenceEvilSlotsFirst), StashStruct::EmptyCell);
 	EXPECT_TRUE(StashTabItems(currency).empty());
 	EXPECT_TRUE(StashTabItems(0).empty());
-	// A click takes an inventory stack.
+	// A click takes an inventory stack, which is 10 for runes (build spec step 5).
 	const Item taken = TakeFromStash(stack);
-	EXPECT_EQ(StackCount(taken), CurrencyStackMax);
-	EXPECT_EQ(StoredStackCount(Stash.stashList[StashTabSlotItem(runes, ort)]), 60 - CurrencyStackMax);
+	EXPECT_EQ(StackCount(taken), RuneStackMax);
+	EXPECT_EQ(StoredStackCount(Stash.stashList[StashTabSlotItem(runes, ort)]), 60 - RuneStackMax);
 }
 
 TEST_F(Poe2StashTabsTest, OldCurrencyTabRunesAndEssencesMoveToTheirTabs)

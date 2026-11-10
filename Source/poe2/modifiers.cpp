@@ -558,6 +558,8 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::LifePercentOnKill:
 	case ModEffect::LifeRecoup:
 	case ModEffect::FlaskRecovery:
+	case ModEffect::LifeRegenPercent:
+	case ModEffect::ManaCostAsLife:
 		return Life;
 	case ModEffect::Mana:
 	case ModEffect::ManaRegeneration:
@@ -585,6 +587,7 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::ArmourToLightning:
 	case ModEffect::ArmourToCold:
 	case ModEffect::EnergyShieldRecharge:
+	case ModEffect::MaximumEnergyShield:
 		return Defence;
 	case ModEffect::LifeAndDefensePercent:
 		return Life | Defence;
@@ -612,6 +615,10 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::ColdAsExtra:
 	case ModEffect::AddedCold:
 	case ModEffect::StunBuildup:
+	case ModEffect::IgniteMagnitude:
+	case ModEffect::FreezeBuildup:
+	case ModEffect::ShockMagnitude:
+	case ModEffect::AttackCritChance:
 		return Damage;
 	case ModEffect::SpellDamageAndMana:
 		return Damage | Mana;
@@ -632,8 +639,11 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::ChaosResistance:
 	case ModEffect::MaxChaosResistance:
 		return Resistance;
+	case ModEffect::AllResistancesAndLife:
+		return Resistance | Life;
 	case ModEffect::AttackSpeed:
 	case ModEffect::CastSpeed:
+	case ModEffect::MovementSpeed:
 		return Speed;
 	case ModEffect::MeleeSkillLevels:
 	case ModEffect::ProjectileSkillLevels:
@@ -658,6 +668,15 @@ uint8_t ModEffectTags(ModEffect effect)
 		return 0;
 	}
 }
+
+} // namespace
+
+bool IsSkillLevelEffect(ModEffect effect)
+{
+	return (ModEffectTags(effect) & (1 << 7)) != 0;
+}
+
+namespace {
 
 uint8_t ModsTags(const std::vector<Poe2ItemMod> &mods)
 {
@@ -1207,6 +1226,36 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 		break;
 	case ModEffect::RequirementsToIntelligence:
 		ConvertRequirements(item._iMinMag, item._iMinStr, item._iMinDex, v0);
+		break;
+	case ModEffect::IgniteMagnitude:
+		AddPoe2Stat(item, Poe2ItemStat::IgniteMagnitude, v0);
+		break;
+	case ModEffect::FreezeBuildup:
+		AddPoe2Stat(item, Poe2ItemStat::FreezeBuildup, v0);
+		break;
+	case ModEffect::ShockMagnitude:
+		AddPoe2Stat(item, Poe2ItemStat::ShockMagnitude, v0);
+		break;
+	case ModEffect::LifeRegenPercent:
+		AddPoe2Stat(item, Poe2ItemStat::LifeRegenRate, v0);
+		break;
+	case ModEffect::ManaCostAsLife:
+		AddPoe2Stat(item, Poe2ItemStat::ManaCostAsLife, v0);
+		break;
+	case ModEffect::AttackCritChance:
+		AddPoe2Stat(item, Poe2ItemStat::AttackCritChance, v0);
+		break;
+	case ModEffect::MovementSpeed:
+		AddPoe2Stat(item, Poe2ItemStat::MovementSpeed, v0);
+		break;
+	case ModEffect::MaximumEnergyShield:
+		AddPoe2Stat(item, Poe2ItemStat::MaximumEnergyShield, v0);
+		break;
+	case ModEffect::AllResistancesAndLife:
+		item._iPLFR = static_cast<int16_t>(item._iPLFR + v0);
+		item._iPLLR = static_cast<int16_t>(item._iPLLR + v0);
+		item._iPLMR = static_cast<int16_t>(item._iPLMR + v0);
+		item._iPLHP += Fixed10_6::fromInt(v1);
 		break;
 	}
 }
