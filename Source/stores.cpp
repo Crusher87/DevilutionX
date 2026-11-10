@@ -714,7 +714,7 @@ void RuneFusingEnter()
 	if (index < 0 || index >= static_cast<int>(RuneFusingChoices.size()))
 		return;
 	const RuneFusion fusion = RuneFusingChoices[static_cast<size_t>(index)];
-	if (fusion.gold > 0 && !PlayerCanAfford(fusion.gold) && (!fusion.needsActThreeBoss || Quests[Q_DIABLO]._qactive == QUEST_DONE)) {
+	if (fusion.gold > 0 && !PlayerCanAfford(fusion.gold) && (!fusion.needsActThreeBoss || PerfectFusingOpen(*MyPlayer))) {
 		OldActiveStore = TalkID::RuneFusing;
 		OldTextLine = CurrentTextLine;
 		OldScrollPos = ScrollPos;

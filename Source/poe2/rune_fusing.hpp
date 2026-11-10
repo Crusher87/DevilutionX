@@ -2,8 +2,9 @@
  * @file poe2/rune_fusing.hpp
  *
  * POE2 Mashup: Cain fuses runes (build spec step 5). Three Lesser runes make one plain rune, three plain make one
- * Greater, and five Greater and gold make one Perfect, once Diablo, the Act 3 boss, is dead. The runes come from the
- * hero's bag and then the stash; the fusing goes through a command (CMD_POE2_FUSERUNES) with the new rune's seed.
+ * Greater, and five Greater and gold make one Perfect, once Diablo, the Act 3 boss, is dead (PerfectFusingOpen). The
+ * runes come from the hero's bag and then the stash; the fusing goes through a command (CMD_POE2_FUSERUNES) with the
+ * new rune's seed.
  */
 #pragma once
 
@@ -46,8 +47,14 @@ struct RuneFusion {
 /** @brief The fusings the hero has the runes for, in the Runes tab's order. */
 [[nodiscard]] std::vector<RuneFusion> RuneFusionsToOffer(const Player &player);
 
-/** @brief The fusing's line in Cain's list: "3 Lesser Ral Runes into a Ral Rune". */
+/** @brief The fusing's line in Cain's list: "3 Lesser Ral Runes: 1 Ral Rune". */
 [[nodiscard]] std::string RuneFusionText(const RuneFusion &fusion);
+
+/**
+ * @brief Whether Cain makes Perfect runes for the hero: once Diablo is dead in this game or the hero has killed him on
+ * any difficulty, and always on Nightmare and Hell and in maps, where Perfect runes drop.
+ */
+[[nodiscard]] bool PerfectFusingOpen(const Player &player);
 
 /** @brief Why the hero can't make the fusing now; empty when they can. */
 [[nodiscard]] std::string_view RuneFusionRefusal(const Player &player, const RuneFusion &fusion);

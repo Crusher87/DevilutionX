@@ -419,7 +419,8 @@ TEST_F(Poe2RunesTest, CainFusesRunes)
 	const std::optional<RuneFusion> fusion = GetRuneFusion(RuneFamily::Ral, RuneStrength::Lesser);
 	ASSERT_TRUE(fusion.has_value());
 	EXPECT_EQ(fusion->output, AugmentId::Ral);
-	EXPECT_EQ(RuneFusionText(*fusion), "3 Lesser Ral Runes into a Ral Rune");
+	EXPECT_EQ(RuneFusionText(*fusion), "3 Lesser Ral Runes: 1 Ral Rune");
+	EXPECT_EQ(RuneFusionText(*GetRuneFusion(RuneFamily::Ort, RuneStrength::Greater)), "5 Greater Ort Runes: 1 Perfect Ort Rune");
 	ASSERT_EQ(RuneFusionsToOffer(player).size(), 1u);
 	ASSERT_TRUE(FuseRunes(player, RuneFamily::Ral, RuneStrength::Lesser, 1234));
 	EXPECT_EQ(BagCount(AugmentId::LesserRal), 1);
@@ -467,6 +468,61 @@ TEST_F(Poe2RunesTest, CainFusesRunes)
 	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ral, RuneStrength::Perfect).has_value());
 	// The command carries the family, the strength and the seed.
 	EXPECT_EQ(sizeof(TCmdFuseRunes), 7u);
+}
+
+TEST_F(Poe2RunesTest, PerfectFusingOpensPastTheStory)
+{
+	Player &player = *MyPlayer;
+	const std::optional<RuneFusion> perfect = GetRuneFusion(RuneFamily::Ort, RuneStrength::Greater);
+	ASSERT_TRUE(perfect.has_value());
+	ASSERT_TRUE(perfect->needsActThreeBoss);
+	Item stored = Rune(AugmentId::GreaterOrt);
+	SetStoredStackCount(stored, RunesPerPerfectFusion);
+	Stash.stashList.push_back(stored);
+	Stash.gold = PerfectFusionGold;
+	const std::string_view locked = RuneFusionRefusal(player, *perfect);
+	const auto reset = [&player]() {
+		Quests[Q_DIABLO]._qactive = QUEST_ACTIVE;
+		player.pDiabloKillLevel = 0;
+		player.poe2.mapTier = 0;
+		sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+	};
+
+	// A fresh hero on Normal who hasn't killed Diablo: closed.
+	reset();
+	EXPECT_FALSE(PerfectFusingOpen(player));
+	EXPECT_FALSE(RuneFusionRefusal(player, *perfect).empty());
+	EXPECT_EQ(locked, RuneFusionRefusal(player, *perfect));
+
+	// Diablo dead in this game.
+	Quests[Q_DIABLO]._qactive = QUEST_DONE;
+	EXPECT_TRUE(PerfectFusingOpen(player));
+	EXPECT_TRUE(RuneFusionRefusal(player, *perfect).empty());
+
+	// Killed on Normal before, in a new Normal game where Diablo lives again.
+	reset();
+	player.pDiabloKillLevel = DIFF_NORMAL + 1;
+	EXPECT_TRUE(PerfectFusingOpen(player));
+	EXPECT_TRUE(RuneFusionRefusal(player, *perfect).empty());
+
+	// On Nightmare and Hell, where Perfect runes drop, with Diablo alive there.
+	for (const _difficulty difficulty : { DIFF_NIGHTMARE, DIFF_HELL }) {
+		reset();
+		sgGameInitInfo.nDifficulty = difficulty;
+		EXPECT_TRUE(PerfectFusingOpen(player)) << static_cast<int>(difficulty);
+		EXPECT_TRUE(RuneFusionRefusal(player, *perfect).empty());
+	}
+
+	// With a map open.
+	reset();
+	player.poe2.mapTier = 1;
+	EXPECT_TRUE(PerfectFusingOpen(player));
+
+	// Plain and Greater fusing never waited.
+	reset();
+	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ort, RuneStrength::Lesser)->needsActThreeBoss);
+	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ort, RuneStrength::Normal)->needsActThreeBoss);
+	Quests[Q_DIABLO]._qactive = QUEST_NOTAVAIL;
 }
 
 TEST_F(Poe2RunesTest, AnItemSavedBeforeTheRunesNumbersGetsThem)
@@ -685,6 +741,38 @@ TEST_F(Poe2RunesTest, ASocketedSoulstoneThatNoLongerFitsDoesNothing)
 	ASSERT_EQ(lines.size(), 1u);
 	EXPECT_EQ(lines[0].text, "Greater Soulstone of the Lord of the Pit: does nothing here");
 	EXPECT_TRUE(lines[0].inactive);
+}
+
+TEST_F(Poe2RunesTest, AnAugmentThatDoesNothingHereIsReplacedFirstAndNotCounted)
+{
+	// An old Hunter's Talisman in body armour became a Relic of Rakkis, which no longer works in armour.
+	const Item bare = MakeItem("Full Plate");
+	Item plate = Socketed(bare, 2, {});
+	plate._iPoe2Craft.augments[0] = static_cast<uint8_t>(AugmentId::RelicOfRakkis);
+	plate = Rebuilt(plate);
+	ASSERT_FALSE(AugmentFitsItem(GetAugment(AugmentId::RelicOfRakkis), plate));
+	// It isn't counted against the one relic: Akarat goes in the empty socket.
+	EXPECT_TRUE(Insert(plate, AugmentId::RelicOfAkarat));
+	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 0), AugmentId::RelicOfRakkis);
+	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 1), AugmentId::RelicOfAkarat);
+
+	// With every socket full, a new augment replaces the one that does nothing, not the last one.
+	EXPECT_TRUE(Insert(plate, AugmentId::LesserRal));
+	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 0), AugmentId::LesserRal);
+	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 1), AugmentId::RelicOfAkarat);
+	// Once all of them work, it is the last one again.
+	EXPECT_TRUE(Insert(plate, AugmentId::LesserAmn));
+	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 0), AugmentId::LesserRal);
+	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 1), AugmentId::LesserAmn);
+
+	// The same for a Horadric soulstone that doesn't fit: Tal Rasha's, a helmet's, in body armour.
+	Item other = Socketed(bare, 2, {});
+	other._iPoe2Craft.augments[0] = static_cast<uint8_t>(AugmentId::TalRashasSoulstone);
+	other = Rebuilt(other);
+	ASSERT_FALSE(AugmentFitsItem(GetAugment(AugmentId::TalRashasSoulstone), other));
+	EXPECT_TRUE(Insert(other, AugmentId::JeredCainsSoulstone));
+	EXPECT_EQ(SocketAugment(other._iPoe2Craft, 1), AugmentId::JeredCainsSoulstone);
+	EXPECT_EQ(Stat(other, Poe2ItemStat::PreventedPhysicalRecoup), 10);
 }
 
 TEST_F(Poe2RunesTest, ASoulstoneSavedBeforeItsNumbersGetsThem)

@@ -743,7 +743,10 @@ bool RaiseSocketedRune(const Player &player, Item &item)
 	return false;
 }
 
-/** @brief An augment goes in an empty socket, or replaces the last one, which is destroyed; corrupted items allow it. */
+/**
+ * @brief An augment goes in an empty socket, or replaces one that does nothing in the item, or else the last one; the
+ * replaced one is destroyed. Corrupted items allow it.
+ */
 bool InsertAugment(const Player &player, Item &item, uint8_t variant)
 {
 	const Augment &augment = GetAugment(static_cast<AugmentId>(variant));
@@ -762,9 +765,18 @@ bool InsertAugment(const Player &player, Item &item, uint8_t variant)
 		Fizzle(FormatRuntime(_("{:s} does nothing in this item."), augment.name));
 		return false;
 	}
+	// An empty socket first, then one whose augment does nothing here (saved before its row moved to one slot).
 	size_t slot = craft.sockets - 1U;
-	for (size_t i = 0; i < craft.sockets; i++) {
+	bool emptyFound = false;
+	for (size_t i = 0; i < craft.sockets && i < craft.augments.size(); i++) {
 		if (craft.augments[i] == 0) {
+			slot = i;
+			emptyFound = true;
+			break;
+		}
+	}
+	for (size_t i = 0; !emptyFound && i < craft.sockets && i < craft.augments.size(); i++) {
+		if (!AugmentFitsItem(GetAugment(SocketAugment(craft, i)), item)) {
 			slot = i;
 			break;
 		}
@@ -777,6 +789,9 @@ bool InsertAugment(const Player &player, Item &item, uint8_t variant)
 		if (i == slot)
 			continue;
 		const Augment &other = GetAugment(SocketAugment(craft, i));
+		// One that does nothing here doesn't count.
+		if (!AugmentFitsItem(other, item))
+			continue;
 		// One relic and one Horadric soulstone per item (build spec step 6).
 		if (augment.tier == RelicTier && other.tier == RelicTier) {
 			Fizzle(_("An item takes only one relic."));

@@ -4,6 +4,7 @@
 #include <array>
 
 #include "effects.h"
+#include "game_mode.hpp"
 #include "inv.h"
 #include "items.h"
 #include "msg.h"
@@ -11,9 +12,11 @@
 #include "plrmsg.h"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
+#include "poe2/waystones.hpp"
 #include "qol/stash.h"
 #include "quests.h"
 #include "stores.h"
+#include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
 
@@ -64,12 +67,15 @@ int TakeRunesFromStash(AugmentId id, int count)
 	return taken;
 }
 
-bool ActThreeBossIsDead()
-{
-	return Quests[Q_DIABLO]._qactive == QUEST_DONE;
-}
-
 } // namespace
+
+bool PerfectFusingOpen(const Player &player)
+{
+	// Diablo dead in this game, or by this hero on any difficulty (saved with the hero), or past the story: a harder
+	// difficulty or an open map, where Perfect runes drop.
+	return Quests[Q_DIABLO]._qactive == QUEST_DONE || player.pDiabloKillLevel > 0 || sgGameInitInfo.nDifficulty > DIFF_NORMAL
+	    || player.poe2.mapTier > 0 || ActiveMapTier() > 0;
+}
 
 std::optional<RuneFusion> GetRuneFusion(RuneFamily family, RuneStrength from)
 {
@@ -123,14 +129,14 @@ std::vector<RuneFusion> RuneFusionsToOffer(const Player &player)
 std::string RuneFusionText(const RuneFusion &fusion)
 {
 	// Every rune's name ends in "Rune", so an s makes it plural.
-	return StrCat(fusion.count, " ", GetAugment(fusion.input).name, _("s into a "), GetAugment(fusion.output).name);
+	return FormatRuntime(_(/* TRANSLATORS: Cain's rune fusing: how many runes, their name, and the rune they make. */ "{:d} {:s}s: 1 {:s}"), fusion.count, GetAugment(fusion.input).name, GetAugment(fusion.output).name);
 }
 
 std::string_view RuneFusionRefusal(const Player &player, const RuneFusion &fusion)
 {
 	if (OwnedRuneCount(player, fusion.input) < fusion.count)
 		return _("You don't have enough of those runes.");
-	if (fusion.needsActThreeBoss && !ActThreeBossIsDead())
+	if (fusion.needsActThreeBoss && !PerfectFusingOpen(player))
 		return _("Cain: Not until Diablo is dead. Then I'll make a Perfect rune.");
 	if (fusion.gold > 0 && (&player != MyPlayer || !PlayerCanAfford(fusion.gold)))
 		return _("You don't have enough gold.");
