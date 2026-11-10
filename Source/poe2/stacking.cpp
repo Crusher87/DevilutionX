@@ -33,15 +33,10 @@ int StackMax(const Item &item)
 	return item._iMiscId == IMISC_AUGMENT ? RuneStackMax : CurrencyStackMax;
 }
 
-namespace {
-
-/** @brief The most a stack may hold: StackMax, but a stack of augments saved when they stacked to 40 keeps its count. */
 int StackHoldMax(const Item &item)
 {
 	return item._iMiscId == IMISC_AUGMENT ? CurrencyStackMax : StackMax(item);
 }
-
-} // namespace
 
 bool CombineShardStack(Item &stack)
 {

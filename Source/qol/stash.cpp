@@ -1116,11 +1116,13 @@ void PlaceRepairedItem(Item item, unsigned page)
 		if (IsAnyOf(StashTabs.kind(other), StashTabKind::Currency, StashTabKind::Runes, StashTabKind::Essences))
 			StoreInPremadeTab(other, item);
 	}
+	// Augments split into cells of 40, which an old stack keeps, not the 10 of a new stack: a stash too full of tabs
+	// for a Runes tab of its own keeps them in fewer cells.
 	while (!item.isEmpty()) {
 		Item part = item;
-		if (IsStackable(item) && StoredStackCount(item) > StackMax(item)) {
-			SetStackCount(part, StackMax(item));
-			SetStoredStackCount(item, StoredStackCount(item) - StackMax(item));
+		if (IsStackable(item) && StoredStackCount(item) > StackHoldMax(item)) {
+			SetStackCount(part, StackHoldMax(item));
+			SetStoredStackCount(item, StoredStackCount(item) - StackHoldMax(item));
 		} else {
 			if (IsStackable(part))
 				SetStackCount(part, StoredStackCount(part));

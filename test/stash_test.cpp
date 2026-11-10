@@ -1351,6 +1351,28 @@ TEST_F(Poe2StashTabsTest, OldCurrencyTabRunesAndEssencesMoveToTheirTabs)
 		EXPECT_EQ(GetCurrencySlotKind(slot).miscId, IMISC_INVALID) << "Old essence places stay empty: " << slot;
 }
 
+TEST_F(Poe2StashTabsTest, OldCurrencyTabRunesKeepFewCellsWithoutARunesTab)
+{
+	// A stash saved before version 4 with every tab it can have gets no Runes tab: its runes go to blank tabs.
+	const unsigned runesPage = PageOf(StashTabKind::Runes);
+	StashTabs.tabs.erase(StashTabs.tabs.begin() + runesPage);
+	const unsigned currency = PageOf(StashTabKind::Currency);
+	PutInSlotAsSaved(currency, 42, MakeRune(AugmentId::LesserOrt, 85));
+	RepairStashTabs();
+	EXPECT_TRUE(StashTabItems(currency).empty());
+	int total = 0;
+	int cells = 0;
+	for (const Item &item : Stash.stashList) {
+		if (item._iMiscId != IMISC_AUGMENT)
+			continue;
+		total += StoredStackCount(item);
+		cells++;
+		EXPECT_LE(StoredStackCount(item), CurrencyStackMax);
+	}
+	EXPECT_EQ(total, 85) << "None lost";
+	EXPECT_EQ(cells, 3) << "Cells of 40, as an old stack keeps, not of 10";
+}
+
 TEST_F(Poe2StashTabsTest, TheEssencesTabHoldsGearToUseEssencesOn)
 {
 	const unsigned essences = PageOf(StashTabKind::Essences);
