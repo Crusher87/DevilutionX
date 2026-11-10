@@ -800,13 +800,17 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/belt_uniques.cpp
   poe2/boss_loot.cpp
   poe2/camera_shake.cpp
+  poe2/cathedral_floors.cpp
   poe2/charms.cpp
   poe2/experience.cpp
   poe2/flasks.cpp
+  poe2/floor_chests.cpp
   poe2/floor_packs.cpp
+  poe2/floor_rooms.cpp
   poe2/floors.cpp
   poe2/gem_levels.cpp
   poe2/gemcutting.cpp
+  poe2/tears.cpp
   poe2/jewels.cpp
   poe2/level_census.cpp
   poe2/loot.cpp

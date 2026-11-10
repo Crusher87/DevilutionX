@@ -634,6 +634,8 @@ void DropBossUnique(Monster &monster, bool sendmsg);
 void SpawnPoe2Loot(Monster &monster, Point position, bool sendmsg);
 /** @brief POE2 Mashup: drops this many extra loot rolls, e.g. from a Golden Charm. */
 void SpawnPoe2LootRolls(Monster &monster, Point position, bool sendmsg, int rolls);
+/** @brief POE2 Mashup: a magic or rare chest's or a strongbox's sure item: equipment of that rarity. */
+void DropPoe2ChestItem(Point position, item_quality rarity, bool sendmsg, std::string_view name);
 void CreateRndItem(Point position, bool onlygood, bool sendmsg, bool delta);
 void CreateRndUseful(Point position, bool sendmsg);
 void CreateTypeItem(Point position, bool onlygood, ItemType itemType, int imisc, bool sendmsg, bool delta, bool spawn = false);

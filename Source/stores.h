@@ -72,6 +72,8 @@ enum class TalkID : uint8_t {
 	Barmaid,
 	/** POE2 Mashup: Wirt's gambling. */
 	Gamble,
+	/** POE2 Mashup: the Fountain of Tears trade window. */
+	Tears,
 };
 
 /** Currently active store */

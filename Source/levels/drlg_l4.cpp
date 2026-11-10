@@ -7,9 +7,14 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <expected>
+#include <optional>
+#include <vector>
 
 #include "engine/load_file.hpp"
+#include "engine/point.hpp"
+#include "engine/points_in_rectangle_range.hpp"
 #include "engine/random.hpp"
 #include "engine/world_tile.hpp"
 #include "game_mode.hpp"
@@ -17,7 +22,11 @@
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "levels/gendung_defs.hpp"
+#include "poe2/cathedral_floors.hpp"
+#include "poe2/floors.hpp"
+#include "poe2/telemetry.hpp"
 #include "tables/questdat.hpp"
+#include "utils/bitset2d.hpp"
 #include "utils/is_of.hpp"
 #include "utils/status_macros.hpp"
 
@@ -1221,6 +1230,311 @@ void GenerateLevel(lvl_entry entry)
 	}
 }
 
+/** POE2: an archway in a wall line of the new Hell floors, as AddWall makes them. */
+struct HellArch {
+	Point at;
+	/** In a wall running north to south. */
+	bool vertical = false;
+};
+
+/** POE2: the opening and both posts are plain wall, with floor either side: the wall Diablo puts its archways in. */
+bool HellArchFits(const HellArch &arch)
+{
+	const Displacement along = arch.vertical ? Displacement { 0, 1 } : Displacement { 1, 0 };
+	const Displacement across = arch.vertical ? Displacement { 1, 0 } : Displacement { 0, 1 };
+	const uint8_t line = arch.vertical ? 1 : 2;
+	for (int k = -1; k <= 1; k++) {
+		const Point p = arch.at + along * k;
+		if (p.x < 1 || p.y < 1 || p.x >= DMAXX - 1 || p.y >= DMAXY - 1 || dungeon[p.x][p.y] != line)
+			return false;
+	}
+	const Point a = arch.at - across;
+	const Point b = arch.at + across;
+	return DungeonMask.test(a.x, a.y) && DungeonMask.test(b.x, b.y);
+}
+
+void StampHellArch(const HellArch &arch)
+{
+	const Point p = arch.at;
+	if (arch.vertical) {
+		dungeon[p.x][p.y - 1] = 53;
+		dungeon[p.x][p.y] = 6;
+		dungeon[p.x][p.y + 1] = 52;
+		if (dungeon[p.x - 1][p.y - 1] == 6)
+			dungeon[p.x - 1][p.y - 1] = 54;
+		if (dungeon[p.x - 1][p.y - 2] == 6)
+			dungeon[p.x - 1][p.y - 2] = 55;
+		return;
+	}
+	dungeon[p.x - 1][p.y] = 57;
+	dungeon[p.x][p.y] = 60;
+	dungeon[p.x + 1][p.y] = 56;
+	if (dungeon[p.x - 1][p.y - 1] == 6)
+		dungeon[p.x - 1][p.y - 1] = 58;
+	if (dungeon[p.x][p.y - 1] == 6)
+		dungeon[p.x][p.y - 1] = 59;
+}
+
+/**
+ * POE2: the floor's tiles from the plan's mask: designed walls and pillars are rock, so Diablo's own Hell passes draw
+ * them. Each doorway and designed archway that sits in a plain stretch of wall becomes an archway; the others are
+ * left open, and the walls are drawn again round them.
+ */
+bool BuildHellFunnelWalls(const CathedralPlan &plan)
+{
+	std::vector<HellArch> openings;
+	for (const CathedralLine &line : plan.lines) {
+		if (line.kind == 'a')
+			openings.push_back({ line.block, plan.mask.test(line.block.x - 1, line.block.y) && plan.mask.test(line.block.x + 1, line.block.y) });
+	}
+	for (const CathedralDoor &door : plan.doors)
+		openings.push_back({ door.block, door.vertical });
+
+	DungeonMask = plan.mask;
+	for (const Point pillar : plan.pillars)
+		DungeonMask.reset(pillar.x, pillar.y);
+	std::vector<bool> open(openings.size(), false);
+	for (int pass = 0; pass < 4; pass++) {
+		memset(dungeon, 30, sizeof(dungeon));
+		MakeDmt();
+		FixTilesPatterns();
+		bool changed = false;
+		for (size_t i = 0; i < openings.size(); i++) {
+			if (open[i] || HellArchFits(openings[i]))
+				continue;
+			// Too near a corner or a wall end for an archway: a plain gap, as wide as the straight wall round it
+			// allows, so the way through is a whole floor tile and not the end of a wall.
+			open[i] = true;
+			const HellArch &arch = openings[i];
+			const Displacement along = arch.vertical ? Displacement { 0, 1 } : Displacement { 1, 0 };
+			const Displacement across = arch.vertical ? Displacement { 1, 0 } : Displacement { 0, 1 };
+			DungeonMask.set(arch.at.x, arch.at.y);
+			for (const Point side : { arch.at - along, arch.at + along }) {
+				const Point a = side - across;
+				const Point b = side + across;
+				if (side.x > 0 && side.y > 0 && side.x < DMAXX - 1 && side.y < DMAXY - 1 && DungeonMask.test(a.x, a.y) && DungeonMask.test(b.x, b.y))
+					DungeonMask.set(side.x, side.y);
+			}
+			changed = true;
+		}
+		if (changed)
+			continue;
+		for (size_t i = 0; i < openings.size(); i++) {
+			if (!open[i])
+				StampHellArch(openings[i]);
+		}
+		return true;
+	}
+	return false;
+}
+
+/** POE2: the stairs go where the plan put them: Diablo's Hell stairs stand free on the floor. */
+bool PlaceHellFunnelStairs(const CathedralPlan &plan, lvl_entry entry)
+{
+	const auto put = [](const Miniset &miniset, std::optional<Point> at, Displacement shift) -> std::optional<Point> {
+		if (!at)
+			return std::nullopt;
+		const Point p = *at + shift;
+		if (p.x < 0 || p.y < 0)
+			return std::nullopt;
+		const WorldTilePosition position { static_cast<WorldTileCoord>(p.x), static_cast<WorldTileCoord>(p.y) };
+		if (!miniset.matches(position))
+			return std::nullopt;
+		miniset.place(position, true);
+		return Point(position);
+	};
+	const std::optional<Point> up = put(L4USTAIRS, plan.stairsUp, { 0, -1 });
+	if (!up)
+		return false;
+	if (entry == ENTRY_MAIN)
+		ViewPosition = up->megaToWorld() + Displacement { 6, 6 };
+	if (currlevel == 13) {
+		const std::optional<Point> town = put(L4TWARP, plan.townStairs, { 0, -1 });
+		if (!town)
+			return false;
+		if (entry == ENTRY_TWARPDN)
+			ViewPosition = town->megaToWorld() + Displacement { 6, 6 };
+	}
+	if (Quests[Q_WARLORD].IsAvailable()) {
+		// The Warlord's chamber holds the stairs down: the hall at the end of the main way, as in Diablo's own floor.
+		if (!plan.questPiece)
+			return false;
+		const WorldTilePosition at { static_cast<WorldTileCoord>(plan.questPiece->x), static_cast<WorldTileCoord>(plan.questPiece->y) };
+		const std::unique_ptr<uint16_t[]> setPieceData = LoadFileInMem<uint16_t>("levels\\l4data\\warlord.dun");
+		PlaceDunTiles(setPieceData.get(), at, 6);
+		SetPiece = { at, GetDunSize(setPieceData.get()) };
+		SetPieceRoom = { at, SetPiece.size + 1 };
+		for (const WorldTilePosition tile : PointsInRectangle(SetPieceRoom))
+			Protected.set(tile.x, tile.y);
+		if (entry == ENTRY_PREV)
+			ViewPosition = SetPiece.position.megaToWorld() + Displacement { 7, 7 };
+		return true;
+	}
+	if (currlevel == 15) {
+		// The pentagram ends the main way in its own hall.
+		const std::optional<Point> gate = put(L4PENTA2, plan.questPiece, { 2, 2 });
+		if (!gate)
+			return false;
+		Quests[Q_DIABLO].position = *gate;
+		if (entry == ENTRY_PREV)
+			ViewPosition = gate->megaToWorld() + Displacement { 6, 5 };
+		return true;
+	}
+	const std::optional<Point> down = put(L4DSTAIRS, plan.stairsDown, { -1, -1 });
+	if (!down)
+		return false;
+	if (entry == ENTRY_PREV)
+		ViewPosition = down->megaToWorld() + Displacement { 7, 5 };
+	return true;
+}
+
+/** POE2: the tiles one can walk on before Diablo's shadows go in: floor, an archway's opening and the shade beside it. */
+bool HellWalkable(uint8_t tile)
+{
+	return IsAnyOf(tile, 6, 5, 60, 54, 55, 58, 59);
+}
+
+/**
+ * POE2: from the stairs up one can walk to every floor tile of the rooms, so no theme room or wall Diablo added cut
+ * one off.
+ */
+bool HellFloorConnected(const CathedralPlan &plan)
+{
+	if (!plan.stairsUp)
+		return false;
+	// The floor row south of the stairs up.
+	const Point start = *plan.stairsUp + Displacement { 0, 3 };
+	if (!HellWalkable(dungeon[start.x][start.y]))
+		return false;
+	Bitset2d<DMAXX, DMAXY> seen;
+	std::vector<Point> stack { start };
+	seen.set(start.x, start.y);
+	while (!stack.empty()) {
+		const Point p = stack.back();
+		stack.pop_back();
+		for (const Displacement step : { Displacement { 1, 0 }, Displacement { -1, 0 }, Displacement { 0, 1 }, Displacement { 0, -1 } }) {
+			const Point n = p + step;
+			if (n.x < 0 || n.y < 0 || n.x >= DMAXX || n.y >= DMAXY || seen.test(n.x, n.y) || !HellWalkable(dungeon[n.x][n.y]))
+				continue;
+			seen.set(n.x, n.y);
+			stack.push_back(n);
+		}
+	}
+	for (int y = 0; y < DMAXY; y++) {
+		for (int x = 0; x < DMAXX; x++) {
+			if (dungeon[x][y] == 6 && !seen.test(x, y)) {
+				return false;
+			}
+		}
+	}
+	for (const CathedralProp &prop : plan.props) {
+		if (!seen.test(prop.block.x, prop.block.y))
+			return false;
+	}
+	return true;
+}
+
+/** POE2: a new Hell floor, levels 13 to 15 (poe2/cathedral_floors.hpp). */
+void GenerateHellFunnelLevel(lvl_entry entry, uint64_t avoidRooms)
+{
+	if (LevelSeeds[currlevel])
+		SetRndSeed(*LevelSeeds[currlevel]);
+
+	CathedralRequest request;
+	request.hell = true;
+	request.forbidden = avoidRooms;
+	request.townStairs = currlevel == 13;
+	// The Warlord's chamber and the pentagram each end the main way in a great hall.
+	if (Quests[Q_WARLORD].IsAvailable() || currlevel == 15) {
+		request.questPiece = true;
+		request.questPieceIsWayDown = true;
+	}
+
+	CathedralPlan &plan = CurrentCathedralPlan();
+	while (true) {
+		LevelSeeds[currlevel] = GetLCGEngineState();
+		if (!PlanCathedralFloor(request, plan))
+			continue;
+		DRLG_InitTrans();
+		InitDungeonFlags();
+		SetPiece = {};
+		SetPieceRoom = {};
+		if (!BuildHellFunnelWalls(plan))
+			continue;
+
+		// Diablo's own inner walls and theme rooms go in the plain rooms only: the designed rooms, the quest hall and the
+		// floor round the stairs keep their shape.
+		Bitset2d<DMAXX, DMAXY> hold = plan.designed;
+		const auto holdPatch = [&hold](std::optional<Point> at, Rectangle patch) {
+			if (!at)
+				return;
+			for (int y = patch.position.y; y < patch.position.y + patch.size.height; y++) {
+				for (int x = patch.position.x; x < patch.position.x + patch.size.width; x++) {
+					const Point p = *at + Displacement { x, y };
+					if (p.x >= 0 && p.y >= 0 && p.x < DMAXX && p.y < DMAXY)
+						hold.set(p.x, p.y);
+				}
+			}
+		};
+		holdPatch(plan.stairsUp, { { -1, -2 }, { 6, 7 } });
+		holdPatch(plan.stairsDown, { { -2, -2 }, { 7, 7 } });
+		holdPatch(plan.townStairs, { { -1, -2 }, { 6, 7 } });
+		Protected = hold;
+		AddWall();
+		Protected.reset();
+
+		FloodTransparencyValues(6);
+		FixTransparency();
+		if (!PlaceHellFunnelStairs(plan, entry))
+			continue;
+		GeneralFix();
+
+		// Meanwhile the held tiles are a tile no theme room looks for.
+		std::vector<std::pair<Point, uint8_t>> held;
+		for (int y = 0; y < DMAXY; y++) {
+			for (int x = 0; x < DMAXX; x++) {
+				if (!hold.test(x, y))
+					continue;
+				held.emplace_back(Point { x, y }, dungeon[x][y]);
+				dungeon[x][y] = 0;
+			}
+		}
+		DRLG_PlaceThemeRooms(7, 10, 6, 8, true);
+		for (const auto &[p, tile] : held)
+			dungeon[p.x][p.y] = tile;
+		if (!HellFloorConnected(plan))
+			continue;
+		break;
+	}
+
+	ApplyShadowsPatterns();
+	FixCornerTiles();
+	Substitution();
+
+	memcpy(pdungeon, dungeon, sizeof(pdungeon));
+
+	DRLG_CheckQuests(SetPieceRoom.position);
+
+	if (currlevel == 15) {
+		const bool isGateOpen = UseMultiplayerQuests() || IsAnyOf(Quests[Q_DIABLO]._qactive, QUEST_ACTIVE, QUEST_DONE);
+		if (!isGateOpen)
+			L4PENTA.place(Quests[Q_DIABLO].position);
+
+		for (WorldTileCoord j = 1; j < DMAXY; j++) {
+			for (WorldTileCoord i = 1; i < DMAXX; i++) {
+				if (IsAnyOf(dungeon[i][j], 98, 107)) {
+					Make_SetPC({ WorldTilePosition(i - 1, j - 1), { 5, 5 } });
+					Quests[Q_BETRAYER].position = Point(i, j).megaToWorld();
+				}
+			}
+		}
+	}
+
+	SetCathedralFunnelFloor(true);
+	Poe2NoteFloorRooms(currlevel, plan.usedRooms | HellRoomsMark);
+	TelemetryLog("floor", DescribeCathedralPlan(plan));
+}
+
 void Pass3()
 {
 	DRLG_LPass3(30 - 1);
@@ -1232,7 +1546,13 @@ void CreateL4Dungeon(uint32_t rseed, lvl_entry entry)
 {
 	SetRndSeed(rseed);
 
-	GenerateLevel(entry);
+	SetCathedralFunnelFloor(false);
+	// POE2: the new Hell floors for levels 13 to 15, for a floor whose build was settled on them (single player for now).
+	const Poe2FloorBuild build = gbIsPoe2 && !gbIsMultiplayer && currlevel >= 13 && currlevel <= 15 ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
+	if (build.cathedralFunnel)
+		GenerateHellFunnelLevel(entry, build.avoidRooms);
+	else
+		GenerateLevel(entry);
 
 	Pass3();
 }
