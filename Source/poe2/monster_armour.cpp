@@ -15,6 +15,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/area_levels.hpp"
+#include "poe2/bound_demons.hpp"
 #include "poe2/map_mods.hpp"
 #include "poe2/monster_levels.hpp"
 #include "poe2/monster_mods.hpp"
@@ -81,6 +82,8 @@ int MonsterArmourPercent(const Monster &monster)
 	// Plated: armour even on a kind that has none, and twice a knight's.
 	if (GetMonsterAffixes(monster).has(MonsterMod::Plated))
 		percent = std::max(percent, PlatedModMinimumPercent) * PlatedModMultiplier;
+	// A bound demon's Essence of Enhancement: armour even on a kind that has none.
+	percent += BoundDemonArmourPercent(monster);
 	// The waystone's "Armoured: monsters have X% increased armour" (nothing on a kind without armour, as in POE2).
 	percent = percent * (100 + ActiveMapEffects()[MapDanger::MonsterArmour]) / 100;
 	return std::max(percent, 0);

@@ -52,6 +52,7 @@
 #include "poe2/autosave.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
+#include "poe2/bound_demons.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/default_attack.hpp"
@@ -1558,7 +1559,10 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 
 					if (x < 2 && y < 2) {
 						ClrPlrPath(player);
-						if (player.destAction == ACTION_ATTACKMON && monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
+						// POE2 Mashup: walking up to a bound demon breaks its crystal.
+						if (player.destAction == ACTION_ATTACKMON && IsBoundDemon(*monster)) {
+							RequestBreakBoundCrystal(player, *monster);
+						} else if (player.destAction == ACTION_ATTACKMON && monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
 							TalktoMonster(player, *monster);
 						} else {
 							StartAttack(player, d, pmWillBeCalled);
@@ -1624,7 +1628,9 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 			y = std::abs(player.position.tile.y - monster->position.future.y);
 			if (x <= 1 && y <= 1) {
 				d = GetDirection(player.position.future, monster->position.future);
-				if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
+				if (IsBoundDemon(*monster)) {
+					RequestBreakBoundCrystal(player, *monster);
+				} else if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
 					TalktoMonster(player, *monster);
 				} else {
 					StartAttack(player, d, pmWillBeCalled);
@@ -1645,7 +1651,9 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 			break;
 		case ACTION_RATTACKMON:
 			d = GetDirection(player.position.future, monster->position.future);
-			if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
+			if (IsBoundDemon(*monster)) {
+				RequestBreakBoundCrystal(player, *monster);
+			} else if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
 				TalktoMonster(player, *monster);
 			} else {
 				StartRangeAttack(player, d, monster->position.future.x, monster->position.future.y, pmWillBeCalled);

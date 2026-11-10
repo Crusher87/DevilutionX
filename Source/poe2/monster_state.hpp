@@ -220,6 +220,13 @@ struct Poe2MonsterState {
 	uint8_t commandStaggerTicks = 0;
 	bool commandStaggerHard = false;
 	uint8_t commandStaggerImmuneTicks = 0;
+	/**
+	 * @brief A bound demon (poe2/bound_demons.hpp; none saved): game ticks it still stands after its crystal broke, its
+	 * crystal's heartbeat, and its speed building up to an extra turn at 100.
+	 */
+	uint8_t boundWakeTicks = 0;
+	uint8_t boundPulse = 0;
+	uint8_t boundHasteCarry = 0;
 };
 
 } // namespace devilution

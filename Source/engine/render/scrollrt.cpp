@@ -80,6 +80,7 @@
 #include "panels/stash_tabs_panel.hpp"
 #include "plrmsg.h"
 #include "engine/palette.h"
+#include "poe2/bound_demons.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/floor_chests.hpp"
 #include "poe2/hd.hpp"
@@ -1099,14 +1100,22 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 
 	const Point monsterRenderPosition = targetBufferPosition + offset;
 	// POE2 Mashup: a hurt monster's life bar is drawn later, with the UI.
-	if (gbIsPoe2)
+	if (gbIsPoe2 && !IsBoundDemon(monster))
 		QueueMonsterOverheadBar(monster, monsterRenderPosition, sprite);
 	// POE2 Mashup: in HD the outline fades in under the cursor.
 	const hd::OutlineScope outlineLook(MonsterOutlineLook(mi));
 	if (mi == pcursmonst) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsMonster, monsterRenderPosition, sprite);
+	} else if (const std::optional<uint8_t> glow = BoundDemonGlowColor(monster); glow) {
+		// POE2 Mashup: a bound demon out of its crystal glows in its essences' colours.
+		ClxDrawOutlineSkipColorZero(out, *glow, monsterRenderPosition, sprite);
 	} else if (const std::optional<uint8_t> rank = RankOutlineColor(monster, lightTableIndex); rank) {
 		ClxDrawOutlineSkipColorZero(out, *rank, monsterRenderPosition, sprite);
+	}
+	// POE2 Mashup: a bound demon is drawn inside its crystal (drawn in code over its own picture).
+	if (IsBoundDemon(monster)) {
+		DrawBoundDemon(out, monster, targetBufferPosition, monsterRenderPosition, sprite);
+		return;
 	}
 	DrawMonster(out, tilePosition, monsterRenderPosition, monster, lightTableIndex);
 }

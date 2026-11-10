@@ -15,6 +15,7 @@
 #include "objects.h"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/bound_demons.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
@@ -746,7 +747,8 @@ void PlaceMapEncounters()
 	std::vector<size_t> candidates;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.isPlayerMinion() || monster.isUnique() || monster.hasNoLife() || static_cast<int>(ActiveMonsters[i]) == data->mapBoss || monster.position.tile == GolemHoldingCell)
+		// Nor a bound demon, which is its own fight.
+		if (monster.isPlayerMinion() || monster.isUnique() || monster.hasNoLife() || static_cast<int>(ActiveMonsters[i]) == data->mapBoss || monster.position.tile == GolemHoldingCell || IsEssenceDemon(monster))
 			continue;
 		candidates.push_back(ActiveMonsters[i]);
 	}

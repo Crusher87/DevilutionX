@@ -13,6 +13,7 @@
 #include "game_mode.hpp"
 #include "monster.h"
 #include "player.h"
+#include "poe2/bound_demons.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_mods.hpp"
@@ -186,9 +187,10 @@ int MonsterBaseResistance(const Monster &monster, DamageType type)
 {
 	if (!gbIsPoe2)
 		return 0;
-	// Chaos resistance is the kind's alone: no modifier, waystone or minion gear raises it.
+	// Chaos resistance is the kind's alone: no modifier, waystone or minion gear raises it; only a bound demon's
+	// Essence of Ruin does.
 	if (type == DamageType::Chaos)
-		return MonsterTypeChaosResistance(static_cast<int>(monster.type().type));
+		return MonsterTypeChaosResistance(static_cast<int>(monster.type().type)) + BoundDemonResistance(monster, type);
 	if (!IsResistedElement(type))
 		return 0;
 	int resistance = 0;
@@ -202,6 +204,8 @@ int MonsterBaseResistance(const Monster &monster, DamageType type)
 	}
 	if (GetMonsterAffixes(monster).has(MonsterMod::Resistant))
 		resistance += ResistantModPercent;
+	// A bound demon's essences (bound_demons.tsv).
+	resistance += BoundDemonResistance(monster, type);
 	// Waystones can give map monsters more elemental resistance.
 	if (!monster.isPlayerMinion())
 		resistance += MapMonsterResistance();

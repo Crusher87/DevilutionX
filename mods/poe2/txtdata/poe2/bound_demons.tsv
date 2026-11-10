@@ -1,0 +1,27 @@
+essence	power	value	glow	note
+Body	Life	40	Red	more life
+Mind	Damage	15	Blue	harder hits
+Insulation	FireResist	50	Orange	fire resistance
+Thawing	ColdResist	50	Blue	cold resistance
+Grounding	LightningResist	50	Yellow	lightning resistance
+Abrasion	Damage	25	Gray	harder hits
+Haste	Speed	20	Beige	faster
+Alacrity	Speed	15	Blue	faster
+Battle	Damage	20	Gray	harder hits
+Enhancement	Armour	50	Gray	armour
+Infinite	Life	25	Yellow	more life
+Command	Damage	20	Beige	harder hits
+Ruin	ChaosResist	40	Gray	chaos resistance
+Flames	FireHit	30	Orange	adds fire to its hits
+Ice	ColdHit	30	Blue	adds cold to its hits
+Electricity	LightningHit	30	Yellow	adds lightning to its hits
+SpellSorcery	Damage	20	Blue	harder hits
+Seeking	Damage	20	Yellow	harder hits
+Opulence	Life	20	Yellow	more life
+Terror	Evil	25	Red	more life and harder hits
+Hatred	Evil	25	Red	more life and harder hits
+Destruction	Evil	25	Red	more life and harder hits
+Lies	Evil	25	Red	more life and harder hits
+Sin	Evil	25	Red	more life and harder hits
+Pain	Evil	25	Red	more life and harder hits
+Anguish	Evil	25	Red	more life and harder hits

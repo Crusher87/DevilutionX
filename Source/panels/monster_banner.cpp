@@ -16,6 +16,7 @@
 #include "monster.h"
 #include "panels/poe2_widgets.hpp"
 #include "panels/spell_icons.hpp"
+#include "poe2/bound_demons.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_armour.hpp"
@@ -351,6 +352,10 @@ void DrawMonsterBanner(const Surface &out)
 
 	const std::vector<Debuff> debuffs = MonsterDebuffs(monster);
 	const std::string resistances = ResistanceText(monster);
+	// A bound demon says which essences it holds, in its crystal and out of it.
+	std::string held = BoundDemonEssenceText(monster);
+	if (!held.empty())
+		held = StrCat(IsBoundDemon(monster) ? "Bound in crystal. Holds " : "Holds ", held);
 
 	const int width = std::min(MaxWidth, out.w() - 60);
 	int x = (out.w() - width) / 2;
@@ -365,6 +370,7 @@ void DrawMonsterBanner(const Surface &out)
 	lines += subtitle.empty() ? 0 : 1;
 	lines += mods.empty() ? 0 : 1;
 	lines += resistances.empty() ? 0 : 1;
+	lines += held.empty() ? 0 : 1;
 	const int iconsHeight = debuffs.empty() ? 0 : IconHeight + IconNumberHeight + 8;
 	const int height = 6 + NameHeight + barHeight + 10 + (lines * LineHeight) + iconsHeight;
 
@@ -378,6 +384,10 @@ void DrawMonsterBanner(const Surface &out)
 	y += barHeight + 6;
 	if (!subtitle.empty()) {
 		DrawShadowedText(out, subtitle, { { x, y }, { width, LineHeight } }, UiFlags::ColorWhite | UiFlags::FontSize12 | UiFlags::AlignCenter);
+		y += LineHeight;
+	}
+	if (!held.empty()) {
+		DrawShadowedText(out, held, { { x, y }, { width, LineHeight } }, UiFlags::ColorRed | UiFlags::FontSize12 | UiFlags::AlignCenter);
 		y += LineHeight;
 	}
 	if (!mods.empty()) {

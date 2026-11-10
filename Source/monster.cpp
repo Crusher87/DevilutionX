@@ -78,6 +78,7 @@
 #include "options.h"
 #include "player.h"
 #include "poe2/area_levels.hpp"
+#include "poe2/bound_demons.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/economy.hpp"
@@ -1057,6 +1058,8 @@ void SpawnLoot(Monster &monster, bool sendmsg)
 	// And the bundle's bosses roll a unique from their own tables.
 	if (!monster.isPlayerMinion())
 		DropBossUnique(monster, sendmsg);
+	// And a bound demon drops the essences it held.
+	DropBoundDemonEssences(monster, sendmsg);
 }
 
 std::optional<Point> GetTeleportTile(const Monster &monster)
@@ -1428,6 +1431,11 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		TelemetryHitStep(true, "after map modifiers", dam.raw());
 		if (extraChaos > 0)
 			TelemetryHitStep(true, "extra chaos after resistance", extraChaos.raw());
+		// A bound demon's essence adds its element to the hit, after the hero's resistance.
+		if (const Fixed26_6 essence = BoundDemonExtraHitDamage(monster, player, dam); essence > 0) {
+			dam += essence;
+			TelemetryHitStep(true, "after the demon's essences", dam.raw());
+		}
 	}
 	if (gbIsPoe2 && &player == MyPlayer) {
 		dam = ApplyTableSkillDefences(monster, player, dam);
@@ -4310,6 +4318,9 @@ void AddDoppelganger(Monster &monster)
 
 void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damage)
 {
+	// POE2 Mashup: nothing hurts a bound demon through its crystal.
+	if (IsBoundDemon(monster))
+		return;
 	lua::OnMonsterTakeDamage(&monster, damage.raw(), static_cast<int>(damageType));
 
 	const Fixed26_6 lifeBefore = monster.hitPoints;
@@ -5053,6 +5064,9 @@ void ProcessMonsters()
 			SetRndSeed(monster.aiSeed);
 			monster.aiSeed = AdvanceRndSeed();
 		}
+		// POE2 Mashup: a bound demon stands in its crystal, and a second after it breaks.
+		if (ProcessBoundDemon(monster))
+			continue;
 		if (monster.hitPoints < monster.maxHitPoints && !monster.hasNoLife()) {
 			// POE2 Mashup: monsters don't heal on their own; only the Regenerating affix (monster_mods.cpp) heals them.
 			if (!gbIsPoe2) {
@@ -5131,7 +5145,8 @@ void ProcessMonsters()
 			// And a minion left behind hurries after its owner.
 			// And the Butcher's Road pact's rage hurries it.
 			// And Bone Frenzy and Last Rites hurry the hero's minions.
-			if (turn > 0 || monster.hasNoLife() || !(MapMonsterExtraTick(monster) || MinionCatchUpTick(monster) || EnragedExtraTick(monster) || CommandExtraTick(monster)))
+			// And a bound demon's speed essences hurry it.
+			if (turn > 0 || monster.hasNoLife() || !(MapMonsterExtraTick(monster) || MinionCatchUpTick(monster) || EnragedExtraTick(monster) || CommandExtraTick(monster) || BoundDemonExtraTick(monster)))
 				break;
 		}
 	}
@@ -5849,7 +5864,8 @@ bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel,
 
 bool CanTalkToMonst(const Monster &monster)
 {
-	return IsAnyOf(monster.goal, MonsterGoal::Inquiring, MonsterGoal::Talking);
+	// POE2 Mashup: a bound demon is clicked like a monster to talk to: the hero walks up and breaks its crystal.
+	return IsAnyOf(monster.goal, MonsterGoal::Inquiring, MonsterGoal::Talking) || IsBoundDemon(monster);
 }
 
 uint8_t encode_enemy(Monster &monster)
@@ -5990,6 +6006,7 @@ bool Monster::isPossibleToHit() const
 {
 	return !hasNoLife()
 	    && talkMsg == TEXT_NONE
+	    && !IsBoundDemon(*this)
 	    && (type().type != MT_ILLWEAV || goal != MonsterGoal::Retreat)
 	    && !(IsAnyOf(mode, MonsterMode::Charge, MonsterMode::Death))
 	    && (!IsAnyOf(type().type, MT_COUNSLR, MT_MAGISTR, MT_CABALIST, MT_ADVOCATE) || goal == MonsterGoal::Normal);

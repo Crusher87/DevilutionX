@@ -74,6 +74,7 @@ set(tests
   poe2_runes_test
   poe2_essences_test
   poe2_net_pack_test
+  poe2_bound_demons_test
   poe2_caster_golden_test
   poe2_weapon_kinds_test
   poe2_caster_stats_test

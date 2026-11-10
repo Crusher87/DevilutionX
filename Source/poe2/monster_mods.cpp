@@ -9,6 +9,7 @@
 #include "monster.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/bound_demons.hpp"
 #include "poe2/effect_primitives.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/meta_gems.hpp"
@@ -161,6 +162,8 @@ int MonsterModsDamagePercent(const Monster &monster)
 	}
 	if (GetMonsterAffixes(monster).has(MonsterMod::HardHitting))
 		percent = percent * (100 + HardHittingPercent) / 100;
+	// A bound demon's essences make it hit harder (bound_demons.tsv).
+	percent = percent * (100 + BoundDemonDamagePercent(monster)) / 100;
 	return static_cast<int>(std::clamp<int64_t>(percent, 0, 100000));
 }
 

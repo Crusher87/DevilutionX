@@ -429,6 +429,10 @@ enum _cmd_id : uint8_t {
 	//
 	// body (TCmdFuseRunes)
 	CMD_POE2_FUSERUNES,
+	// POE2 Mashup: a hero broke a bound demon's crystal; it wakes on every machine and the level's delta keeps it.
+	//
+	// body (TCmdBreakCrystal)
+	CMD_POE2_BREAKCRYSTAL,
 	// Fake command; set current player for succeeding mega pkt buffer messages.
 	//
 	// body (TFakeCmdPlr)
@@ -538,6 +542,15 @@ struct TCmdFuseRunes {
 	/** The RuneStrength of the runes it takes. */
 	uint8_t strength;
 	uint32_t seed;
+};
+
+struct TCmdBreakCrystal {
+	_cmd_id bCmd;
+	/** Where the demon stands, and its life (a raw Fixed26_6), for the delta of a level this machine doesn't have loaded. */
+	uint8_t x;
+	uint8_t y;
+	uint16_t monsterId;
+	int32_t hitPoints;
 };
 
 struct TCmdSpawnMonster {
@@ -787,6 +800,7 @@ void NetSendCmd(bool bHiPri, _cmd_id bCmd);
 void NetSendCmdFreshFloor(uint8_t level, bool isSetLevel, uint32_t seed, uint16_t visits);
 void NetSendCmdShrineBuff(uint8_t kind, uint8_t variant, uint8_t curse);
 void NetSendCmdFuseRunes(uint8_t family, uint8_t strength, uint32_t seed);
+void NetSendCmdBreakCrystal(const Monster &monster);
 void NetSendCmdSpawnMonster(Point position, Direction dir, uint16_t typeIndex, uint16_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, uint8_t golemSpellLevel);
 void NetSendCmdLoc(uint8_t playerId, bool bHiPri, _cmd_id bCmd, Point position);
 void NetSendCmdLocParam1(bool bHiPri, _cmd_id bCmd, Point position, uint16_t wParam1);

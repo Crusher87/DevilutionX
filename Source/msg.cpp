@@ -51,6 +51,7 @@
 #include "player.h"
 #include "players/validation.hpp"
 #include "plrmsg.h"
+#include "poe2/bound_demons.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/floors.hpp"
@@ -206,6 +207,7 @@ std::string_view CmdIdString(_cmd_id cmd)
 	case CMD_POE2_FRESHFLOOR: return "CMD_POE2_FRESHFLOOR";
 	case CMD_POE2_SHRINEBUFF: return "CMD_POE2_SHRINEBUFF";
 	case CMD_POE2_FUSERUNES: return "CMD_POE2_FUSERUNES";
+	case CMD_POE2_BREAKCRYSTAL: return "CMD_POE2_BREAKCRYSTAL";
 	case FAKE_CMD_SETID: return "FAKE_CMD_SETID";
 	case FAKE_CMD_DROPID: return "FAKE_CMD_DROPID";
 	case CMD_INVALID: return "CMD_INVALID";
@@ -232,6 +234,8 @@ struct DMonsterStr {
 	uint8_t mactive;
 	int32_t hitPoints;
 	int8_t mWhoHit;
+	/** POE2 Mashup: DeltaBoundReleased once a bound demon's crystal broke; 0xFF (the empty entry's fill) otherwise. */
+	uint8_t poe2Mark;
 };
 #pragma pack(pop)
 
@@ -884,6 +888,9 @@ void DeltaLoadMonsters(const DLevel &deltaLevel)
 
 		monster.hitPoints = Fixed26_6::fromRaw(Swap32LE(deltaMonster.hitPoints));
 		monster.whoHit = deltaMonster.mWhoHit;
+		// POE2 Mashup: a bound demon someone freed before this machine came to the level.
+		if (deltaMonster.poe2Mark == DeltaBoundReleased)
+			ReleaseBoundDemonOnLoad(monster);
 		if (deltaMonster.hitPoints != 0)
 			continue;
 
@@ -2663,6 +2670,33 @@ size_t OnFuseRunes(const TCmdFuseRunes &message, Player &player)
 	return sizeof(message);
 }
 
+size_t OnBreakCrystal(const TCmdBreakCrystal &message, Player &player)
+{
+	if (gbBufferMsgs == 1) {
+		BufferMessage(player, &message, sizeof(message));
+		return sizeof(message);
+	}
+	const Point position { message.x, message.y };
+	const uint16_t monsterId = Swap16LE(message.monsterId);
+	if (!gbIsPoe2 || player.plrlevel == 0 || monsterId >= MaxMonsters || !InDungeonBounds(position))
+		return sizeof(message);
+	if (player.isOnActiveLevel())
+		BreakBoundCrystal(Monsters[monsterId]);
+	if (gbIsMultiplayer) {
+		// The level's delta keeps it for whoever comes to the level later; an entry nothing wrote yet gets the demon's place.
+		DMonsterStr &delta = GetDeltaLevel(player).monster[monsterId];
+		if (!IsMonsterDeltaValid(delta)) {
+			delta.position = position;
+			delta.menemy = 0xFF;
+			delta.mactive = 0;
+			delta.hitPoints = message.hitPoints;
+			delta.mWhoHit = 0;
+		}
+		delta.poe2Mark = DeltaBoundReleased;
+	}
+	return sizeof(message);
+}
+
 size_t OnSpawnMonster(const TCmdSpawnMonster &message, const Player &player)
 {
 	if (gbBufferMsgs == 1)
@@ -3108,6 +3142,18 @@ void NetSendCmdFuseRunes(uint8_t family, uint8_t strength, uint32_t seed)
 	cmd.family = family;
 	cmd.strength = strength;
 	cmd.seed = Swap32LE(seed);
+	NetSendHiPri(MyPlayerId, reinterpret_cast<std::byte *>(&cmd), sizeof(cmd));
+}
+
+void NetSendCmdBreakCrystal(const Monster &monster)
+{
+	TCmdBreakCrystal cmd;
+
+	cmd.bCmd = CMD_POE2_BREAKCRYSTAL;
+	cmd.x = static_cast<uint8_t>(monster.position.tile.x);
+	cmd.y = static_cast<uint8_t>(monster.position.tile.y);
+	cmd.monsterId = Swap16LE(static_cast<uint16_t>(monster.getId()));
+	cmd.hitPoints = SwapSigned32LE(monster.hitPoints.raw());
 	NetSendHiPri(MyPlayerId, reinterpret_cast<std::byte *>(&cmd), sizeof(cmd));
 }
 
@@ -3633,6 +3679,8 @@ size_t ParseCmd(uint8_t pnum, const TCmd *pCmd, size_t maxCmdSize)
 		return HandleCmd(OnShrineBuff, player, pCmd, maxCmdSize);
 	case CMD_POE2_FUSERUNES:
 		return HandleCmd(OnFuseRunes, player, pCmd, maxCmdSize);
+	case CMD_POE2_BREAKCRYSTAL:
+		return HandleCmd(OnBreakCrystal, player, pCmd, maxCmdSize);
 	default:
 		break;
 	}

@@ -40,6 +40,7 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/bound_demons.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/floor_chests.hpp"
 #include "poe2/loot_filter.hpp"
@@ -2776,7 +2777,7 @@ void ScanTowners(const View &view)
 		for (size_t i = 0; i < ActiveMonsterCount; i++) {
 			const Monster &monster = Monsters[ActiveMonsters[i]];
 			const Point tile = monster.position.tile;
-			if (!CanTalkToMonst(monster) || !monster.animInfo.sprites || !InDungeonBounds(tile) || !IsTileLit(tile) || BehindWall(tile))
+			if (!CanTalkToMonst(monster) || IsBoundDemon(monster) || !monster.animInfo.sprites || !InDungeonBounds(tile) || !IsTileLit(tile) || BehindWall(tile))
 				continue;
 			const Vec feet = TileCentre(tile);
 			if (!view.contains(feet, 150))

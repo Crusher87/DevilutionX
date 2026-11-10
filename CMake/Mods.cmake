@@ -101,6 +101,7 @@ set(poe2_mod
   txtdata/poe2/area_levels.tsv
   txtdata/poe2/augments.tsv
   txtdata/poe2/base_meta.tsv
+  txtdata/poe2/bound_demons.tsv
   txtdata/poe2/catacombs_rooms.tsv
   txtdata/poe2/caves_rooms.tsv
   txtdata/poe2/hell_rooms.tsv

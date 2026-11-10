@@ -11,6 +11,7 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "poe2/bases.hpp"
+#include "poe2/bound_demons.hpp"
 #include "poe2/desecration.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/mix.hpp"
@@ -403,6 +404,8 @@ void LoadCraftingItemData()
 	Augments.clear();
 	for (std::vector<RuneBond> &bonds : RuneBonds)
 		bonds.clear();
+	// The bound demons' powers are the essences' too (they clear themselves outside POE2 mode).
+	LoadBoundDemonPowers();
 	if (!gbIsPoe2)
 		return;
 	if (!LoadEssences())
