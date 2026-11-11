@@ -21,6 +21,7 @@
 #include "engine/render/overlapped_memset.hpp"
 #include "levels/dun_tile.hpp"
 #include "options.h"
+#include "poe2/hd.hpp"
 #include "utils/attributes.h"
 #ifdef DEBUG_STR
 #include "engine/render/text_render.hpp"
@@ -1040,6 +1041,7 @@ std::string_view MaskTypeToString(MaskType maskType)
 DVL_ATTRIBUTE_HOT void RenderTileFrame(const Surface &out, const Lightmap &lightmap, const Point &position, TileType tile, const uint8_t *src, int_fast16_t height,
     MaskType maskType, const uint8_t *tbl)
 {
+	if (hd::Recording) hd::RecordTile(out, lightmap, position, tile, src, static_cast<int>(height), maskType, tbl);
 #ifdef DEBUG_RENDER_OFFSET_X
 	position.x += DEBUG_RENDER_OFFSET_X;
 #endif

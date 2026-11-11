@@ -1,0 +1,538 @@
+#include <gtest/gtest.h>
+
+#include <chrono>
+#include <fstream>
+#include <sstream>
+#include <string>
+#include <thread>
+
+#include "diablo.h"
+#include "engine/assets.hpp"
+#include "game_mode.hpp"
+#include "inv.h"
+#include "items.h"
+#include "monster.h"
+#include "player.h"
+#include "poe2/defenses.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/telemetry.hpp"
+#include "poe2/tree_telemetry.hpp"
+#include "poe2/unique_effects.hpp"
+#include "qol/stash.h"
+#include "spells.h"
+#include "storm/storm_net.hpp"
+#include "stores.h"
+#include "tables/monstdat.h"
+#include "tables/playerdat.hpp"
+#include "utils/file_util.h"
+#include "utils/paths.h"
+#include "utils/str_cat.hpp"
+
+namespace devilution {
+namespace {
+
+std::string LogFolder()
+{
+	return paths::PrefPath() + "poe2_logs" + DIRECTORY_SEPARATOR_STR;
+}
+
+std::string ReadLatest(std::string_view extension)
+{
+	TelemetryFlush();
+	std::string latest;
+	for (const std::string &file : ListFiles(LogFolder().c_str())) {
+		if (file.ends_with(extension) && file > latest)
+			latest = file;
+	}
+	std::ifstream stream(LogFolder() + latest);
+	std::stringstream contents;
+	contents << stream.rdbuf();
+	return contents.str();
+}
+
+std::string ReadLatestLog()
+{
+	return ReadLatest(".log");
+}
+
+std::string ReadLatestEvents()
+{
+	return ReadLatest(".events");
+}
+
+class Poe2TelemetryTest : public ::testing::Test {
+public:
+	static void SetUpTestSuite()
+	{
+		// A folder of its own, as tests run side by side and a session file is named by the second it starts.
+		paths::SetPrefPath(::testing::TempDir() + "poe2_telemetry_" + std::to_string(std::chrono::steady_clock::now().time_since_epoch().count()) + DIRECTORY_SEPARATOR_STR);
+		TelemetryInit();
+	}
+
+	void SetUp() override
+	{
+		Players.resize(1);
+		MyPlayer = &Players[0];
+		*MyPlayer = {};
+		MyPlayer->poe2.clear();
+		gbIsSpawn = false;
+		gbIsMultiplayer = false;
+		gbIsHellfire = true;
+		gbIsPoe2 = true;
+		UnloadModArchives();
+		LoadModArchives({ { "hf", "poe2" } });
+		LoadItemData();
+		LoadPlayerDataFiles();
+
+		Player &player = *MyPlayer;
+		player._pMaxHP = player._pMaxHPBase = Fixed26_6::fromInt(100);
+		player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(100);
+		player._pMaxMana = player._pMaxManaBase = Fixed26_6::fromInt(100);
+		player._pMana = player._pManaBase = Fixed26_6::fromInt(100);
+		TelemetryGameStarted(player, false);
+	}
+
+	void TearDown() override
+	{
+		gbIsPoe2 = false;
+		UnloadModArchives();
+	}
+};
+
+TEST_F(Poe2TelemetryTest, WritesEventsToTheSessionLog)
+{
+	ASSERT_TRUE(TelemetryEnabled());
+	TelemetryMark("checking the log");
+	TelemetrySkillUsed(*MyPlayer, "Fireball", 12);
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("POE2 Mashup play log"), std::string::npos);
+	EXPECT_NE(log.find("[mark] checking the log"), std::string::npos);
+	EXPECT_NE(log.find("[skill] Fireball, 12 mana"), std::string::npos);
+}
+
+TEST_F(Poe2TelemetryTest, EffectsAreLoggedWithoutFlooding)
+{
+	for (int i = 0; i < 10; i++)
+		TelemetryEffect("visual", "BloodHit", 20 + i, 30);
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[fx] visual BloodHit at 20,30, hero at"), std::string::npos) << log;
+	EXPECT_NE(log.find("[fx] visual BloodHit at 22,30"), std::string::npos) << log;
+	EXPECT_EQ(log.find("[fx] visual BloodHit at 23,30"), std::string::npos) << "Only a few lines a second for each kind";
+}
+
+TEST_F(Poe2TelemetryTest, CountsWastedFlasksAndFailedSkills)
+{
+	Item flask {};
+	TelemetryFlaskUsed(*MyPlayer, flask, 10, true, false, 95, 40);
+	TelemetryFlaskUsed(*MyPlayer, flask, 0, true, false, 30, 40);
+	TelemetrySkillFailed(*MyPlayer, "Leap Slam", "not enough mana");
+	const std::string stats = TelemetryStatsText();
+	EXPECT_NE(stats.find("flasks 2 (1 wasted)"), std::string::npos) << stats;
+	EXPECT_NE(stats.find("skills 0 (1 failed"), std::string::npos) << stats;
+}
+
+TEST_F(Poe2TelemetryTest, CloseCallNamesTheAttacker)
+{
+	Player &player = *MyPlayer;
+	player._pHitPoints = player._pHPBase = Fixed26_6::fromInt(15);
+	TelemetryNoteAttacker("Goatman");
+	TelemetryPlayerDamaged(player, DamageType::Fire, Fixed26_6::fromInt(10));
+	EXPECT_NE(ReadLatestLog().find("[close call] took 10 fire damage from Goatman, life 15/100"), std::string::npos);
+	EXPECT_NE(TelemetryStatsText().find("1 close calls"), std::string::npos);
+}
+
+TEST_F(Poe2TelemetryTest, HitsOnEnergyShieldCountAsHitsTaken)
+{
+	Player &player = *MyPlayer;
+	SetMaxEnergyShield(player, 50);
+	TelemetryNoteAttacker("Fallen One");
+	ApplyPlrDamage(DamageType::Physical, player, AbsorbWithEnergyShield(player, Fixed26_6::fromInt(20)));
+	EXPECT_EQ(player._pHitPoints, Fixed26_6::fromInt(100)) << "the shield took it all";
+	EXPECT_NE(ReadLatestLog().find("[hit] took 20 physical damage from Fallen One (20 to energy shield), life 100/100, energy shield 30/50"), std::string::npos) << ReadLatestLog();
+	const std::string stats = TelemetryStatsText();
+	EXPECT_NE(stats.find("hits taken 1 (1 big, 0 close calls, 0 damage, 20 to energy shield, lowest life 100%)"), std::string::npos) << stats;
+}
+
+TEST_F(Poe2TelemetryTest, CountsMeleeSwingsByOutcome)
+{
+	TelemetryMeleeSwing(*MyPlayer, SwingOutcome::Landed);
+	TelemetryMeleeSwing(*MyPlayer, SwingOutcome::Evaded);
+	TelemetryMeleeSwing(*MyPlayer, SwingOutcome::Evaded);
+	TelemetryMeleeSwing(*MyPlayer, SwingOutcome::Blocked);
+	TelemetryMeleeSwing(*MyPlayer, SwingOutcome::Dodged);
+	const std::string stats = TelemetryStatsText();
+	EXPECT_NE(stats.find("melee swings 5 (2 evaded, 1 blocked, 1 dodged)"), std::string::npos) << stats;
+}
+
+TEST_F(Poe2TelemetryTest, GemLevelsGoToTheGemLog)
+{
+	TelemetryGemLevelChanged(*MyPlayer, SkillSlot::ForAttack(WeaponSkill::Cleave), 8, 9);
+	std::ifstream stream(LogFolder() + "gem_levels.log");
+	std::stringstream contents;
+	contents << stream.rdbuf();
+	const std::string log = contents.str();
+	EXPECT_NE(log.find("Cleave raised from gem level 8 to 9"), std::string::npos) << log;
+	// Boneshatter's curve at 9 (182%) times Cleave's damage for its speed (134%).
+	EXPECT_NE(log.find("level 9: 243% weapon damage"), std::string::npos) << log;
+}
+
+TEST_F(Poe2TelemetryTest, EventsGoToTheEventFileAsData)
+{
+	TelemetryMark("events check");
+	TelemetrySkillUsed(*MyPlayer, "Spark", 7, 3);
+	TelemetryNoteAttacker("Hidden");
+	TelemetryPlayerDamaged(*MyPlayer, DamageType::Lightning, Fixed26_6::fromInt(5));
+	const std::string events = ReadLatestEvents();
+	EXPECT_EQ(events.rfind("{\"k\":\"header\",\"version\":1,", 0), 0U) << events;
+	EXPECT_NE(events.find("\"k\":\"mark\",\"area\":\"town\",\"text\":\"events check\""), std::string::npos) << events;
+	EXPECT_NE(events.find("\"k\":\"skill\",\"area\":\"town\",\"p\":0,\"skill\":\"Spark\",\"gem\":3,\"mana\":7"), std::string::npos) << events;
+	EXPECT_NE(events.find("\"attacker\":\"Hidden\",\"type\":\"lightning\",\"damage\":5.00"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, ItemActionsAndPausesAreLogged)
+{
+	// Curtis 2026-11-06: items turned up in the log from nowhere (identified, bought, taken from the stash) and pauses
+	// had to be guessed from gaps.
+	Item item {};
+	InitializeItem(item, IDI_GOLD);
+	item._ivalue = 75;
+	TelemetryItemAction(*MyPlayer, "put_down", item);
+	TelemetryItemAction(Players[0], "sell", item, "Griswold", 30);
+	Player other {};
+	TelemetryItemAction(other, "buy", item, "Adria", 10);
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[put_down] gold, 75 gold"), std::string::npos) << log;
+	EXPECT_NE(log.find("[sell] gold, Griswold, 30 gold"), std::string::npos) << log;
+	EXPECT_EQ(log.find("Adria"), std::string::npos) << "only the local hero's actions are logged";
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"k\":\"sell\",\"area\":\"town\",\"p\":0,\"item\":"), std::string::npos) << events;
+	EXPECT_NE(events.find("\"detail\":\"Griswold\",\"gold\":30"), std::string::npos) << events;
+
+	PauseMode = 2;
+	TelemetryPauseChanged("pause key");
+	TelemetryPauseChanged("pause key"); // still paused: nothing more
+	PauseMode = 0;
+	TelemetryPauseChanged("pause key");
+	const std::string paused = ReadLatestLog();
+	EXPECT_NE(paused.find("[pause] game paused (pause key)"), std::string::npos) << paused;
+	EXPECT_NE(paused.find("[resume] game resumed after "), std::string::npos) << paused;
+	EXPECT_EQ(paused.find("[pause]"), paused.rfind("[pause]"));
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"resume\",\"area\":\"town\",\"ms\":"), std::string::npos);
+}
+
+TEST_F(Poe2TelemetryTest, ChaosDamageTakenIsLoggedAsChaos)
+{
+	TelemetryNoteAttacker("Acid Beast");
+	TelemetryPlayerDamaged(*MyPlayer, DamageType::Chaos, Fixed26_6::fromInt(7));
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"attacker\":\"Acid Beast\",\"type\":\"chaos\",\"damage\":7.00"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, GrantedSkillsAreLoggedWithTheirLevel)
+{
+	TelemetryGrantedSkillUsed(*MyPlayer, "Frost Bolt", 7, 0);
+	EXPECT_NE(ReadLatestLog().find("[granted skill used] Frost Bolt at level 7, 0 mana"), std::string::npos);
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"granted_skill\",\"area\":\"town\",\"p\":0,\"skill\":\"Frost Bolt\",\"level\":7,\"mana\":0"), std::string::npos);
+}
+
+TEST_F(Poe2TelemetryTest, ChannelsSwitchFromTheConsole)
+{
+	EXPECT_NE(TelemetryLogLevelsText("", "").find("skills: normal"), std::string::npos);
+	EXPECT_NE(TelemetryLogLevelsText("skills", "off").find("skills: off"), std::string::npos);
+	TelemetrySkillUsed(*MyPlayer, "Quiet Spell", 1);
+	EXPECT_EQ(ReadLatestEvents().find("Quiet Spell"), std::string::npos) << "the skills channel is off";
+	EXPECT_NE(ReadLatestLog().find("[skill] Quiet Spell"), std::string::npos) << "the readable log keeps every line";
+	TelemetryLogLevelsText("skills", "normal");
+	EXPECT_NE(TelemetryLogLevelsText("session", "off").find("session: always"), std::string::npos) << "session events can't be switched off";
+	EXPECT_NE(TelemetryLogLevelsText("sound", "deep").find("No channel"), std::string::npos);
+}
+
+TEST_F(Poe2TelemetryTest, DeepDamageBreaksDownHitsTaken)
+{
+	Player &player = *MyPlayer;
+	SetMaxEnergyShield(player, 0);
+	TelemetryHitStart(true, "Not on yet");
+	EXPECT_FALSE(TelemetryDeepDamage());
+	TelemetryLogLevelsText("damage", "deep");
+	ASSERT_TRUE(TelemetryDeepDamage());
+	TelemetryHitStart(true, "Overlord");
+	TelemetryHitStep(true, "rolled", 40 * 64);
+	TelemetryHitStep(true, "resistance", 25, true);
+	TelemetryHitStep(true, "after resistance", 30 * 64);
+	TelemetryNoteAttacker("Overlord");
+	ApplyPlrDamage(DamageType::Fire, player, Fixed26_6::fromInt(30));
+	TelemetryLogLevelsText("damage", "normal");
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"hit\":\"Overlord\",\"steps\":[{\"step\":\"rolled\",\"damage\":40.00},{\"step\":\"resistance\",\"percent\":25},{\"step\":\"after resistance\",\"damage\":30.00}]"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, GameEndWritesSummaryAndHistory)
+{
+	TelemetryGameEnded();
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"k\":\"summary\""), std::string::npos) << events;
+	std::ifstream stream(LogFolder() + "history.tsv");
+	std::stringstream contents;
+	contents << stream.rdbuf();
+	EXPECT_EQ(contents.str().rfind("date\tsession\thero", 0), 0U) << contents.str();
+}
+
+TEST_F(Poe2TelemetryTest, SkillDamageStartsEmpty)
+{
+	EXPECT_EQ(TelemetrySkillDamageText(), "damage by skill: none yet");
+}
+
+/** @brief A zombie in the first monster slot, with this much life. */
+Monster &TestMonster(int life)
+{
+	LoadMonsterData();
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	Monster &monster = Monsters[0];
+	monster = {};
+	monster.levelType = 0;
+	monster.uniqueType = UniqueMonsterType::None;
+	monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(life);
+	return monster;
+}
+
+TEST_F(Poe2TelemetryTest, SkillsAreCreditedWithEachHitsFullDamage)
+{
+	// Curtis 2026-10-28: overkill hid how hard Firebolt and Holy Bolt hit; the life taken is counted beside it.
+	const Monster &monster = TestMonster(10);
+	TelemetrySkillUsed(*MyPlayer, "Firebolt", 5, 2);
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(30), Fixed26_6::fromInt(10), DamageType::Physical);
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(10), Fixed26_6::fromInt(40), DamageType::Physical);
+	const std::string text = TelemetrySkillDamageText();
+	EXPECT_NE(text.find("Firebolt gem 2 40 (2 hits, 20 average, 0 kills, 20 life removed"), std::string::npos) << text;
+	TelemetryGameEnded();
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"skill\":\"Firebolt gem 2\",\"damage\":40,\"lifeRemoved\":20"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, RunesAndCursesAreCreditedToTheirOwnSkill)
+{
+	const Monster &monster = TestMonster(100);
+	TelemetrySkillUsed(*MyPlayer, "Spark", 5, 1);
+	{
+		// A rune that goes off long after it was laid, while the last skill used was another.
+		const TelemetrySkillCreditScope rune("Rune of Fire", 3);
+		TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(20), Fixed26_6::fromInt(100), DamageType::Physical);
+		// A source named for the hit still comes first.
+		TelemetryNoteDamageSource("minions");
+		TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(1), Fixed26_6::fromInt(80), DamageType::Physical);
+	}
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(7), Fixed26_6::fromInt(79), DamageType::Physical);
+	const std::string text = TelemetrySkillDamageText();
+	EXPECT_NE(text.find("Rune of Fire gem 3 20 (1 hits"), std::string::npos) << text;
+	EXPECT_NE(text.find("minions 1 (1 hits"), std::string::npos) << text;
+	EXPECT_NE(text.find("Spark gem 1 7 (1 hits"), std::string::npos) << text;
+}
+
+TEST_F(Poe2TelemetryTest, SummaryCountsChaosDealtAndTaken)
+{
+	// Chaos damage plan step 16: the totals tools/run_report.py shows.
+	Player &player = *MyPlayer;
+	const Monster &monster = TestMonster(100);
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(12), Fixed26_6::fromInt(100), DamageType::Chaos);
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(30), Fixed26_6::fromInt(88), DamageType::Fire);
+	// Only the life it took counts, not the overkill.
+	TelemetryMonsterDamaged(monster, Fixed26_6::fromInt(50), Fixed26_6::fromInt(5), DamageType::Chaos);
+	TelemetryNoteAttacker("Acid Beast");
+	TelemetryPlayerDamaged(player, DamageType::Chaos, Fixed26_6::fromInt(7));
+	TelemetryNoteAttacker("poison");
+	TelemetryPlayerDamaged(player, DamageType::Chaos, Fixed26_6::fromInt(3));
+	TelemetryNoteAttacker("Goatman");
+	TelemetryPlayerDamaged(player, DamageType::Physical, Fixed26_6::fromInt(9));
+	// Chaos costs energy shield double: 20 chaos takes 40 shield.
+	SetMaxEnergyShield(player, 50);
+	TelemetryNoteAttacker("Acid Beast");
+	ApplyPlrDamage(DamageType::Chaos, player, AbsorbWithEnergyShield(player, Fixed26_6::fromInt(20), DamageType::Chaos));
+	TelemetryGameEnded();
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"chaosDealt\":17,\"chaosTaken\":10,\"chaosShieldTaken\":40,\"poisonTaken\":3,"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, HauntsDrainIsCreditedToHaunt)
+{
+	// Curtis 2026-10-28: Haunt's and Locust Swarm's damage over time was logged as "bleeding". It is chaos now, in its own slot.
+	Monster &monster = TestMonster(100);
+	MyPlayerId = 0;
+	// The damage over time is sent to the game.
+	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+	monster.poe2.chaosSource = 0;
+	monster.poe2.chaosSkill = WeaponSkill::Haunt;
+	monster.poe2.chaosDamagePerTick = Fixed26_6::fromInt(2).raw();
+	monster.poe2.chaosTicks = 3;
+	for (int i = 0; i < 3; i++)
+		ProcessUniqueMonsterAilments(monster);
+	// A bleed from anything but a skill is still bleeding.
+	monster.poe2.bleedSource = 0;
+	monster.poe2.bleedSkill = WeaponSkill::None;
+	monster.poe2.bleedDamagePerTick = Fixed26_6::fromInt(2).raw();
+	monster.poe2.bleedTicks = 8;
+	ProcessUniqueMonsterAilments(monster);
+	const std::string text = TelemetrySkillDamageText();
+	EXPECT_EQ(text.find("bleeding 6"), std::string::npos) << text;
+	EXPECT_NE(text.find("Haunt 6 (3 hits"), std::string::npos) << text;
+	EXPECT_NE(text.find("bleeding 2 (1 hits"), std::string::npos) << text;
+	// Summed as damage over time, not a line per tick.
+	TelemetryGameEnded();
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"source\":\"Haunt\",\"monster\""), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, ALevelChangeIsLoadingTimeNotAStall)
+{
+	// Curtis 2026-10-28: "game froze for 591 ms (140 monsters, 0 missiles)" on entering the first floor, and 556 ms on
+	// coming into town. The game doesn't tick through a level change's fades and loading: that's loading time.
+	using namespace std::chrono_literals;
+	TelemetryFrameDrawn();
+	TelemetryTick();
+	TelemetryLoadingStarted("level change");
+	std::this_thread::sleep_for(100ms);
+	TelemetryLoadingFadedOut();
+	std::this_thread::sleep_for(100ms);
+	TelemetryLoadingFadingIn();
+	std::this_thread::sleep_for(100ms);
+	TelemetryLoadingDone();
+	TelemetryTick();
+	EXPECT_NE(TelemetryStatsText().find("stalls 0"), std::string::npos) << TelemetryStatsText();
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[load] level change took "), std::string::npos) << log;
+	EXPECT_NE(log.find(" ms: fade out "), std::string::npos) << log;
+
+	// The same wait in play, with no frame drawn, is a freeze.
+	std::this_thread::sleep_for(300ms);
+	TelemetryTick();
+	EXPECT_NE(TelemetryStatsText().find("stalls 1"), std::string::npos) << TelemetryStatsText();
+}
+
+TEST_F(Poe2TelemetryTest, AFreezeSaysWhereItsTimeWent)
+{
+	// Curtis 2026-11-07: "game froze for 1004 ms (72 monsters, 0 missiles)" in the Bone Chamber, and 1.6 s on floor 4
+	// after a unique's kill. The line now says how much of it was drawing, saving and the HD world's first looks.
+	using namespace std::chrono_literals;
+	TelemetryFrameDrawn();
+	TelemetryTick();
+	{
+		const uint64_t start = TelemetryFramePartStart();
+		std::this_thread::sleep_for(200ms);
+		TelemetryGameSaved("level up", start);
+	}
+	{
+		const SlowWorkScope raster(SlowWork::HdRaster);
+		std::this_thread::sleep_for(100ms);
+	}
+	TelemetryTick();
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[save] autosave (level up) took "), std::string::npos) << log;
+	const size_t stall = log.rfind("[stall] game froze for ");
+	ASSERT_NE(stall, std::string::npos) << log;
+	const std::string line = log.substr(stall, log.find('\n', stall) - stall);
+	EXPECT_NE(line.find(" missiles): drawing 0 ms (hd 0, present 0), game logic "), std::string::npos) << line;
+	EXPECT_NE(line.find(", saving 2"), std::string::npos) << line;
+	EXPECT_NE(line.find(", 1 classic pictures made for HD in 1"), std::string::npos) << line;
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"autosave\",\"area\":\"town\",\"why\":\"level up\",\"ms\":"), std::string::npos);
+}
+
+TEST_F(Poe2TelemetryTest, StatsSplitEachFrameIntoItsParts)
+{
+	// Curtis 2026-11-04 asked whether the game could get back to 60 fps: the stats line shows where a frame's time goes.
+	using namespace std::chrono_literals;
+	TelemetryFrameDrawn();
+	{
+		const FramePartScope part(FramePart::Hd);
+		std::this_thread::sleep_for(20ms);
+	}
+	TelemetryFrameDrawn();
+	const std::string stats = TelemetryStatsText();
+	EXPECT_NE(stats.find(", frame ms: drawing 0.0 (world 0.0), world upload 0.0, hd "), std::string::npos) << stats;
+	EXPECT_EQ(stats.find(", hd 0.0,"), std::string::npos) << stats;
+	EXPECT_NE(stats.find(", effects 0.0, ui layer 0.0, present 0.0"), std::string::npos) << stats;
+}
+
+TEST_F(Poe2TelemetryTest, TreeTrackerLogsEveryNodeAndKeepsHistory)
+{
+	LoadSpellData();
+	LoadPassiveTreeData();
+	ASSERT_FALSE(PassiveTree().empty());
+	Player &player = *MyPlayer;
+	player._pClass = HeroClass::Warrior;
+	player.setCharacterLevel(10);
+	player._pgfxnum = 0;
+	const PassiveNodeId start = *PassiveStartNode(HeroClass::Warrior);
+	const PassiveNodeId next = PassiveTree()[start].links.front();
+	ASSERT_TRUE(AllocatePassive(player, next));
+	TelemetryTreeSnapshot(player, "test");
+	ASSERT_TRUE(RefundPassive(player, next));
+	ResetPassives(player); // nothing left to clear: no line
+
+	const std::string name = PassiveNodeName(PassiveTree()[next]);
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"k\":\"tree_take\""), std::string::npos) << events;
+	EXPECT_NE(events.find("\"k\":\"tree_refund\""), std::string::npos) << events;
+	EXPECT_NE(events.find(StrCat("\"main\":[", next, "]")), std::string::npos) << "the snapshot lists the node";
+	EXPECT_EQ(events.find("\"k\":\"tree_clear\""), std::string::npos) << "an empty reset isn't logged";
+	EXPECT_NE(ReadLatestLog().find(StrCat("[tree] took ")), std::string::npos);
+
+	std::ifstream history(LogFolder() + "tree_history.tsv");
+	std::stringstream lines;
+	lines << history.rdbuf();
+	EXPECT_EQ(lines.str().rfind("date\tsession\thero\tclass", 0), 0U) << "the file starts with its header";
+	EXPECT_NE(lines.str().find(StrCat("\ttook\tmain\t", next, "\t", name, "\t")), std::string::npos) << lines.str();
+	EXPECT_NE(lines.str().find(StrCat("\trefunded\tmain\t", next, "\t")), std::string::npos) << lines.str();
+	std::ifstream builds(LogFolder() + "tree_builds.tsv");
+	EXPECT_TRUE(builds.good());
+
+	ASSERT_TRUE(AllocatePassive(player, next));
+	const std::string text = TreeTrackerText(player);
+	EXPECT_EQ(text.rfind("Passive points 1/", 0), 0U) << text;
+	ResetPassives(player);
+	EXPECT_NE(ReadLatestEvents().find("\"reason\":\"reset\",\"nodes\":1"), std::string::npos);
+	gbIsPoe2 = false;
+	LoadPassiveTreeData();
+}
+
+TEST_F(Poe2TelemetryTest, BuildLineBlockIsZeroWithoutAShield)
+{
+	Player &player = *MyPlayer;
+	player._pClass = HeroClass::Warrior;
+	player._pDexterity = 50;
+	player._pBlockFlag = false;
+	EXPECT_NE(TelemetryBuildText(player).find("block 0%"), std::string::npos) << TelemetryBuildText(player);
+	// A Monk's staff once let Diablo's block through; in POE2 only a shield blocks.
+	player._pClass = HeroClass::Monk;
+	player._pBlockFlag = true;
+	EXPECT_NE(TelemetryBuildText(player).find("block 0%"), std::string::npos) << TelemetryBuildText(player);
+	// With a shield, its own chance.
+	player._pClass = HeroClass::Warrior;
+	player.poe2.shieldBlockChance = 28;
+	EXPECT_NE(TelemetryBuildText(player).find("block 28%"), std::string::npos) << TelemetryBuildText(player);
+}
+
+TEST_F(Poe2TelemetryTest, GoldPickedUpIntoTheLeaguePurseIsCounted)
+{
+	// Curtis's play logs from 2026-10-20 on: "gold 0 (0/min)" for hours of play. POE2 gold goes straight to the league's
+	// purse (Stash.gold), not the bag the play log watched.
+	Player &player = *MyPlayer;
+	Stash.gold = 1000;
+	TelemetryStashLoaded();
+	TelemetryTick();
+	EXPECT_NE(TelemetryStatsText().find(", gold 0 ("), std::string::npos) << "a loaded purse isn't a gain: " << TelemetryStatsText();
+
+	Item pile {};
+	MakeGoldStack(pile, 250);
+	ASSERT_TRUE(GoldAutoPlace(player, pile));
+	ASSERT_EQ(Stash.gold, 1250);
+	ASSERT_EQ(player._pGold, 0);
+	TelemetryTick();
+	EXPECT_NE(TelemetryStatsText().find(", gold 250 ("), std::string::npos) << TelemetryStatsText();
+
+	TakePlrsMoney(100);
+	TelemetryTick();
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"gold_out\",\"area\":\"town\",\"p\":0,\"amount\":100,\"left\":1150"), std::string::npos) << ReadLatestEvents();
+	Stash = {};
+}
+
+} // namespace
+} // namespace devilution

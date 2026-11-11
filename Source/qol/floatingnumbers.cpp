@@ -12,6 +12,7 @@
 #endif
 
 #include "engine/render/text_render.hpp"
+#include "engine/ui_scale.hpp"
 #include "options.h"
 #include "utils/str_cat.hpp"
 
@@ -91,7 +92,8 @@ void DrawFloatingNumbers(const Surface &out, Point viewPosition, Displacement of
 			worldOffset *= 2;
 		}
 
-		Point screenPosition { worldOffset.deltaX, worldOffset.deltaY };
+		// POE2 Mashup: from the full-size world to the scaled UI.
+		Point screenPosition = WorldToUi({ worldOffset.deltaX, worldOffset.deltaY });
 
 		const int lineWidth = GetLineWidth(floatingNum.text, GetGameFontSize(floatingNum.style));
 		screenPosition.x -= lineWidth / 2;

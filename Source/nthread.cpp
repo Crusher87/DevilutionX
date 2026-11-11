@@ -19,6 +19,7 @@
 #include "engine/demomode.h"
 #include "game_mode.hpp"
 #include "gmenu.h"
+#include "poe2/skill_lab.hpp"
 #include "storm/storm_net.hpp"
 #include "utils/sdl_mutex.h"
 #include "utils/sdl_thread.h"
@@ -246,6 +247,9 @@ bool nthread_has_500ms_passed(bool *drawGame /*= nullptr*/)
 void nthread_UpdateProgressToNextGameTick()
 {
 	if (!gbRunGame || PauseMode != 0 || (!gbIsMultiplayer && gmenu_is_active()) || !gbProcessPlayers || demo::IsRunning()) // if game is not running or paused there is no next gametick in the near future
+		return;
+	// POE2 Mashup: while the Skill Lab is paused, the pictures hold still between ticks.
+	if (SkillLabFreezesAnimation())
 		return;
 	const int currentTickCount = SDL_GetTicks();
 	const int ticksMissing = last_tick - currentTickCount;

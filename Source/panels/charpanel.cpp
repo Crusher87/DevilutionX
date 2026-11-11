@@ -5,19 +5,28 @@
 
 #include <algorithm>
 #include <string>
+#include <vector>
 
 #include <function_ref.hpp>
 
 #include "control/control.hpp"
+#include "diablo.h"
 #include "engine/load_clx.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/text_render.hpp"
+#include "game_mode.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "poe2/defenses.hpp"
+#include "poe2/effect_primitives.hpp"
+#include "poe2/jewels.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/regen.hpp"
 #include "tables/playerdat.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/display.h"
 #include "utils/enum_traits.h"
+#include "utils/format.hpp"
 #include "utils/format_int.hpp"
 #include "utils/language.h"
 #include "utils/status_macros.hpp"
@@ -99,15 +108,20 @@ std::pair<int, int> GetDamage()
 	return { mindam, maxdam };
 }
 
+UiFlags GetResistColor(int resist, int maxResist)
+{
+	if (resist == 0)
+		return UiFlags::ColorWhite;
+	if (resist < 0)
+		return UiFlags::ColorRed;
+	if (resist >= maxResist)
+		return UiFlags::ColorWhitegold;
+	return UiFlags::ColorBlue;
+}
+
 StyledText GetResistInfo(int8_t resist)
 {
-	UiFlags style = UiFlags::ColorBlue;
-	if (resist == 0)
-		style = UiFlags::ColorWhite;
-	else if (resist < 0)
-		style = UiFlags::ColorRed;
-	else if (resist >= MaxResistance)
-		style = UiFlags::ColorWhitegold;
+	const UiFlags style = GetResistColor(resist, MaxResistance);
 
 	return { style, StrCat(resist, "%") };
 }
@@ -119,7 +133,47 @@ constexpr int RightColumnLabelX = 253;
 constexpr int LeftColumnLabelWidth = 76;
 constexpr int RightColumnLabelWidth = 68;
 
+/** @brief The three resistance boxes and their labels, from the top of the first box to the bottom of the last. */
+constexpr Rectangle ResistanceBoxesRect { { RightColumnLabelX - RightColumnLabelWidth, 256 }, { RightColumnLabelWidth + 57, 313 + 24 - 256 } };
+
 // Indices in `panelEntries`.
+// The Life and Mana rows, labels and both boxes: hovering them shows regeneration a second.
+constexpr Rectangle LifeRowRect { { LeftColumnLabelX - LeftColumnLabelWidth, 284 }, { LeftColumnLabelWidth + 135 + 45 - LeftColumnLabelX, 24 } };
+constexpr Rectangle ManaRowRect { { LeftColumnLabelX - LeftColumnLabelWidth, 312 }, { LeftColumnLabelWidth + 135 + 45 - LeftColumnLabelX, 24 } };
+
+std::string Tenths(int tenths)
+{
+	return StrCat(tenths / 10, ".", tenths % 10);
+}
+
+/** @brief Life regeneration a second, and what gives it: each worn item and jewel, the passive tree (Curtis 2026-11-07). */
+void ShowLifeRegenInfo(const Player &player)
+{
+	InfoString = FormatRuntime(_("Life regeneration: {:s} a second"), Tenths(LifeRegenTenthsPerSecond(player)));
+	InfoColor = UiFlags::ColorWhite;
+	int listed = 0;
+	std::vector<const Item *> worn;
+	for (const Item &item : player.InvBody)
+		worn.push_back(&item);
+	for (const Item *jewel : ActiveJewels(player))
+		worn.push_back(jewel);
+	for (const Item *item : worn) {
+		if (item->isEmpty() || !item->_iStatFlag || item->_iPLLifeRegen == 0)
+			continue;
+		AddInfoBoxString(FormatRuntime(_("{:s}: {:+d}"), item->getName().str(), item->_iPLLifeRegen));
+		listed += item->_iPLLifeRegen;
+	}
+	const int tree = PassiveTotal(player, PassiveStat::LifeRegen);
+	if (tree != 0)
+		AddInfoBoxString(FormatRuntime(_("Passive tree: {:+d}"), tree));
+	if (const int other = player.poe2.lifeRegen - listed - tree; other != 0)
+		AddInfoBoxString(FormatRuntime(_("Other: {:+d}"), other));
+	if (player.poe2.lifeRegenPerMille != 0)
+		AddInfoBoxString(FormatRuntime(_(/*xgettext:no-c-format*/ "Passive tree: {:s}% of maximum life"), Tenths(player.poe2.lifeRegenPerMille)));
+	if (const int gear = GearLifeRegenPerTenThousand(player); gear != 0)
+		AddInfoBoxString(FormatRuntime(_(/*xgettext:no-c-format*/ "Gear: {:d}.{:02d}% of maximum life"), gear / 100, gear % 100));
+}
+
 constexpr unsigned AttributeHeaderEntryIndices[2] = { 5, 6 };
 constexpr unsigned GoldHeaderEntryIndex = 16;
 
@@ -171,9 +225,19 @@ PanelEntry panelEntries[] = {
 	    []() { return StyledText { UiFlags::ColorWhite, FormatInteger(InspectPlayer->_pGold) }; } },
 
 	{ N_("Armor class"), { RightColumnLabelX, 163 }, 57, RightColumnLabelWidth,
-	    []() { return StyledText { GetValueColor(InspectPlayer->_pIBonusAC), StrCat(InspectPlayer->GetArmor() + (InspectPlayer->getCharacterLevel() * 2)) }; } },
+	    []() {
+	        // POE2 Mashup: armour and evasion are separate defenses.
+	        if (gbIsPoe2)
+		        return StyledText { GetValueColor(InspectPlayer->_pIBonusAC), StrCat(ArmourRating(*InspectPlayer), "/", EvasionRating(*InspectPlayer)) };
+	        return StyledText { GetValueColor(InspectPlayer->_pIBonusAC), StrCat(InspectPlayer->GetArmor() + (InspectPlayer->getCharacterLevel() * 2)) };
+	    } },
 	{ N_("Chance To Hit"), { RightColumnLabelX, 191 }, 57, RightColumnLabelWidth,
-	    []() { return StyledText { GetValueColor(InspectPlayer->_pIBonusToHit), StrCat(InspectPlayer->InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Bow ? InspectPlayer->GetRangedToHit() : InspectPlayer->GetMeleeToHit(), "%") }; } },
+	    []() {
+	        // POE2 Mashup: POE2's accuracy, against an ordinary monster of the hero's level up close.
+	        if (gbIsPoe2)
+		        return StyledText { GetValueColor(InspectPlayer->_pIBonusToHit), StrCat(TypicalHitChance(*InspectPlayer), "%") };
+	        return StyledText { GetValueColor(InspectPlayer->_pIBonusToHit), StrCat(InspectPlayer->InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Bow ? InspectPlayer->GetRangedToHit() : InspectPlayer->GetMeleeToHit(), "%") };
+	    } },
 	{ N_("Damage"), { RightColumnLabelX, 219 }, 57, RightColumnLabelWidth,
 	    []() {
 	        const auto [dmgMin, dmgMax] = GetDamage();
@@ -221,7 +285,12 @@ void DrawShadowString(const Surface &out, const PanelEntry &entry)
 		return;
 
 	constexpr int Spacing = 0;
-	const std::string_view textStr = LanguageTranslate(entry.label);
+	// POE2 Mashup: the armor class box shows armour and evasion, and Diablo's magic resistance is cold resistance.
+	std::string_view textStr = LanguageTranslate(entry.label);
+	if (gbIsPoe2 && entry.label == "Armor class")
+		textStr = _("Armour / Evasion");
+	else if (gbIsPoe2 && entry.label == "Resist magic")
+		textStr = _("Resist cold");
 	std::string_view text;
 	std::string wrapped;
 	if (entry.labelLength > 0) {
@@ -303,6 +372,36 @@ std::expected<void, std::string> LoadCharPanel()
 void FreeCharPanel()
 {
 	Panel = std::nullopt;
+}
+
+void CheckCharPanelInfo()
+{
+	// The panel has room for three resistance boxes only, so chaos shows here (Curtis 2026-10-30: fourth row if it fits, else a tooltip).
+	if (!gbIsPoe2 || !CharFlag)
+		return;
+	const Point origin = GetPanelPosition(UiPanels::Character, { 0, 0 });
+	const auto hovered = [&](const Rectangle &rect) {
+		return Rectangle { origin + Displacement { rect.position.x, rect.position.y }, rect.size }.contains(MousePosition);
+	};
+	if (hovered(LifeRowRect)) {
+		ShowLifeRegenInfo(*InspectPlayer);
+		MainPanelFlag = true;
+		return;
+	}
+	if (hovered(ManaRowRect)) {
+		InfoString = FormatRuntime(_("Mana regeneration: {:s} a second"), Tenths(ManaRegenTenthsPerSecond(*InspectPlayer)));
+		InfoColor = UiFlags::ColorWhite;
+		MainPanelFlag = true;
+		return;
+	}
+	const Rectangle boxes { origin + Displacement { ResistanceBoxesRect.position.x, ResistanceBoxesRect.position.y }, ResistanceBoxesRect.size };
+	if (!boxes.contains(MousePosition))
+		return;
+	const Poe2PlayerData &data = InspectPlayer->poe2;
+	InfoString = FormatRuntime(_(/*xgettext:no-c-format*/ "Chaos Resistance: {:d}%"), data.chaosResistance);
+	AddInfoBoxString(FormatRuntime(_(/*xgettext:no-c-format*/ "Maximum Chaos Resistance: {:d}%"), data.maxChaosResistance));
+	InfoColor = GetResistColor(data.chaosResistance, data.maxChaosResistance);
+	MainPanelFlag = true;
 }
 
 void DrawChr(const Surface &out)

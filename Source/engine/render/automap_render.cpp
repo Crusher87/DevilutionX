@@ -5,13 +5,19 @@
  */
 #include "engine/render/automap_render.hpp"
 
+#include <algorithm>
 #include <cstdint>
 
 #include "automap.h"
 #include "engine/render/primitive_render.hpp"
+#include "utils/palette_blending.hpp"
 
 namespace devilution {
 namespace {
+
+int MapLineOpacity = 100;
+/** @brief POE2 Mashup: the map is laid over the world with real alpha (SetMapTintsUi). */
+bool MapTints = false;
 
 enum class DirectionX : int8_t {
 	EAST = 1,
@@ -169,10 +175,61 @@ void SetMapPixel(const Surface &out, Point position, uint8_t color)
 		return;
 
 	if (GetAutomapType() == AutomapType::Transparent) {
-		SetHalfTransparentPixel(out, position, color);
+		if (MapTints)
+			PutMapPixel(out, position, color, 50);
+		else
+			SetHalfTransparentPixel(out, position, color);
+	} else if (MapLineOpacity < 100 || MapTints) {
+		PutMapPixel(out, position, color, MapLineOpacity);
 	} else {
 		out.SetPixel(position, color);
 	}
+}
+
+void SetMapLineOpacity(int percent)
+{
+	MapLineOpacity = std::clamp(percent, 0, 100);
+}
+
+int GetMapLineOpacity()
+{
+	return MapLineOpacity;
+}
+
+void SetMapTintsUi(bool tints)
+{
+	MapTints = tints;
+}
+
+bool GetMapTintsUi()
+{
+	return MapTints;
+}
+
+void PutMapPixel(const Surface &out, Point position, uint8_t color, int opacityPercent)
+{
+	if (!out.InBounds(position))
+		return;
+	if (MapTints && CanTintUi(out)) {
+		TintUiPixel(out, position, color, static_cast<uint8_t>(std::clamp(opacityPercent, 0, 100) * 255 / 100));
+		return;
+	}
+	uint8_t &pixel = *out.at(position.x, position.y);
+	pixel = BlendMapColor(color, pixel, opacityPercent);
+}
+
+uint8_t BlendMapColor(uint8_t color, uint8_t under, int opacityPercent)
+{
+	if (opacityPercent >= 88)
+		return color;
+	const uint8_t half = paletteTransparencyLookup[color][under];
+	if (opacityPercent >= 63)
+		return paletteTransparencyLookup[color][half];
+	if (opacityPercent >= 38)
+		return half;
+	if (opacityPercent >= 13)
+		return paletteTransparencyLookup[under][half];
+	return under;
 }
 
 } // namespace devilution

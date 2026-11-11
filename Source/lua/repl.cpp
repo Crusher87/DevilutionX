@@ -12,6 +12,21 @@
 
 #include "lua/lua_global.hpp"
 #include "panels/console.hpp"
+#include "player.h"
+#include "levels/gendung.h"
+#include "levels/setmaps.h"
+#include "interfac.h"
+#include "cursor.h"
+#include "missiles.h"
+#include "poe2/aim.hpp"
+#include "poe2/floor_chests.hpp"
+#include "poe2/gem_levels.hpp"
+#include "poe2/hit_trace.hpp"
+#include "poe2/level_census.hpp"
+#include "poe2/telemetry.hpp"
+#include "poe2/tree_telemetry.hpp"
+#include "poe2/vfx.hpp"
+#include "poe2/weather.hpp"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -50,6 +65,101 @@ void CreateReplEnvironment()
 {
 	sol::environment env = CreateLuaSandbox();
 	env["print"] = LuaPrintToConsole;
+	// POE2 Mashup play log: stats() shows this game's numbers, mark("text") notes a moment in the log.
+	env["stats"] = []() {
+		return StrCat(TelemetryStatsText(), "\n", TelemetrySkillDamageText(), "\n", TelemetryDamageTakenText(), "\n", MyPlayer != nullptr ? TelemetryBuildText(*MyPlayer) : std::string());
+	};
+	// gems() shows each socketed gem's numbers now and at its next level; gemcurve("Cleave") shows levels 1 to 20.
+	env["gems"] = []() {
+		return MyPlayer != nullptr ? SocketedGemsText(*MyPlayer) : std::string("No hero loaded.");
+	};
+	env["gemcurve"] = [](std::string_view name) {
+		return GemCurveTextByName(name);
+	};
+	// vfx() plays one of each modern effect around the hero.
+	env["vfx"] = []() {
+		if (MyPlayer == nullptr || !vfx::Enabled())
+			return "Modern Effects are off (Settings > Graphics, needs Upscale).";
+		vfx::Showcase(MyPlayer->position.tile);
+		// The console covers the effects, so it gets out of the way.
+		CloseConsole();
+		return "Playing every effect around you.";
+	};
+	// weather() shows what the sky is doing; weather("rain", 0.8) or weather("snow") forces a look, weather("auto") hands it back.
+	env["weather"] = [](sol::optional<std::string> what, sol::optional<double> strength) {
+		// The console covers the effects while it's open, so it closes to show the change (Curtis 2026-10-21:
+		// weather("rain", 0.9) seemed to do nothing).
+		const auto changed = [](std::string text) {
+			if (weather::Enabled() && weather::Outdoors()) {
+				CloseConsole();
+				text += "\nClosed the console so you can see it.";
+			}
+			return text;
+		};
+		if (what) {
+			if (*what == "auto") {
+				weather::Force(std::nullopt);
+				return changed(std::string("Weather follows its schedule again.\n") + weather::Text());
+			}
+			const std::optional<weather::Kind> kind = weather::KindNamed(*what);
+			if (!kind)
+				return std::string("Say weather(\"rain\"), weather(\"snow\"), weather(\"clear\") or weather(\"auto\"), with a strength 0 to 1 after rain or snow.");
+			weather::Force(kind, static_cast<float>(strength.value_or(0.8)));
+			weather::Advance(1);
+			return changed(weather::Text());
+		}
+		return weather::Text();
+	};
+	env["aim"] = []() {
+		if (MyPlayer == nullptr)
+			return std::string("No hero.");
+		float x = 0;
+		float y = 0;
+		GetCursorTileExact(x, y);
+		const Point target = AimAlongCursor(*MyPlayer, AimTiles);
+		AddMissile(MyPlayer->position.tile, target, MyPlayer->_pdir, MissileID::Firebolt, TARGET_MONSTERS, *MyPlayer, 0, 1);
+		return StrCat("hero ", MyPlayer->position.tile.x, ",", MyPlayer->position.tile.y, "  cursor tile ", cursPosition.x, ",", cursPosition.y,
+		    "  exact ", static_cast<int>(x * 100), ",", static_cast<int>(y * 100), " /100  aim ", target.x, ",", target.y);
+	};
+	// hittrace(true) logs every tile your spells fly through, not just one line per spell; hittrace(false) goes back.
+	env["hittrace"] = [](bool detail) {
+		HitTraceSetDetail(detail);
+		return detail ? "Hit trace logs every tile now." : "Hit trace logs one line per spell.";
+	};
+	// log() shows each play log channel's loudness; log("damage", "deep") breaks down every hit until the game closes.
+	env["log"] = [](sol::optional<std::string> channel, sol::optional<std::string> level) {
+		return TelemetryLogLevelsText(channel.value_or(""), level.value_or(""));
+	};
+	// tree() shows your passive points, notables by area, Profane Roads walked and what the tree adds up to.
+	env["tree"] = []() {
+		return MyPlayer != nullptr ? TreeTrackerText(*MyPlayer) : std::string("No hero loaded.");
+	};
+	// mixtest() takes you to the tile-set mixing test map: a Cathedral hall with a Tristram yard in it.
+	env["mixtest"] = []() {
+		if (MyPlayer == nullptr)
+			return std::string("No hero loaded.");
+		if (setlevel && setlvlnum == SL_MIXTEST)
+			return std::string("You are already on the tile mix test map.");
+		setlvltype = DTYPE_CATHEDRAL;
+		StartNewLvl(*MyPlayer, WM_DIABSETLVL, SL_MIXTEST);
+		return std::string("Going to the tile mix test map. Walk down into the hall; the exit is where you came in.");
+	};
+	// rooms() shows what this floor holds room by room, and how this visit has gone so far.
+	env["rooms"] = []() {
+		return LevelCensusText();
+	};
+	// censusfloors(n) walks between this floor and the next n times, building each one fresh and counting it.
+	env["censusfloors"] = [](int floors) {
+		return LevelCensusStartBatch(floors);
+	};
+	// strongbox() puts a strongbox with 5 guards next to you, to try one.
+	env["strongbox"] = []() {
+		return PlaceTestStrongbox();
+	};
+	env["mark"] = [](std::string_view text) {
+		TelemetryMark(text);
+		return TelemetryEnabled() ? "Marked in the play log." : "The play log isn't open.";
+	};
 	lua_setwarnf(env.lua_state(), LuaConsoleWarn, /*ud=*/nullptr);
 	replEnv.emplace(env);
 }

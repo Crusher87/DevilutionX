@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdint>
 #include <list>
+#include <optional>
+#include <utility>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_events.h>
@@ -28,6 +30,7 @@
 #include "controls/touch/gamepad.h"
 #include "cursor.h"
 #include "cursor_defs.hpp"
+#include "diablo.h"
 #include "doom.h"
 #include "engine/point.hpp"
 #include "engine/points_in_rectangle_range.hpp"
@@ -46,6 +49,13 @@
 #include "panels/spell_icons.hpp"
 #include "panels/spell_list.hpp"
 #include "panels/ui_panels.hpp"
+#include "poe2/default_attack.hpp"
+#include "poe2/flasks.hpp"
+#include "poe2/loot_filter.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/profane_roads.hpp"
+#include "poe2/weapon_skills.hpp"
+#include "portal.h"
 #include "qol/chatlog.h"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -181,7 +191,7 @@ void FindItemOrObject()
 			continue;
 		}
 		const Item &item = Items[itemId];
-		if (item.isEmpty() || item.selectionRegion == SelectionRegion::None) {
+		if (item.isEmpty() || item.selectionRegion == SelectionRegion::None || IsItemHiddenByLootFilter(item)) {
 			continue;
 		}
 
@@ -270,6 +280,39 @@ bool CanTargetMonster(const Monster &monster)
 	return dMonster[mx][my] != 0;
 }
 
+/**
+ * @brief POE2 Mashup: the Maiden's Road toll. With nothing lit to shoot at, the aim opens on the nearest shape in the
+ * dark, preferring one that hasn't noticed the hero.
+ */
+void FindShapeInTheDark()
+{
+	constexpr int ShapeAimTiles = 15;
+	const Player &myPlayer = *MyPlayer;
+	if (!gbIsPoe2 || PassiveTotal(myPlayer, PassiveStat::EyesInTheDark) <= 0 || !myPlayer.UsesRangedWeapon())
+		return;
+	int best = -1;
+	int bestDistance = 0;
+	bool bestUnaware = false;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const int mi = ActiveMonsters[i];
+		const Monster &monster = Monsters[mi];
+		if ((monster.flags & MFLAG_HIDDEN) != 0 || monster.isPlayerMinion() || monster.hasNoLife() || IsTileLit(monster.position.tile))
+			continue;
+		if (dMonster[monster.position.tile.x][monster.position.tile.y] == 0)
+			continue;
+		const int distance = myPlayer.position.future.ExactDistance(monster.position.future);
+		if (distance > ShapeAimTiles)
+			continue;
+		const bool unaware = monster.activeForTicks == 0;
+		if (best != -1 && (bestUnaware != unaware ? bestUnaware : distance >= bestDistance))
+			continue;
+		best = mi;
+		bestDistance = distance;
+		bestUnaware = unaware;
+	}
+	pcursmonst = best;
+}
+
 void FindRangedTarget()
 {
 	int rotations = 0;
@@ -299,6 +342,8 @@ void FindRangedTarget()
 		canTalk = newCanTalk;
 		pcursmonst = mi;
 	}
+	if (pcursmonst == -1)
+		FindShapeInTheDark();
 }
 
 void FindMeleeTarget()
@@ -373,7 +418,7 @@ void FindMeleeTarget()
 
 void CheckMonstersNearby()
 {
-	if (MyPlayer->UsesRangedWeapon() || HasRangedSpell()) {
+	if (AttacksAtRange(*MyPlayer) || HasRangedSpell()) {
 		FindRangedTarget();
 		return;
 	}
@@ -406,7 +451,7 @@ void CheckPlayerNearby()
 		    || (player.hasNoLife() && spl != SpellID::Resurrect))
 			continue;
 
-		if (myPlayer.UsesRangedWeapon() || HasRangedSpell() || spl == SpellID::HealOther) {
+		if (AttacksAtRange(myPlayer) || HasRangedSpell() || spl == SpellID::HealOther) {
 			newDdistance = GetDistanceRanged(player.position.future);
 		} else {
 			newDdistance = GetDistance(player.position.future, distance);
@@ -519,6 +564,12 @@ void Interact()
 
 	const Player &myPlayer = *MyPlayer;
 
+	// POE2 Mashup: a caster weapon's granted skill is its attack, at the target or, standing ground, straight ahead.
+	if (leveltype != DTYPE_TOWN && UsesGrantedSkill(myPlayer) && (IsStandingGround() || (pcursmonst != -1 && !CanTalkToMonst(Monsters[pcursmonst])))) {
+		TryUseGrantedSkill(*MyPlayer);
+		return;
+	}
+
 	if (leveltype != DTYPE_TOWN && IsStandingGround()) {
 		Direction pdir = myPlayer._pdir;
 		const AxisDirection moveDir = GetMoveDirection();
@@ -532,13 +583,13 @@ void Interact()
 			position = Monsters[pcursmonst].position.tile;
 		}
 
-		NetSendCmdLoc(MyPlayerId, true, myPlayer.UsesRangedWeapon() ? CMD_RATTACKXY : CMD_SATTACKXY, position);
+		NetSendCmdLoc(MyPlayerId, true, AttacksAtRange(myPlayer) ? CMD_RATTACKXY : CMD_SATTACKXY, position);
 		LastPlayerAction = PlayerActionType::Attack;
 		return;
 	}
 
 	if (pcursmonst != -1) {
-		if (!myPlayer.UsesRangedWeapon() || CanTalkToMonst(Monsters[pcursmonst])) {
+		if (!AttacksAtRange(myPlayer) || CanTalkToMonst(Monsters[pcursmonst])) {
 			NetSendCmdParam1(true, CMD_ATTACKID, pcursmonst);
 		} else {
 			NetSendCmdParam1(true, CMD_RATTACKID, pcursmonst);
@@ -548,7 +599,7 @@ void Interact()
 	}
 
 	if (leveltype != DTYPE_TOWN && PlayerUnderCursor != nullptr && !PlayerUnderCursor->hasNoLife() && !myPlayer.friendlyMode) {
-		NetSendCmdParam1(true, myPlayer.UsesRangedWeapon() ? CMD_RATTACKPID : CMD_ATTACKPID, PlayerUnderCursor->getId());
+		NetSendCmdParam1(true, AttacksAtRange(myPlayer) ? CMD_RATTACKPID : CMD_ATTACKPID, PlayerUnderCursor->getId());
 		LastPlayerAction = PlayerActionType::AttackPlayerTarget;
 		return;
 	}
@@ -1059,8 +1110,11 @@ void VisualStoreMove(AxisDirection dir)
 
 	if (dir.x == AxisDirectionX_RIGHT) {
 		if (VisualStoreSlot.y == -1) { // Tabs
-			if (VisualStoreSlot.x == 0 && VisualStore.vendor == VisualStoreVendor::Smith) {
-				VisualStoreSlot.x = 1;
+			// POE2 Mashup: along the vendor's tabs, in order.
+			const bool hasNextTab = gbIsPoe2 ? static_cast<size_t>(VisualStoreSlot.x) + 1 < Poe2ShopTabs().size()
+			                                 : VisualStoreSlot.x == 0 && VisualStore.vendor == VisualStoreVendor::Smith;
+			if (hasNextTab) {
+				VisualStoreSlot.x++;
 			} else {
 				// Transition to inventory
 				VisualStoreSlot = { -1, -1 }; // Invalidate visual store slot
@@ -1168,6 +1222,8 @@ void VisualStoreMove(AxisDirection dir)
 		// 0: Basic, 1: Premium
 		// Map to button IDs: TabButtonBasic=0, TabButtonPremium=1
 		int btnId = VisualStoreSlot.x == 0 ? 0 : 1;
+		if (gbIsPoe2)
+			btnId = Poe2ShopTabButton(static_cast<size_t>(VisualStoreSlot.x));
 		mousePos = GetVisualBtnCoord(btnId).Center();
 	} else if (VisualStoreSlot.y == VisualStoreGridHeight) {
 		// Repair buttons
@@ -1740,16 +1796,99 @@ bool IsPathBlocked(Point position, Direction dir)
 	return !PosOkPlayer(myPlayer, leftStep) && !PosOkPlayer(myPlayer, rightStep);
 }
 
+bool CanStep(const Player &player, Direction dir)
+{
+	return PosOkPlayer(player, player.position.future + dir) && !IsPathBlocked(player.position.future, dir);
+}
+
+/**
+ * @brief POE2 Mashup: the step to take when walking with the keyboard.
+ *
+ * A little leeway, not a slide: when the hero just clips the corner of a wall or object, they step 45 degrees
+ * around it, but only if the way they want to go is clear right after. A long wall still stops them, and
+ * monsters always block, so a surrounded hero is stuck until they dodge roll out.
+ */
+/** @brief POE2 Mashup: stairs and level entrances take a click; walking with the keyboard stops short of them. */
+bool IsLevelTrigger(Point tile)
+{
+	for (int i = 0; i < numtrigs; i++) {
+		if (trigs[i].position == tile)
+			return true;
+	}
+	return false;
+}
+
+bool CanKeyboardStep(const Player &player, Direction dir)
+{
+	return CanStep(player, dir) && !(gbIsPoe2 && IsLevelTrigger(player.position.future + dir));
+}
+
+std::optional<Direction> KeyboardStep(const Player &player, Direction wanted)
+{
+	if (CanKeyboardStep(player, wanted))
+		return wanted;
+	const Point ahead = player.position.future + wanted;
+	if (InDungeonBounds(ahead) && (dMonster[ahead.x][ahead.y] != 0 || dPlayer[ahead.x][ahead.y] != 0))
+		return std::nullopt;
+	// Prefer the side that went around the last corner, so the hero doesn't zigzag between two.
+	static Direction lastSlide = Direction::South;
+	Direction first = Left(wanted);
+	Direction second = Right(wanted);
+	if (lastSlide == second)
+		std::swap(first, second);
+	for (const Direction slide : { first, second }) {
+		if (!CanKeyboardStep(player, slide))
+			continue;
+		const Point side = player.position.future + slide;
+		if (PosOkPlayer(player, side + wanted) && !IsPathBlocked(side, wanted)) {
+			lastSlide = slide;
+			return slide;
+		}
+	}
+	return std::nullopt;
+}
+
 void WalkInDir(Player &player, AxisDirection dir)
 {
+	// Set while WASD keys drive the player, so letting go of them stops the walk
+	// without cancelling paths started by clicking.
+	static bool walkingWithKeyboard = false;
+
 	if (dir.x == AxisDirectionX_NONE && dir.y == AxisDirectionY_NONE) {
-		if (ControlMode != ControlTypes::KeyboardAndMouse && player.walkpath[0] != WALK_NONE && player.destAction == ACTION_NONE)
+		if ((ControlMode != ControlTypes::KeyboardAndMouse || walkingWithKeyboard) && player.walkpath[0] != WALK_NONE && player.destAction == ACTION_NONE)
 			NetSendCmdLoc(player.getId(), true, CMD_WALKXY, player.position.future); // Stop walking
+		walkingWithKeyboard = false;
 		return;
+	}
+
+	// Let a dodge roll finish its dash before walking on. Held keys take over on its last step, so the walk carries
+	// straight on with no pause (Curtis 2026-10-16); a Leap Slam or Shield Charge still lands first.
+	if (player.poe2.isDodging()) {
+		if (player.poe2.dashSkillTicks > 0 || player.walkpath[0] != WALK_NONE)
+			return;
+		player.poe2.dodgeTicks = 0;
+	}
+
+	if (ControlMode == ControlTypes::KeyboardAndMouse) {
+		walkingWithKeyboard = true;
+		// Let mouse attacks and spells happen first; walking resumes once they've started.
+		// POE2 Mashup: once a held ranged attack or spell has fired, the hero can step before the next one.
+		const bool shotFired = gbIsPoe2 && IsAnyOf(player._pmode, PM_RATTACK, PM_SPELL) && player.poe2.castSkill == WeaponSkill::None
+		    && player.destAction == ACTION_NONE && player.CanChangeAction();
+		// POE2 Mashup: a walk to an item, object or person started by a click gives way to the movement keys.
+		if (gbIsPoe2 && sgbMouseDown == CLICK_NONE
+		    && IsAnyOf(player.destAction, ACTION_PICKUPITEM, ACTION_PICKUPAITEM, ACTION_OPERATE, ACTION_DISARM, ACTION_TALK, ACTION_ATTACKMON, ACTION_ATTACKPLR))
+			player.destAction = ACTION_NONE;
+		if ((sgbMouseDown != CLICK_NONE || player.destAction != ACTION_NONE) && !shotFired)
+			return;
 	}
 
 	const Direction pdir = FaceDir[static_cast<std::size_t>(dir.x)][static_cast<std::size_t>(dir.y)];
 	const auto delta = player.position.future + pdir;
+	// POE2 Mashup: walking over a town portal, stairs or a quest entrance with the keys doesn't take the hero through;
+	// only clicking it does.
+	ForgetChosenPortal();
+	ForgetChosenLevelExit();
 
 	if (!player.isWalking() && player.CanChangeAction())
 		player._pdir = pdir;
@@ -1757,6 +1896,17 @@ void WalkInDir(Player &player, AxisDirection dir)
 	if (IsStandingGround()) {
 		if (player._pmode == PM_STAND)
 			StartStand(player, pdir);
+		return;
+	}
+
+	if (walkingWithKeyboard) {
+		const std::optional<Direction> step = KeyboardStep(player, pdir);
+		if (!step) {
+			if (player._pmode == PM_STAND)
+				StartStand(player, pdir);
+			return;
+		}
+		NetSendCmdLoc(player.getId(), true, CMD_WALKXY, player.position.future + *step);
 		return;
 	}
 
@@ -1850,6 +2000,12 @@ void Movement(Player &player)
 		return;
 
 	if (GetLeftStickOrDPadGameUIHandler() == nullptr) {
+		WalkInDir(player, GetMoveDirection());
+		return;
+	}
+
+	// Keyboard movement keeps working with the inventory or other panels open, like in POE2.
+	if (ControlMode == ControlTypes::KeyboardAndMouse && !SpellSelectFlag) {
 		WalkInDir(player, GetMoveDirection());
 	}
 }
@@ -2300,6 +2456,10 @@ void UseBeltItem(BeltItemType type)
 		if (item.isEmpty()) {
 			continue;
 		}
+		// Skip flasks without enough charges so a potion further along the belt gets used.
+		if (IsFlaskSlot(*MyPlayer, static_cast<size_t>(i)) && !CanUseFlask(*MyPlayer, static_cast<size_t>(i))) {
+			continue;
+		}
 
 		const bool isRejuvenation = IsAnyOf(item._iMiscId, IMISC_REJUV, IMISC_FULLREJUV) || (item._iMiscId == IMISC_ARENAPOT && MyPlayer->isOnArenaLevel());
 		const bool isHealing = isRejuvenation || IsAnyOf(item._iMiscId, IMISC_HEAL, IMISC_FULLHEAL) || item.isScrollOf(SpellID::Healing);
@@ -2563,12 +2723,17 @@ void PerformSecondaryAction()
 		LastPlayerAction = PlayerActionType::OperateObject;
 	} else {
 		if (pcursmissile != nullptr) {
+			// Lazarus' red portal is a quest entrance.
+			ChoosePortalAt(pcursmissile->position.tile);
+			ChooseLevelExitAt(pcursmissile->position.tile);
 			MakePlrPath(myPlayer, pcursmissile->position.tile, true);
 			myPlayer.destAction = ACTION_WALK;
 		} else if (pcurstrig != -1) {
+			ChooseLevelExitAt(trigs[pcurstrig].position);
 			MakePlrPath(myPlayer, trigs[pcurstrig].position, true);
 			myPlayer.destAction = ACTION_WALK;
 		} else if (pcursquest != Q_INVALID) {
+			ChooseLevelExitAt(Quests[pcursquest].position);
 			MakePlrPath(myPlayer, Quests[pcursquest].position, true);
 			myPlayer.destAction = ACTION_WALK;
 		}

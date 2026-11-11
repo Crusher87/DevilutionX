@@ -1,0 +1,139 @@
+type	coldResistance	coldResistanceHell	name	note
+MT_NZOMBIE	20	20	Zombie	undead: resists cold
+MT_BZOMBIE	20	20	Ghoul	undead: resists cold
+MT_GZOMBIE	20	20	Rotting Carcass	undead: resists cold
+MT_YZOMBIE	20	20	Black Death	undead: resists cold
+MT_RFALLSP	0	0	Fallen One	Diablo's magic marks, as before
+MT_DFALLSP	0	0	Carver	Diablo's magic marks, as before
+MT_YFALLSP	0	0	Devil Kin	Diablo's magic marks, as before
+MT_BFALLSP	0	0	Dark One	Diablo's magic marks, as before
+MT_WSKELAX	20	20	Skeleton	undead: resists cold
+MT_TSKELAX	20	20	Corpse Axe	undead: resists cold
+MT_RSKELAX	0	0	Burning Dead	undead but burning: the flames cancel the grave cold
+MT_XSKELAX	20	20	Horror	undead: resists cold
+MT_RFALLSD	0	0	Fallen One	Diablo's magic marks, as before
+MT_DFALLSD	0	0	Carver	Diablo's magic marks, as before
+MT_YFALLSD	0	0	Devil Kin	Diablo's magic marks, as before
+MT_BFALLSD	0	0	Dark One	Diablo's magic marks, as before
+MT_NSCAV	0	0	Scavenger	Diablo's magic marks, as before
+MT_BSCAV	0	0	Plague Eater	Diablo's magic marks, as before
+MT_WSCAV	0	0	Shadow Beast	Diablo's magic marks, as before
+MT_YSCAV	20	0	Bone Gasher	Diablo's magic marks, as before
+MT_WSKELBW	20	20	Skeleton	undead: resists cold
+MT_TSKELBW	20	20	Corpse Bow	undead: resists cold
+MT_RSKELBW	0	0	Burning Dead	undead but burning: the flames cancel the grave cold
+MT_XSKELBW	20	20	Horror	undead: resists cold
+MT_WSKELSD	20	20	Skeleton Captain	undead: resists cold
+MT_TSKELSD	20	20	Corpse Captain	undead: resists cold
+MT_RSKELSD	0	0	Burning Dead Captain	undead but burning: the flames cancel the grave cold
+MT_XSKELSD	20	20	Horror Captain	undead: resists cold
+MT_INVILORD	20	20	Invisible Lord	Diablo's magic marks, as before
+MT_SNEAK	0	0	Hidden	Diablo's magic marks, as before
+MT_STALKER	0	0	Stalker	Diablo's magic marks, as before
+MT_UNSEEN	20	40	Unseen	Diablo's magic marks, as before
+MT_ILLWEAV	20	40	Illusion Weaver	Diablo's magic marks, as before
+MT_LRDSAYTR	0	20	Satyr Lord	Diablo's magic marks, as before
+MT_NGOATMC	0	0	Flesh Clan	Diablo's magic marks, as before
+MT_BGOATMC	20	40	Stone Clan	Diablo's magic marks, as before
+MT_RGOATMC	0	0	Fire Clan	fire-hardened (immune or resistant to fire), not made of fire: no cold resistance
+MT_GGOATMC	20	40	Night Clan	Diablo's magic marks, as before
+MT_FIEND	0	0	Fiend	Diablo's magic marks, as before
+MT_BLINK	0	0	Blink	Diablo's magic marks, as before
+MT_GLOOM	20	20	Gloom	Diablo's magic marks, as before
+MT_FAMILIAR	20	20	Familiar	Diablo's magic marks, as before
+MT_NGOATBW	0	0	Flesh Clan	Diablo's magic marks, as before
+MT_BGOATBW	20	40	Stone Clan	Diablo's magic marks, as before
+MT_RGOATBW	0	0	Fire Clan	fire-hardened (immune or resistant to fire), not made of fire: no cold resistance
+MT_GGOATBW	20	40	Night Clan	Diablo's magic marks, as before
+MT_NACID	0	40	Acid Beast	Diablo's magic marks, as before
+MT_RACID	0	40	Poison Spitter	Diablo's magic marks, as before
+MT_BACID	20	40	Pit Beast	Diablo's magic marks, as before
+MT_XACID	-30	-30	Lava Maw	a creature of fire or lava: weak to cold
+MT_SKING	20	20	Skeleton King	undead: resists cold
+MT_CLEAVER	0	20	The Butcher	Diablo's magic marks, as before
+MT_FAT	0	0	Overlord	Diablo's magic marks, as before
+MT_MUDMAN	0	0	Mud Man	Diablo's magic marks, as before
+MT_TOAD	40	40	Toad Demon	Diablo's magic marks, as before
+MT_FLAYED	0	0	Flayed One	fire-hardened (immune or resistant to fire), not made of fire: no cold resistance
+MT_WYRM	20	20	Wyrm	Diablo's magic marks, as before
+MT_CAVSLUG	20	20	Cave Slug	Diablo's magic marks, as before
+MT_DVLWYRM	20	20	Devil Wyrm	Diablo's magic marks, as before
+MT_DEVOUR	20	20	Devourer	Diablo's magic marks, as before
+MT_NMAGMA	-30	-30	Magma Demon	a creature of fire or lava: weak to cold
+MT_YMAGMA	-30	-30	Blood Stone	a creature of fire or lava: weak to cold
+MT_BMAGMA	-30	-30	Hell Stone	a creature of fire or lava: weak to cold
+MT_WMAGMA	-30	-30	Lava Lord	a creature of fire or lava: weak to cold
+MT_HORNED	0	0	Horned Demon	Diablo's magic marks, as before
+MT_MUDRUN	0	0	Mud Runner	Diablo's magic marks, as before
+MT_FROSTC	50	50	Frost Charger	ice-flavoured
+MT_OBLORD	40	40	Obsidian Lord	Diablo's magic marks, as before
+MT_BONEDMN	40	40	oldboned	Diablo's magic marks, as before
+MT_REDDTH	-30	-30	Red Death	a creature of fire or lava: weak to cold
+MT_LTCHDMN	40	40	Litch Demon	Diablo's magic marks, as before
+MT_UDEDBLRG	40	40	Undead Balrog	Diablo's magic marks, as before
+MT_INCIN	-30	-30	Incinerator	a creature of fire or lava: weak to cold
+MT_FLAMLRD	-30	-30	Flame Lord	a creature of fire or lava: weak to cold
+MT_DOOMFIRE	-30	-30	Doom Fire	a creature of fire or lava: weak to cold
+MT_HELLBURN	-30	-30	Hell Burner	a creature of fire or lava: weak to cold
+MT_STORM	40	40	Red Storm	Diablo's magic marks, as before
+MT_RSTORM	20	40	Storm Rider	Diablo's magic marks, as before
+MT_STORML	20	40	Storm Lord	Diablo's magic marks, as before
+MT_MAEL	20	40	Maelstrom	Diablo's magic marks, as before
+MT_BIGFALL	0	20	Devil Kin Brute	Diablo's magic marks, as before
+MT_WINGED	40	40	Winged-Demon	Diablo's magic marks, as before
+MT_GARGOYLE	40	40	Gargoyle	Diablo's magic marks, as before
+MT_BLOODCLW	0	0	Blood Claw	fire-hardened (immune or resistant to fire), not made of fire: no cold resistance
+MT_DEATHW	40	40	Death Wing	Diablo's magic marks, as before
+MT_MEGA	-30	-30	Slayer	a creature of fire or lava: weak to cold
+MT_GUARD	-30	-30	Guardian	a creature of fire or lava: weak to cold
+MT_VTEXLRD	-30	-30	Vortex Lord	a creature of fire or lava: weak to cold
+MT_BALROG	-30	-30	Balrog	a creature of fire or lava: weak to cold
+MT_NSNAKE	40	40	Cave Viper	Diablo's magic marks, as before
+MT_RSNAKE	-30	-30	Fire Drake	a creature of fire or lava: weak to cold
+MT_BSNAKE	40	40	Gold Viper	Diablo's magic marks, as before
+MT_GSNAKE	40	40	Azure Drake	icy blue drake
+MT_NBLACK	20	20	Black Knight	Diablo's magic marks, as before
+MT_RTBLACK	20	20	Doom Guard	Diablo's magic marks, as before
+MT_BTBLACK	0	0	Steel Lord	fire-hardened (immune or resistant to fire), not made of fire: no cold resistance
+MT_RBLACK	40	40	Blood Knight	Diablo's magic marks, as before
+MT_UNRAV	20	20	The Shredded	undead: resists cold
+MT_HOLOWONE	20	20	Hollow One	undead: resists cold
+MT_PAINMSTR	20	20	Pain Master	undead: resists cold
+MT_REALWEAV	20	20	Reality Weaver	undead: resists cold
+MT_SUCCUBUS	20	40	Succubus	Diablo's magic marks, as before
+MT_SNOWWICH	50	50	Snow Witch	ice-flavoured
+MT_HLSPWN	20	40	Hell Spawn	Diablo's magic marks, as before
+MT_SOLBRNR	-30	-30	Soul Burner	a creature of fire or lava: weak to cold
+MT_COUNSLR	20	20	Counselor	Diablo's magic marks, as before
+MT_MAGISTR	0	0	Magistrate	fire-hardened (immune or resistant to fire), not made of fire: no cold resistance
+MT_CABALIST	20	40	Cabalist	Diablo's magic marks, as before
+MT_ADVOCATE	40	40	Advocate	Diablo's magic marks, as before
+MT_GOLEM	0	0	Golem	Diablo's magic marks, as before
+MT_DIABLO	40	40	The Dark Lord	Diablo's magic marks, as before
+MT_DARKMAGE	20	40	The Arch-Litch Malignus	Diablo's magic marks, as before
+MT_HELLBOAR	0	0	Hellboar	Diablo's magic marks, as before
+MT_STINGER	0	0	Stinger	Diablo's magic marks, as before
+MT_PSYCHORB	0	0	Psychorb	Diablo's magic marks, as before
+MT_ARACHNON	0	0	Arachnon	Diablo's magic marks, as before
+MT_FELLTWIN	0	0	Felltwin	Diablo's magic marks, as before
+MT_HORKSPWN	20	20	Hork Spawn	Diablo's magic marks, as before
+MT_VENMTAIL	0	0	Venomtail	Diablo's magic marks, as before
+MT_NECRMORB	0	0	Necromorb	Diablo's magic marks, as before
+MT_SPIDLORD	0	0	Spider Lord	Diablo's magic marks, as before
+MT_LASHWORM	0	0	Lashworm	Diablo's magic marks, as before
+MT_TORCHANT	-30	-30	Torchant	a creature of fire or lava: weak to cold
+MT_HORKDMN	0	20	Hork Demon	Diablo's magic marks, as before
+MT_DEFILER	20	20	Hell Bug	Diablo's magic marks, as before
+MT_GRAVEDIG	20	20	Gravedigger	undead: resists cold
+MT_TOMBRAT	0	0	Tomb Rat	Diablo's magic marks, as before
+MT_FIREBAT	-30	-30	Firebat	a creature of fire or lava: weak to cold
+MT_SKLWING	20	20	Skullwing	undead: resists cold
+MT_LICH	30	30	Lich	undead caster of the cold crypt: resists cold more
+MT_CRYPTDMN	40	40	Crypt Demon	Diablo's magic marks, as before
+MT_HELLBAT	-30	-30	Hellbat	a creature of fire or lava: weak to cold
+MT_BONEDEMN	20	20	Bone Demon	undead: resists cold
+MT_ARCHLICH	30	30	Arch Lich	undead caster of the cold crypt: resists cold more
+MT_BICLOPS	0	0	Biclops	Diablo's magic marks, as before
+MT_FLESTHNG	20	20	Flesh Thing	Diablo's magic marks, as before
+MT_REAPER	0	0	Reaper	fire-hardened (immune or resistant to fire), not made of fire: no cold resistance
+MT_NAKRUL	0	0	Na-Krul	fire-hardened (immune or resistant to fire), not made of fire: no cold resistance

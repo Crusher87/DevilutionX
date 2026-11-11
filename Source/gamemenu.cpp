@@ -9,21 +9,32 @@
 #include <SDL3/SDL_timer.h>
 #endif
 
+#include "DiabloUI/diabloui.h"
+#include "DiabloUI/settingsmenu.h"
+#include "admin_menu.hpp"
+#include "controls/wasd_movement.hpp"
 #include "cursor.h"
+#include "diablo.h"
 #include "diablo_msg.hpp"
 #include "engine/backbuffer_state.hpp"
 #include "engine/demomode.h"
 #include "engine/events.hpp"
+#include "engine/palette.h"
+#include "engine/render/scrollrt.h"
 #include "engine/sound.h"
 #include "engine/sound_defs.hpp"
 #include "game_mode.hpp"
 #include "gmenu.h"
 #include "headless_mode.hpp"
+#include "items.h"
 #include "loadsave.h"
 #include "multi.h"
 #include "options.h"
 #include "pfile.h"
+#include "poe2/autosave.hpp"
+#include "poe2/telemetry.hpp"
 #include "qol/floatingnumbers.h"
+#include "utils/format.hpp"
 #include "utils/language.h"
 
 #ifndef USE_SDL1
@@ -44,6 +55,10 @@ void GamemenuMusicVolume(bool bActivate);
 void GamemenuSoundVolume(bool bActivate);
 void GamemenuBrightness(bool bActivate);
 void GamemenuSpeed(bool bActivate);
+void GamemenuMovement(bool bActivate);
+void GamemenuUiScale(bool bActivate);
+void GamemenuResolution(bool bActivate);
+void GamemenuAllSettings(bool bActivate);
 
 /** Contains the game menu items of the single player menu. */
 TMenuItem sgSingleMenu[] = {
@@ -54,6 +69,19 @@ TMenuItem sgSingleMenu[] = {
 	{ GMENU_ENABLED, N_("Load Game"),         &gamemenu_load_game },
 	{ GMENU_ENABLED, N_("Exit to Main Menu"), &GamemenuNewGame    },
 	{ GMENU_ENABLED, N_("Quit Game"),         &gamemenu_quit_game },
+	{ GMENU_ENABLED, N_("Admin Tools"),       &AdminMenuOpen      },
+	{ GMENU_ENABLED, nullptr,                 nullptr             },
+	// clang-format on
+};
+/** POE2 Mashup: the single player menu without Save Game; the game saves on its own (poe2/autosave.hpp). */
+TMenuItem sgPoe2SingleMenu[] = {
+	// clang-format off
+	// dwFlags,      pszStr,                  fnMenu
+	{ GMENU_ENABLED, N_("Options"),           &GamemenuOptions    },
+	{ GMENU_ENABLED, N_("Load Game"),         &gamemenu_load_game },
+	{ GMENU_ENABLED, N_("Exit to Main Menu"), &GamemenuNewGame    },
+	{ GMENU_ENABLED, N_("Quit Game"),         &gamemenu_quit_game },
+	{ GMENU_ENABLED, N_("Admin Tools"),       &AdminMenuOpen      },
 	{ GMENU_ENABLED, nullptr,                 nullptr             },
 	// clang-format on
 };
@@ -74,6 +102,10 @@ TMenuItem sgOptionsMenu[] = {
 	{ GMENU_ENABLED | GMENU_SLIDER, nullptr,             &GamemenuSoundVolume  },
 	{ GMENU_ENABLED | GMENU_SLIDER, N_("Gamma"),         &GamemenuBrightness   },
 	{ GMENU_ENABLED | GMENU_SLIDER, N_("Speed"),         &GamemenuSpeed        },
+	{ GMENU_ENABLED               , nullptr,             &GamemenuMovement     },
+	{ GMENU_ENABLED               , nullptr,             &GamemenuUiScale      },
+	{ GMENU_ENABLED               , nullptr,             &GamemenuResolution   },
+	{ GMENU_ENABLED               , N_("All Settings"),  &GamemenuAllSettings  },
 	{ GMENU_ENABLED               , N_("Previous Menu"), &GamemenuPrevious     },
 	{ GMENU_ENABLED               , nullptr,             nullptr               },
 	// clang-format on
@@ -96,6 +128,17 @@ void GamemenuUpdateSingle()
 	const bool enable = MyPlayer->_pmode != PM_DEATH && !MyPlayerIsDead;
 
 	sgSingleMenu[0].setEnabled(enable);
+	sgSingleMenu[5].setEnabled(enable);
+}
+
+void GamemenuUpdatePoe2Single()
+{
+	sgPoe2SingleMenu[1].setEnabled(gbValidSaveFile);
+
+	const bool enable = MyPlayer->_pmode != PM_DEATH && !MyPlayerIsDead;
+
+	sgPoe2SingleMenu[0].setEnabled(enable);
+	sgPoe2SingleMenu[4].setEnabled(enable);
 }
 
 void GamemenuPrevious(bool /*bActivate*/)
@@ -105,6 +148,8 @@ void GamemenuPrevious(bool /*bActivate*/)
 
 void GamemenuNewGame(bool /*bActivate*/)
 {
+	// POE2 Mashup: leaving saves the game, as there is no Save Game.
+	AutosaveNow();
 	for (Player &player : Players) {
 		player._pmode = PM_QUIT;
 		player._pInvincible = true;
@@ -177,6 +222,56 @@ void GamemenuGetSpeed()
 	gmenu_slider_set(&sgOptionsMenu[3], 20, 50, sgGameInitInfo.nTickRate);
 }
 
+void GamemenuGetMovement()
+{
+	sgOptionsMenu[4].pszStr = IsWasdMovementEnabled() ? N_("Movement: WASD") : N_("Movement: Click");
+}
+
+// POE2 Mashup: UI Scale and Resolution change during a game; each click picks the next value.
+std::string UiScaleMenuText;
+std::string ResolutionMenuText;
+
+void GamemenuGetUiScale()
+{
+	OptionEntryInt<int> &uiScale = GetOptions().Graphics.uiScale;
+#ifdef USE_SDL1
+	constexpr bool CanScaleUi = false;
+#else
+	const bool CanScaleUi = *GetOptions().Graphics.upscale;
+#endif
+	if (!CanScaleUi) {
+		sgOptionsMenu[5].removeFlags(GMENU_ENABLED);
+		UiScaleMenuText = _("UI Scale: needs Upscale");
+	} else {
+		sgOptionsMenu[5].addFlags(GMENU_ENABLED);
+		UiScaleMenuText = FormatRuntime(_("UI Scale: {:d}%"), *uiScale);
+	}
+	sgOptionsMenu[5].pszStr = UiScaleMenuText.c_str();
+}
+
+void GamemenuGetResolution()
+{
+	OptionEntryResolution &resolution = GetOptions().Graphics.resolution;
+	const Size size = *resolution;
+	ResolutionMenuText = FormatRuntime(_("Resolution: {:d}x{:d}"), size.width, size.height);
+	if (resolution.GetListSize() > 1)
+		sgOptionsMenu[6].addFlags(GMENU_ENABLED);
+	else
+		sgOptionsMenu[6].removeFlags(GMENU_ENABLED);
+	sgOptionsMenu[6].pszStr = ResolutionMenuText.c_str();
+}
+
+/** @brief Steps a list option to its next value, wrapping around, and refits the game view to the new size. */
+void StepDisplayOption(OptionEntryListBase &option)
+{
+	const size_t count = option.GetListSize();
+	if (count < 2)
+		return;
+	option.SetActiveListIndex((option.GetActiveListIndex() + 1) % count);
+	CalcViewportGeometry();
+	RedrawEverything();
+}
+
 int GamemenuSliderBrightness()
 {
 	return gmenu_slider_get(&sgOptionsMenu[2], 0, 100);
@@ -188,6 +283,11 @@ void GamemenuOptions(bool /*bActivate*/)
 	GamemenuGetSound();
 	GamemenuGetBrightness();
 	GamemenuGetSpeed();
+	GamemenuGetMovement();
+	GamemenuGetUiScale();
+	GamemenuGetResolution();
+	// The Settings menu stops the game while it is open, which only a single player game can do.
+	sgOptionsMenu[7].setEnabled(!gbIsMultiplayer);
 	gmenu_set_items(sgOptionsMenu, nullptr);
 }
 
@@ -277,6 +377,51 @@ void GamemenuSpeed(bool bActivate)
 	gnTickDelay = 1000 / sgGameInitInfo.nTickRate;
 }
 
+void GamemenuMovement(bool /*bActivate*/)
+{
+	SetWasdMovementEnabled(!IsWasdMovementEnabled());
+	GamemenuGetMovement();
+}
+
+void GamemenuUiScale(bool /*bActivate*/)
+{
+	StepDisplayOption(GetOptions().Graphics.uiScale);
+	GamemenuGetUiScale();
+}
+
+void GamemenuResolution(bool /*bActivate*/)
+{
+	StepDisplayOption(GetOptions().Graphics.resolution);
+	GamemenuGetResolution();
+}
+
+/** @brief POE2 Mashup: the main menu's full Settings list, during a game (Curtis 2026-10-14: every option reachable in game). */
+void GamemenuAllSettings(bool /*bActivate*/)
+{
+	if (gbIsMultiplayer)
+		return;
+	gamemenu_off();
+	ClearWasdMovementKeys();
+	const int cursor = pcurs;
+	const std::array<SDL_Color, 256> gamePalette = logical_palette;
+	NewCursor(CURSOR_NONE);
+
+	UiInitialize();
+	UiSettingsMenu(/*inGame=*/true);
+	UnloadUiGFX();
+
+	// The menu drew with its own palette, and a resolution or UI scale change reloads the items' ground pictures.
+	logical_palette = gamePalette;
+	for (int i = 0; i < ActiveItemCount; i++)
+		GetItemFrm(Items[ActiveItems[i]]);
+	CalcViewportGeometry();
+	sgbMouseDown = CLICK_NONE;
+	NewCursor(cursor);
+	RedrawEverything();
+	DrawAndBlit();
+	PaletteFadeIn(8);
+}
+
 } // namespace
 
 void gamemenu_exit_game(bool bActivate)
@@ -305,6 +450,7 @@ void gamemenu_load_game(bool /*bActivate*/)
 	DrawAndBlit();
 
 	const std::array<SDL_Color, 256> prevPalette = logical_palette;
+	TelemetryLoadingStarted("loading a save");
 #ifndef USE_SDL1
 	DeactivateVirtualGamepad();
 	FreeVirtualGamepadTextures();
@@ -326,7 +472,9 @@ void gamemenu_load_game(bool /*bActivate*/)
 	MyPlayerIsDead = false;
 	RedrawEverything();
 	DrawAndBlit();
+	TelemetryLoadingFadingIn();
 	PaletteFadeIn(8);
+	TelemetryLoadingDone();
 	NewCursor(CURSOR_HAND);
 	interface_msg_pump();
 	SetEventHandler(saveProc);
@@ -366,7 +514,9 @@ void gamemenu_save_game(bool /*bActivate*/)
 void gamemenu_on()
 {
 	isGameMenuOpen = true;
-	if (!gbIsMultiplayer) {
+	if (!gbIsMultiplayer && gbIsPoe2) {
+		gmenu_set_items(sgPoe2SingleMenu, GamemenuUpdatePoe2Single);
+	} else if (!gbIsMultiplayer) {
 		gmenu_set_items(sgSingleMenu, GamemenuUpdateSingle);
 	} else {
 		gmenu_set_items(sgMultiMenu, nullptr);

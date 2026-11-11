@@ -1,0 +1,22 @@
+id	name	trigger	dropLevel	weight	description
+SinistralExaltation	Omen of Sinistral Exaltation	Exalt	40	100	Your next Exalted Orb adds only a prefix
+DextralExaltation	Omen of Dextral Exaltation	Exalt	40	100	Your next Exalted Orb adds only a suffix
+GreaterExaltation	Omen of Greater Exaltation	Exalt	65	25	Your next Exalted Orb adds two modifiers
+HomogenisingExaltation	Omen of Homogenising Exaltation	Exalt	70	18	Your next Exalted Orb adds a modifier of a kind the item already has
+DiscordantExaltation	Omen of Discordant Exaltation	Exalt	70	18	Your next Exalted Orb adds a modifier of a kind the item doesn't have
+SinistralAnnulment	Omen of Sinistral Annulment	Annul	45	85	Your next Orb of Annulment removes only a prefix
+DextralAnnulment	Omen of Dextral Annulment	Annul	45	85	Your next Orb of Annulment removes only a suffix
+Whittling	Omen of Whittling	Annul	58	45	Your next Orb of Annulment removes the lowest level modifier
+SinistralErasure	Omen of Sinistral Erasure	Chaos	50	70	Your next Chaos Orb removes only a prefix
+DextralErasure	Omen of Dextral Erasure	Chaos	50	70	Your next Chaos Orb removes only a suffix
+SinistralPreservation	Omen of Sinistral Preservation	Chaos	68	25	Your next Chaos Orb never removes a prefix
+DextralPreservation	Omen of Dextral Preservation	Chaos	68	25	Your next Chaos Orb never removes a suffix
+SinistralCrystallisation	Omen of Sinistral Crystallisation	PerfectEssence	68	30	Your next Perfect Essence removes only a prefix
+DextralCrystallisation	Omen of Dextral Crystallisation	PerfectEssence	68	30	Your next Perfect Essence removes only a suffix
+Severance	Omen of Severance	PerfectEssence	74	14	Your next Perfect Essence removes the highest level modifier
+Mercy	Omen of Mercy	Chance	75	8	Your next failed Orb of Chance leaves the item whole
+Corruption	Omen of Corruption	Corrupt	72	12	Your next Vaal Orb always changes the item
+Artificer	Omen of the Artificer	Corrupt	78	6	Your next Vaal Orb favours adding a socket
+SinistralNecromancy	Omen of Sinistral Necromancy	Desecrate	65	20	Your next desecration reveals a prefix
+DextralNecromancy	Omen of Dextral Necromancy	Desecrate	65	20	Your next desecration reveals a suffix
+Kinship	Omen of Kinship	Desecrate	75	10	One revealed choice shares a kind with the item's modifiers

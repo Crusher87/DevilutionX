@@ -1,0 +1,1178 @@
+#include "poe2/skill_details.hpp"
+
+#include <algorithm>
+#include <cmath>
+#include <cstdint>
+#include <format>
+#include <limits>
+#include <optional>
+#include <string_view>
+
+#include "game_mode.hpp"
+#include "items.h"
+#include "missiles.h"
+#include "monster.h"
+#include "player.h"
+#include "poe2/attack_speed.hpp"
+#include "poe2/default_attack.hpp"
+#include "poe2/effect_primitives.hpp"
+#include "poe2/gem_levels.hpp"
+#include "poe2/meta_gems.hpp"
+#include "poe2/minion_gems.hpp"
+#include "poe2/monster_levels.hpp"
+#include "poe2/monster_resistance.hpp"
+#include "poe2/player_data.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/skill_resources.hpp"
+#include "poe2/spell_base.hpp"
+#include "poe2/spell_damage.hpp"
+#include "poe2/spirit.hpp"
+#include "poe2/spirit_auras.hpp"
+#include "poe2/spirit_buffs.hpp"
+#include "poe2/spirit_skills.hpp"
+#include "poe2/spirit_uses.hpp"
+#include "poe2/summon_commands.hpp"
+#include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/weapon_skills.hpp"
+#include "tables/misdat.h"
+#include "tables/monstdat.h"
+#include "tables/playerdat.hpp"
+#include "tables/spelldat.h"
+#include "utils/is_of.hpp"
+
+namespace devilution {
+
+namespace {
+
+/** Game ticks in one second at normal speed. */
+constexpr int TicksPerSecond = 20;
+
+struct HitPart {
+	DamageType type;
+	/** The least and the most one hit deals, with any fraction the real hit keeps. */
+	double min;
+	double max;
+	/** What one hit deals on average. */
+	double average;
+};
+
+struct HitEstimate {
+	std::vector<HitPart> parts;
+	/** Shown instead of damage for skills that don't hit, like curses and buffs. */
+	std::string effect;
+};
+
+std::string_view DamageTypeName(DamageType type)
+{
+	switch (type) {
+	case DamageType::Fire:
+		return "Fire";
+	case DamageType::Lightning:
+		return "Lightning";
+	case DamageType::Cold:
+		return "Cold";
+	case DamageType::Chaos:
+		return "Chaos";
+	default:
+		return "Physical";
+	}
+}
+
+} // namespace
+
+DamageType SpellDamageType(SpellID spell)
+{
+	const auto schoolType = [spell]() {
+		switch (GetSpellData(spell).type()) {
+		case MagicType::Fire:
+			return DamageType::Fire;
+		case MagicType::Lightning:
+			return DamageType::Lightning;
+		default:
+			return DamageType::Cold;
+		}
+	};
+	// Without the missile table (some tests) the spell school is all there is.
+	if (!HasMissileData(MissileID::ApocalypseBoom))
+		return schoolType();
+	// A few spells hit with a missile other than their first: Apocalypse's control missile drops the booms, Guardian
+	// shoots firebolts, and a rune bursts into the missile it holds.
+	switch (spell) {
+	case SpellID::Apocalypse:
+		return GetMissileData(MissileID::ApocalypseBoom).damageType();
+	case SpellID::Guardian:
+		return GetMissileData(MissileID::Firebolt).damageType();
+	case SpellID::RuneOfFire:
+		return GetMissileData(MissileID::BigExplosion).damageType();
+	case SpellID::RuneOfLight:
+		return GetMissileData(MissileID::LightningWall).damageType();
+	case SpellID::RuneOfNova:
+		return GetMissileData(MissileID::Nova).damageType();
+	case SpellID::RuneOfImmolation:
+		return GetMissileData(MissileID::Immolation).damageType();
+	default:
+		break;
+	}
+	// The type its hits deal, from its first missile: Nova shows lightning though Diablo files it under magic.
+	const MissileID missile = GetSpellData(spell).sMissiles[0];
+	if (missile != MissileID::Null && HasMissileData(missile))
+		return GetMissileData(missile).damageType();
+	return schoolType();
+}
+
+namespace {
+
+/** @brief A percent of a whole number, cut to whole points as the game's integer damage code cuts it. */
+int ScaleWhole(int value, int percent)
+{
+	return static_cast<int>(static_cast<int64_t>(value) * percent / 100);
+}
+
+/**
+ * @brief Every whole-point roll from low to high, each turned into the damage it deals: the least, the most and the
+ * true average of them. The game rolls each value equally often (RandomIntBetween, GenerateRnd).
+ */
+template <typename Damage>
+DamageEstimate EstimateRolls(int low, int high, Damage damage)
+{
+	high = std::max(high, low);
+	double total = 0;
+	for (int roll = low; roll <= high; roll++)
+		total += damage(roll);
+	return { damage(low), damage(high), total / (static_cast<double>(high) - low + 1) };
+}
+
+HitPart Part(DamageType type, const DamageEstimate &estimate)
+{
+	return { type, estimate.min, estimate.max, estimate.average };
+}
+
+/** @brief A part that rolls whole points evenly from min to max. */
+HitPart WholePart(DamageType type, int min, int max)
+{
+	return { type, static_cast<double>(min), static_cast<double>(max), (static_cast<double>(min) + max) / 2 };
+}
+
+/** @brief Whether the hero's weapon hits fly as arrows (a bow in the left hand, as the character panel reads it). */
+bool ShootsArrows(const Player &player)
+{
+	return player.InvBody[INVLOC_HAND_LEFT]._itype == ItemType::Bow;
+}
+
+/** @brief The damage the hero adds to each weapon hit: a bow's arrows get half the attribute damage, but a Rogue's all. */
+int WeaponAddedDamage(const Player &player)
+{
+	if (ShootsArrows(player) && player._pClass != HeroClass::Rogue)
+		return player._pIBonusDamMod + (player._pDamageMod / 2);
+	return player._pIBonusDamMod + player._pDamageMod;
+}
+
+/** @brief The weapon's own roll, before the hero's bonuses. Bare fists hit at the skill's gem level, the one shown. */
+std::pair<int, int> WeaponRoll(const Player &player, SkillSlot skill, int level)
+{
+	if (skill.kind == SkillKind::Attack && level > 0 && FightsWithBareFists(player))
+		return BareFistDamage(level);
+	// Two weapons take turns: a swing's average, not the hand that swings next.
+	if (DualWields(player))
+		return { player._pIMinDam, player._pIMaxDam };
+	return AttackWeaponDamage(player, skill);
+}
+
+/**
+ * @brief A weapon hit scaled by the skill (then by secondPercent, as a melee hit applies them one after the other),
+ * with the weapon's own fire and lightning added at elementPercent.
+ */
+void AddWeaponHit(HitEstimate &hit, const Player &player, SkillSlot skill, int level, int percent, int secondPercent = 100, std::optional<int> elementPercent = std::nullopt)
+{
+	const auto [weaponMin, weaponMax] = WeaponRoll(player, skill, level);
+	const int added = WeaponAddedDamage(player);
+	if (ShootsArrows(player))
+		hit.parts.push_back(Part(DamageType::Physical, ArrowHitEstimate(weaponMin, weaponMax, player._pIBonusDam, added, ScaleWhole(percent, secondPercent))));
+	else
+		hit.parts.push_back(Part(DamageType::Physical, MeleeHitEstimate(weaponMin, weaponMax, player._pIBonusDam, added, percent, secondPercent)));
+	const int elements = elementPercent.value_or(ScaleWhole(percent, secondPercent));
+	if (player._pIFMaxDam > 0)
+		hit.parts.push_back(WholePart(DamageType::Fire, ScaleWhole(player._pIFMinDam, elements), ScaleWhole(player._pIFMaxDam, elements)));
+	if (player._pILMaxDam > 0)
+		hit.parts.push_back(WholePart(DamageType::Lightning, ScaleWhole(player._pILMinDam, elements), ScaleWhole(player._pILMaxDam, elements)));
+	// The gear's added cold lands on melee hits only.
+	if (const auto [minCold, maxCold] = AddedColdDamage(player); maxCold > 0 && !ShootsArrows(player))
+		hit.parts.push_back(WholePart(DamageType::Cold, ScaleWhole(minCold, elements), ScaleWhole(maxCold, elements)));
+}
+
+/** @brief The base of a spell-like skill, from Magic and the gem level (Ice Bolt, table spells), each roll cut to whole points. */
+void AddSpellBase(HitEstimate &hit, const Player &player, int gemLevel, DamageType type, int percent)
+{
+	hit.parts.push_back(Part(type, EstimateRolls(SpellBaseMin(player, gemLevel), SpellBaseMax(player, gemLevel), [percent](int base) {
+		return static_cast<double>(ScaleWhole(base, percent));
+	})));
+}
+
+HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
+{
+	HitEstimate hit;
+	switch (skill.kind) {
+	case SkillKind::Spell: {
+		const SpellID spell = skill.spell();
+		const DamageRange range = GetDamageAmt(spell, player.GetSpellLevel(spell));
+		if (range.min < 0)
+			return hit;
+		const int percent = SupportSpellDamagePercent(player, spell);
+		hit.parts.push_back(WholePart(SpellDamageType(spell), ScaleWhole(range.min, percent), ScaleWhole(range.max, percent)));
+		return hit;
+	}
+	case SkillKind::Persistent:
+		if ((SkillTags(skill) & ST_Minion) != 0)
+			hit.effect = std::format("Minions at level {:d}", level);
+		return hit;
+	case SkillKind::Attack:
+		break;
+	case SkillKind::Default:
+		if (static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt && FiresGrantedBolt(player)) {
+			// RollGrantedBoltDamage: the spell base at the weapon's grant level, at GrantedBoltPercent.
+			const int boltLevel = std::max(GrantedBoltLevel(player), 1);
+			AddSpellBase(hit, player, boltLevel, DamageType::Fire, GrantedBoltPercent(player, boltLevel));
+		} else if (static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt) {
+			// RollStaffBoltDamage: the staff's damage with its bonus, cut down to whole points, plus a little of the hero's Magic.
+			const int magic = player._pMagic * StaffBoltMagicPercent / 100;
+			const int bonus = player._pIBonusDam;
+			hit.parts.push_back(Part(DamageType::Fire, EstimateRolls(player._pIMinDam, player._pIMaxDam, [magic, bonus](int roll) {
+				return static_cast<double>(std::max(1, ScaleWhole(roll + (roll * bonus / 100), StaffBoltDamagePercent) + magic));
+			})));
+		} else {
+			// DoAttack: the weapon's fire and lightning land in full on a hit, outside the attack's percent.
+			AddWeaponHit(hit, player, skill, level, DefaultAttackDamagePercent, 100, ShootsArrows(player) ? std::nullopt : std::optional<int>(100));
+		}
+		return hit;
+	default:
+		return hit;
+	}
+	const WeaponSkill attack = skill.attack();
+	const int percent = GemDamagePercent(skill, level);
+	switch (attack) {
+	case WeaponSkill::BattleCry:
+		hit.effect = std::format("+{:d}% melee damage for a while", BattleCryDamagePercent(level));
+		return hit;
+	case WeaponSkill::AmplifyDamage:
+		hit.effect = std::format("Enemies take +{:d}% physical damage", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (level - 1)));
+		return hit;
+	case WeaponSkill::IceBolt:
+		AddSpellBase(hit, player, level, DamageType::Cold, ScaleWhole(percent, IceBoltShardDamagePercent));
+		return hit;
+	case WeaponSkill::FrostNova:
+		AddSpellBase(hit, player, level, DamageType::Cold, ScaleWhole(percent, FrostNovaShardDamagePercent));
+		return hit;
+	case WeaponSkill::LeapSlam:
+		AddWeaponHit(hit, player, skill, level, percent, LeapSlamDamagePercent);
+		return hit;
+	case WeaponSkill::ShieldCharge:
+		AddWeaponHit(hit, player, skill, level, percent, ShieldChargeDamagePercent);
+		return hit;
+	case WeaponSkill::ShadowStep:
+		AddWeaponHit(hit, player, skill, level, percent, ShadowStepDamagePercent);
+		return hit;
+	case WeaponSkill::EscapeShot:
+		AddWeaponHit(hit, player, skill, level, percent, VaultShotArrowDamagePercent);
+		return hit;
+	case WeaponSkill::Barrage:
+		AddWeaponHit(hit, player, skill, level, percent, BarrageArrowDamagePercent);
+		return hit;
+	case WeaponSkill::EmberFusillade:
+		// Each ember and spark rolls the spell base times its own row (poe2/spell_damage.hpp), then the gem's curve.
+		AddSpellBase(hit, player, level, DamageType::Fire, ScaleWhole(percent, SkillSpellDamagePercent(attack)));
+		return hit;
+	case WeaponSkill::Spark:
+		AddSpellBase(hit, player, level, DamageType::Lightning, ScaleWhole(percent, SkillSpellDamagePercent(attack)));
+		return hit;
+	case WeaponSkill::Smite:
+		// The weapon hit lands as lightning (ApplyPlayerAttackDamage) at Smite's percent (DoAttack); the weapon's own fire
+		// and lightning stay as they were.
+		AddWeaponHit(hit, player, skill, level, percent, SmiteDamagePercent, percent);
+		if (!hit.parts.empty())
+			hit.parts.front().type = DamageType::Lightning;
+		return hit;
+	case WeaponSkill::Frenzy:
+		AddWeaponHit(hit, player, skill, level, percent, FrenzyDamagePercent, percent);
+		return hit;
+	case WeaponSkill::ShieldBash:
+		AddWeaponHit(hit, player, skill, level, percent, ShieldBashDamagePercent);
+		return hit;
+	default:
+		break;
+	}
+	if (const TableSkillData *table = FindTableSkill(attack); table != nullptr) {
+		if (table->buff == TableBuff::WarCry) {
+			// Only War Cry stuns; the other cries say what they do (balance re-score, batch2-fixes.md 7).
+			const std::string note = table->skill == WeaponSkill::WarCry ? std::string() : TableSkillExtraNote(table->skill);
+			hit.effect = note.empty() ? std::format("Stuns enemies within {:d} tiles", table->radius) : note;
+			return hit;
+		}
+		if (table->shape == TableShape::Buff) {
+			hit.effect = std::format("Buff for {:d} seconds", table->duration / TicksPerSecond);
+			return hit;
+		}
+		if (table->shape == TableShape::Curse && table->curse != TableCurse::Haunt && table->curse != TableCurse::Locust) {
+			hit.effect = std::format("Curse for {:d} seconds", table->duration / TicksPerSecond);
+			return hit;
+		}
+		// POE2 Mashup: Mana Drain deals no damage, so it shows what it does instead (Curtis 2026-10-29).
+		if (table->damagePercent <= 0) {
+			if (table->rider == GrantedRider::ManaDrain)
+				hit.effect = std::format("No damage: each hit gives you {:d} mana (once a second an enemy) and slows the enemy {:d}% for {:d} seconds", ManaDrainMana(level), ManaDrainSlowPercent, ManaDrainSlowTicks / TicksPerSecond);
+			else
+				hit.effect = "No damage";
+			return hit;
+		}
+		const int tablePercent = percent * table->damagePercent / 100;
+		if ((table->flags & TF_Spell) != 0) {
+			AddSpellBase(hit, player, level, table->type, tablePercent);
+		} else {
+			// A table skill's weapon hit takes the gem's percent, then its own (SkillHitMonster).
+			// Swamp Gas Arrow's arrow deals only its share of the row, as FireTableMissile shoots it (audit-drafts-bow.md 7.2).
+			// Shock Web's hit is its burst, half the row (audit-drafts-dagger.md 6.2); its pulses are in its note.
+			int rowPercent = table->damagePercent;
+			if (table->skill == WeaponSkill::SwampGasArrow)
+				rowPercent = table->damagePercent * SwampGasArrowPercent / 100;
+			else if (table->skill == WeaponSkill::ShockWeb)
+				rowPercent = table->damagePercent * ShockWebBurstPercent / 100;
+			AddWeaponHit(hit, player, skill, level, percent, rowPercent);
+			// Wrath of the Skies' hit is part lightning (ApplyPlayerAttackDamage), the rest physical.
+			if (table->type != DamageType::Physical && !hit.parts.empty() && table->convertPercent > 0 && table->convertPercent < 100) {
+				HitPart element = hit.parts.front();
+				const double share = table->convertPercent / 100.0;
+				for (double *value : { &element.min, &element.max, &element.average })
+					*value *= share;
+				element.type = table->type;
+				HitPart &physical = hit.parts.front();
+				for (double *value : { &physical.min, &physical.max, &physical.average })
+					*value *= 1.0 - share;
+				hit.parts.insert(hit.parts.begin() + 1, element);
+			} else if (table->type != DamageType::Physical && !hit.parts.empty()) {
+				hit.parts.front().type = table->type;
+			}
+		}
+		return hit;
+	}
+	AddWeaponHit(hit, player, skill, level, percent);
+	return hit;
+}
+
+/** @brief Whether a weapon skill plays a spell casting animation, as TryUseWeaponSkill starts it, rather than a swing. */
+bool PlaysCastAnimation(WeaponSkill skill)
+{
+	const TableSkillData *table = FindTableSkill(skill);
+	return (table != nullptr && table->graphic != 0)
+	    || IsAnyOf(skill, WeaponSkill::IceBolt, WeaponSkill::Spark, WeaponSkill::EmberFusillade, WeaponSkill::FrostNova, WeaponSkill::BattleCry, WeaponSkill::AmplifyDamage);
+}
+
+} // namespace
+
+double UseSeconds(const Player &player, SkillSlot skill)
+{
+	// The same times StartAttack, StartRangeAttack, StartSpell and BeginSkillAnimation give the animations; a held use
+	// starts the next one on the last frame.
+	if (skill.kind == SkillKind::Spell) {
+		// Supports that slow the cast hold the hero still after it (DoSpell).
+		const int frames = std::max<int>(GetPlayerAnimDataForClass(player._pClass).castingFrames, 1);
+		const int recovery = SupportCastRecoveryTicks(player, skill.spell(), frames);
+		return ActionSeconds(CastTime(player, skill)) + (recovery / static_cast<double>(TicksPerSecond));
+	}
+	const WeaponSkill attack = skill.kind == SkillKind::Attack ? skill.attack() : WeaponSkill::None;
+	if (skill.kind == SkillKind::Default || IsSwingWeaponSkill(attack)) {
+		// A use of Double Swing holds both strikes, each with its own time.
+		if (attack == WeaponSkill::Flurry)
+			return ActionSeconds(SkillUseTime(player, skill, false)) + ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Backhand));
+		// Fists of Thunder's strikes on average: two plain ones, then the slower finisher.
+		if (attack == WeaponSkill::FistsOfThunder) {
+			const int every = FistsOfThunderBurstEvery;
+			return (((every - 1) * ActionSeconds(SkillUseTime(player, skill, false))) + ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))) / every;
+		}
+		return ActionSeconds(SkillUseTime(player, skill, false));
+	}
+	// Rime Strikes' strikes on average: two quick ones, then the slower third that throws the shards.
+	if (attack == WeaponSkill::RimeStrikes) {
+		const int every = RimeStrikesShardEvery;
+		return (((every - 1) * ActionSeconds(SkillUseTime(player, skill, false))) + ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))) / every;
+	}
+	// A skill with its own animation; a dash's time counts from its start, for the shortest dash.
+	return ActionSeconds(SkillUseTime(player, skill, PlaysCastAnimation(attack)));
+}
+
+double SkillHitAverage(const Player &player, SkillSlot skill, int level)
+{
+	const HitEstimate hit = EstimateHit(player, skill, std::max(level, 1));
+	double average = 0;
+	for (const HitPart &part : hit.parts) {
+		if (part.max > 0)
+			average += part.average;
+	}
+	if (skill.kind == SkillKind::Attack && PerHitBurst(skill.attack()) > 0)
+		average = average * PerHitDamagePercent(player, skill.attack()) / 100.0;
+	return average;
+}
+
+namespace {
+
+std::string_view SpellDescription(SpellID spell)
+{
+	switch (spell) {
+	case SpellID::Firebolt:
+		return "Hurls a fast bolt of fire at the target";
+	case SpellID::Fireball:
+		return "Hurls a ball of fire that explodes on impact, burning everything close by";
+	case SpellID::ChargedBolt:
+		return "Releases crackling sparks that wander erratically towards the target";
+	case SpellID::Lightning:
+		return "A bolt of lightning that strikes everything in a line";
+	case SpellID::ChainLightning:
+		return "Lightning that leaps from enemy to enemy";
+	case SpellID::HolyBolt:
+		return "A bolt of holy light that is deadly to the undead";
+	case SpellID::FireWall:
+		return "Raises a wall of fire that burns anything walking through it";
+	case SpellID::RingOfFire:
+		return "Surrounds you with a ring of fire";
+	case SpellID::FlameWave:
+		return "Sends a wave of fire rolling out across the ground";
+	case SpellID::Inferno:
+		return "Breathes a stream of fire at close range";
+	case SpellID::Nova:
+		return "A ring of lightning bursts out in every direction";
+	case SpellID::Guardian:
+		return "Summons a three-headed guardian that spits fire at enemies";
+	case SpellID::BloodStar:
+		return "A star of blood that pays for itself with life when mana runs low";
+	case SpellID::Elemental:
+		return "A slow fire elemental that hunts down its target, or the nearest enemy, and explodes";
+	case SpellID::Apocalypse:
+		return "Fire rains on every enemy in sight";
+	case SpellID::StoneCurse:
+		return "Turns an enemy to stone for a while";
+	case SpellID::Healing:
+		return "Restores some of your life";
+	case SpellID::Teleport:
+		return "Moves you instantly to the target";
+	case SpellID::ManaShield:
+		return "Damage taken drains mana instead of life";
+	default:
+		return {};
+	}
+}
+
+std::string_view SkillDescription(SkillSlot skill)
+{
+	switch (skill.kind) {
+	case SkillKind::Spell:
+		return SpellDescription(skill.spell());
+	case SkillKind::Attack:
+		return WeaponSkillDescription(skill.attack());
+	case SkillKind::Persistent:
+		return PersistentSkillDescription(skill.persistent());
+	case SkillKind::Default:
+		return IsRangedDefaultAttack(static_cast<DefaultAttack>(skill.id)) ? "Your weapon's own ranged attack. It costs no mana, so it hits softer than a skill gem's attack"
+		                                                                  : "Your weapon's own attack. It costs no mana, so it hits softer than a skill gem's attack";
+	default:
+		return {};
+	}
+}
+
+/** @brief Plain words on the ailments the skill's damage types can cause. */
+std::vector<std::string> AilmentLines(const HitEstimate &hit, uint32_t tags)
+{
+	std::vector<std::string> lines;
+	bool fire = (tags & ST_Fire) != 0;
+	bool lightning = (tags & ST_Lightning) != 0;
+	bool cold = (tags & ST_Frost) != 0;
+	bool physical = (tags & ST_Physical) != 0;
+	for (const HitPart &part : hit.parts) {
+		fire = fire || part.type == DamageType::Fire;
+		lightning = lightning || part.type == DamageType::Lightning;
+		cold = cold || part.type == DamageType::Cold;
+		physical = physical || part.type == DamageType::Physical;
+	}
+	if (fire)
+		lines.emplace_back("Fire hits build up Ignite (burns over time)");
+	if (cold)
+		lines.emplace_back("Cold hits Chill (slow), big ones Freeze");
+	if (lightning)
+		lines.emplace_back("Lightning hits Shock (more damage taken)");
+	if (physical)
+		lines.emplace_back("Physical hits build up Stun");
+	return lines;
+}
+
+void Heading(std::vector<SkillDetailLine> &lines, std::string label)
+{
+	lines.push_back({ SkillDetailLine::Kind::Heading, std::move(label), {} });
+}
+
+void Value(std::vector<SkillDetailLine> &lines, std::string label, std::string value)
+{
+	lines.push_back({ SkillDetailLine::Kind::Value, std::move(label), std::move(value) });
+}
+
+void Text(std::vector<SkillDetailLine> &lines, SkillDetailLine::Kind kind, std::string text)
+{
+	lines.push_back({ kind, std::move(text), {} });
+}
+
+std::string Seconds(double seconds)
+{
+	return std::format("{:.2f}s", seconds);
+}
+
+/** @brief What one minion of a minion skill is, as it rises: its monster, level, life and blow, and how its kind fights. */
+struct MinionKind {
+	_monster_id type;
+	int level;
+	MinionRiseStats stats;
+	/** Its supports' life, and a Blood Golem's more, in percent. */
+	int lifePercent;
+	/** The share of its blow its kind deals (a Brute's more, a Cleric's none), in percent. */
+	int damagePercent;
+	MinionShot shot;
+	int shotPercent;
+	int range;
+	/** Game ticks from one attack to the next for the slow ones; 0 attacks as fast as its swing. */
+	int attackTicks;
+};
+
+bool IsGolemSkill(SkillSlot skill)
+{
+	return skill == SkillSlot::ForSpell(SpellID::Golem) || IsAnyOf(skill.persistent(), PersistentSkill::SummonGolem, PersistentSkill::BloodGolem, PersistentSkill::FireGolem);
+}
+
+/** @brief The minion the skill raises at the level; none for a skill without minions, or whose minions are other monsters (Revive). */
+std::optional<MinionKind> MinionKindOf(const Player &player, SkillSlot skill, int level)
+{
+	if (IsGolemSkill(skill)) {
+		const int lifePercent = skill.kind == SkillKind::Persistent ? GolemSkillLifePercent(player, skill.persistent()) : 100;
+		return MinionKind { MT_GOLEM, MinionLevelForGemLevel(level), GolemRiseStats(player, level), lifePercent, 100, MinionShot::None, 0, 0, 0 };
+	}
+	const MinionGemData *gem = FindMinionGem(skill.persistent());
+	// An illusion doesn't fight; its own lines say what it is.
+	if (gem == nullptr || gem->skill == PersistentSkill::LingeringIllusion)
+		return std::nullopt;
+	return MinionKind { gem->type, MinionLevelForGemLevel(level), SkeletonMinionRiseStats(player, gem->type, level), SupportMinionLifePercent(player, gem->skill),
+		gem->damagePercent, gem->shot, gem->shotPercent, gem->range, gem->attackTicks };
+}
+
+/** @brief One of the hero's minions of the skill standing on this level, whose supports' damage the details can ask; nullptr if none. */
+const Monster *MinionOfSkillUp(const Player &player, SkillSlot skill)
+{
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (!monster.isPlayerMinion() || monster.hasNoLife() || static_cast<size_t>(monster.goalVar3) != player.getId() || monster.position.tile == GolemHoldingCell
+		    || monster.poe2.revived)
+			continue;
+		const MinionGemData *gem = FindMinionGemByType(monster.type().type);
+		if (IsGolemSkill(skill) ? monster.type().type == MT_GOLEM : gem != nullptr && gem->skill == skill.persistent())
+			return &monster;
+	}
+	return nullptr;
+}
+
+/** @brief Every minion skill's numbers, as POE2's summon skills show them: life, damage, attack time and resistances. */
+void MinionDetails(std::vector<SkillDetailLine> &lines, const Player &player, SkillSlot skill, int level)
+{
+	const std::optional<MinionKind> kind = MinionKindOf(player, skill, level);
+	if (!kind)
+		return;
+	Heading(lines, "Each minion");
+	if (IsGolemSkill(skill)) {
+		// KeepGolemAlive raises it a quarter of GolemReviveTicks after it is gone.
+		Value(lines, "Minions", std::format("1, rising again {:s} after it falls", Seconds((GolemReviveTicks / 4) / static_cast<double>(TicksPerSecond))));
+		Value(lines, "Minion level", std::format("{:d}", kind->level));
+	}
+	const int32_t lifeRaw = static_cast<int32_t>(std::max<int64_t>(static_cast<int64_t>(kind->stats.lifeRaw) * kind->lifePercent / 100, 64));
+	Value(lines, "Life", std::format("{:d}", ShownDamage(lifeRaw / 64.0)));
+
+	// The blow as MonsterAttackMonster deals it: the roll on the minion tables with the owner's minion damage, the
+	// owner's gear's added damage, uniques, supports (asked of one that is up) and its kind's share.
+	const Monster *up = MinionOfSkillUp(player, skill);
+	const int supportPercent = up != nullptr ? SupportMinionDamagePercent(player, *up) : 100;
+	const int uniquePercent = UniqueMinionDamagePercent(player);
+	const int64_t permille = MinionDamageScalePermille(kind->type, kind->level, kind->stats.minDamage + kind->stats.maxDamage, MinionDamagePercent(player));
+	const int32_t gearRaw = MinionGearAddedRaw(player);
+	constexpr int64_t Limit = std::numeric_limits<int32_t>::max() / 4;
+	if (kind->damagePercent <= 0) {
+		Value(lines, "Damage", "None: it doesn't fight");
+	} else {
+		const DamageEstimate blow = EstimateRolls(kind->stats.minDamage, kind->stats.maxDamage, [&](int roll) {
+			int64_t dam = std::clamp<int64_t>((static_cast<int64_t>(roll) << 6) * permille / 1000, -Limit, Limit);
+			dam = std::clamp<int64_t>(dam + gearRaw, 0, Limit);
+			dam = dam * uniquePercent / 100;
+			dam = dam * supportPercent / 100 * kind->damagePercent / 100;
+			return static_cast<double>(dam) / 64;
+		});
+		Value(lines, "Damage per blow", std::format("{:d}-{:d} (average {:d})", ShownDamage(blow.min), ShownDamage(blow.max), ShownDamage(blow.average)));
+		if (skill.persistent() == PersistentSkill::RagingSpirits)
+			Text(lines, SkillDetailLine::Kind::Note, std::format("{:d}% of it is fire", RagingSpiritFirePercent));
+	}
+	if (kind->shot != MinionShot::None) {
+		// MinionShotDamage: the roll on the tables, the shot's share, then uniques and supports, in whole points.
+		const DamageEstimate shot = EstimateRolls(kind->stats.minDamage, kind->stats.maxDamage, [&](int roll) {
+			int64_t damage = std::clamp<int64_t>(static_cast<int64_t>(roll) * permille / 1000, -Limit, Limit) * kind->shotPercent / 100;
+			damage = damage * uniquePercent / 100;
+			damage = damage * supportPercent / 100;
+			return static_cast<double>(std::clamp<int64_t>(damage, 1, INT16_MAX));
+		});
+		const std::string_view name = kind->shot == MinionShot::Arrow ? "Arrows" : kind->shot == MinionShot::FrostBolt ? "Frost bolts" : kind->shot == MinionShot::ChargedBolts ? "Charged bolts (two)" : "Firebolts";
+		Value(lines, std::string(name), std::format("{:d}-{:d} each, from 2 to {:d} tiles", ShownDamage(shot.min), ShownDamage(shot.max), kind->range));
+	}
+	if (kind->damagePercent > 0) {
+		// A swing is its attack animation; the slow kinds wait longer between attacks.
+		const MonsterData &data = MonstersData[static_cast<size_t>(kind->type)];
+		const auto attack = static_cast<size_t>(MonsterGraphic::Attack);
+		const int ticks = std::max(std::max<int>(data.frames[attack], 1) * std::max<int>(data.rate[attack], 1), kind->attackTicks);
+		Value(lines, "Attack time", std::format("{:s} ({:.1f} per second)", Seconds(ticks / static_cast<double>(TicksPerSecond)), static_cast<double>(TicksPerSecond) / ticks));
+	}
+	// Its kind's resistances, and those the owner's gear gives minions.
+	const MonsterData &data = MonstersData[static_cast<size_t>(kind->type)];
+	const uint8_t marks = sgGameInitInfo.nDifficulty == DIFF_HELL ? data.resistanceHell : data.resistance;
+	const bool undead = data.monsterClass == MonsterClass::Undead;
+	const int gear = player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::MinionResistances)];
+	const auto resistance = [&](DamageType type) { return std::clamp(ResistanceMarkPercent(marks, type, undead) + gear, MinMonsterResistance, MaxMonsterResistance); };
+	Value(lines, "Resistances", std::format("Fire {:d}%, Lightning {:d}%, Cold {:d}%", resistance(DamageType::Fire), resistance(DamageType::Lightning), resistance(DamageType::Cold)));
+	if (up == nullptr && kind->damagePercent > 0)
+		Text(lines, SkillDetailLine::Kind::Note, "Supports that change minion damage count once one is up");
+}
+
+/** @brief Revive's minions are the monsters it raises, so it shows what it does to them. */
+void ReviveDetails(std::vector<SkillDetailLine> &lines, const Player &player, int level)
+{
+	Heading(lines, "Each minion");
+	Value(lines, "Minions", std::format("up to {:d}, the strongest monster you kill", ReviveMinionCount(player)));
+	Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
+	Value(lines, "Life", std::format("{:d}% of the monster's", SupportMinionLifePercent(player, PersistentSkill::Revive) * (100 + (5 * level)) / 100));
+	Value(lines, "Damage", "the monster's own, at the minion level");
+	Value(lines, "Resistances", "the monster's own");
+}
+
+void SpiritBuffDetails(std::vector<SkillDetailLine> &lines, PersistentSkill skill, int level)
+{
+	const auto ticks = [](int gameTicks) { return Seconds(gameTicks / 20.0); };
+	switch (skill) {
+	case PersistentSkill::WindDancer:
+		Value(lines, "A stage every", ticks(WindDancerStageTicks(level)));
+		Value(lines, "Each stage", std::format("{:d}% more evasion, up to {:d}", WindDancerEvasionPerStage, WindDancerMaxStages));
+		Value(lines, "Gale Force", std::format("{:d}% of the weapon's damage, {:d}% more per stage", GaleForceDamagePercent(level), GaleForceDamagePerStage));
+		break;
+	case PersistentSkill::GhostDance:
+		Value(lines, "A shroud every", ticks(GhostShroudTicks(level)));
+		Value(lines, "Losing one", std::format("{:d}% of evasion as energy shield per second, for {:d} seconds", GhostDanceRegenPercent, GhostDanceRegenTicks / 20));
+		break;
+	case PersistentSkill::Barkskin:
+		Value(lines, "Armour", std::format("{:d}% of the energy shield lost, for {:d} seconds", BarkskinArmourPercent(level), BarkskinTicks / 20));
+		break;
+	case PersistentSkill::ArcticArmour:
+		Value(lines, "A stage every", ticks(ArcticArmourStageTicks(level)));
+		Value(lines, "Stages", std::format("up to {:d}", ArcticArmourMaxStages(level)));
+		break;
+	case PersistentSkill::HeraldOfPlague:
+		Value(lines, "Spreads to", std::format("{:d} tiles around", HeraldOfPlagueRadius));
+		Value(lines, "Hinder chance", std::format("{:d}% for {:d} seconds", HeraldOfPlagueHinderChance(level), HeraldOfPlagueHinderTicks / 20));
+		break;
+	case PersistentSkill::CombatFrenzy:
+		Value(lines, "At most every", ticks(CombatFrenzyCooldownTicks(level)));
+		break;
+	case PersistentSkill::EternalRage:
+		Value(lines, "Rage per second", std::format("{:.2f}", EternalRageCentiPerSecond(level) / 100.0));
+		break;
+	case PersistentSkill::ElementalConflux:
+		Value(lines, "More damage", std::format("{:d}%, the element changes every {:d} seconds", ConfluxDamagePercent(level), ConfluxTicks / 20));
+		break;
+	case PersistentSkill::AlchemistsBoon:
+		Value(lines, "Flask charges", std::format("{:.2f} per second", AlchemistChargesMilliPerSecond(level) / 1000.0));
+		Value(lines, "Minions heal", std::format("{:d}% of a life flask's recovery", AlchemistMinionHealPercent(level)));
+		break;
+	case PersistentSkill::OverwhelmingPresence:
+		Value(lines, "Stun threshold", std::format("{:d}% lower", PresenceStunThresholdPercent(level)));
+		Value(lines, "Ailment threshold", std::format("{:d}% lower", PresenceAilmentThresholdPercent(level)));
+		Value(lines, "Reaches", std::format("{:d} tiles around you", PresenceTiles));
+		break;
+	case PersistentSkill::TrailOfCaltrops:
+		Value(lines, "Caltrop damage", std::format("{:d}% of the weapon's", CaltropDamagePercent(level)));
+		Value(lines, "Caltrops last", std::format("{:d} seconds, up to {:d}", CaltropTicks / 20, MaxCaltrops));
+		break;
+	case PersistentSkill::ManaRemnants:
+		Value(lines, "Mana each", std::format("{:d}", ManaRemnantMana(level)));
+		Value(lines, "From kills", std::format("{:d}% chance", ManaRemnantDropPercent));
+		break;
+	case PersistentSkill::Attrition:
+		Value(lines, "More damage", std::format("1% each {:d} seconds near you, up to {:d}%", AttritionTicksPerPercent / 20, AttritionMaxPercent(level)));
+		Value(lines, "Cull after", std::format("{:d} seconds, rares at {:d}%, uniques at {:d}%", AttritionCullTicks(level) / 20, AttritionCullRarePercent, AttritionCullUniquePercent));
+		break;
+	case PersistentSkill::Blink:
+		Value(lines, "Distance", std::format("{:d} tiles", BlinkTiles(level)));
+		Value(lines, "Cooldown", ticks(BlinkCooldownTicks(level)));
+		break;
+	case PersistentSkill::IronWard:
+		Value(lines, "Stores", std::format("{:d}% of the damage armour stops", IronWardStorePercent(level)));
+		Value(lines, "Holds up to", std::format("{:d}% of your maximum life", SpiritStoreCapPercent(level)));
+		Value(lines, "Nova", std::format("{:d} to {:d} tiles, {:d}% more stun", IronWardMinRadius, IronWardMaxRadius, IronWardStunPercent - 100));
+		break;
+	case PersistentSkill::PlagueBearer:
+		Value(lines, "Stores", std::format("{:d}% of your poison damage", PlagueBearerStorePercent));
+		Value(lines, "Holds up to", std::format("{:d}% of your maximum life", SpiritStoreCapPercent(level)));
+		Value(lines, "Nova", std::format("{:d} tiles, always poisons", PlagueBearerRadius));
+		break;
+	case PersistentSkill::Convalescence:
+		Value(lines, "Mana", std::format("{:d}", ConvalescenceManaCost));
+		Value(lines, "Can't be stopped for", ticks(ConvalescenceTicks(level)));
+		Value(lines, "Cooldown", ticks(ConvalescenceCooldownTicks));
+		break;
+	case PersistentSkill::GrimFeast:
+		Value(lines, "Remnant", std::format("{:d}% of the skeleton's life, for {:d} seconds", GrimFeastRemnantPercent, GrimFeastRemnantTicks / 20));
+		Value(lines, "Holds up to", std::format("{:d}% of your toughest skeleton's life", GrimFeastCapPercent(level)));
+		break;
+	case PersistentSkill::WarBanner:
+	case PersistentSkill::DefianceBanner:
+	case PersistentSkill::DreadBanner:
+		Value(lines, "Glory to plant", std::format("{:d}", GloryForBanner));
+		Value(lines, "Banner lasts", ticks(BannerTicks(level)));
+		Value(lines, "Area", std::format("{:d} tiles", BannerTiles));
+		if (skill == PersistentSkill::WarBanner)
+			Value(lines, "In its area", std::format("{:d}% more attack damage, {:d}% more accuracy, {:d}% faster attacks", WarBannerDamagePercent, WarBannerAccuracyPercent, WarBannerAttackSpeedPercent));
+		else if (skill == PersistentSkill::DefianceBanner)
+			Value(lines, "In its area", std::format("{:d}% more armour and evasion, {:d}% faster movement", DefianceBannerDefencePercent, DefianceBannerMovementPercent));
+		else
+			Value(lines, "In its area", std::format("+{:d}% maximum resistances, half a flask charge a second", DreadBannerMaxResistance));
+		break;
+	case PersistentSkill::Briarpatch:
+		Value(lines, "Stores", std::format("{:d}% of your attacks' physical damage", BriarpatchStorePercent));
+		Value(lines, "Holds up to", std::format("{:d}% of your maximum life", BriarpatchCapPercent(level)));
+		Value(lines, "Thorny ground", std::format("{:d} tiles for {:d} seconds, at most every {:d} seconds", BriarpatchRadius, BriarpatchTicks / 20, BriarpatchCooldownTicks / 20));
+		break;
+	case PersistentSkill::MagmaBarrier:
+		Value(lines, "Block chance", std::format("{:d}% increased, with a shield", MagmaBarrierBlockPercent));
+		Value(lines, "Charges in", ticks(MagmaBarrierChargeTicks(level)));
+		Value(lines, "Fire spray", std::format("{:d} plus {:d}% of the shield's armour, {:d} tiles ahead", MagmaBarrierDamage(level), MagmaBarrierArmourPercent, MagmaBarrierTiles));
+		break;
+	case PersistentSkill::ScavengedPlating:
+		Value(lines, "Each plating", std::format("{:d}% more armour, {:d} thorns damage", ScavengedPlatingArmourPerStack, ScavengedPlatingThorns(level)));
+		Value(lines, "Platings", std::format("up to {:d}, for {:d} seconds", ScavengedPlatingMaxStacks, ScavengedPlatingTicks / 20));
+		break;
+	case PersistentSkill::TimeOfNeed:
+		Value(lines, "Heals", std::format("{:d}% of your maximum life", TimeOfNeedHealPercent(level)));
+		Value(lines, "At most every", ticks(TimeOfNeedTicks(level)));
+		break;
+	case PersistentSkill::ChargeRegulation:
+		Value(lines, "Speed", std::format("{:d}% more attack and cast speed", ChargeRegulationSpeedPercent(level)));
+		Value(lines, "Each Frenzy charge", std::format("{:d} seconds", ChargeRegulationTicksPerCharge / 20));
+		break;
+	case PersistentSkill::WitheringPresence:
+		Value(lines, "A stack every", ticks(WitheringPresencePulseTicks(level)));
+		Value(lines, "Stacks", std::format("up to {:d}, for {:d} seconds", WitheringPresenceMaxStacks, WitheringPresenceTicks / 20));
+		Value(lines, "Reaches", std::format("{:d} tiles around you", PresenceTiles));
+		break;
+	case PersistentSkill::Trinity:
+		Value(lines, "Resonance a hit", std::format("+{:d} of its element, -{:d} of the others", TrinityResonanceGained(level), TrinityResonanceLost));
+		Value(lines, "More elemental damage", std::format("{:d}% for every {:d} Resonance in all", TrinityPercentPerStep(level), TrinityResonancePerStep));
+		Value(lines, "Fades", std::format("after {:d} seconds without an elemental hit", TrinityIdleTicks / 20));
+		break;
+	case PersistentSkill::SiphonElements:
+		Value(lines, "Infusion chance", std::format("{:d}% a freeze, shock or ignite", SiphonElementsChance(level)));
+		Value(lines, "Picked up from", std::format("{:d} tiles", SiphonElementsPickupTiles(level)));
+		break;
+	case PersistentSkill::HeraldOfBlood:
+		Value(lines, "Burst", std::format("{:d}% of the dead enemy's life, {:d} tiles around", HeraldOfBloodPercent, HeraldOfBloodRadius));
+		Value(lines, "Bleed chance", std::format("{:d}%", HeraldOfBloodBleedChance(level)));
+		break;
+	case PersistentSkill::SkeletalReavers:
+		Value(lines, "Rage", std::format("+1 a blow, up to {:d}; {:d}% more damage each", ReaverMaxRage, ReaverRagePercent));
+		Value(lines, "Rage fades", std::format("{:d} seconds after its last blow", ReaverRageTicks / 20));
+		break;
+	case PersistentSkill::SkeletalBrutes:
+		Value(lines, "Heavy stun", std::format("{:d}% more buildup from its blows", BruteStunPercent));
+		break;
+	case PersistentSkill::SkeletalClerics:
+		Value(lines, "Heals", std::format("{:d}% of a hurt minion's life every {:d} seconds, within {:d} tiles", ClericHealPercent(level), ClericHealTicks / 20, ClericRadius));
+		Value(lines, "Fallen minions", "rise twice as fast while a Cleric stands");
+		break;
+	case PersistentSkill::WolfPack:
+		Value(lines, "Wolves", std::format("{:d}", WolfPackSize(level)));
+		Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
+		Value(lines, "Revives after", std::format("{:d} seconds", SkeletonReviveTicks / 20));
+		break;
+	case PersistentSkill::RagingSpirits:
+		Value(lines, "Spirits", std::format("{:d} a cast at most, {:d} at once", RagingSpiritsPerCast, RagingSpiritsMax));
+		Value(lines, "Burn for", ticks(RagingSpiritTicks));
+		Value(lines, "Fire", std::format("{:d}% of their blows", RagingSpiritFirePercent));
+		Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
+		break;
+	case PersistentSkill::RavenousSwarm:
+		Value(lines, "A swarm every", std::format("{:d} seconds, with an enemy within {:d} tiles", SwarmEveryTicks / 20, SwarmReachTiles));
+		Value(lines, "Each swarm lasts", ticks(SwarmTicks(level)));
+		Value(lines, "Bites", std::format("every {:.1f}s for {:d}% of a Skeleton Warrior's blow", SwarmBiteTicks / 20.0, SwarmBitePercent));
+		Value(lines, "Poison", std::format("{:d}% of the bite over {:d} seconds, the strongest only", SwarmPoisonPercent, SwarmPoisonTicks / 20));
+		break;
+	case PersistentSkill::Sacrifice:
+		Value(lines, "Corpses", "your skeletons, for Corpse Explosion and Soul Harvest");
+		Value(lines, "Minions rise again after", std::format("{:.1f} seconds", SkeletonReviveTicks * SacrificeRevivePercent(level) / 100 / 20.0));
+		break;
+	case PersistentSkill::Guardian:
+		Value(lines, "Rises every", ticks(GuardianCooldownTicks));
+		Value(lines, "When an enemy is within", std::format("{:d} tiles", GuardianRange));
+		break;
+	case PersistentSkill::LingeringIllusion:
+		Value(lines, "Illusion", std::format("{:d} seconds, 1% of your life, draws enemies within {:d} tiles", IllusionTicks / 20, IllusionDrawTiles));
+		Value(lines, "Broken by an enemy", std::format("a Frenzy remnant for {:d} seconds", IllusionRemnantTicks / 20));
+		Value(lines, "Second remnant", std::format("{:d}% chance", IllusionSecondRemnantChance(level)));
+		break;
+	case PersistentSkill::Impurity:
+		Value(lines, "Chaos resistance", std::format("+{:d}%, for you", CleansingChaosResistance(level)));
+		break;
+	default:
+		break;
+	}
+}
+
+} // namespace
+
+DamageEstimate MeleeHitEstimate(int weaponMin, int weaponMax, int increasedPercent, int addedDamage, int percent, int secondPercent)
+{
+	return EstimateRolls(weaponMin, weaponMax, [=](int roll) {
+		// PlrHitMonst: whole points up to the added damage, then 1/64 points for the percents.
+		int64_t raw = static_cast<int64_t>(std::max(roll + (roll * increasedPercent / 100) + addedDamage, 1)) << 6;
+		raw = raw * percent / 100;
+		raw = raw * secondPercent / 100;
+		return static_cast<double>(raw) / 64;
+	});
+}
+
+DamageEstimate ArrowHitEstimate(int weaponMin, int weaponMax, int increasedPercent, int addedDamage, int percent)
+{
+	// ScaleSupportedMissileDamage cuts the ends of the bow's range before the roll.
+	return EstimateRolls(ScaleWhole(weaponMin, percent), ScaleWhole(weaponMax, percent), [=](int roll) {
+		return static_cast<double>(std::max(roll + (roll * increasedPercent / 100) + addedDamage, 0));
+	});
+}
+
+int ShownDamage(double damage)
+{
+	return static_cast<int>(std::floor(damage + 0.5));
+}
+
+std::string SkillTagText(SkillSlot skill)
+{
+	const uint32_t tags = SkillTags(skill);
+	std::string text;
+	const auto add = [&text](std::string_view name) {
+		if (!text.empty())
+			text.append(", ");
+		text.append(name);
+	};
+	if (skill.kind == SkillKind::Persistent)
+		add("Spirit");
+	if ((tags & ST_Attack) != 0)
+		add("Attack");
+	if ((tags & ST_Spell) != 0)
+		add("Spell");
+	if ((tags & ST_Buff) != 0)
+		add("Buff");
+	if ((tags & ST_Melee) != 0)
+		add("Melee");
+	if ((tags & ST_Strike) != 0)
+		add("Strike");
+	if ((tags & ST_Slam) != 0)
+		add("Slam");
+	if ((tags & ST_Projectile) != 0)
+		add("Projectile");
+	if ((tags & ST_Area) != 0)
+		add("Area");
+	if ((tags & ST_Duration) != 0)
+		add("Duration");
+	if ((tags & ST_Warcry) != 0)
+		add("Warcry");
+	if ((tags & ST_Curse) != 0)
+		add("Curse");
+	if ((tags & ST_Minion) != 0)
+		add("Minion");
+	if ((tags & ST_Command) != 0)
+		add("Command");
+	if ((tags & ST_Movement) != 0)
+		add("Movement");
+	if ((tags & ST_Channelling) != 0)
+		add("Channelling");
+	if ((tags & ST_Fire) != 0)
+		add("Fire");
+	if ((tags & ST_Lightning) != 0)
+		add("Lightning");
+	if ((tags & ST_Frost) != 0)
+		add("Cold");
+	if ((tags & ST_Physical) != 0)
+		add("Physical");
+	if ((tags & ST_Chaos) != 0)
+		add("Chaos");
+	if ((tags & ST_Poison) != 0)
+		add("Poison");
+	return text;
+}
+
+std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
+{
+	using Kind = SkillDetailLine::Kind;
+	std::vector<SkillDetailLine> lines;
+	// A held sceptre's granted Spirit skill has a row of its own, without a gem (Curtis 2026-10-30).
+	const bool isGranted = socket == GrantedRowMain || socket == GrantedRowOff;
+	if (socket > DefaultAttackRow && !isGranted)
+		return lines;
+	SkillSlot skill = RowSkill(player, socket);
+	if (isGranted) {
+		const PersistentSkill granted = GrantedSpiritSkill(player, static_cast<int>(socket - GrantedRowMain));
+		skill = granted != PersistentSkill::None ? SkillSlot::ForPersistent(granted) : SkillSlot {};
+	}
+	if (skill.isEmpty())
+		return lines;
+	const bool isDefault = socket == DefaultAttackRow;
+
+	// The default attack has no gem: it is level 1 and stays so. A caster weapon's granted skill there is at its grant level.
+	const int gemLevel = isDefault ? MaxGemLevel : isGranted ? std::max(player.poe2.grantedLevel(skill), 1) : player.poe2.gemLevel(socket);
+	const int level = isDefault && skill.kind == SkillKind::Default ? 1 : skill.kind == SkillKind::Spell ? player.GetSpellLevel(skill.spell()) : player.poe2.effectiveLevel(skill);
+	const std::string tags = SkillTagText(skill);
+	if (!tags.empty())
+		Text(lines, Kind::Note, tags);
+	if (const std::string_view description = SkillDescription(skill); !description.empty())
+		Text(lines, Kind::Text, std::string(description));
+
+	Heading(lines, isDefault ? "Weapon attack" : isGranted ? "Granted by your sceptre" : "Gem");
+	// POE2 Mashup: a granted skill that deals no damage (Mana Drain) has no damage line (Curtis 2026-10-29).
+	const TableSkillData *grantedRow = isDefault && skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
+	if (isDefault && (grantedRow == nullptr || grantedRow->damagePercent > 0))
+		Value(lines, "Damage", static_cast<DefaultAttack>(skill.id) == DefaultAttack::StaffBolt ? std::format("{:d}% of the staff's or sceptre's, +{:d}% of Magic", StaffBoltDamagePercent, StaffBoltMagicPercent)
+		                                                                                      : std::format("{:d}% of the weapon's", DefaultAttackDamagePercent));
+	else if (isGranted)
+		Value(lines, "Level", player.poe2.skillLevel(skill) > 0 ? std::format("{:d} (your gem of it is used instead)", level) : std::format("{:d}", level));
+	else if (!isDefault)
+		Value(lines, "Level", level != gemLevel ? std::format("{:d} (gem {:d}, {:+d} from gear)", level, gemLevel, level - gemLevel) : std::format("{:d}", level));
+	if (skill.kind == SkillKind::Persistent && IsMinionCountSkill(skill.persistent())) {
+		const PersistentSkill persistent = skill.persistent();
+		const int chosen = ChosenMinionCount(player, persistent);
+		const int active = ActiveMinionCount(player, persistent);
+		Value(lines, "Minions", active < chosen ? std::format("{:d} of {:d} (not enough Spirit)", active, chosen) : std::format("{:d}", chosen));
+		Value(lines, "Reserves", std::format("{:d} Spirit", GemSpiritReservation(player, persistent)));
+		const int free = FreeMinions(persistent);
+		Value(lines, "Spirit per minion", free > 0 ? std::format("{:d}, first {:d} free", SpiritPerMinion(player, persistent), free) : std::format("{:d}", SpiritPerMinion(player, persistent)));
+		if (const int extra = SupportExtraMinions(player, persistent); extra > 0)
+			Value(lines, "From supports", std::format("+{:d} minions", extra));
+		Value(lines, "Most minions", std::format("{:d}, as Spirit allows", static_cast<int>(MaxMinionsPerGem)));
+		Value(lines, "Minion level", std::format("{:d}", MinionLevelForGemLevel(level)));
+		Value(lines, "Revives after", std::format("{:.1f} seconds", MinionReviveTicks(player) / 20.0));
+	} else if (skill.persistent() == PersistentSkill::HoradricTotem && skill.kind == SkillKind::Persistent)
+		Value(lines, "Cost", std::format("{:d} Mana for each totem", HoradricTotemManaCost(gemLevel)));
+	else if (skill.kind == SkillKind::Persistent)
+		Value(lines, "Reserves", std::format("{:d} Spirit", GemSpiritCost(player, skill.persistent())));
+	else if (const int mana = SkillManaCost(player, skill); mana > 0)
+		Value(lines, "Cost", std::format("{:d} Mana", mana));
+	else
+		Value(lines, "Cost", "No mana");
+
+	if (skill.kind == SkillKind::Persistent && !isDefault)
+		SpiritBuffDetails(lines, skill.persistent(), std::max(level, 1));
+	// Minion skills show their minions, as POE2's do: the Spirit gems' and the Golem spell's.
+	const int minionLevel = std::max(skill.kind == SkillKind::Spell ? player.GetSpellLevel(skill.spell()) : level, 1);
+	MinionDetails(lines, player, skill, minionLevel);
+	if (skill.persistent() == PersistentSkill::Revive)
+		ReviveDetails(lines, player, minionLevel);
+	// Its Command, picked for the tray from the skill picker.
+	if (const SummonCommand command = CommandForGem(skill.persistent()); command != SummonCommand::None && !isDefault) {
+		Heading(lines, std::format("Command: {:s}", SummonCommandName(command)));
+		Text(lines, Kind::Note, std::string(SummonCommandDescription(command)));
+		Value(lines, "Cooldown", std::format("{:d} seconds, no mana cost", SummonCommandCooldownTicks(command) / 20));
+		Value(lines, "Tags", SummonCommandTagText(command));
+	}
+
+	if (IsMetaGem(skill) && !isDefault && !isGranted) {
+		const PersistentSkill meta = skill.persistent();
+		if (UsesMetaEnergy(skill)) {
+			Value(lines, "Energy", std::format("{:d} of {:d}", MetaEnergy(player, socket), MetaEnergyCap(player.poe2, socket)));
+			if (IsInvocationGem(skill))
+				Value(lines, "A cast takes", std::format("{:d} Energy", MetaMaxEnergy(player.poe2, socket)));
+			Value(lines, "Energy gain", std::format("+{:d}% from gem level", MetaEnergyPercentPerLevel * (gemLevel - 1)));
+		}
+		if (meta == PersistentSkill::CastOnCritical)
+			Value(lines, "Damage of the spells", std::format("{:d}%", CastOnCriticalDamagePercent));
+		if (meta == PersistentSkill::Blasphemy) {
+			Value(lines, "Curse strength", std::format("{:d}%", BlasphemyStrength(gemLevel)));
+			Value(lines, "Reaches", std::format("{:d} tiles around you", BlasphemyRadius));
+			Value(lines, "Spirit per curse", std::format("{:d}", BlasphemySpiritPerCurse));
+		}
+		if (meta == PersistentSkill::HoradricTotem) {
+			Value(lines, "Totems", std::format("up to {:d}, for {:d} seconds", HoradricTotemLimit(gemLevel), HoradricTotemTicks / 20));
+			Value(lines, "Casts", std::format("one spell each {:s}, taking turns", Seconds(HoradricTotemCastTicks / 20.0)));
+		}
+		Heading(lines, meta == PersistentSkill::Blasphemy ? "Curses inside" : "Spells inside");
+		if (MetaSkillCount(player.poe2, socket) == 0)
+			Text(lines, Kind::Note, meta == PersistentSkill::Blasphemy ? "None yet: drop a curse gem in a socket" : "None yet: drop a spell gem in a socket");
+		for (const SkillSlot inside : player.poe2.metaSkills[socket]) {
+			if (!inside.isEmpty())
+				Value(lines, std::string(SkillName(inside)), std::format("level {:d}, {:d} mana", player.poe2.skillLevel(inside), SkillManaCost(player, inside)));
+		}
+		if (meta == PersistentSkill::Blasphemy)
+			Text(lines, Kind::Note, "They curse every enemy around you, and cost no mana");
+		else if (meta == PersistentSkill::HoradricTotem)
+			Text(lines, Kind::Note, "The totem casts them at the nearest enemy, and they cost no mana");
+		else
+			Text(lines, Kind::Note, IsInvocationGem(skill) ? "They cast together when you use it from the skill tray, for their mana" : "They cast together when the Energy is full, for their mana");
+	}
+
+	HitEstimate hit = EstimateHit(player, skill, std::max(skill.kind == SkillKind::Spell ? gemLevel : level, 1));
+	// A per-hit skill's use is one hit, for PerHitDamagePercent of one of its old burst.
+	const int perHitBurst = skill.kind == SkillKind::Attack ? PerHitBurst(skill.attack()) : 0;
+	if (perHitBurst > 0) {
+		const double scale = PerHitDamagePercent(player, skill.attack()) / 100.0;
+		for (HitPart &part : hit.parts) {
+			part.min *= scale;
+			part.max *= scale;
+			part.average *= scale;
+		}
+	}
+	const bool usable = skill.kind != SkillKind::Persistent;
+	double seconds = 0;
+	if (usable) {
+		seconds = UseSeconds(player, skill);
+		Value(lines, skill.kind == SkillKind::Spell ? "Cast time" : "Use time", std::format("{:s} ({:.1f} per second)", Seconds(seconds), 1.0 / seconds));
+		if (skill.kind == SkillKind::Attack && skill.attack() == WeaponSkill::FistsOfThunder) {
+			Value(lines, "Strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false))));
+			Value(lines, "Bursting strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))));
+		}
+		if (skill.kind == SkillKind::Attack && skill.attack() == WeaponSkill::RimeStrikes) {
+			Value(lines, "Strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false))));
+			Value(lines, "Third strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))));
+		}
+		if (const SkillSpeedRow *row = FindSkillSpeedRow(skill); row != nullptr && row->distanceMs > 0 && skill.kind == SkillKind::Attack)
+			Text(lines, Kind::Note, std::format("A longer leap adds up to {:s}", Seconds(row->distanceMs / 1000.0)));
+		if (perHitBurst > 0)
+			Text(lines, Kind::Note, "One hit a use: hold it to keep hitting");
+		if (perHitBurst > 0 && skill.attack() == WeaponSkill::SevenSidedStrike)
+			Text(lines, Kind::Note, std::format("Strikes the {:d} nearest enemies in turn; with fewer near, each strike deals their share", perHitBurst));
+	}
+
+	if (!hit.parts.empty()) {
+		Heading(lines, "Damage per hit");
+		// The real hits keep fractions of a point, so the numbers round to the nearest point and the average is the
+		// true average of the rolls, not the middle of the rounded ends.
+		double average = 0;
+		for (const HitPart &part : hit.parts) {
+			if (part.max <= 0)
+				continue;
+			Value(lines, std::string(DamageTypeName(part.type)), std::format("{:d}-{:d}", ShownDamage(part.min), ShownDamage(part.max)));
+			average += part.average;
+		}
+		Value(lines, "Average hit", std::format("{:d}", ShownDamage(average)));
+		// Double Swing's use time holds both strikes, and the backhand hits harder.
+		if (skill.kind == SkillKind::Attack && skill.attack() == WeaponSkill::Flurry)
+			average = average * (100 + FlurryBackhandDamagePercent) / 100;
+		// Seven-Sided Strike's strikes share the burst among the enemies near: one alone takes its share each time.
+		if (perHitBurst > 0 && skill.attack() == WeaponSkill::SevenSidedStrike)
+			average /= perHitBurst;
+		if (usable && seconds > 0)
+			Value(lines, "Damage per second", std::format("{:d} (one target)", ShownDamage(average / seconds)));
+		Text(lines, Kind::Note, "Before the enemy's armour and resistances");
+	} else if (!hit.effect.empty() && (SkillTags(skill) & ST_Minion) == 0) {
+		Heading(lines, "Effect");
+		Text(lines, Kind::Text, hit.effect);
+	}
+
+	const uint32_t tagBits = SkillTags(skill);
+	int extraProjectiles = GemExtraProjectiles(skill, std::max(level, 1));
+	if (skill.kind == SkillKind::Spell)
+		extraProjectiles += SupportExtraProjectiles(player, skill.spell());
+	else
+		extraProjectiles += SupportExtraProjectileCount(player, skill);
+	const TableSkillData *table = skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
+	std::vector<SkillDetailLine> shape;
+	if (perHitBurst > 0) {
+		if (extraProjectiles > 0)
+			Text(shape, Kind::Note, std::format("{:d} extra projectiles add to each hit's damage", extraProjectiles));
+	} else if (table != nullptr && table->count > 1 && IsAnyOf(table->shape, TableShape::Projectiles, TableShape::Stream))
+		Value(shape, "Projectiles", std::format("{:d}", table->count + extraProjectiles));
+	else if (extraProjectiles > 0)
+		Value(shape, "Extra projectiles", std::format("+{:d}", extraProjectiles));
+	if (table != nullptr && table->radius > 0)
+		Value(shape, "Area radius", std::format("{:d} tiles", static_cast<int>(table->radius)));
+	// Bone Spikes' cone.
+	if (table != nullptr && table->shape == TableShape::Line && (table->flags & TF_Spell) != 0)
+		Value(shape, "Cone", std::format("{:d} tiles long", static_cast<int>(table->count)));
+	if (table != nullptr && (table->flags & TF_PoisonBurst) != 0)
+		Text(shape, Kind::Note, std::format("The first hit bursts: it poisons all there and hits the others for {:d}%", PlagueArrowSplashPercent));
+	if (const std::string note = table != nullptr ? TableSkillExtraNote(table->skill) : std::string(); !note.empty())
+		Text(shape, Kind::Note, note);
+	// The poison skills' ground, traps, pods, effigy and bog.
+	if (table != nullptr) {
+		switch (table->zone) {
+		case TableZone::PoisonGround:
+			if (table->skill == WeaponSkill::SwampGasArrow)
+				Text(shape, Kind::Note, std::string("The gas poisons all in it every half second"));
+			else
+				Text(shape, Kind::Note, (table->flags & TF_LandingZone) != 0 ? std::format("The vine poisons and hinders {:d}% every half second", ThornvineHinderPercent) : std::string("The ground poisons all in it every half second"));
+			break;
+		case TableZone::GasTrap:
+			Text(shape, Kind::Note, std::format("Waits {:d} seconds for an enemy, then fills with gas", VenomSentryArmTicks / TicksPerSecond));
+			break;
+		case TableZone::Pod:
+			Text(shape, Kind::Note, std::format("{:d} pods, {:d} tiles apart, burst when an enemy is next to one", static_cast<int>(table->count), PodSpreadTiles));
+			break;
+		case TableZone::Bog:
+			Text(shape, Kind::Note, std::format("Hinders {:d}%; your arrows from or over it poison", WitchsBogHinderPercent));
+			break;
+		default:
+			break;
+		}
+		if ((table->flags & TF_PoisonedOnly) != 0)
+			Text(shape, Kind::Note, "Shoots only enemies your poison is on");
+	}
+	if (table != nullptr && table->duration > 0)
+		Value(shape, "Duration", Seconds(table->duration / static_cast<double>(TicksPerSecond)));
+	if ((tagBits & ST_Projectile) != 0)
+		Text(shape, Kind::Note, "Projectiles fly where you aim, at any angle");
+	if (!shape.empty()) {
+		Heading(lines, "Area and projectiles");
+		lines.insert(lines.end(), shape.begin(), shape.end());
+	}
+
+	std::vector<std::string> ailments = AilmentLines(hit, tagBits);
+	// A skill that poisons says how strong its poison is: Cobra Strike's is three times the common one. Its poison never
+	// stacks on its own; only supports add stacks (Twin Fangs).
+	if (table != nullptr && ((table->flags & (TF_Poison | TF_PoisonBurst | TF_LandingZone)) != 0 || table->zone == TableZone::Bog)) {
+		const int poison = TablePoisonPercentPerSecond(*table);
+		ailments.push_back(std::format("Poisons for {:d}% of the hit a second for {:d} seconds ({:d}% in all)", poison, PoisonTicks / TicksPerSecond, poison * PoisonTicks / TicksPerSecond));
+	}
+	if (!ailments.empty()) {
+		Heading(lines, "Ailments");
+		for (const std::string &line : ailments)
+			Text(lines, Kind::Text, line);
+	}
+
+	if (SkillTakesSupports(skill) && !isGranted) {
+		Heading(lines, "Supports");
+		bool any = false;
+		for (size_t i = 0; i < MaxSupportSockets; i++) {
+			const SupportGem gem = player.poe2.supportsAt(socket)[i];
+			if (gem == SupportGem::None)
+				continue;
+			any = true;
+			const int tier = player.poe2.socketTier(socket, i);
+			Value(lines, SupportGemTierName(gem, tier), {});
+			if (!SupportGemCanSupport(gem, skill))
+				Text(lines, Kind::Note, std::format("Resting: it doesn't fit {:s}", SkillName(skill)));
+			else
+				Text(lines, Kind::Good, std::string(SupportGemDescription(gem, tier)));
+		}
+		if (!any)
+			Text(lines, Kind::Note, "No supports yet: drop a support gem in a socket");
+	}
+
+	if (gemLevel < MaxGemLevel && !isGranted) {
+		Heading(lines, "Next gem level");
+		Value(lines, "Needs", std::format("character level {:d}", CharacterLevelForGemLevel(gemLevel + 1)));
+		Text(lines, Kind::Note, GemLevelText(skill, gemLevel + 1));
+	}
+	return lines;
+}
+
+} // namespace devilution

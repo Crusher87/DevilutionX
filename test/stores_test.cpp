@@ -1,5 +1,9 @@
 #include <gtest/gtest.h>
 
+#include "game_mode.hpp"
+#include "levels/dun_tile_data.hpp"
+#include "minitext.h"
+#include "player.h"
 #include "stores.h"
 
 using namespace devilution;
@@ -192,6 +196,62 @@ TEST(Stores, RegisterTownerDialogOption_multipleTowners)
 	EXPECT_EQ((*griswoldOpts)[0].getLabel(), "B");
 
 	ClearTownerDialogOptions();
+}
+
+class TalkMenuWalkAwayTest : public ::testing::Test {
+public:
+	void SetUp() override
+	{
+		Players.resize(1);
+		MyPlayerId = 0;
+		MyPlayer = &Players[0];
+		MyPlayer->position.tile = { 50, 50 };
+		MyPlayer->position.future = { 50, 50 };
+		// Not in town, so closing doesn't touch the speech stream.
+		leveltype = DTYPE_CATHEDRAL;
+		qtextflag = false;
+		ActiveStore = TalkID::None;
+		CloseInteractionPanelsWhenAway();
+	}
+
+	void TearDown() override
+	{
+		ActiveStore = TalkID::None;
+		qtextflag = false;
+		gbIsPoe2 = false;
+		leveltype = DTYPE_TOWN;
+		CloseInteractionPanelsWhenAway();
+	}
+};
+
+TEST_F(TalkMenuWalkAwayTest, CloseTalkMenuLeavesEveryPageAtOnce)
+{
+	ActiveStore = TalkID::SmithSell;
+	qtextflag = true;
+	CloseTalkMenu();
+	EXPECT_FALSE(IsPlayerInStore());
+	EXPECT_FALSE(qtextflag);
+}
+
+TEST_F(TalkMenuWalkAwayTest, Poe2StepAwayClosesTheTalkMenu)
+{
+	gbIsPoe2 = true;
+	ActiveStore = TalkID::SmithBuy;
+	CloseInteractionPanelsWhenAway();
+	EXPECT_TRUE(IsPlayerInStore()) << "standing still keeps the menu open";
+	MyPlayer->position.future = { 51, 50 };
+	CloseInteractionPanelsWhenAway();
+	EXPECT_FALSE(IsPlayerInStore());
+}
+
+TEST_F(TalkMenuWalkAwayTest, DiabloKeepsTheTalkMenuOpenWhenMoving)
+{
+	gbIsPoe2 = false;
+	ActiveStore = TalkID::Smith;
+	CloseInteractionPanelsWhenAway();
+	MyPlayer->position.future = { 51, 50 };
+	CloseInteractionPanelsWhenAway();
+	EXPECT_TRUE(IsPlayerInStore());
 }
 
 } // namespace

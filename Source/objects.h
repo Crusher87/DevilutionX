@@ -311,6 +311,13 @@ inline bool IsObjectAtPosition(Point position)
 }
 
 /**
+ * @brief POE2 Mashup: whether a solid object put on @p tile would cut the way between the floor tiles around it, as
+ * one in front of a doorway does (Curtis 2026-11-06: a book stand kept him out of a room). The tiles beside it must
+ * still reach each other within a few tiles without going through it.
+ */
+bool ObjectWouldBlockPassage(Point tile);
+
+/**
  * @brief Get a reference to the object located at this tile
  *
  * This function is unchecked. Trying to access an invalid position will result in out of bounds memory access
@@ -331,6 +338,8 @@ bool IsItemBlockingObjectAtPosition(Point position);
 
 std::expected<void, std::string> InitObjectGFX();
 void FreeObjectGFX();
+/** @brief Empties the object list on entering town, which has no objects of its own. */
+void ClearObjectsForTown();
 void AddL1Objs(int x1, int y1, int x2, int y2);
 void AddL2Objs(int x1, int y1, int x2, int y2);
 void AddL3Objs(int x1, int y1, int x2, int y2);
@@ -355,6 +364,16 @@ void OperateObject(Player &player, Object &object);
 void SyncOpObject(Player &player, int cmd, Object &object);
 void BreakObjectMissile(Object &object);
 void BreakObject(const Player &player, Object &object);
+/**
+ * @brief POE2 Mashup: a skill's hit smashes the barrel, urn, pod or crux on the tile, like a melee swing at it
+ * (Curtis 2026-10-22). Only the local hero's skills break them here; the break reaches the other players as a command.
+ */
+void BreakObjectAt(const Player &player, Point tile);
+/**
+ * @brief POE2 Mashup: an area skill smashes every barrel, urn, pod and crux in its area (see BreakObjectAt).
+ * @param radius Tiles from the centre, counted as the area's monster hits count them (Point::ExactDistance).
+ */
+void BreakObjectsInArea(const Player &player, Point center, int radius);
 void DeltaSyncOpObject(Object &object);
 void DeltaSyncCloseObj(Object &object);
 void DeltaSyncBreakObj(Object &object);

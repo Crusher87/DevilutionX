@@ -10,6 +10,7 @@
 
 #include "engine/random.hpp"
 #include "game_mode.hpp"
+#include "items.h"
 #include "items/validation.h"
 #include "loadsave.h"
 #include "plrmsg.h"
@@ -245,7 +246,8 @@ void PackNetPlayer(PlayerNetPack &packed, const Player &player)
 		PackNetItem(player.InvBody[i], packed.InvBody[i]);
 
 	packed._pNumInv = player._pNumInv;
-	for (int i = 0; i < packed._pNumInv; i++)
+	// Never past the bag: a bad count is sent as it is for the other side to refuse, but writes nothing out of bounds.
+	for (int i = 0; i < std::min<int>(packed._pNumInv, InventoryGridCells); i++)
 		PackNetItem(player.InvList[i], packed.InvList[i]);
 
 	for (int i = 0; i < InventoryGridCells; i++)
@@ -339,7 +341,8 @@ void UnPackItem(const ItemPack &packedItem, const Player &player, Item &item, bo
 		// so if we carry it over from packedItem, it may be incorrect
 		const uint32_t dwBuff = Swap32LE(packedItem.dwBuff) | (isHellfire ? CF_HELLFIRE : 0);
 		RecreateItem(player, item, idx, Swap16LE(packedItem.iCreateInfo), Swap32LE(packedItem.iSeed), Swap16LE(packedItem.wValue), dwBuff);
-		item._iIdentified = (packedItem.bId & 1) != 0;
+		// POE2 Mashup: normal items have nothing to identify.
+		item._iIdentified = (packedItem.bId & 1) != 0 || (gbIsPoe2 && item._iMagical == ITEM_QUALITY_NORMAL);
 		item._iMaxDur = packedItem.bMDur;
 		item._iDurability = ClampDurability(item, packedItem.bDur);
 		item._iMaxCharges = std::clamp<int>(packedItem.bMCh, 0, item._iMaxCharges);
@@ -424,6 +427,8 @@ void UnPackPlayer(const PlayerPack &packed, Player &player)
 
 	for (int i = 0; i < InventoryGridCells; i++)
 		player.InvGrid[i] = packed.InvGrid[i];
+	if (gbIsPoe2)
+		FitOneCellItems(player);
 
 	VerifyGoldSeeds(player);
 
@@ -565,6 +570,8 @@ bool UnPackNetPlayer(const PlayerNetPack &packed, Player &player)
 
 	for (int i = 0; i < InventoryGridCells; i++)
 		player.InvGrid[i] = packed.InvGrid[i];
+	if (gbIsPoe2)
+		FitOneCellItems(player);
 
 	for (int i = 0; i < MaxBeltItems; i++) {
 		Item &item = player.SpdList[i];

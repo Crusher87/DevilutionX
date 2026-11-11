@@ -37,6 +37,7 @@
 #include "config.h"
 #include "control/control.hpp"
 #include "controls/controller.h"
+#include "engine/ui_scale.hpp"
 #ifndef USE_SDL1
 #include "controls/devices/game_controller.h"
 #endif
@@ -157,6 +158,7 @@ Size GetPreferredWindowSize()
 }
 
 const auto OptionChangeHandlerResolution = (GetOptions().Graphics.resolution.SetValueChangedCallback(ResizeWindow), true);
+const auto OptionChangeHandlerUiScale = (GetOptions().Graphics.uiScale.SetValueChangedCallback(ResizeWindow), true);
 const auto OptionChangeHandlerFullscreen = (GetOptions().Graphics.fullscreen.SetValueChangedCallback(SetFullscreenMode), true);
 
 void OptionGrabInputChanged()
@@ -429,8 +431,15 @@ SDL_DisplayMode GetNearestDisplayMode(Size preferredSize,
 
 void AdjustToScreenGeometry(Size windowSize)
 {
-	gnScreenWidth = windowSize.width;
-	gnScreenHeight = windowSize.height;
+#ifdef USE_SDL1
+	constexpr bool CanScaleUi = false;
+#else
+	const bool CanScaleUi = *GetOptions().Graphics.upscale;
+#endif
+	// POE2 Mashup: the screen size is the UI's; the world is drawn at the full size.
+	const Size uiSize = SetRenderSize(windowSize, *GetOptions().Graphics.uiScale, CanScaleUi);
+	gnScreenWidth = uiSize.width;
+	gnScreenHeight = uiSize.height;
 	CalculateUIRectangle();
 	CalculatePanelAreas();
 }
@@ -711,11 +720,11 @@ void ReinitializeTexture()
 		Log("SDL_SetDefaultTextureScaleMode: {}", SDL_GetError());
 		SDL_ClearError();
 	}
-	texture = SDLWrap::CreateTexture(renderer, DEVILUTIONX_DISPLAY_TEXTURE_FORMAT, SDL_TEXTUREACCESS_STREAMING, gnScreenWidth, gnScreenHeight);
+	texture = SDLWrap::CreateTexture(renderer, DEVILUTIONX_DISPLAY_TEXTURE_FORMAT, SDL_TEXTUREACCESS_STREAMING, gnRenderWidth, gnRenderHeight);
 #else
 	auto quality = StrCat(static_cast<int>(*GetOptions().Graphics.scaleQuality));
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, quality.c_str());
-	texture = SDLWrap::CreateTexture(renderer, DEVILUTIONX_DISPLAY_TEXTURE_FORMAT, SDL_TEXTUREACCESS_STREAMING, gnScreenWidth, gnScreenHeight);
+	texture = SDLWrap::CreateTexture(renderer, DEVILUTIONX_DISPLAY_TEXTURE_FORMAT, SDL_TEXTUREACCESS_STREAMING, gnRenderWidth, gnRenderHeight);
 #endif
 }
 
@@ -731,12 +740,12 @@ void ReinitializeIntegerScale()
 	int w, h;
 	SDL_RendererLogicalPresentation mode;
 	if (!SDL_GetRenderLogicalPresentation(renderer, &w, &h, &mode)) ErrSdl();
-	const SDL_RendererLogicalPresentation newMode = *GetOptions().Graphics.integerScaling
+	const SDL_RendererLogicalPresentation newMode = *GetOptions().Graphics.integerScaling && !IsUiScaled()
 	    ? SDL_LOGICAL_PRESENTATION_INTEGER_SCALE
 	    : SDL_LOGICAL_PRESENTATION_LETTERBOX;
 	if (mode != newMode) SDL_SetRenderLogicalPresentation(renderer, w, h, newMode);
 #else
-	if (SDL_RenderSetIntegerScale(renderer, *GetOptions().Graphics.integerScaling ? SDL_TRUE : SDL_FALSE) < 0) {
+	if (SDL_RenderSetIntegerScale(renderer, *GetOptions().Graphics.integerScaling && !IsUiScaled() ? SDL_TRUE : SDL_FALSE) < 0) {
 		ErrSdl();
 	}
 #endif
@@ -777,13 +786,13 @@ void ReinitializeRenderer()
 
 #ifdef USE_SDL3
 		if (!SDL_SetRenderLogicalPresentation(renderer, gnScreenWidth, gnScreenHeight,
-		        *GetOptions().Graphics.integerScaling
+		        *GetOptions().Graphics.integerScaling && !IsUiScaled()
 		            ? SDL_LOGICAL_PRESENTATION_INTEGER_SCALE
 		            : SDL_LOGICAL_PRESENTATION_LETTERBOX)) {
 			ErrSdl();
 		}
 #else
-		if (SDL_RenderSetIntegerScale(renderer, *GetOptions().Graphics.integerScaling ? SDL_TRUE : SDL_FALSE) < 0) {
+		if (SDL_RenderSetIntegerScale(renderer, *GetOptions().Graphics.integerScaling && !IsUiScaled() ? SDL_TRUE : SDL_FALSE) < 0) {
 			ErrSdl();
 		}
 
@@ -795,12 +804,12 @@ void ReinitializeRenderer()
 		ReinitializeTexture();
 
 #ifdef USE_SDL3
-		RendererTextureSurface = SDLSurfaceUniquePtr { SDL_CreateSurface(gnScreenWidth, gnScreenHeight, texture->format) };
+		RendererTextureSurface = SDLSurfaceUniquePtr { SDL_CreateSurface(gnRenderWidth, gnRenderHeight, texture->format) };
 		if (RendererTextureSurface == nullptr) ErrSdl();
 #else
 		Uint32 format;
 		if (SDL_QueryTexture(texture.get(), &format, nullptr, nullptr, nullptr) < 0) ErrSdl();
-		RendererTextureSurface = SDLWrap::CreateRGBSurfaceWithFormat(0, gnScreenWidth, gnScreenHeight, SDL_BITSPERPIXEL(format), format);
+		RendererTextureSurface = SDLWrap::CreateRGBSurfaceWithFormat(0, gnRenderWidth, gnRenderHeight, SDL_BITSPERPIXEL(format), format);
 #endif
 	} else {
 		Size windowSize = {};

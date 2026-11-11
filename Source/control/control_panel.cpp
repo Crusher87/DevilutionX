@@ -18,11 +18,15 @@
 #include "panels/charpanel.hpp"
 #include "panels/mainpanel.hpp"
 #include "panels/partypanel.hpp"
+#include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
 #include "panels/spell_icons.hpp"
 #include "panels/spell_list.hpp"
 #include "pfile.h"
+#include "poe2/hardcore.hpp"
+#include "poe2/passive_tree.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "stores.h"
@@ -62,7 +66,7 @@ const Rectangle &GetRightPanel()
 }
 bool IsLeftPanelOpen()
 {
-	return CharFlag || QuestLogIsOpen || IsStashOpen || IsVisualStoreOpen;
+	return CharFlag || QuestLogIsOpen || IsStashOpen || IsVisualStoreOpen || IsSkillsPanelOpen();
 }
 bool IsRightPanelOpen()
 {
@@ -218,11 +222,27 @@ int DrawDurIcon4Item(const Surface &out, Item &pItem, int x, int c)
 	return x - (*pDurIcons)[c].height() - 8; // Add in spacing for the next durability icon
 }
 
+/** @brief Whether the weapon set has a point the hero can spend now. */
+bool HasWeaponSetPointToSpend(const Player &player, PassivePool pool)
+{
+	return WeaponSetPointsLeft(player, pool) > 0 && !WeaponSetNeedsPassivePoint(player, pool);
+}
+
+/** @brief POE2 Mashup: the level-up button is for unspent passive or weapon set points, and opens the passive tree. */
+bool LevelUpButtonIsForPassives()
+{
+	if (!gbIsPoe2 || MyPlayer == nullptr || MyPlayer->_pStatPts != 0)
+		return false;
+	return PassivePointsLeft(*MyPlayer) > 0 || HasWeaponSetPointToSpend(*MyPlayer, PassivePool::SetI) || HasWeaponSetPointToSpend(*MyPlayer, PassivePool::SetII);
+}
+
 bool IsLevelUpButtonVisible()
 {
-	if (SpellSelectFlag || CharFlag || MyPlayer->_pStatPts == 0) {
+	if (SpellSelectFlag || CharFlag || (MyPlayer->_pStatPts == 0 && !LevelUpButtonIsForPassives())) {
 		return false;
 	}
+	if (LevelUpButtonIsForPassives() && IsPassiveTreeOpen())
+		return false;
 	if (ControlMode == ControlTypes::VirtualGamepad) {
 		return false;
 	}
@@ -236,7 +256,18 @@ bool IsLevelUpButtonVisible()
 	return true;
 }
 
+/** @brief The label over the level-up button is centred in a line this wide, from the main panel's left edge. */
+constexpr int LevelButtonLabelWidth = 120;
+constexpr int LevelButtonLabelRise = 23;
+
 } // namespace
+
+std::optional<Rectangle> LevelButtonLabelArea()
+{
+	if (MyPlayer == nullptr || !IsLevelUpButtonVisible())
+		return std::nullopt;
+	return Rectangle { GetMainPanel().position + Displacement { 0, LevelButtonRect.position.y - LevelButtonLabelRise }, { LevelButtonLabelWidth, 12 } };
+}
 
 void CalculatePanelAreas()
 {
@@ -301,8 +332,9 @@ void FocusOnCharInfo()
 void OpenCharPanel()
 {
 	QuestLogIsOpen = false;
+	CloseSkillsPanel();
 	CloseGoldWithdraw();
-	CloseStash();
+	CloseStashForPanel();
 	CloseVisualStore();
 	CharFlag = true;
 }
@@ -568,7 +600,7 @@ void CheckMainPanelButtonUp()
 		case PanelButtonQlog:
 			CloseCharPanel();
 			CloseGoldWithdraw();
-			CloseStash();
+			CloseStashForPanel();
 			CloseVisualStore();
 			if (!QuestLogIsOpen)
 				StartQuestlog();
@@ -580,7 +612,9 @@ void CheckMainPanelButtonUp()
 			break;
 		case PanelButtonMainmenu:
 			if (MyPlayerIsDead) {
-				if (!gbIsMultiplayer) {
+				if (HardcoreHeroFell()) {
+					ContinueInSoftcore(*MyPlayer);
+				} else if (!gbIsMultiplayer) {
 					if (gbValidSaveFile)
 						gamemenu_load_game(false);
 					else
@@ -600,7 +634,7 @@ void CheckMainPanelButtonUp()
 			SpellbookFlag = false;
 			invflag = !invflag;
 			CloseGoldWithdraw();
-			CloseStash();
+			CloseStashForPanel();
 			CloseVisualStore();
 			CloseGoldDrop();
 			break;
@@ -667,7 +701,10 @@ void CheckLevelButtonUp()
 	SetPanelObjectPosition(UiPanels::Main, button);
 
 	if (button.contains(MousePosition)) {
-		OpenCharPanel();
+		if (LevelUpButtonIsForPassives())
+			OpenPassiveTree();
+		else
+			OpenCharPanel();
 	}
 	LevelButtonDown = false;
 }
@@ -676,7 +713,7 @@ void DrawLevelButton(const Surface &out)
 {
 	if (IsLevelUpButtonVisible()) {
 		const int nCel = LevelButtonDown ? 2 : 1;
-		DrawString(out, _("Level Up"), { GetMainPanel().position + Displacement { 0, LevelButtonRect.position.y - 23 }, { 120, 0 } },
+		DrawString(out, LevelUpButtonIsForPassives() ? FormatRuntime(ngettext("{:d} Passive Point", "{:d} Passive Points", PassivePointsLeft(*MyPlayer)), PassivePointsLeft(*MyPlayer)) : std::string(_("Level Up")), { GetMainPanel().position + Displacement { 0, LevelButtonRect.position.y - LevelButtonLabelRise }, { LevelButtonLabelWidth, 0 } },
 		    { .flags = UiFlags::ColorWhite | UiFlags::AlignCenter | UiFlags::KerningFitSpacing });
 		RenderClxSprite(out, (*pChrButtons)[nCel], GetMainPanel().position + Displacement { LevelButtonRect.position.x, LevelButtonRect.position.y });
 	}
@@ -818,7 +855,9 @@ void DrawDeathText(const Surface &out)
 		break;
 	}
 
-	if (!gbIsMultiplayer) {
+	if (HardcoreHeroFell()) {
+		text = FormatRuntime(_("Your hardcore hero has fallen. Press {} to continue in Softcore."), buttonText);
+	} else if (!gbIsMultiplayer) {
 		if (gbValidSaveFile)
 			text = FormatRuntime(_("Press {} to load last save."), buttonText);
 		else

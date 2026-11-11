@@ -86,6 +86,8 @@ enum item_color : uint8_t {
 extern DVL_API_FOR_TEST bool invflag;
 extern const Rectangle InvRect[NUM_XY_SLOTS];
 
+/** @brief The rarity an item's slot is coloured for: its own, except waystones in POE2 mode, which get no colour. */
+item_quality SlotBackQuality(const Item &item);
 void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_quality itemQuality);
 /**
  * @brief Checks whether the given item can be placed on the belt. Takes item size as well as characteristics into account. Items
@@ -101,7 +103,13 @@ bool CanBePlacedOnBelt(const Player &player, const Item &item);
 using ItemFunc = void (*)(Item &);
 
 void CloseInventory();
-void CloseStash();
+/**
+ * @brief Closes the stash. An item in hand is put down (on the floor or back in a bag) unless @p dropHeldItem is false,
+ * when it stays in hand.
+ */
+void CloseStash(bool dropHeldItem = true);
+/** @brief POE2 Mashup: closes the stash for another panel opening in its place, keeping the item in hand (Curtis 2026-10-20). */
+void CloseStashForPanel();
 void FreeInvGFX();
 void InitInv();
 
@@ -109,6 +117,11 @@ void InitInv();
  * @brief Render the inventory panel to the given buffer.
  */
 void DrawInv(const Surface &out);
+/**
+ * @brief POE2 Mashup: draws the inventory panel's stone grid behind a grid of the given cells at the given top-left,
+ * repeating its four rows (the stash grid uses it).
+ */
+void DrawInventoryGridBackground(const Surface &out, Point topLeft, Size cells);
 
 void DrawInvBelt(const Surface &out);
 
@@ -140,6 +153,13 @@ bool AutoEquipEnabled(const Player &player, const Item &item);
  * @return 'True' if the item was equipped and 'False' otherwise.
  */
 bool AutoEquip(Player &player, const Item &item, bool persistItem = true, bool sendNetworkMessage = false);
+
+/**
+ * @brief Whether the two items can be held together, one in each hand: one-handed both, and a weapon with a shield (or a
+ * focus), a Bard's swords and maces, and in POE2 a sceptre with any one-hander. A POE2 wand goes only with a shield,
+ * focus or sceptre.
+ */
+bool HandsCanHold(const Player &player, const Item &first, const Item &second);
 
 /**
  * @brief Checks whether the given item can be placed on the specified player's inventory.
@@ -232,8 +252,8 @@ bool CanPut(Point position);
 
 int ClampDurability(const Item &item, int durability);
 int16_t ClampToHit(const Item &item, int16_t toHit);
-uint8_t ClampMaxDam(const Item &item, uint8_t maxDam);
-int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int iseed, int id, int dur, int mdur, int ch, int mch, int ivalue, uint32_t ibuff, int toHit, int maxDam);
+uint16_t ClampMaxDam(const Item &item, uint16_t maxDam);
+int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int iseed, int id, int dur, int mdur, int ch, int mch, int ivalue, uint32_t ibuff, int toHit, int maxDam, const Poe2Craft &craft = {});
 int SyncDropEar(Point position, uint16_t icreateinfo, uint32_t iseed, uint8_t cursval, std::string_view heroname);
 int8_t CheckInvHLight();
 bool CanUseScroll(Player &player, SpellID spell);
@@ -241,8 +261,12 @@ void ConsumeStaffCharge(Player &player);
 bool CanUseStaff(Player &player, SpellID spellId);
 Item &GetInventoryItem(Player &player, int location);
 bool UseInvItem(int cii);
+/** @brief POE2 Mashup: puts on the inventory item under the cursor, swapping out what's worn; false if it isn't equipment. */
+bool EquipInvItem(Player &player, int cii);
 void DoTelekinesis();
 int CalculateGold(Player &player);
+/** @brief POE2 Mashup: gold left in an old save's inventory joins the league's purse. */
+void MoveInventoryGoldToLeague(Player &player);
 
 /**
  * @brief Gets the size, in inventory cells, of the given item.

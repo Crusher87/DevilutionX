@@ -24,8 +24,11 @@ int8_t AnimationInfo::getFrameToUseForRendering() const
 	if (relevantFramesForDistributing_ <= 0)
 		return std::max<int8_t>(0, currentFrame);
 
-	if (currentFrame >= relevantFramesForDistributing_)
+	if (currentFrame >= relevantFramesForDistributing_) {
+		if (spriteFrames_ > 0)
+			return static_cast<int8_t>(getFollowThroughSpriteFraction() / baseValueFraction);
 		return currentFrame;
+	}
 
 	TicksFixed ticksSinceSequenceStarted = ticksSinceSequenceStarted_;
 	if (ticksSinceSequenceStarted_ < 0) {
@@ -84,6 +87,23 @@ uint8_t AnimationInfo::getAnimationProgress() const
 	return static_cast<uint8_t>(animationFraction);
 }
 
+float AnimationInfo::getFrameFraction() const
+{
+	if (spriteFrames_ > 0 && relevantFramesForDistributing_ > 0 && currentFrame >= relevantFramesForDistributing_)
+		return static_cast<float>(getFollowThroughSpriteFraction() % baseValueFraction) / static_cast<float>(baseValueFraction);
+	TicksFixed ticksSinceSequenceStarted = std::max(TicksFixed::fromInt(0), ticksSinceSequenceStarted_);
+	RateFixed tickModifier = tickModifier_;
+	if (relevantFramesForDistributing_ <= 0 || currentFrame >= relevantFramesForDistributing_) {
+		if (ticksPerFrame <= 0)
+			return 0;
+		ticksSinceSequenceStarted = TicksFixed::fromInt((currentFrame * ticksPerFrame) + tickCounterOfCurrentFrame);
+		tickModifier = RateFixed(RateFixed::fromInt(1) / ticksPerFrame);
+	}
+	const FixedPoint<int, 7> total = getProgressToNextGameTick() + ticksSinceSequenceStarted;
+	const FixedPoint<int, 7> frames = total.multiplyWithoutWidening(tickModifier);
+	return static_cast<float>(frames.fractional()) / static_cast<float>(baseValueFraction);
+}
+
 void AnimationInfo::setNewAnimation(OptionalClxSpriteList celSprite, int8_t numberOfFrames, int8_t ticksPerFrame, AnimationDistributionFlags flags /*= AnimationDistributionFlags::None*/, int8_t numSkippedFrames /*= 0*/, int8_t distributeFramesBeforeFrame /*= 0*/, uint8_t previewShownGameTickFragments /*= 0*/)
 {
 	if ((flags & AnimationDistributionFlags::RepeatedAction) == AnimationDistributionFlags::RepeatedAction && distributeFramesBeforeFrame != 0 && this->numberOfFrames == numberOfFrames && currentFrame + 1 >= distributeFramesBeforeFrame && currentFrame != this->numberOfFrames - 1) {
@@ -107,6 +127,7 @@ void AnimationInfo::setNewAnimation(OptionalClxSpriteList celSprite, int8_t numb
 	ticksSinceSequenceStarted_ = TicksFixed::fromInt(0);
 	relevantFramesForDistributing_ = 0;
 	tickModifier_ = RateFixed::fromInt(0);
+	spriteFrames_ = 0;
 	isPetrified = false;
 
 	if (numSkippedFrames != 0 || flags != AnimationDistributionFlags::None) {
@@ -188,6 +209,31 @@ void AnimationInfo::setNewAnimation(OptionalClxSpriteList celSprite, int8_t numb
 	}
 }
 
+void AnimationInfo::setTimedAnimation(OptionalClxSpriteList celSprite, int8_t spriteFrames, int8_t actionFrame, int8_t ticksToAction, int8_t ticksAfterAction, AnimationDistributionFlags flags, uint8_t previewShownGameTickFragments /*= 0*/)
+{
+	ticksToAction = std::max<int8_t>(ticksToAction, 2);
+	ticksAfterAction = std::max<int8_t>(ticksAfterAction, 1);
+	actionFrame = std::clamp<int8_t>(actionFrame, 1, static_cast<int8_t>(std::max(spriteFrames - 1, 1)));
+	// The game logic's frames: from ticksToAction before the action frame to ticksAfterAction after it.
+	const auto logicalFrames = static_cast<int8_t>(actionFrame + ticksAfterAction + 1);
+	const auto start = static_cast<int8_t>(actionFrame - ticksToAction);
+	setNewAnimation(celSprite, logicalFrames, 1, flags, start, static_cast<int8_t>(actionFrame + 1), previewShownGameTickFragments);
+	if (logicalFrames != spriteFrames)
+		spriteFrames_ = spriteFrames;
+}
+
+int AnimationInfo::getFollowThroughSpriteFraction() const
+{
+	// From the action frame (relevantFramesForDistributing_) the logic's frames map evenly onto the sprites' last frames.
+	const int actionFrame = relevantFramesForDistributing_;
+	const int logicalSpan = std::max(numberOfFrames - 1 - actionFrame, 1);
+	const int spriteSpan = spriteFrames_ - 1 - actionFrame;
+	const int progress = currentFrame >= numberOfFrames - 1 ? 0 : getProgressToNextGameTick().raw();
+	const int logical = ((currentFrame - actionFrame) * baseValueFraction) + progress;
+	const int sprite = (actionFrame * baseValueFraction) + (logical * spriteSpan / logicalSpan);
+	return std::clamp(sprite, 0, (spriteFrames_ - 1) * baseValueFraction);
+}
+
 void AnimationInfo::changeAnimationData(OptionalClxSpriteList celSprite, int8_t numberOfFrames, int8_t ticksPerFrame)
 {
 	if (numberOfFrames != this->numberOfFrames || ticksPerFrame != this->ticksPerFrame) {
@@ -202,6 +248,7 @@ void AnimationInfo::changeAnimationData(OptionalClxSpriteList celSprite, int8_t 
 		ticksSinceSequenceStarted_ = TicksFixed::fromInt(0);
 		relevantFramesForDistributing_ = 0;
 		tickModifier_ = RateFixed::fromInt(0);
+		spriteFrames_ = 0;
 	}
 	this->sprites = celSprite;
 }

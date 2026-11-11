@@ -112,6 +112,11 @@ struct Quest {
 	uint8_t _qvar2;
 
 	bool IsAvailable() const;
+	/**
+	 * @brief POE2 Mashup: whether the quest's item or reward still belongs on this floor.
+	 * Floors are rebuilt fresh, so a finished quest must not put its item or reward back.
+	 */
+	bool IsRewardPending() const;
 };
 
 struct QuestData {

@@ -99,6 +99,28 @@ enum class StoreUi : uint8_t {
 	VisualGrid = 2,
 };
 
+/**
+ * @brief POE2 Mashup: the loot filter, NeverSink's seven strictness levels (Curtis 2026-11-05). Off shows every item
+ * plainly; each level styles items like NeverSink's POE2 filter and hides more of the low value ones than the last.
+ */
+enum class LootFilter : uint8_t {
+	Off = 0,
+	Soft = 1,
+	Regular = 2,
+	SemiStrict = 3,
+	Strict = 4,
+	VeryStrict = 5,
+	UberStrict = 6,
+	UberPlusStrict = 7,
+};
+
+/** @brief POE2 Mashup: how wide the corner map is. */
+enum class CornerMapSize : uint8_t {
+	Small = 0,
+	Medium = 1,
+	Large = 2,
+};
+
 enum class PartyPortraits : uint8_t {
 	/** @brief No party portraits. */
 	Disabled = 0,
@@ -538,6 +560,24 @@ struct GraphicsOptions : OptionCategoryBase {
 	std::vector<OptionEntryBase *> GetEntries() override;
 
 	OptionEntryResolution resolution;
+	/** @brief POE2 Mashup: draws the UI bigger, in percent, while the world keeps the full resolution. */
+	OptionEntryInt<int> uiScale;
+	/** @brief POE2 Mashup: skill effects drawn by code in full colour, with glow and bloom. */
+	OptionEntryBoolean modernEffects;
+	/** @brief POE2 Mashup: how many particles and how much glow the modern effects use, in percent. */
+	OptionEntryInt<int> effectIntensity;
+	/** @brief POE2 Mashup: rain and snow outdoors, drawn with the modern effects. */
+	OptionEntryBoolean weather;
+	/** @brief POE2 Mashup: draws the world with the upscaled HD art pack while zoomed in. */
+	OptionEntryBoolean hdGraphics;
+	/** @brief POE2 Mashup: HD light in each light's own colour, stopped by walls, with shadows that move with the light. */
+	OptionEntryBoolean hdLighting;
+	/** @brief POE2 Mashup: the HD world's firelight warmer and dark corners darker, in a mood of its own for each part of the dungeon. */
+	OptionEntryBoolean hdStrongMood;
+	/** @brief POE2 Mashup: the HD world's darkest shades a little lighter, for screens slow to brighten dark shades while they move. */
+	OptionEntryBoolean hdLiftDarks;
+	/** @brief POE2 Mashup: chips of stone, sparks and drops of blood that fly, bounce off the floor and walls and settle (looks only). */
+	OptionEntryBoolean physicsDebris;
 	/** @brief Run in fullscreen or windowed mode. */
 	OptionEntryBoolean fullscreen;
 #if !defined(USE_SDL1) || defined(__3DS__)
@@ -642,6 +682,52 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean disableCripplingShrines;
 	/** @brief Spell hotkeys instantly cast the spell. */
 	OptionEntryBoolean quickCast;
+	/** @brief Walk by holding W, A, S and D (POE2 Mashup). */
+	OptionEntryBoolean wasdMovement;
+	/** @brief The loot filter's strictness, or Off (POE2 Mashup). */
+	OptionEntryEnum<LootFilter> lootFilter;
+	/** @brief The loot filter's light beams over good items (POE2 Mashup). */
+	OptionEntryBoolean lootFilterBeams;
+	/** @brief The loot filter's drop sounds for good items (POE2 Mashup). */
+	OptionEntryBoolean lootFilterSounds;
+	/** @brief The loot filter's icons for good items on the maps (POE2 Mashup). */
+	OptionEntryBoolean lootFilterMapIcons;
+	/** @brief No longer in the settings: POE2 mode always shows the numbers above the globes. Kept so old ini files still load. */
+	OptionEntryBoolean showLifeManaLevels;
+	/** @brief A small life bar with a thin mana bar under it over the hero (POE2 Mashup). */
+	OptionEntryBoolean heroMiniBar;
+	/** @brief The hero's mini bar shows Energy Shield over the top of the life bar (POE2 Mashup). */
+	OptionEntryBoolean heroMiniBarEnergyShield;
+	/** @brief A small life bar over every monster that has taken damage (POE2 Mashup). */
+	OptionEntryBoolean hurtMonsterBars;
+	/** @brief The small always-on map in the top right corner (POE2 Mashup). */
+	OptionEntryBoolean showCornerMap;
+	/** @brief How wide the corner map is (POE2 Mashup). */
+	OptionEntryEnum<CornerMapSize> cornerMapSize;
+	/** @brief The corner map keeps the hero in its middle; off, it moves only when the hero nears its edge (POE2 Mashup). */
+	OptionEntryBoolean autoCentreMap;
+	/** @brief How see-through the map's lines and markers are, in percent (POE2 Mashup). */
+	OptionEntryInt<int> mapTransparency;
+	/** @brief How see-through the explored floor under the map's lines is, in percent; 100 hides it (POE2 Mashup). */
+	OptionEntryInt<int> landscapeTransparency;
+	/** @brief The corner map's zoom level, 1 to 4 (POE2 Mashup). */
+	OptionEntryInt<int> mapZoom;
+	/** @brief Names next to the map's markers (POE2 Mashup). */
+	OptionEntryBoolean mapPoiNames;
+	/** @brief Active quests and their next steps under the corner map (POE2 Mashup). */
+	OptionEntryBoolean enableQuestTracking;
+	/** @brief Cathedral floors built as a winding main way of rooms with side areas (POE2 Mashup). */
+	OptionEntryBoolean newCathedralFloors;
+	/** @brief Catacombs floors built the same way, from their own rooms (POE2 Mashup). */
+	OptionEntryBoolean newCatacombsFloors;
+	/** @brief Caves floors built the same way, from their own rooms (POE2 Mashup). */
+	OptionEntryBoolean newCavesFloors;
+	/** @brief Hell floors built the same way, from their own rooms (POE2 Mashup). */
+	OptionEntryBoolean newHellFloors;
+	/** @brief Hellfire's Hive floors built the same way, from their own rooms (POE2 Mashup). */
+	OptionEntryBoolean newHiveFloors;
+	/** @brief Hellfire's Crypt floors built the same way, from their own rooms (POE2 Mashup). */
+	OptionEntryBoolean newCryptFloors;
 	/** @brief Number of Healing potions to pick up automatically */
 	OptionEntryInt<int> numHealPotionPickup;
 	/** @brief Number of Full Healing potions to pick up automatically */
@@ -861,6 +947,11 @@ struct ModOptions : OptionCategoryBase {
 	void AddModEntry(const std::string &modName);
 	void RemoveModEntry(const std::string &modName);
 	void SetHellfireEnabled(bool enableHellfire);
+	/**
+	 * @brief POE2 mode always plays on Hellfire (Curtis 2026-10-18): switches Hellfire on when POE2 is on and Hellfire isn't.
+	 * @return true if it switched Hellfire on, whose own change then reloads the mods.
+	 */
+	bool SwitchOnHellfireForPoe2();
 
 private:
 	struct ModEntry {

@@ -77,6 +77,15 @@ public:
 	}
 
 	/**
+	 * @brief Whether this field is the last of its record (scanning it if it hasn't been read yet)
+	 */
+	[[nodiscard]] bool endOfRecord()
+	{
+		(void)value();
+		return state_->endOfRecord();
+	}
+
+	/**
 	 * Convenience function to let DataFileField instances be used like other single-value STL containers
 	 */
 	[[nodiscard]] std::string_view operator*()

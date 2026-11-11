@@ -725,8 +725,9 @@ void LoadModArchives(std::span<const std::string_view> modnames)
 	std::vector<bool> hasLooseOverride(activeMods.size(), false);
 #endif
 
+	// The first override path that has a file wins, so later (higher priority) mods go first.
 	std::string targetPath;
-	for (size_t i = 0; i < activeMods.size(); ++i) {
+	for (size_t i = activeMods.size(); i-- > 0;) {
 		const std::string_view modname = activeMods[i];
 		targetPath = StrCat(paths::PrefPath(), "mods" DIRECTORY_SEPARATOR_STR, modname, DIRECTORY_SEPARATOR_STR);
 		if (DirectoryExists(targetPath)) {

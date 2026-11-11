@@ -29,6 +29,7 @@
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "options.h"
+#include "poe2/weather.hpp"
 #include "utils/log.hpp"
 #include "utils/math.h"
 #include "utils/sdl_mutex.h"
@@ -293,6 +294,7 @@ void snd_init()
 void snd_deinit()
 {
 	if (gbSndInited) {
+		weather::StopSound();
 		ClearDuplicateSounds();
 #ifdef USE_SDL3
 		MIX_DestroyMixer(CurrentMixer);

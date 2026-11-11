@@ -1,0 +1,1364 @@
+id	name	kind	class	x	y	stats	links	region	lore	group	cluster_id	gx	gy	orbit	arcs	motif	road
+0	Warrior	Start	Warrior	228	0		16,17	Warrior		lattice	0	228	0	-1			
+1	Monk	Start	Monk	-228	0		18,19	Monk		lattice	1	-228	0	-1			
+2	Rogue	Start	Rogue	0	228		20,21	Rogue		lattice	2	0	228	-1			
+3	Sorcerer	Start	Sorcerer	0	-228		22,23	Sorcerer		lattice	3	0	-228	-1			
+4		JewelSocket		760	-80		28,34,65,447,451	Warrior		lattice	4	760	-80	-1			
+5		JewelSocket		-680	96		152,158,168,836,840	Monk		lattice	5	-680	96	-1			
+6		JewelSocket		58	-610		93,100,111,685,689	Sorcerer		lattice	6	58	-610	-1			
+7		JewelSocket		-468	721		292,302,307,1208,1211	Sightless Eye		lattice	7	-468	721	-1	-,-,-,-,+71		
+8		JewelSocket		83	755		199,215,224,1006,1010	Rogue		lattice	8	83	755	-1			
+9		JewelSocket		663	-447		238,241,244,1073,1086	Zakarum Cloister		lattice	9	663	-447	-1	-,-,-,-,+72		
+10		JewelSocket		478	591		314,316,325,1237,1242	Khanduras Muster		lattice	10	478	591	-1	-,-,-,-49,-		
+11		JewelSocket		-431	-638		264,269,275,1125,1141	Horadric Archive		lattice	11	-431	-638	-1	-,-,-,-,-86		
+12		JewelSocket		1030	206		64,67,72,577,581	Warrior		lattice	12	1030	206	-1			
+13		JewelSocket		-1015	150		156,161,163,852,856	Monk		lattice	13	-1015	150	-1			
+14		JewelSocket		110	-1085		94,99,104,680,684	Sorcerer		lattice	14	110	-1085	-1			
+15		JewelSocket		-235	1050		200,202,206,954,958	Rogue		lattice	15	-235	1050	-1			
+16		Small		232	-46	MeleeDamage=5	0,336	Warrior		lattice	16	232	-46	-1	-2230		
+17		Small		230	46	ArmorPercent=8	0,355	Warrior		lattice	17	230	46	-1	+3344		
+18		Small		-219	51	StaffDamage=5	1,409	Monk		lattice	18	-219	51	-1	+233		
+19		Small		-248	-49	EvasionPercent=8,EnergyShieldPercent=8	1,394	Monk		lattice	19	-248	-49	-1	-233		
+20		Small		4	268	BowDamage=5	2,432	Rogue		lattice	20	4	268	-1	-158		
+21		Small		-33	251	EvasionPercent=8	2,431	Rogue		lattice	21	-33	251	-1	+987		
+22		Small		-52	-256	SpellDamage=4	3,381	Sorcerer		lattice	22	-52	-256	-1	-408		
+23		Small		50	-258	EnergyShieldPercent=8	3,373	Sorcerer		lattice	23	50	-258	-1	+430		
+24		Attribute		860	-10	AnyAttribute=5	26,29,70,73,607	Warrior		lattice	24	860	-10	-1	-,-,-,-,-83		
+25	Swift Justice	Keystone		934	-41	FifthAttackRepeat=100,Damage=-20	331	Warrior	"The sword of justice is swift and sharp" Every fifth attack strikes twice, but all your attacks deal 20% reduced damage.	lattice	25	934	-41	-1	-201		
+26		Small		825	-45	AllResist=2	24,28	Warrior		lattice	26	825	-45	-1			
+27		Small		1049	-90	LifePercent=3	31,72	Warrior		lattice	27	1049	-90	-1			
+28		Attribute		800	-71	AnyAttribute=5	4,26,486	Warrior		lattice	28	800	-71	-1	+58		
+29		Small		851	-100	LifePercent=3	24,30	Warrior		lattice	29	851	-100	-1			
+30		Attribute		826	-190	AnyAttribute=5	29,33,497	Warrior		lattice	30	826	-190	-1			
+31		Attribute		953	-230	AnyAttribute=5	27,32,235,335,496	Warrior		lattice	31	953	-230	-1	-,-,+202,-50		
+32		Small		935	-302	AllResist=2	31,35	Warrior		lattice	32	935	-302	-1			
+33		Small		833	-279	LifePercent=3	30,36	Warrior		lattice	33	833	-279	-1			
+34		Attribute		600	-230	AnyAttribute=5	4,44,502	Warrior		lattice	34	600	-230	-1			
+35		Attribute		912	-397	AnyAttribute=5	32,338,1272	Warrior		lattice	35	912	-397	-1	+138,-		
+36		Attribute		830	-371	AnyAttribute=5	33,237,507,526	Warrior		lattice	36	830	-371	-1	-,+112,-66		
+37		Attribute		573	-289	AnyAttribute=5	38,39,40	Warrior		lattice	37	573	-289	-1			
+38		Small		615	-330	ManaPercent=4	37,238	Warrior		lattice	38	615	-330	-1			
+39		Small		613	-361	StunThreshold=10	37,41,238	Warrior		lattice	39	613	-361	-1			
+40		Small		541	-326	LifeRegen=1	37,43	Warrior		lattice	40	541	-326	-1			
+41		Small		566	-360	ManaPercent=4	39,42	Warrior		lattice	41	566	-360	-1			
+42		Small		539	-360	StunBuildup=10	41,43	Warrior		lattice	42	539	-360	-1			
+43		Attribute		499	-376	AnyAttribute=5	40,42,45,528	Warrior		lattice	43	499	-376	-1	-,-77		
+44		Attribute		410	-316	AnyAttribute=5	34,45,339	Warrior		lattice	44	410	-316	-1	-,+709		
+45		Small		461	-360	LifeRegen=1	43,44	Warrior		lattice	45	461	-360	-1			
+46		Small		499	474	LifeRegen=1	47,54,325,533	Warrior		lattice	46	499	474	-1	-,-,-,+72		
+47		Small		484	450	LifePercent=3	46,48	Warrior		lattice	47	484	450	-1			
+48		Small		469	425	StunThreshold=10	47,51	Warrior		lattice	48	469	425	-1			
+49		Small		529	453	AllResist=2	54,325	Warrior		lattice	49	529	453	-1			
+50		Small		448	376	StunBuildup=10	51,53	Warrior		lattice	50	448	376	-1			
+51		Attribute		475	396	AnyAttribute=5	48,50,52,538	Warrior		lattice	51	475	396	-1	-,-68		
+52		Small		500	409	StunBuildup=10	51,54	Warrior		lattice	52	500	409	-1			
+53		Attribute		402	322	AnyAttribute=5	50,65,342,348	Warrior		lattice	53	402	322	-1	-,-120,-720		
+54		Attribute		526	421	AnyAttribute=5	46,49,52	Warrior		lattice	54	526	421	-1			
+55		Attribute		889	558	AnyAttribute=5	56,346,552	Warrior		lattice	55	889	558	-1	-,+99,-		
+56		Small		888	526	ManaPercent=4	55,58	Warrior		lattice	56	888	526	-1			
+57	Iron Patience	Keystone		507	293	ArmorPercent=40,ArmourVsElements=20,NoEvasion=1,Damage=-20	347	Warrior	"Those who defend seldom attack" Armour also applies to fire, cold and lightning hits. You cannot evade. Less attack damage.	lattice	57	507	293	-1	+122		
+58		Attribute		886	486	AnyAttribute=5	56,59	Warrior		lattice	58	886	486	-1			
+59		Small		870	458	LifePercent=3	58,60	Warrior		lattice	59	870	458	-1			
+60		Attribute		853	430	AnyAttribute=5	59,62,329,556	Warrior		lattice	60	853	430	-1	-,-,-68		
+61		Attribute		846	356	AnyAttribute=5	63,330	Warrior		lattice	61	846	356	-1			
+62		Small		929	365	ManaPercent=4	60,64	Warrior		lattice	62	929	365	-1			
+63		Small		809	265	LifePercent=3	61,66	Warrior		lattice	63	809	265	-1			
+64		Attribute		1005	300	AnyAttribute=5	12,62,560,564	Warrior		lattice	64	1005	300	-1	-53,-		
+65		Attribute		632	170	AnyAttribute=5	4,53,352,354,582	Warrior		lattice	65	632	170	-1	-30,+30,-56		
+66		Attribute		772	175	AnyAttribute=5	63,70,574,590,1271	Warrior		lattice	66	772	175	-1	-,+52,-66,-		
+67		Attribute		1020	151	AnyAttribute=5	12,68	Warrior		lattice	67	1020	151	-1			
+68		Small		974	138	ManaPercent=4	67,69	Warrior		lattice	68	974	138	-1			
+69		Attribute		917	121	AnyAttribute=5	68,71	Warrior		lattice	69	917	121	-1			
+70		Small		816	82	AllResist=2	24,66	Warrior		lattice	70	816	82	-1			
+71		Small		915	69	LifePercent=3	69,73	Warrior		lattice	71	915	69	-1			
+72		Attribute		1109	69	AnyAttribute=5	12,27,454,463	Warrior		lattice	72	1109	69	-1	-65,-103		
+73		Attribute		913	17	AnyAttribute=5	24,71,455	Warrior		lattice	73	913	17	-1			
+74		Small		482	-506	ManaOnKill=2	76,77,244	Sorcerer		lattice	74	482	-506	-1			
+75		Small		478	-547	AllResist=2	77,244	Sorcerer		lattice	75	478	-547	-1			
+76		Small		413	-503	LifePercent=3	74,78	Sorcerer		lattice	76	413	-503	-1			
+77		Attribute		418	-556	AnyAttribute=5	74,75,80	Sorcerer		lattice	77	418	-556	-1			
+78		Small		360	-500	ManaRegen=10	76,81	Sorcerer		lattice	78	360	-500	-1			
+79	Crimson and Azure	Keystone		298	-426	SpellsSpendEnergyShield=25,LessEnergyShieldRecharge=50	359	Sorcerer	"Crimson and Azure become as the sun" Spells spend energy shield before mana, and deal up to 25% more damage for it. Energy shield recharges half as fast.	lattice	79	298	-426	-1	+114		
+80		Small		355	-537	StunThreshold=10	77,81	Sorcerer		lattice	80	355	-537	-1			
+81		Attribute		300	-520	AnyAttribute=5	78,80,82,608	Sorcerer		lattice	81	300	-520	-1	-,-48		
+82		Small		254	-477	ManaRegen=10	81,85	Sorcerer		lattice	82	254	-477	-1			
+83		Attribute		478	-990	AnyAttribute=5	84,363,622	Sorcerer		lattice	83	478	-990	-1	-,+105,-		
+84		Small		437	-985	ManaPercent=4	83,87	Sorcerer		lattice	84	437	-985	-1			
+85		Attribute		196	-448	AnyAttribute=5	82,93,365,367	Sorcerer		lattice	85	196	-448	-1	-,-115,-210		
+86		Attribute		354	-812	AnyAttribute=5	90,256	Sorcerer		lattice	86	354	-812	-1			
+87		Attribute		405	-981	AnyAttribute=5	84,88	Sorcerer		lattice	87	405	-981	-1			
+88		Small		375	-966	LifePercent=3	87,89	Sorcerer		lattice	88	375	-966	-1			
+89		Attribute		341	-950	AnyAttribute=5	88,91,257,627,653	Sorcerer		lattice	89	341	-950	-1	-,-,-74,-45		
+90		Small		273	-788	LifePercent=3	86,92	Sorcerer		lattice	90	273	-788	-1			
+91		Small		274	-1019	ManaPercent=4	89,94	Sorcerer		lattice	91	274	-1019	-1			
+92		Attribute		192	-764	AnyAttribute=5	90,95,632,647,1279	Sorcerer		lattice	92	192	-764	-1	-,-79,-69,-		
+93		Attribute		122	-606	AnyAttribute=5	6,85,372,375,665	Sorcerer		lattice	93	122	-606	-1	-50,+51,-64		
+94		Attribute		206	-1088	AnyAttribute=5	14,91,662,670	Sorcerer		lattice	94	206	-1088	-1	+49,-		
+95		Small		116	-812	AllResist=2	92,102	Sorcerer		lattice	95	116	-812	-1			
+96		Attribute		100	-962	AnyAttribute=5	97,98	Sorcerer		lattice	96	100	-962	-1			
+97		Small		85	-1016	ManaPercent=4	96,99	Sorcerer		lattice	97	85	-1016	-1			
+98		Small		72	-944	LifePercent=3	96,103	Sorcerer		lattice	98	72	-944	-1			
+99		Attribute		73	-1056	AnyAttribute=5	14,97	Sorcerer		lattice	99	73	-1056	-1			
+100		Attribute		36	-685	AnyAttribute=5	6,101,678,708	Sorcerer		lattice	100	36	-685	-1	-,-58,+82		
+101		Small		37	-746	AllResist=2	100,102	Sorcerer		lattice	101	37	-746	-1			
+102		Attribute		40	-860	AnyAttribute=5	95,101,103,106,712	Sorcerer		lattice	102	40	-860	-1	-,-,+65		
+103		Attribute		14	-908	AnyAttribute=5	98,102,693	Sorcerer		lattice	103	14	-908	-1	-67		
+104		Attribute		13	-1136	AnyAttribute=5	14,107,695	Sorcerer		lattice	104	13	-1136	-1	-,+61		
+105	Vigilant Spirit	Keystone		-44	-994	HitDamageFromMana=25,LessManaRecovery=30	378	Sorcerer	"While the spirit is vigilant the body thrives" A quarter of hit damage is taken from mana first. Less mana recovery.	lattice	105	-44	-994	-1	-189		
+106		Small		-45	-828	ManaPercent=4	102,109	Sorcerer		lattice	106	-45	-828	-1			
+107		Small		-112	-1081	ManaPercent=4	104,112	Sorcerer		lattice	107	-112	-1081	-1			
+108		Attribute		-140	-1121	AnyAttribute=5	110,379,1280	Sorcerer		lattice	108	-140	-1121	-1	-,+86,-		
+109		Attribute		-130	-797	AnyAttribute=5	106,113,115,718	Sorcerer		lattice	109	-130	-797	-1			
+110		Small		-188	-1051	AllResist=2	108,112	Sorcerer		lattice	110	-188	-1051	-1			
+111		Attribute		-128	-600	AnyAttribute=5	6,117,723	Sorcerer		lattice	111	-128	-600	-1			
+112		Attribute		-222	-1001	AnyAttribute=5	107,110,114,258,380	Sorcerer		lattice	112	-222	-1001	-1	-,-,+187		
+113		Small		-198	-722	ManaPercent=4	109,116	Sorcerer		lattice	113	-198	-722	-1			
+114		Small		-287	-1030	AllResist=2	112,259	Sorcerer		lattice	114	-287	-1030	-1			
+115		Attribute		-237	-830	AnyAttribute=5	109,118	Sorcerer		lattice	115	-237	-830	-1			
+116		Attribute		-264	-650	AnyAttribute=5	113,119	Sorcerer		lattice	116	-264	-650	-1			
+117		Attribute		-190	-452	AnyAttribute=5	111,122,383	Sorcerer		lattice	117	-190	-452	-1	-,+234		
+118		Attribute		-319	-758	AnyAttribute=5	115,262,743,759	Sorcerer		lattice	118	-319	-758	-1	-,-53,-64		
+119		Small		-328	-709	ManaPercent=4	116,262	Sorcerer		lattice	119	-328	-709	-1			
+120		Attribute		-271	-571	AnyAttribute=5	121,124,127	Sorcerer		lattice	120	-271	-571	-1			
+121		Small		-257	-506	ManaRegen=10	120,123	Sorcerer		lattice	121	-257	-506	-1			
+122		Small		-222	-437	ManaOnKill=2	117,123	Sorcerer		lattice	122	-222	-437	-1			
+123		Attribute		-249	-468	AnyAttribute=5	121,122,125,755	Sorcerer		lattice	123	-249	-468	-1	-,+79		
+124		Small		-326	-579	ManaPercent=4	120,264	Sorcerer		lattice	124	-326	-579	-1			
+125		Small		-301	-456	ManaOnKill=2	123,126	Sorcerer		lattice	125	-301	-456	-1			
+126		Small		-343	-492	ManaPercent=4	125,127	Sorcerer		lattice	126	-343	-492	-1			
+127		Small		-385	-527	StunThreshold=10	120,126,264	Sorcerer		lattice	127	-385	-527	-1			
+128		Small		-580	-454	ManaRegen=10	130,131,275	Monk		lattice	128	-580	-454	-1			
+129		Small		-616	-453	AllResist=2	131,275	Monk		lattice	129	-616	-453	-1			
+130		Small		-574	-406	LifePercent=3	128,132	Monk		lattice	130	-574	-406	-1			
+131		Attribute		-630	-401	AnyAttribute=5	128,129,133	Monk		lattice	131	-630	-401	-1			
+132		Small		-568	-358	StunBuildup=10	130,134	Monk		lattice	132	-568	-358	-1			
+133		Small		-613	-364	ToHit=5	131,134	Monk		lattice	133	-613	-364	-1			
+134		Attribute		-590	-314	AnyAttribute=5	132,133,138,771	Monk		lattice	134	-590	-314	-1	-,-60		
+135		Small		-728	-384	LifePercent=3	136,280	Monk		lattice	135	-728	-384	-1			
+136		Attribute		-659	-325	AnyAttribute=5	135,139	Monk		lattice	136	-659	-325	-1			
+137		Attribute		-776	-355	AnyAttribute=5	140,280	Monk		lattice	137	-776	-355	-1			
+138		Small		-589	-250	StunBuildup=10	134,147	Monk		lattice	138	-589	-250	-1			
+139		Small		-725	-275	LifePercent=3	136,145	Monk		lattice	139	-725	-275	-1			
+140		Attribute		-834	-297	AnyAttribute=5	137,145	Monk		lattice	140	-834	-297	-1			
+141		Attribute		-960	-330	AnyAttribute=5	142,393,780	Monk		lattice	141	-960	-330	-1	-,+93,-		
+142		Small		-956	-300	ManaPercent=4	141,144	Monk		lattice	142	-956	-300	-1			
+143	Inner Wellspring	Keystone		-654	-187	LifeRecoveryToShield=60,NoEnergyShieldRecharge=1	396	Monk	"The essence of life flows from within" Life recovery also recovers 60% as much energy shield, even at full life. Energy shield never recharges.	lattice	143	-654	-187	-1	-121		
+144		Attribute		-952	-270	AnyAttribute=5	142,146	Monk		lattice	144	-952	-270	-1			
+145		Attribute		-786	-217	AnyAttribute=5	139,140,149,783,801	Monk		lattice	145	-786	-217	-1	-,+49,+73		
+146		Small		-933	-246	LifePercent=3	144,148	Monk		lattice	146	-933	-246	-1			
+147		Attribute		-556	-143	AnyAttribute=5	138,152,395,398	Monk		lattice	147	-556	-143	-1	-,+235,+118		
+148		Attribute		-914	-221	AnyAttribute=5	146,150,282,790	Monk		lattice	148	-914	-221	-1	-,-,-69		
+149		Small		-827	-142	AllResist=2	145,151	Monk		lattice	149	-827	-142	-1			
+150		Small		-963	-90	LifePercent=3	148,156	Monk		lattice	150	-963	-90	-1			
+151		Attribute		-880	-75	AnyAttribute=5	149,153,154,157	Monk		lattice	151	-880	-75	-1			
+152		Attribute		-657	-42	AnyAttribute=5	5,147,402,403,820	Monk		lattice	152	-657	-42	-1	-29,+29,-86		
+153		Attribute		-929	-46	AnyAttribute=5	151,155,817,833	Monk		lattice	153	-929	-46	-1	-,+61,-		
+154		Small		-822	-11	AllResist=2	151,158	Monk		lattice	154	-822	-11	-1			
+155		Small		-913	1	LifePercent=3	153,159	Monk		lattice	155	-913	1	-1			
+156		Attribute		-1039	28	AnyAttribute=5	13,150,822,830	Monk		lattice	156	-1039	28	-1			
+157		Small		-872	29	LifePercent=3	151,162	Monk		lattice	157	-872	29	-1			
+158		Attribute		-759	58	AnyAttribute=5	5,154,829	Monk		lattice	158	-759	58	-1	+65		
+159		Attribute		-890	69	AnyAttribute=5	155,160	Monk		lattice	159	-890	69	-1			
+160		Small		-954	87	ManaPercent=4	159,161	Monk		lattice	160	-954	87	-1			
+161		Attribute		-997	100	AnyAttribute=5	13,160	Monk		lattice	161	-997	100	-1			
+162		Attribute		-850	135	AnyAttribute=5	157,165,859	Monk		lattice	162	-850	135	-1			
+163		Attribute		-1062	277	AnyAttribute=5	13,166,851,868	Monk		lattice	163	-1062	277	-1	-,+112,-49		
+164	Unspent Spirit	Keystone		-914	242	SpiritDamage=2,Spirit=10,LessMaxLife=10	406	Monk	"Spiritual energy is restored." 2% increased damage per 10 unreserved Spirit. Less maximum life.	lattice	164	-914	242	-1	-232		
+165		Small		-861	249	LifePercent=3	162,169	Monk		lattice	165	-861	249	-1			
+166		Small		-990	371	ManaPercent=4	163,171	Monk		lattice	166	-990	371	-1			
+167		Attribute		-1037	394	AnyAttribute=5	170,407,1288	Monk		lattice	167	-1037	394	-1	-,+99,-		
+168		Attribute		-605	235	AnyAttribute=5	5,173,878	Monk		lattice	168	-605	235	-1			
+169		Attribute		-862	367	AnyAttribute=5	165,283,888,893	Monk		lattice	169	-862	367	-1	-,-47,-48		
+170		Small		-978	429	AllResist=2	167,171	Monk		lattice	170	-978	429	-1			
+171		Attribute		-918	464	AnyAttribute=5	166,170,172,284,408	Monk		lattice	171	-918	464	-1	-,-,+234		
+172		Small		-944	541	AllResist=2	171,285	Monk		lattice	172	-944	541	-1			
+173		Attribute		-455	295	AnyAttribute=5	168,174,411	Monk		lattice	173	-455	295	-1	-,-234		
+174		Small		-485	353	ManaRegen=10	173,175	Monk		lattice	174	-485	353	-1			
+175		Attribute		-528	412	AnyAttribute=5	174,176,179,913	Monk		lattice	175	-528	412	-1	-,-,+53		
+176		Small		-559	437	StunBuildup=10	175,177	Monk		lattice	176	-559	437	-1			
+177		Attribute		-624	489	AnyAttribute=5	176,178,181	Monk		lattice	177	-624	489	-1			
+178		Small		-598	535	ManaPercent=4	177,292	Monk		lattice	178	-598	535	-1			
+179		Small		-477	449	ManaRegen=10	175,180	Monk		lattice	179	-477	449	-1			
+180		Small		-482	501	ManaPercent=4	179,181	Monk		lattice	180	-482	501	-1			
+181		Small		-489	568	ToHit=5	177,180,292,914	Monk		lattice	181	-489	568	-1	-,-85		
+182	Light of Reason	Keystone		-276	380	DamageVsRareUnique=25,LessDamageVsNormal=15	415	Rogue	"Mysteries are revealed in the light of reason" More damage against rare and unique monsters, less against the rest.	lattice	182	-276	380	-1	-102		
+183		Attribute		-486	991	AnyAttribute=5	187,419,937	Rogue		lattice	183	-486	991	-1	-,+94,-		
+184		Small		-281	589	ToHit=5	186,190	Rogue		lattice	184	-281	589	-1			
+185		Small		-328	699	LifeOnKill=2	186,196,307,915	Rogue		lattice	185	-328	699	-1	-,-,-,+85		
+186		Small		-309	661	LifePercent=3	184,185	Rogue		lattice	186	-309	661	-1			
+187		Small		-459	989	ManaPercent=4	183,189	Rogue		lattice	187	-459	989	-1			
+188		Attribute		-196	440	AnyAttribute=5	194,199,420,421	Rogue		lattice	188	-196	440	-1	-,-,+103,-970		
+189		Attribute		-432	987	AnyAttribute=5	187,191	Rogue		lattice	189	-432	987	-1			
+190		Attribute		-243	560	AnyAttribute=5	184,193,194,932	Rogue		lattice	190	-243	560	-1	-,-,-78		
+191		Small		-412	966	LifePercent=3	189,195	Rogue		lattice	191	-412	966	-1			
+192		Small		-298	701	AllResist=2	196,307	Rogue		lattice	192	-298	701	-1			
+193		Small		-262	621	LifeRegen=1	190,196	Rogue		lattice	193	-262	621	-1			
+194		Small		-210	504	ToHit=5	188,190	Rogue		lattice	194	-210	504	-1			
+195		Attribute		-393	946	AnyAttribute=5	191,198,306,936	Rogue		lattice	195	-393	946	-1	-,-,+73		
+196		Attribute		-264	660	AnyAttribute=5	185,192,193	Rogue		lattice	196	-264	660	-1			
+197		Attribute		-347	900	AnyAttribute=5	201,305	Rogue		lattice	197	-347	900	-1			
+198		Small		-347	1002	AllResist=2	195,200	Rogue		lattice	198	-347	1002	-1			
+199		Attribute		-186	640	AnyAttribute=5	8,188,423,430,964	Rogue		lattice	199	-186	640	-1	-51,+51,+77		
+200		Attribute		-301	1059	AnyAttribute=5	15,198,948	Rogue		lattice	200	-301	1059	-1			
+201		Small		-250	897	LifePercent=3	197,203	Rogue		lattice	201	-250	897	-1			
+202		Attribute		-187	1061	AnyAttribute=5	15,204	Rogue		lattice	202	-187	1061	-1			
+203		Attribute		-154	893	AnyAttribute=5	201,207,953,970,1295	Rogue		lattice	203	-154	893	-1	-,-68,+102,-		
+204		Small		-166	1032	ManaPercent=4	202,205	Rogue		lattice	204	-166	1032	-1			
+205		Attribute		-124	974	AnyAttribute=5	204,208	Rogue		lattice	205	-124	974	-1			
+206		Attribute		-144	1135	AnyAttribute=5	15,209,974,987	Rogue		lattice	206	-144	1135	-1	-,-141,-172		
+207		Small		-72	912	AllResist=2	203,211	Rogue		lattice	207	-72	912	-1			
+208		Small		-70	977	LifePercent=3	205,210	Rogue		lattice	208	-70	977	-1			
+209		Small		-16	1085	ManaPercent=4	206,213	Rogue		lattice	209	-16	1085	-1			
+210		Attribute		-8	980	AnyAttribute=5	208,211,992,1011	Rogue		lattice	210	-8	980	-1	-,-,-48		
+211		Attribute		10	930	AnyAttribute=5	207,210,212,214	Rogue		lattice	211	10	930	-1			
+212		Small		37	892	AllResist=2	211,215	Rogue		lattice	212	37	892	-1			
+213		Attribute		98	1008	AnyAttribute=5	209,219,308,434,1016	Rogue		lattice	213	98	1008	-1	-,-,+111,-62		
+214		Small		90	915	AllResist=2	211,217	Rogue		lattice	214	90	915	-1			
+215		Attribute		87	821	AnyAttribute=5	8,212,1000	Rogue		lattice	215	87	821	-1	+43		
+216	Guided by Fate	Keystone		174	934	EvasionVsSpells=20,AllResist=-15	435	Rogue	"The hands of men may be guided by fate" Evasion also dodges spells. Lower resistances.	lattice	216	174	934	-1	-114		
+217		Attribute		170	900	AnyAttribute=5	214,218,220,1018	Rogue		lattice	217	170	900	-1			
+218		Small		192	829	AllResist=2	217,221	Rogue		lattice	218	192	829	-1			
+219		Small		251	973	AllResist=2	213,222	Rogue		lattice	219	251	973	-1			
+220		Attribute		246	863	AnyAttribute=5	217,223	Rogue		lattice	220	246	863	-1			
+221		Attribute		223	729	AnyAttribute=5	218,225	Rogue		lattice	221	223	729	-1			
+222		Attribute		345	952	AnyAttribute=5	219,440,1264	Rogue		lattice	222	345	952	-1	+199,-		
+223		Attribute		310	795	AnyAttribute=5	220,312,1050,1300	Rogue		lattice	223	310	795	-1	-,+44,-246		
+224		Attribute		252	598	AnyAttribute=5	8,229,1051	Rogue		lattice	224	252	598	-1			
+225		Small		329	770	AllResist=2	221,312	Rogue		lattice	225	329	770	-1			
+226		Attribute		281	594	AnyAttribute=5	227,230,234	Rogue		lattice	226	281	594	-1			
+227		Small		278	536	ToHit=5	226,231	Rogue		lattice	227	278	536	-1			
+228		Small		255	467	LifeOnKill=2	229,231	Rogue		lattice	228	255	467	-1			
+229		Attribute		226	410	AnyAttribute=5	224,228,439	Rogue		lattice	229	226	410	-1	+161		
+230		Small		334	604	ManaPercent=4	226,314	Rogue		lattice	230	334	604	-1			
+231		Attribute		276	499	AnyAttribute=5	227,228,232,1062	Rogue		lattice	231	276	499	-1	-,+59		
+232		Small		329	492	LifeOnKill=2	231,233	Rogue		lattice	232	329	492	-1			
+233		Small		368	535	ManaPercent=4	232,234	Rogue		lattice	233	368	535	-1			
+234		Small		391	560	LifeRegen=1	226,233,314,534	Rogue		lattice	234	391	560	-1	-,-71		
+235		Small		955	-343	AllResist=2	31,236	Zakarum Cloister		lattice	235	955	-343	-1			
+236		Attribute		957	-456	AnyAttribute=5	235,239,1070	Zakarum Cloister		lattice	236	957	-456	-1	-,-57		
+237		Small		762	-434	LifePercent=3	36,240	Zakarum Cloister		lattice	237	762	-434	-1			
+238		Attribute		650	-375	AnyAttribute=5	9,38,39,1077	Zakarum Cloister		lattice	238	650	-375	-1	-113		
+239		Small		886	-581	LifePercent=3	236,243	Zakarum Cloister		lattice	239	886	-581	-1			
+240		Attribute		701	-502	AnyAttribute=5	237,242,1076	Zakarum Cloister		lattice	240	701	-502	-1			
+241		Attribute		676	-532	AnyAttribute=5	9,245,443	Zakarum Cloister		lattice	241	676	-532	-1	-,+211		
+242		Small		687	-589	LifePercent=3	240,245	Zakarum Cloister		lattice	242	687	-589	-1			
+243		Attribute		783	-684	AnyAttribute=5	239,247,1085	Zakarum Cloister		lattice	243	783	-684	-1	-,-104		
+244		Attribute		537	-537	AnyAttribute=5	9,74,75,1080	Zakarum Cloister		lattice	244	537	-537	-1	+112		
+245		Attribute		659	-682	AnyAttribute=5	241,242,246,250,1101	Zakarum Cloister		lattice	245	659	-682	-1	-,-,+76		
+246		Small		665	-711	AllResist=2	245,249	Zakarum Cloister		lattice	246	665	-711	-1			
+247		Attribute		750	-804	AnyAttribute=5	243,248,251,1097	Zakarum Cloister		lattice	247	750	-804	-1	-,-,-61		
+248		Small		707	-778	LifePercent=3	247,249	Zakarum Cloister		lattice	248	707	-778	-1			
+249		Attribute		676	-759	AnyAttribute=5	246,248,1100	Zakarum Cloister		lattice	249	676	-759	-1	+66		
+250		Small		599	-717	AllResist=2	245,253	Zakarum Cloister		lattice	250	599	-717	-1			
+251		Attribute		721	-899	AnyAttribute=5	247,254,1108	Zakarum Cloister		lattice	251	721	-899	-1			
+252	Salvation's Price	Keystone		557	-713	PhysicalToFire=100,FireDamage=15,ManaPercent=-20	443	Zakarum Cloister	"Salvation comes at the cost of wisdom" All physical attack damage becomes fire. Less maximum mana.	lattice	252	557	-713	-1	-209		
+253		Attribute		540	-751	AnyAttribute=5	250,256	Zakarum Cloister		lattice	253	540	-751	-1			
+254		Small		626	-918	ManaPercent=4	251,255	Zakarum Cloister		lattice	254	626	-918	-1			
+255		Attribute		529	-922	AnyAttribute=5	254,257,1113	Zakarum Cloister		lattice	255	529	-922	-1	-,-51		
+256		Small		447	-782	LifePercent=3	86,253	Zakarum Cloister		lattice	256	447	-782	-1			
+257		Small		438	-945	LifePercent=3	89,255	Zakarum Cloister		lattice	257	438	-945	-1			
+258		Attribute		-305	-999	AnyAttribute=5	112,260	Horadric Archive		lattice	258	-305	-999	-1			
+259		Attribute		-381	-1072	AnyAttribute=5	114,261	Horadric Archive		lattice	259	-381	-1072	-1			
+260		Attribute		-385	-934	AnyAttribute=5	258,263,1296	Horadric Archive		lattice	260	-385	-934	-1	-,-507		
+261		Small		-428	-1003	ManaPercent=4	259,263	Horadric Archive		lattice	261	-428	-1003	-1			
+262		Attribute		-401	-777	AnyAttribute=5	118,119,266	Horadric Archive		lattice	262	-401	-777	-1			
+263		Attribute		-485	-918	AnyAttribute=5	260,261,265,1121	Horadric Archive		lattice	263	-485	-918	-1	-,-47		
+264		Attribute		-381	-587	AnyAttribute=5	11,124,127,1145	Horadric Archive		lattice	264	-381	-587	-1	-79		
+265		Small		-569	-845	ManaPercent=4	263,267	Horadric Archive		lattice	265	-569	-845	-1			
+266		Small		-500	-694	AllResist=2	262,270	Horadric Archive		lattice	266	-500	-694	-1			
+267		Attribute		-668	-797	AnyAttribute=5	265,268,273,1133	Horadric Archive		lattice	267	-668	-797	-1	-,-,+74		
+268		Small		-677	-742	LifePercent=3	267,271	Horadric Archive		lattice	268	-677	-742	-1			
+269		Attribute		-570	-611	AnyAttribute=5	11,274,444	Horadric Archive		lattice	269	-570	-611	-1	-,+191		
+270		Attribute		-609	-635	AnyAttribute=5	266,274	Horadric Archive		lattice	270	-609	-635	-1			
+271		Attribute		-684	-700	AnyAttribute=5	268,272,1153,1156	Horadric Archive		lattice	271	-684	-700	-1	-,-,+59		
+272		Small		-659	-658	AllResist=2	271,274,1298,1299	Horadric Archive		lattice	272	-659	-658	-1	-,+504,-134		
+273		Attribute		-773	-751	AnyAttribute=5	267,277,1160	Horadric Archive		lattice	273	-773	-751	-1			
+274		Attribute		-633	-611	AnyAttribute=5	269,270,272,276,1140	Horadric Archive		lattice	274	-633	-611	-1	-,+83		
+275		Attribute		-606	-491	AnyAttribute=5	11,128,129,1148	Horadric Archive		lattice	275	-606	-491	-1	+79		
+276		Attribute		-720	-576	AnyAttribute=5	274,279,1299	Horadric Archive		lattice	276	-720	-576	-1	-,+133		
+277		Small		-818	-607	ManaPercent=4	273,281	Horadric Archive		lattice	277	-818	-607	-1			
+278	Horadric Cycle	Keystone		-730	-492	SpellElementCycle=30,OffElementLess=15	444	Horadric Archive	"Magic is not always what it seems to be" Your spells cycle fire, cold and lightning. Spells of the current element deal more damage, the others less.	lattice	278	-730	-492	-1	-195		
+279		Small		-756	-508	ManaPercent=4	276,280	Horadric Archive		lattice	279	-756	-508	-1			
+280		Attribute		-791	-439	AnyAttribute=5	135,137,279	Horadric Archive		lattice	280	-791	-439	-1			
+281		Attribute		-892	-480	AnyAttribute=5	277,282,1163	Horadric Archive		lattice	281	-892	-480	-1	-,+64		
+282		Small		-903	-351	LifePercent=3	148,281	Horadric Archive		lattice	282	-903	-351	-1			
+283		Small		-781	438	LifePercent=3	169,286	Sightless Eye		lattice	283	-781	438	-1			
+284		Attribute		-916	540	AnyAttribute=5	171,287	Sightless Eye		lattice	284	-916	540	-1			
+285		Attribute		-971	623	AnyAttribute=5	172,288	Sightless Eye		lattice	285	-971	623	-1			
+286		Attribute		-701	508	AnyAttribute=5	283,290,1170,1171	Sightless Eye		lattice	286	-701	508	-1			
+287		Attribute		-845	613	AnyAttribute=5	284,289	Sightless Eye		lattice	287	-845	613	-1			
+288		Small		-889	664	AllResist=2	285,289	Sightless Eye		lattice	288	-889	664	-1			
+289		Attribute		-817	700	AnyAttribute=5	287,288,291,1179	Sightless Eye		lattice	289	-817	700	-1	-,+68		
+290		Small		-674	626	AllResist=2	286,293	Sightless Eye		lattice	290	-674	626	-1			
+291		Small		-754	794	AllResist=2	289,297	Sightless Eye		lattice	291	-754	794	-1			
+292		Attribute		-548	590	AnyAttribute=5	7,178,181	Sightless Eye		lattice	292	-548	590	-1			
+293		Attribute		-646	743	AnyAttribute=5	290,294,298,302,1193	Sightless Eye		lattice	293	-646	743	-1	-,-,-,-47		
+294		Small		-665	778	AllResist=2	293,295	Sightless Eye		lattice	294	-665	778	-1			
+295		Attribute		-680	805	AnyAttribute=5	294,296	Sightless Eye		lattice	295	-680	805	-1			
+296		Small		-688	854	LifePercent=3	295,297	Sightless Eye		lattice	296	-688	854	-1			
+297		Attribute		-693	887	AnyAttribute=5	291,296,299,1190,1200	Sightless Eye		lattice	297	-693	887	-1	-,+52,+105		
+298		Small		-584	786	AllResist=2	293,300	Sightless Eye		lattice	298	-584	786	-1			
+299		Attribute		-651	912	AnyAttribute=5	297,301,1207	Sightless Eye		lattice	299	-651	912	-1			
+300		Attribute		-523	828	AnyAttribute=5	298,305	Sightless Eye		lattice	300	-523	828	-1			
+301		Small		-585	930	AllResist=2	299,303	Sightless Eye		lattice	301	-585	930	-1			
+302		Attribute		-490	784	AnyAttribute=5	7,293,445	Sightless Eye		lattice	302	-490	784	-1	+81		
+303		Attribute		-522	958	AnyAttribute=5	301,306	Sightless Eye		lattice	303	-522	958	-1			
+304	The High Vantage	Keystone		-427	838	DistanceRule=25,MovingVulnerability=20	445	Sightless Eye	"The way is made clear when viewed from above" More damage while no enemy is near you. You take more damage for a moment after moving.	lattice	304	-427	838	-1	-81		
+305		Small		-436	864	AllResist=2	197,300	Sightless Eye		lattice	305	-436	864	-1			
+306		Small		-457	952	ManaPercent=4	195,303	Sightless Eye		lattice	306	-457	952	-1			
+307		Attribute		-316	746	AnyAttribute=5	7,185,192	Sightless Eye		lattice	307	-316	746	-1			
+308		Small		207	1011	AllResist=2	213,309	Khanduras Muster		lattice	308	207	1011	-1			
+309		Attribute		317	1015	AnyAttribute=5	308,310,1219	Khanduras Muster		lattice	309	317	1015	-1	-,+43		
+310		Small		432	990	ManaPercent=4	309,313	Khanduras Muster		lattice	310	432	990	-1			
+311	Borrowed Strength	Keystone		366	750	MinionDamage=40,MinionLife=20,Damage=-25,SpellDamage=-25	446	Khanduras Muster	"Some are weakened as one grows strong" Your minions deal more damage and have more life. Your own attacks and spells deal less damage.	lattice	311	366	750	-1	-140		
+312		Attribute		403	799	AnyAttribute=5	223,225,315	Khanduras Muster		lattice	312	403	799	-1			
+313		Attribute		547	965	AnyAttribute=5	310,317,1220	Khanduras Muster		lattice	313	547	965	-1	-,+53		
+314		Attribute		367	610	AnyAttribute=5	10,230,234	Khanduras Muster		lattice	314	367	610	-1			
+315		Small		478	760	AllResist=2	312,318	Khanduras Muster		lattice	315	478	760	-1			
+316		Attribute		487	670	AnyAttribute=5	10,323,446	Khanduras Muster		lattice	316	487	670	-1	-,+141		
+317		Attribute		624	859	AnyAttribute=5	313,319,321,1230	Khanduras Muster		lattice	317	624	859	-1	-,-,+119		
+318		Attribute		553	722	AnyAttribute=5	315,323	Khanduras Muster		lattice	318	553	722	-1			
+319		Small		636	827	LifePercent=3	317,320	Khanduras Muster		lattice	319	636	827	-1			
+320		Attribute		660	760	AnyAttribute=5	319,322,1226,1243	Khanduras Muster		lattice	320	660	760	-1	-,-86,+51		
+321		Attribute		709	813	AnyAttribute=5	317,324,1249	Khanduras Muster		lattice	321	709	813	-1			
+322		Small		642	719	AllResist=2	320,323,1303,1304	Khanduras Muster		lattice	322	642	719	-1	-,+246,+223		
+323		Attribute		617	662	AnyAttribute=5	316,318,322,326,1251	Khanduras Muster		lattice	323	617	662	-1	-,+72		
+324		Small		755	717	AllResist=2	321,327	Khanduras Muster		lattice	324	755	717	-1			
+325		Attribute		529	479	AnyAttribute=5	10,46,49	Khanduras Muster		lattice	325	529	479	-1			
+326		Small		663	594	AllResist=2	323,328	Khanduras Muster		lattice	326	663	594	-1			
+327		Attribute		777	614	AnyAttribute=5	324,329,1306	Khanduras Muster		lattice	327	777	614	-1	-,-222		
+328		Attribute		696	518	AnyAttribute=5	326,330	Khanduras Muster		lattice	328	696	518	-1			
+329		Small		831	529	LifePercent=3	60,327	Khanduras Muster		lattice	329	831	529	-1			
+330		Small		766	435	AllResist=2	61,328	Khanduras Muster		lattice	330	766	435	-1			
+331		Small		965	-100	LifePercent=3	25,335	Warrior		shrine-spur	331	965	-100	0	-159		
+332	Lachdanan's Oath	Notable		396	-60	MeleeDamage=12,AttackSpeed=3	333,337	Warrior	Lachdanan, captain of Leoric's knights, fought the king's curse with all the honour he had left.	opening	332	396	-60	0	+2311,-98		
+333		Small		355	-55	ToHit=5	332,334	Warrior		opening	333	355	-55	0	+2268		
+334		Small		314	-52	Strength=7	333,336	Warrior		opening	334	314	-52	0	+2266		
+335		Small		972	-165	LifePercent=3	31,331	Warrior		shrine-spur	335	972	-165	0			
+336		Small		273	-48	MeleeDamage=5	16,334	Warrior		opening	336	273	-48	0			
+337		Small		440	-137	MeleeDamage=5	332,339,485	Warrior		opening	337	440	-137	0	-295,+63		
+338		Small		884	-437	TwoHandDamage=6	35,340	Warrior		capstone-path	338	884	-437	0	+105		
+339		Small		434	-228	LifeOnKill=2	44,337	Warrior		opening	339	434	-228	0			
+340		Small		874	-484	TwoHandDamage=6	338,341	Warrior		capstone-path	340	874	-484	0	+140		
+341	Fresh Meat	Notable		884	-532	TwoHandKillFrenzy=1,TwoHandDamage=10	340	Warrior	'Ah, fresh meat!'	capstone	341	884	-532	0			
+342		Small		430	326	LifeRegen=1	53,344	Warrior		shrine-spur	342	430	326	0	-97		
+343	Lachdanan's Guard	Notable		895	654	BlockRiposte=60,AttackSpeed=5	345	Warrior	'Lachdanan was an honorable and just man who served his King faithfully for years.'	capstone	343	895	654	0	-95		
+344		Small		459	323	LifePercent=3	342,347	Warrior		shrine-spur	344	459	323	0	-94		
+345		Small		907	623	BlockChance=1,ArmorPercent=4	343,346	Warrior		capstone-path	345	907	623	0	-75		
+346		Small		905	589	BlockChance=1,ArmorPercent=4	55,345	Warrior		capstone-path	346	905	589	0			
+347		Small		485	311	LifePercent=3	57,344	Warrior		shrine-spur	347	485	311	0			
+348		Small		428	232	StunThreshold=10	53,353	Warrior		opening	348	428	232	0	-306		
+349		Small		656	267	AllResist=3	350,351	Warrior		socket-loop	349	656	267	0	+30,-30		
+350		Small		629	248	LifePercent=3	349,352	Warrior		socket-loop	350	629	248	0	+94		
+351		Small		671	237	LifePercent=3	349,354	Warrior		socket-loop	351	671	237	0	-94		
+352		Attribute		617	200	AnyAttribute=5	65,350	Warrior		socket-loop	352	617	200	0			
+353		Small		436	139	ArmorPercent=8	348,358,567,586	Warrior		opening	353	436	139	0	-107,-59,-56		
+354		Attribute		659	189	AnyAttribute=5	65,351	Warrior		socket-loop	354	659	189	0			
+355		Small		271	48	ArmorPercent=8	17,356	Warrior		opening	355	271	48	0	+3387		
+356		Small		312	51	LifeRegen=1	355,357	Warrior		opening	356	312	51	0	+3393		
+357		Attribute		353	54	AnyAttribute=5	356,358	Warrior		opening	357	353	54	0	+3442		
+358	Griswold's Temper	Notable		394	58	ArmorPercent=26,LifeRegen=2	353,357	Warrior	Griswold the smith tempered every blade and breastplate the town owned.	opening	358	394	58	0			
+359		Small		272	-420	ManaPercent=4	79,361	Sorcerer		shrine-spur	359	272	-420	0	+92		
+360	Na-Krul's Jailer	Notable		582	-998	MinionSpellDamage=50,MinionLife=10	362	Sorcerer	Spells, threats and bargains all failed on Na-Krul. Lesser demons bind more easily.	capstone	360	582	-998	0	-103		
+361		Small		244	-422	ManaPercent=4	359,365	Sorcerer		shrine-spur	361	244	-422	0	+92		
+362		Small		548	-1010	MinionDamage=8,MinionLife=6	360,363	Sorcerer		capstone-path	362	548	-1010	0	-81		
+363		Small		511	-1007	MinionDamage=8,MinionLife=6	83,362	Sorcerer		capstone-path	363	511	-1007	0			
+364	Azure Ward	Notable		170	-336	EnergyShieldPercent=28,ManaRegen=10	366,368	Sorcerer	Raw mana, wrapped about the body like a second skin.	opening	364	170	-336	0	+212,-428		
+365		Small		218	-432	StunThreshold=10	85,361	Sorcerer		shrine-spur	365	218	-432	0			
+366		Small		172	-375	EnergyShieldPercent=8	364,367,633,638	Sorcerer		opening	366	172	-375	0	+212,+63,-73		
+367		Small		180	-413	AllResist=3	85,366	Sorcerer		opening	367	180	-413	0			
+368		Attribute		138	-320	AnyAttribute=5	364,369	Sorcerer		opening	368	138	-320	0	-429		
+369		Small		107	-302	ManaRegen=10	368,373	Sorcerer		opening	369	107	-302	0	-433		
+370		Small		206	-627	LifePercent=3	371,372	Sorcerer		socket-loop	370	206	-627	0	-50,+51		
+371		Small		194	-675	AllResist=3	370,374	Sorcerer		socket-loop	371	194	-675	0	-50		
+372		Attribute		170	-592	AnyAttribute=5	93,370	Sorcerer		socket-loop	372	170	-592	0			
+373		Small		78	-281	EnergyShieldPercent=8	23,369	Sorcerer		opening	373	78	-281	0			
+374		Small		146	-689	LifePercent=3	371,375	Sorcerer		socket-loop	374	146	-689	0	-50		
+375		Attribute		110	-655	AnyAttribute=5	93,374	Sorcerer		socket-loop	375	110	-655	0			
+376	Wheel of the Elements	Notable		-62	-1153	ElementRotation=20,CastSpeed=5	377	Sorcerer	Fire, then frost, then storm. Then fire again.	capstone	376	-62	-1153	0	-86		
+377		Small		-92	-1154	FireDamage=5	376,379	Sorcerer		capstone-path	377	-92	-1154	0	-64		
+378		Small		-101	-1020	ManaPercent=4	105,380	Sorcerer		shrine-spur	378	-101	-1020	0	-151		
+379		Small		-119	-1143	FireDamage=5	108,377	Sorcerer		capstone-path	379	-119	-1143	0			
+380		Small		-163	-1022	ManaPercent=4	112,378	Sorcerer		shrine-spur	380	-163	-1022	0			
+381		Small		-79	-279	SpellDamage=4	22,382	Sorcerer		opening	381	-79	-279	0	-399		
+382		Small		-107	-299	ManaOnKill=2	381,384	Sorcerer		opening	382	-107	-299	0	-406		
+383		Small		-176	-414	ManaPercent=4	117,385	Sorcerer		opening	383	-176	-414	0	+242		
+384		Attribute		-137	-317	AnyAttribute=5	382,386	Sorcerer		opening	384	-137	-317	0	-404		
+385		Small		-168	-373	SpellDamage=4	383,386,733	Sorcerer		opening	385	-168	-373	0	+235,+53		
+386	Vizjerei Lore	Notable		-168	-332	SpellDamage=12,ManaOnKill=4	384,385	Sorcerer	The Vizjerei clan taught that every spell is a bargain struck with power.	opening	386	-168	-332	0			
+387	Ceaseless Hands	Notable		-982	-418	UnarmedHitStacks=2,MeleeDamage=8	391	Monk	Stop striking and you start thinking. Never stop.	capstone	387	-982	-418	0	-93		
+388		Attribute		-360	-149	AnyAttribute=5	389,390	Monk		opening	388	-360	-149	0	-231,+230		
+389	The Bending Bough	Notable		-408	-164	EvasionPercent=26,EnergyShieldPercent=24	388,392	Monk	The body moves; the mind shields.	opening	389	-408	-164	0	-230		
+390		Small		-316	-125	ManaRegen=10	388,394	Monk		opening	390	-316	-125	0	+234		
+391		Small		-988	-386	MeleeDamage=5	387,393	Monk		capstone-path	391	-988	-386	0	-68		
+392		Small		-458	-168	EvasionPercent=8,EnergyShieldPercent=8	389,395,775,786	Monk		opening	392	-458	-168	0	-232,+42,+56		
+393		Small		-980	-356	MeleeDamage=5	141,391	Monk		capstone-path	393	-980	-356	0			
+394		Small		-278	-91	EvasionPercent=8,EnergyShieldPercent=8	19,390	Monk		opening	394	-278	-91	0			
+395		Small		-508	-161	AllResist=3	147,392	Monk		opening	395	-508	-161	0			
+396		Small		-635	-166	LifePercent=3	143,397	Monk		shrine-spur	396	-635	-166	0	-91		
+397		Small		-612	-151	LifePercent=3	396,398	Monk		shrine-spur	397	-612	-151	0	-96		
+398		Small		-584	-143	ToHit=5	147,397	Monk		shrine-spur	398	-584	-143	0			
+399		Small		-696	-134	AllResist=3	400,401	Monk		socket-loop	399	-696	-134	0	+30,-29		
+400		Small		-670	-117	LifePercent=3	399,402	Monk		socket-loop	400	-670	-117	0	+116		
+401		Small		-702	-104	LifePercent=3	399,403	Monk		socket-loop	401	-702	-104	0	-118		
+402		Attribute		-651	-72	AnyAttribute=5	152,400	Monk		socket-loop	402	-651	-72	0			
+403		Attribute		-683	-58	AnyAttribute=5	152,401	Monk		socket-loop	403	-683	-58	0			
+404	Staff of the Storm Gods	Notable		-1108	325	StaffToLightning=50,ShockChance=15,StaffArc=30,LightningDamage=10	405	Monk	In Ivgorod every storm has its god, and every god keeps a staff.	capstone	404	-1108	325	0	-99		
+405		Small		-1095	357	StaffDamage=6	404,407	Monk		capstone-path	405	-1095	357	0	-78		
+406		Small		-944	313	LifePercent=3	164,408	Monk		shrine-spur	406	-944	313	0	-190		
+407		Small		-1070	382	StaffDamage=6	167,405	Monk		capstone-path	407	-1070	382	0			
+408		Small		-946	391	LifePercent=3	171,406	Monk		shrine-spur	408	-946	391	0			
+409		Small		-223	106	StaffDamage=5	18,410	Monk		opening	409	-223	106	0	+234		
+410		Small		-239	158	StunBuildup=10	409,412	Monk		opening	410	-239	158	0	+231		
+411		Small		-401	289	ToHit=5	173,413	Monk		opening	411	-401	289	0	-231		
+412		Attribute		-267	204	AnyAttribute=5	410,414	Monk		opening	412	-267	204	0	+231		
+413		Small		-350	272	StaffDamage=5	411,414,902	Monk		opening	413	-350	272	0	-234,+45		
+414	Way of the Staff	Notable		-304	243	StaffDamage=15,StunBuildup=10	412,413	Monk	The Brotherhood carries no blade, only the staff.	opening	414	-304	243	0			
+415		Small		-267	406	AllResist=2	182,416	Rogue		shrine-spur	415	-267	406	0	-65		
+416		Small		-249	427	AllResist=2	415,420	Rogue		shrine-spur	416	-249	427	0	-65		
+417	Knife in the Dark	Notable		-579	999	SwapStrike=50,MeleeDamage=8	418	Rogue	Let them watch the bow. The knife comes from the other hand.	capstone	417	-579	999	0	-94		
+418		Small		-548	1010	MeleeDamage=5	417,419	Rogue		capstone-path	418	-548	1010	0	-73		
+419		Small		-515	1007	MeleeDamage=5	183,418	Rogue		capstone-path	419	-515	1007	0			
+420		Small		-224	438	LifeRegen=1	188,416	Rogue		shrine-spur	420	-224	438	0			
+421		Small		-170	416	LifeRegen=1	188,422	Rogue		opening	421	-170	416	0	-989		
+422		Small		-145	390	EvasionPercent=8	421,425,941	Rogue		opening	422	-145	390	0	-989,+58		
+423		Attribute		-234	654	AnyAttribute=5	199,424	Rogue		socket-loop	423	-234	654	0	-50		
+424		Small		-246	702	LifePercent=3	423,427	Rogue		socket-loop	424	-246	702	0	-51		
+425	Highland Stride	Notable		-120	364	EvasionPercent=29,StunThreshold=10	422,426	Rogue	A Sister of the Sightless Eye is never where the blow lands.	opening	425	-120	364	0	-973		
+426		Attribute		-97	337	AnyAttribute=5	425,428	Rogue		opening	426	-97	337	0	-955		
+427		Small		-210	737	AllResist=3	424,429	Rogue		socket-loop	427	-210	737	0	-51		
+428		Small		-75	310	StunThreshold=10	426,431	Rogue		opening	428	-75	310	0	-982		
+429		Small		-162	723	LifePercent=3	427,430	Rogue		socket-loop	429	-162	723	0	-50		
+430		Attribute		-150	675	AnyAttribute=5	199,429	Rogue		socket-loop	430	-150	675	0			
+431		Small		-54	281	EvasionPercent=8	21,428	Rogue		opening	431	-54	281	0			
+432		Small		11	312	BowDamage=5	20,433	Rogue		opening	432	11	312	0	-162		
+433		Small		31	352	ToHit=5	432,436	Rogue		opening	433	31	352	0	-159		
+434		Small		113	974	AllResist=2	213,435	Rogue		shrine-spur	434	113	974	0	+90		
+435		Small		139	948	AllResist=2	216,434	Rogue		shrine-spur	435	139	948	0			
+436		Attribute		60	385	AnyAttribute=5	433,437	Rogue		opening	436	60	385	0	-160		
+437	Sisterhood Volley	Notable		97	409	BowDamage=15,ToHit=5	436,438	Rogue	The Sisters loose together, and nothing stands in the field before them.	opening	437	97	409	0	-158		
+438		Small		139	421	BowDamage=5	437,439,1028,1041	Rogue		opening	438	139	421	0	-159,+44,+58		
+439		Small		183	422	LifeOnKill=2	229,438	Rogue		opening	439	183	422	0			
+440		Small		400	908	BowDamage=6	222,441	Rogue		capstone-path	440	400	908	0	+152		
+441		Small		467	890	BowDamage=6	440,442	Rogue		capstone-path	441	467	890	0	+199		
+442	One Shaft, Many Fallen	Notable		536	901	ArrowPierce=2,BowDamage=10	441	Rogue	Two Fallen, one arrow. The Sisters call that thrift.	capstone	442	536	901	0			
+443		Small		589	-605	LifePercent=3	241,252	Zakarum Cloister		shrine-spur	443	589	-605	0			
+444		Small		-632	-528	ManaPercent=4	269,278	Horadric Archive		shrine-spur	444	-632	-528	0			
+445		Small		-450	801	AllResist=2	302,304	Sightless Eye		shrine-spur	445	-450	801	0			
+446		Small		438	728	AllResist=2	311,316	Khanduras Muster		shrine-spur	446	438	728	0			
+447		Small		687	-4	StunBuildup=8	4,448,598	Warrior		sweep	447	760	-80	5	o,+58	Bridge Arc	
+448		Small		667	-29	StunBuildup=8	447,449,472	Warrior		sweep	447	760	-80	5	o,+59	Bridge Arc	
+449	The Cranium Basher	Notable		656	-61	StunBuildup=25,MeleeDamage=8	448,450	Warrior	A maul from the labyrinth, made to crush bone, living or dead.	sweep	447	760	-80	5	o	Bridge Arc	
+450		Small		654	-89	StunBuildup=8	449,451	Warrior		sweep	447	760	-80	5	o	Bridge Arc	
+451		Small		663	-123	StunBuildup=8	4,450	Warrior		sweep	447	760	-80	5		Bridge Arc	
+452		Attribute		1102	-14	AnyAttribute=5	453,454	Warrior		cluster	452	1150	-7	3	+44,-47	Stub	
+453	Bloodied Veteran	Notable		1151	-46	Vitality=10,MaxElementalResist=1	452	Warrior	Scarred by every element and still standing.	cluster	452	1150	-7	2		Stub	
+454		Small		1118	26	MeleeDamage=5	72,452	Warrior		cluster	452	1150	-7	2		Stub	
+455		Small		957	-14	OneHandDamage=6	73,457	Warrior		cluster	455	913	17	3	o	Stub	
+456	Griswold's Edge	Notable		954	52	OneHandDamage=16,AttackSpeed=5	457	Warrior	Griswold forged one blade from the Anvil of Fury, and it was quick in the hand.	cluster	455	913	17	3	o	Stub	
+457		Small		967	23	OneHandDamage=6	455,456	Warrior		cluster	455	913	17	3		Stub	
+458		Attribute		1055	-26	AnyAttribute=5	459,466	Warrior		set	458	1033	24	3	-,-71	Crown	
+459		Small		1023	-40	StunThreshold=10	458	Warrior		set	458	1033	24	3		Crown	
+460		Small		1020	77	StunThreshold=10	461,462	Warrior		set	458	1033	24	3	-,+70	Crown	
+461		Small		986	69	StunThreshold=10	460	Warrior		set	458	1033	24	3		Crown	
+462		Small		1038	56	StunThreshold=10	460,463	Warrior		set	458	1033	24	1	+74	Crown	
+463		Small		1051	30	StunThreshold=10	72,462,464,466	Warrior		set	458	1033	24	1	-,+72	Crown	
+464		Small		1019	20	StunThreshold=10	463,465	Warrior		set	458	1033	24	1		Crown	
+465	Hold the Line	Notable		988	9	ArmorPercent=26,StunThreshold=20	464	Warrior	Stand and let them break upon you.	set	458	1033	24	3		Crown	
+466		Small		1056	2	StunThreshold=10	458,463	Warrior		set	458	1033	24	1		Crown	
+467	Heavy Momentum	Notable		360	-19	TwoHandDamage=12,AttackSpeed=5	471	Warrior	A great blade is slow to start and slower to stop.	cluster	467	415	0	3	-51	Fork	
+468	The Armories of Hell	Notable		431	-31	TwoHandDamage=18,LifeOnKill=8	470	Warrior	The armories of Hell are home to the Warlord of Blood. In his wake lie the bodies of thousands.	cluster	467	415	0	2	+65	Fork	
+469		Small		432	29	TwoHandDamage=6	470,588	Warrior		cluster	467	415	0	2	-156,+73	Fork	
+470		Small		415	3	TwoHandDamage=6	468,469,471	Warrior		cluster	467	415	0	0	+57	Fork	
+471		Small		382	1	TwoHandDamage=6	467,470	Warrior		cluster	467	415	0	1		Fork	
+472		Small		623	-35	MeleeDamage=5	448,473	Warrior		cluster	472	589	-54	2	-38	Stub	
+473		Small		614	-81	MeleeDamage=5	472,474	Warrior		cluster	472	589	-54	2	-39	Stub	
+474	Drums of Westmarch	Notable		571	-92	AttackSpeed=8,MeleeDamage=8	473	Warrior	Leoric marched on Westmarch to the drums. His veterans still swing in time.	cluster	472	589	-54	2		Stub	
+475		Small		518	-44	AttackSpeed=3	477,478,480	Warrior		cluster	475	525	-39	0	+51,-203,-60	Horns	
+476	Eater of Souls	Notable		592	-53	LifeOnKill=10,MeleeDamage=6	477	Warrior	A great sword that steals life from all it cuts.	cluster	475	525	-39	4	+40	Horns	
+477		Small		550	-66	LifePercent=3	475,476	Warrior		cluster	475	525	-39	2		Horns	
+478		Small		488	-77	MeleeDamage=5	475,485	Warrior		cluster	475	525	-39	3		Horns	
+479	Rim and Edge	Notable		550	39	BlockChance=3,ToHit=10	480	Warrior	A Westmarch footman learns to guard first and strike where the guard leaves a gap.	cluster	475	525	-39	4	-44	Horns	
+480		Small		519	2	ArmorPercent=9	475,479	Warrior		cluster	475	525	-39	2		Horns	
+481	Cleaving Blow	Notable		469	-43	TwoHandDamage=18,AttackSpeed=2	482	Warrior	A great swing that staggers whatever it does not cut.	style	481	469	-95	3	-31	Short Horns	
+482		Small		453	-73	TwoHandDamage=6	481,485	Warrior		style	481	469	-95	1	+49	Short Horns	
+483	Sword of Justice	Notable		521	-95	OneHandDamage=12,AttackSpeed=5	484	Warrior	A blade of the old kingdom, light enough to strike twice before the Butcher's cleaver falls once.	style	481	469	-95	3	+31	Short Horns	
+484		Small		492	-111	OneHandDamage=6	483,485	Warrior		style	481	469	-95	1	-49	Short Horns	
+485		Small		455	-110	MeleeDamage=5	337,478,482,484	Warrior		style	481	469	-95	1		Short Horns	
+486		Small		793	-114	MeleeDamage=5	28,487	Warrior		cluster	486	768	-142	2	-38	Spur Arc	
+487		Small		807	-142	MeleeDamage=5	486,488	Warrior		cluster	486	768	-142	2	-36	Spur Arc	
+488		Small		784	-171	MeleeDamage=5	487,489	Warrior		cluster	486	768	-142	2	-35	Spur Arc	
+489	Might of Khanduras	Notable		745	-170	Strength=15,MeleeDamage=8	488	Warrior	Before the madness, Leoric had always been the holiest of men, and the strongest.	cluster	486	768	-142	2		Spur Arc	
+490		Small		1045	-160	Damage=4	491,492	Warrior		cluster	490	1039	-187	1	-51,+51	Teardrop	
+491	Marching Order	Notable		1074	-166	AttackSpeed=6,ArmorPercent=16	490,493	Warrior	Keep pace, keep formation.	cluster	490	1039	-187	2	-51	Teardrop	
+492		Small		1016	-167	Damage=4	490,494	Warrior		cluster	490	1039	-187	1	+41	Teardrop	
+493		Small		1065	-194	Damage=4	491,495	Warrior		cluster	490	1039	-187	1	-51	Teardrop	
+494		Small		1009	-204	Damage=4	492,495,496	Warrior		cluster	490	1039	-187	2	+42,-65	Teardrop	
+495		Attribute		1046	-217	AnyAttribute=5	493,494	Warrior		cluster	490	1039	-187	1		Teardrop	
+496		Small		983	-220	Damage=4	31,494	Warrior		cluster	490	1039	-187	3		Teardrop	
+497		Small		932	-182	Vitality=7	30,498	Warrior		cluster	497	826	-190	5	o	Stub	
+498		Small		929	-217	Vitality=7	497,499	Warrior		cluster	497	826	-190	5	o	Stub	
+499	Labyrinth Veteran	Notable		913	-250	TwoHandDamage=12,LifePercent=5	498	Warrior	Sixteen levels down, a man either grows harder or is carried out.	cluster	497	826	-190	5		Stub	
+500		Small		606	-151	LifeRegenRate=2	501,502	Warrior		cluster	500	600	-230	4	o,o	Stub	
+501	The Mangler	Notable		636	-159	TwoHandDamage=20,Strength=10	500	Warrior	A great axe that does terrible work in strong hands.	cluster	500	600	-230	4		Stub	
+502		Small		575	-155	MeleeDamage=4	34,500,514	Warrior		cluster	500	600	-230	4	-59	Stub	
+503		Attribute		800	-211	AnyAttribute=5	504,507	Warrior		cluster	503	745	-246	3	+91,-128	Spiral	
+504		Small		731	-205	StunThreshold=10	503,506,508	Warrior		cluster	503	745	-246	2	+68,+91	Spiral	
+505	Iron Will	Notable		745	-246	StunThreshold=30,AllResist=5	506	Warrior	Fear has no purchase on a mind made of iron.	cluster	503	745	-246	0	-41	Spiral	
+506		Small		715	-254	StunThreshold=10	504,505	Warrior		cluster	503	745	-246	1		Spiral	
+507		Small		800	-309	StunThreshold=10	36,503	Warrior		cluster	503	745	-246	4		Spiral	
+508		Small		693	-227	ArmorPercent=13	504,509,510	Warrior		cluster	508	660	-262	3	+55,-55	Long Lens	
+509		Small		651	-230	ArmorPercent=13	508,511	Warrior		cluster	508	660	-262	2	+62	Long Lens	
+510		Small		692	-269	ArmorPercent=13	508,512	Warrior		cluster	508	660	-262	2	-63	Long Lens	
+511		Small		626	-256	ArmorPercent=13	509,513	Warrior		cluster	508	660	-262	2	+55	Long Lens	
+512		Small		667	-296	ArmorPercent=13	510,513	Warrior		cluster	508	660	-262	2	-55	Long Lens	
+513	Demonspike Coat	Notable		625	-298	ArmorPercent=26,FireResist=10	511,512	Warrior	Unbreakable full plate that blunts every blow and turns aside fire.	cluster	508	660	-262	3		Long Lens	
+514		Small		548	-190	TwoHandDamage=6	502,515,516	Warrior		cluster	514	512	-218	2	+22,-21	Figure Eight	
+515		Small		518	-187	TwoHandDamage=6	514,517	Warrior		cluster	514	512	-218	1	+22	Figure Eight	
+516		Small		543	-219	TwoHandDamage=6	514,517	Warrior		cluster	514	512	-218	1	-21	Figure Eight	
+517		Small		514	-217	TwoHandDamage=6	515,516,518,519	Warrior		cluster	514	512	-218	0	+22,-21	Figure Eight	
+518		Small		484	-214	TwoHandDamage=6	517,520	Warrior		cluster	514	512	-218	1	+22	Figure Eight	
+519		Small		509	-246	TwoHandDamage=6	517,520	Warrior		cluster	514	512	-218	1	-22	Figure Eight	
+520	The Wounded Townsman	Notable		479	-244	StunBuildup=20,LifeOnKill=6	518,519	Warrior	'Avenge us! Find this Butcher and slay him so that our souls may finally rest...'	cluster	514	512	-218	2		Figure Eight	
+521		Small		744	-287	Vitality=7	522,523	Warrior		cluster	521	747	-313	1	-55,+50	Teardrop	
+522		Small		773	-300	Vitality=7	521,525	Warrior		cluster	521	747	-313	1	-41	Teardrop	
+523	Overhead Chop	Notable		715	-285	StunBuildup=20,MoreVsStunned=10	521,524	Warrior	Lift it high and let its weight do the work.	cluster	521	747	-313	2	+51	Teardrop	
+524		Small		720	-314	Vitality=7	523,527	Warrior		cluster	521	747	-313	1	+55	Teardrop	
+525		Small		775	-338	Vitality=7	522,526,527	Warrior		cluster	521	747	-313	2	+71,-41	Teardrop	
+526		Small		800	-360	Vitality=7	36,525	Warrior		cluster	521	747	-313	4		Teardrop	
+527		Small		737	-341	Vitality=7	524,525	Warrior		cluster	521	747	-313	1		Teardrop	
+528		Small		458	-386	TwoHandDamage=6	43,530	Warrior		crossover	528	404	-384	3	-54	Crook	
+529	Sword of the Cloister	Notable		404	-384	MeleeDamage=10,FireDamage=10	532	Warrior	The cloister's knights carried their faith on the edge.	crossover	528	404	-384	0	-57	Crook	
+530		Small		440	-424	TwoHandDamage=6	528,531	Warrior		crossover	528	404	-384	3	-54	Crook	
+531		Small		395	-437	TwoHandDamage=6	530,532	Warrior		crossover	528	404	-384	3	-55	Crook	
+532		Attribute		356	-407	AnyAttribute=5	529,531	Warrior		crossover	528	404	-384	3		Crook	
+533		Attribute		460	480	AnyAttribute=5	46,537	Warrior		scenic	533	411	474	3	+161	Crypt Arch	
+534		Small		405	524	ArmorPercent=9,Damage=3	234,535	Rogue		scenic	533	411	474	3	+164	Crypt Arch	
+535		Small		381	493	ArmorPercent=9,Damage=3	534,536	Khanduras Muster		scenic	533	411	474	2	+68	Crypt Arch	
+536	Bones of the Garrison	Notable		380	436	MinionDamage=11,ArmorPercent=20	535,537	Khanduras Muster	The old garrison was buried beneath the cathedral. Not all of it stayed buried.	scenic	533	411	474	3	+69	Crypt Arch	
+537		Small		436	450	ArmorPercent=9,Damage=3	533,536	Khanduras Muster		scenic	533	411	474	2		Crypt Arch	
+538		Small		502	377	OneHandDamage=6	51,539	Warrior		crossover	538	530	329	3	-57	Crook	
+539		Small		540	387	OneHandDamage=6	538,541	Warrior		crossover	538	530	329	3	-56	Crook	
+540	Iron Draw	Notable		530	329	ArrowDamageMod=65,BowDamage=10	542	Warrior	The longbowmen of the levy drew with their backs, not their fingers.	crossover	538	530	329	0	-54	Crook	
+541		Small		574	357	OneHandDamage=6	539,542,547	Warrior		crossover	538	530	329	3	-53,+62	Crook	
+542		Small		573	303	OneHandDamage=6	540,541	Warrior		crossover	538	530	329	3		Crook	
+543		Small		624	441	OneHandDamage=6	544,546	Warrior		cluster	543	653	427	1	-62,+40	Teardrop	
+544		Small		658	453	OneHandDamage=6	543,545	Warrior		cluster	543	653	427	1	-58	Teardrop	
+545	Broken Fealty	Notable		692	453	StunThreshold=15,LifePercent=5	544,548	Warrior	Leoric's own knights were forced to kill him. He cursed them for it.	cluster	543	653	427	2	-50	Teardrop	
+546		Small		619	404	OneHandDamage=6	543,547,549	Warrior		cluster	543	653	427	2	-74,+49	Teardrop	
+547		Small		590	385	OneHandDamage=6	541,546	Warrior		cluster	543	653	427	4		Teardrop	
+548		Small		685	425	OneHandDamage=6	545,549	Warrior		cluster	543	653	427	1	-56	Teardrop	
+549	Albrecht's Champion	Notable		664	400	OneHandDamage=12,DamageVsRareUnique=8	546,548	Warrior	Lazarus carried the prince below. Someone had to go down after him.	cluster	543	653	427	1		Teardrop	
+550		Attribute		852	597	AnyAttribute=5	551,552	Warrior		cluster	550	889	558	3	o,o	Stub	
+551	Arbalest of the Levy	Notable		877	611	BowDamage=16,ArmorPercent=13	550	Warrior	Crossbows for the men who had never drawn a bow.	cluster	550	889	558	3		Stub	
+552		Small		837	570	Damage=4	55,550	Warrior		cluster	550	889	558	3		Stub	
+553	Pepin's Poultice	Notable		781	516	LifeRegenRate=8,FlaskRecovery=10	554	Warrior	Pepin sent everyone who went below away with a pouch of his salves.	cluster	553	804	490	2	+33	Spur Arc	
+554		Attribute		775	480	AnyAttribute=5	553,555	Warrior		cluster	553	804	490	1	+35	Spur Arc	
+555		Small		799	454	LifeRegenRate=2	554,556	Warrior		cluster	553	804	490	2	+35	Spur Arc	
+556		Small		826	464	LifeRegenRate=2	60,555	Warrior		cluster	553	804	490	2		Spur Arc	
+557		Small		908	346	ArmorPercent=13	558,559	Warrior		cluster	557	918	318	1		Triangle	
+558	Arkaine's Valor	Notable		895	299	ArmorPercent=39,AllResist=5	557,559	Warrior	Arkaine wore Valor when he drove the legions of darkness back to the Burning Hells.	cluster	557	918	318	1		Triangle	
+559		Small		940	312	ArmorPercent=13	557,558,560	Warrior		cluster	557	918	318	1		Triangle	
+560		Small		974	303	ArmorPercent=13	64,559	Warrior		cluster	557	918	318	3		Triangle	
+561	Tempered Plate	Notable		1003	379	ArmorPercent=26,ArmourVsElements=10	562	Warrior	Steel heated past red takes flame and frost alike.	cluster	561	1005	300	4	o	Spur Arc	
+562		Small		1035	373	ArmorPercent=13	561,563	Warrior		cluster	561	1005	300	4	o	Spur Arc	
+563		Small		1065	352	ArmorPercent=13	562,564	Warrior		cluster	561	1005	300	4	o	Spur Arc	
+564		Small		1080	327	ArmorPercent=13	64,563	Warrior		cluster	561	1005	300	4		Spur Arc	
+565		Small		489	176	BlockChance=1,ArmorPercent=5	566,567	Warrior		style	565	485	149	1	+30,+48	Short Horns	
+566	King's Guard	Notable		520	187	BlockChance=4,StunThreshold=20	565	Warrior	Leoric's household knights were drilled to never give a step.	style	565	485	149	3		Short Horns	
+567		Small		465	148	BlockChance=1,ArmorPercent=5	353,565,568	Warrior		style	565	485	149	1	+49	Short Horns	
+568		Small		492	122	BlockChance=1,ArmorPercent=5	567,569	Warrior		style	565	485	149	1	-30	Short Horns	
+569	Defender of Tristram	Notable		524	114	BlockChance=5,ArmorPercent=20	568	Warrior	With the army lost in Westmarch, Tristram's few defenders held their own doors.	style	565	485	149	3		Short Horns	
+570		Small		891	266	ArmorPercent=13	571,572,575	Warrior		set	570	893	228	2		Coffin	
+571	Rising Sun Brawler	Notable		939	273	MeleeDamage=10,Vitality=8	570,573	Warrior	Ogden kept a club behind the bar of the Rising Sun, and never needed it twice for the same man.	set	570	893	228	3		Coffin	
+572		Small		831	216	ArmorPercent=13	570,574	Warrior		set	570	893	228	3		Coffin	
+573		Small		956	241	ArmorPercent=13	571,575	Warrior		set	570	893	228	3		Coffin	
+574		Small		807	183	ArmorPercent=13	66,572,576	Warrior		set	570	893	228	5		Coffin	
+575		Small		923	205	ArmorPercent=13	570,573,576	Warrior		set	570	893	228	2		Coffin	
+576		Small		849	184	ArmorPercent=13	574,575	Warrior		set	570	893	228	3		Coffin	
+577		Small		1047	283	OneHandDamage=6	12,578	Warrior		sweep	577	1030	206	4	o	Bridge Arc	
+578		Attribute		1082	265	AnyAttribute=5	577,579	Warrior		sweep	577	1030	206	4	o	Bridge Arc	
+579	The Gladiator's Bane	Notable		1102	238	OneHandDamage=8,ArmorPercent=20	578,580	Warrior	Studded leather that takes the sting out of every blow.	sweep	577	1030	206	4	o	Bridge Arc	
+580		Small		1109	199	OneHandDamage=6	579,581	Warrior		sweep	577	1030	206	4	o	Bridge Arc	
+581		Small		1097	164	OneHandDamage=6	12,580	Warrior		sweep	577	1030	206	4		Bridge Arc	
+582		Small		662	159	BlockChance=1,ArmorPercent=5	65,583,584	Warrior		cluster	582	689	141	1	-42,+42	Lens	
+583		Small		701	159	BlockChance=1,ArmorPercent=5	582,585	Warrior		cluster	582	689	141	1	-44	Lens	
+584		Small		677	123	BlockChance=1,ArmorPercent=5	582,585	Warrior		cluster	582	689	141	1	+44	Lens	
+585	Split Skull Shield	Notable		718	122	BlockChance=3,StunBuildup=20	583,584	Warrior	Catch the blow on the shield, then return it with the rim.	cluster	582	689	141	2		Lens	
+586		Small		447	105	Vitality=7	353,587,588	Warrior		defence	586	463	81	1	-38,+38	Lens	
+587		Small		479	91	StunThreshold=10	586,589	Warrior		defence	586	463	81	1	-39	Lens	
+588		Small		447	70	Vitality=7	469,586,589	Warrior		defence	586	463	81	1	+38	Lens	
+589	Unbroken	Notable		479	55	Vitality=15,LifeRegenRate=4	587,588	Warrior	Some men simply refuse to fall.	defence	586	463	81	1		Lens	
+590		Small		811	154	ArmorPercent=13	66,592	Warrior		cluster	590	844	146	2	-153	Fork	
+591	Tristram by Night	Notable		868	165	ArmorPercent=20,LifePercent=5	592	Warrior	When demons ran through the village at night, every barred door was a wall worth holding.	cluster	590	844	146	1	+59	Fork	
+592		Small		840	145	ArmorPercent=13	590,591,593	Warrior		cluster	590	844	146	0	+52	Fork	
+593		Attribute		852	117	AnyAttribute=5	592,594	Warrior		cluster	590	844	146	1	+50	Fork	
+594	Blood of Westmarch	Notable		877	102	LifePercent=6,Vitality=8	593	Warrior	Leoric's men left their blood on the fields of Westmarch. Those who came home were harder for it.	cluster	590	844	146	3		Fork	
+595	Snotspill's Banner	Notable		578	87	OneHandDamage=12,LifeOnKill=6	596	Warrior	"You give! Yes, good! Go now, we strong. We kill all with big Magic!"	cluster	595	617	26	4	-66	Fork	
+596		Small		609	64	BlockChance=1,ArmorPercent=5	595,597	Warrior		cluster	595	617	26	2	-67	Fork	
+597		Small		622	27	BlockChance=1,ArmorPercent=5	596,598,599	Warrior		cluster	595	617	26	0	+196,-79	Fork	
+598		Small		658	12	BlockChance=1,ArmorPercent=5	447,597	Warrior		cluster	595	617	26	2		Fork	
+599	Stormshield	Notable		583	3	BlockChance=4,LifePercent=4	597	Warrior	A great shield that turns the storm aside and keeps the one behind it standing.	cluster	595	617	26	2		Fork	
+600	Anvil of Fury	Notable		771	80	OneHandDamage=12,StunBuildup=15	602,603	Warrior	Griswold needed only the Anvil of Fury to forge a blade fit for the labyrinth.	cluster	600	760	48	2	-46,+49	Ribcage	
+601		Small		734	74	OneHandDamage=6	603	Warrior		cluster	600	760	48	2		Ribcage	
+602		Small		797	57	OneHandDamage=6	600,605	Warrior		cluster	600	760	48	2	+26	Ribcage	
+603		Small		761	44	OneHandDamage=6	600,601,604,605	Warrior		cluster	600	760	48	0	+44,-157	Ribcage	
+604		Small		731	29	OneHandDamage=6	603,606	Warrior		cluster	600	760	48	2	+46	Ribcage	
+605		Small		789	30	OneHandDamage=6	602,603,606,607	Warrior		cluster	600	760	48	2	+31,+153	Ribcage	
+606		Small		761	11	OneHandDamage=6	604,605	Warrior		cluster	600	760	48	2		Ribcage	
+607		Small		810	8	OneHandDamage=6	24,605	Warrior		cluster	600	760	48	3		Ribcage	
+608		Small		317	-549	SpellDamage=5	81,610	Sorcerer		crossover	608	331	-601	3	+54	Crook	
+609	Fire in the Hand	Notable		331	-601	PhysicalToFire=25,SpellDamageToFireAttacks=50	611	Sorcerer	The battle priests never saw why fire should stay in a spell.	crossover	608	331	-601	0	+58	Crook	
+610		Small		284	-575	SpellDamage=5	608,612	Sorcerer		crossover	608	331	-601	3	+54	Crook	
+611		Attribute		319	-654	AnyAttribute=5	609,612	Sorcerer		crossover	608	331	-601	3	-55	Crook	
+612		Small		281	-622	SpellDamage=5	610,611,615	Sorcerer		crossover	608	331	-601	3	-45	Crook	
+613	Kehjistan Demonology	Notable		255	-527	SpellDamage=14,MinionDamage=9	614,616	Sorcerer	In Kehjistan, demonology was taught beside geometry, and with less care.	cluster	613	227	-532	1	+56,-47	Teardrop	
+614		Small		234	-502	SpellDamage=5	613,617	Sorcerer		cluster	613	227	-532	1	+50	Teardrop	
+615		Small		257	-602	SpellDamage=5	612,616	Sorcerer		cluster	613	227	-532	4	+76	Teardrop	
+616		Small		243	-569	SpellDamage=5	613,615,619	Sorcerer		cluster	613	227	-532	2	-40	Teardrop	
+617	Bartuc's Lessons	Notable		208	-489	SpellDamage=12,Magic=10	614,618	Sorcerer	Bartuc outpaced every Vizjerei of his age. The demons were patient teachers.	cluster	613	227	-532	2	+59	Teardrop	
+618		Small		202	-523	SpellDamage=5	617,619	Sorcerer		cluster	613	227	-532	1	+61	Teardrop	
+619		Small		207	-558	SpellDamage=5	616,618	Sorcerer		cluster	613	227	-532	1		Teardrop	
+620	Tithe of the Cloister	Notable		488	-1043	Spirit=10,ManaPercent=-10	621	Sorcerer	The church takes its tithe, and the faithful are stronger for paying it.	cluster	620	478	-990	3	o	Stub	
+621		Attribute		459	-1041	AnyAttribute=5	620,622	Sorcerer		cluster	620	478	-990	3	o	Stub	
+622		Small		430	-1015	LifeRegenRate=2	83,621	Sorcerer		cluster	620	478	-990	3		Stub	
+623		Attribute		367	-862	AnyAttribute=5	624,625	Sorcerer		cluster	623	327	-871	2	-46,+41	Crook	
+624		Small		369	-898	LifeRegenRate=2	623,627	Sorcerer		cluster	623	327	-871	3	-48	Crook	
+625		Small		334	-832	LifeRegenRate=2	623,626	Sorcerer		cluster	623	327	-871	2	-43	Crook	
+626	Sanctuary of Light	Notable		327	-871	LifeRegenRate=8,ArmorPercent=13	625	Sorcerer	Stand in the Light and be mended.	cluster	623	327	-871	0		Crook	
+627		Small		342	-913	Spirit=2	89,624	Sorcerer		cluster	623	327	-871	2		Crook	
+628	Zhar the Mad	Notable		267	-709	CastSpeed=8,ManaPercent=6	631	Sorcerer	'All these interruptions are enough to make one insane.'	cluster	628	235	-703	1	-61	Fork	
+629	Ammann Sanctum	Notable		236	-649	SpellDamage=10,EnergyShieldRecharge=10	630	Sorcerer	The Ammann taught that a mage's first ward is patience, and the second is a locked door.	cluster	628	235	-703	3	+49	Fork	
+630		Small		225	-675	SpellDamage=5	629,631	Sorcerer		cluster	628	235	-703	1	+51	Fork	
+631		Small		232	-704	SpellDamage=5	628,630,632	Sorcerer		cluster	628	235	-703	0	-143	Fork	
+632		Small		214	-726	SpellDamage=5	92,631	Sorcerer		cluster	628	235	-703	1		Fork	
+633		Small		143	-384	EnergyShieldPercent=11	366,634,635	Sorcerer		defence	633	114	-385	1	+36,-35	Lens	
+634		Small		114	-368	EnergyShieldPercent=11	633,636,671	Sorcerer		defence	633	114	-385	1	+38,+64	Lens	
+635		Small		115	-401	EnergyShieldPercent=11	633,636	Sorcerer		defence	633	114	-385	1	-37	Lens	
+636	Clan Warding	Notable		84	-386	EnergyShieldPercent=33,EnergyShieldRecharge=15	634,635	Sorcerer	A clan ward is drawn once and renewed with every breath.	defence	633	114	-385	1		Lens	
+637		Small		164	-444	MinionDamage=7,MinionLife=6	638,639	Sorcerer		style	637	140	-432	1	+45,+29	Short Horns	
+638		Small		149	-413	MinionDamage=7,MinionLife=6	366,637,640	Sorcerer		style	637	140	-432	1	+53	Short Horns	
+639	Horazon's Servants	Notable		160	-475	MinionLife=25,Spirit=8	637	Sorcerer	Horazon kept demons as servants in his sanctuary.	style	637	140	-432	3		Short Horns	
+640		Small		112	-429	MinionDamage=7,MinionLife=6	638,641	Sorcerer		style	637	140	-432	1	-33	Short Horns	
+641	Vizjerei Binding	Notable		89	-456	MinionDamage=22,MinionLife=15	640	Sorcerer	The Vizjerei bound demons to their will, and called it scholarship.	style	637	140	-432	3		Short Horns	
+642		Attribute		304	-822	AnyAttribute=5	644,645	Sorcerer		set	642	240	-867	4		Pentagram	
+643		Small		302	-904	EnergyShieldPercent=11	644,646,656	Sorcerer		set	642	240	-867	4	-,-,-56	Pentagram	
+644	Calm Between Spells	Notable		272	-865	EnergyShieldRecharge=20,ManaRegen=15	642,643	Sorcerer	Let the hands fall quiet, and the ward closes over you again.	set	642	240	-867	1		Pentagram	
+645		Small		251	-840	EnergyShieldPercent=11	642,647	Sorcerer		set	642	240	-867	1		Pentagram	
+646		Small		249	-893	EnergyShieldPercent=11	643,650	Sorcerer		set	642	240	-867	1		Pentagram	
+647		Small		218	-802	EnergyShieldPercent=11	92,645,648	Sorcerer		set	642	240	-867	4		Pentagram	
+648		Small		215	-852	EnergyShieldPercent=11	647,651	Sorcerer		set	642	240	-867	1		Pentagram	
+649		Small		215	-885	EnergyShieldPercent=11	650,651	Sorcerer		set	642	240	-867	1		Pentagram	
+650		Small		215	-934	EnergyShieldPercent=11	646,649	Sorcerer		set	642	240	-867	4		Pentagram	
+651		Small		163	-871	EnergyShieldPercent=11	648,649	Sorcerer		set	642	240	-867	4		Pentagram	
+652		Small		355	-1004	AllResist=3	653,654	Sorcerer		cluster	652	319	-1011	2	+37,-34	Spur Arc	
+653		Small		336	-981	AllResist=3	89,652	Sorcerer		cluster	652	319	-1011	2		Spur Arc	
+654		Small		339	-1035	AllResist=3	652,655	Sorcerer		cluster	652	319	-1011	1	-32	Spur Arc	
+655	Wisdom's Wrap	Notable		304	-1041	EnergyShieldPercent=22,HitDamageFromMana=5	654	Sorcerer	A mage's robe that adds to his mana and softens every blow.	cluster	652	319	-1011	2		Spur Arc	
+656		Small		277	-924	EnergyShieldPercent=11	643,657	Sorcerer		cluster	656	246	-968	3		Triangle	
+657		Small		258	-951	EnergyShieldPercent=11	656,658,659	Sorcerer		cluster	656	246	-968	1		Triangle	
+658		Small		254	-995	EnergyShieldPercent=11	657,659	Sorcerer		cluster	656	246	-968	1		Triangle	
+659	The Ward Reknits	Notable		217	-968	EnergyShieldRecharge=25,StunThreshold=15	657,658	Sorcerer	The shield knits itself back the moment you step clear.	cluster	656	246	-968	1		Triangle	
+660	Horazon's Focus	Notable		310	-1083	CastSpeed=8,SpellDamage=8	661	Sorcerer	Horazon and his brother Bartuc were the greatest Vizjerei of their age.	cluster	660	275	-1098	2	+39	Stub	
+661		Small		270	-1060	SpellDamage=4	660,662	Sorcerer		cluster	660	275	-1098	2	+39	Stub	
+662		Small		238	-1089	SpellDamage=4	94,661	Sorcerer		cluster	660	275	-1098	2		Stub	
+663		Small		138	-532	MinionDamage=7,MinionLife=6	664,665	Sorcerer		cluster	663	116	-530	1	+44,-42	Lens	
+664	Heart of the Golem	Notable		119	-496	MinionLife=25,ManaRegen=10	663,666	Sorcerer	A golem is only as strong as the heart its maker gives it.	cluster	663	116	-530	2	+44	Lens	
+665		Small		114	-563	MinionDamage=7,MinionLife=6	93,663,666	Sorcerer		cluster	663	116	-530	1	-42	Lens	
+666		Small		95	-529	MinionDamage=7,MinionLife=6	664,665	Sorcerer		cluster	663	116	-530	1		Lens	
+667	Mindcry	Notable		233	-1014	EnergyShieldRecharge=20,CastSpeed=5	668	Sorcerer	A staff that clears the mind, so the ward mends while the next spell forms.	cluster	667	206	-1088	4	o	Spur Arc	
+668		Small		203	-1009	EnergyShieldPercent=11	667,669	Sorcerer		cluster	667	206	-1088	4	o	Spur Arc	
+669		Small		173	-1017	EnergyShieldPercent=11	668,670	Sorcerer		cluster	667	206	-1088	4	o	Spur Arc	
+670		Small		150	-1033	EnergyShieldPercent=11	94,669	Sorcerer		cluster	667	206	-1088	4		Spur Arc	
+671		Small		72	-354	MinionDamage=7	634,672	Sorcerer		cluster	671	41	-350	1	-138	Fork	
+672		Small		45	-349	MinionDamage=7	671,673,674	Sorcerer		cluster	671	41	-350	0	+52,-61	Fork	
+673		Small		31	-322	MinionDamage=7	672,675	Sorcerer		cluster	671	41	-350	1	+49	Fork	
+674	The Summoning Circle	Notable		21	-375	MinionDamage=18,CastSpeed=5	672	Sorcerer	Draw the circle quickly. What waits beyond it is not patient.	cluster	671	41	-350	1		Fork	
+675	The Unspoken Name	Notable		6	-309	Spirit=8,EnergyShieldPercent=17	673	Sorcerer	No Vizjerei told a demon his true name. Some, in time, forgot it themselves.	cluster	671	41	-350	3		Fork	
+676	Arcane Thirst	Notable		136	-742	ManaOnKill=6,ManaRegen=12	677	Sorcerer	Each death leaves a little magic in the air for the taking.	cluster	676	107	-720	2	-36	Spur Arc	
+677		Small		103	-756	ManaRegen=8	676,679	Sorcerer		cluster	676	107	-720	2	-37	Spur Arc	
+678		Small		77	-700	ManaRegen=8	100,679	Sorcerer		cluster	676	107	-720	2	+37	Spur Arc	
+679		Small		73	-734	MinionDamage=7	677,678	Sorcerer		cluster	676	107	-720	2		Spur Arc	
+680		Small		183	-1114	SpellDamage=4	14,681	Sorcerer		sweep	680	110	-1085	4	o	Bridge Arc	
+681		Attribute		164	-1143	AnyAttribute=5	680,682	Sorcerer		sweep	680	110	-1085	4	o	Bridge Arc	
+682	Arcane Sanctuary	Notable		135	-1160	EnergyShieldPercent=22,EvasionVsSpells=5	681,683	Sorcerer	Horazon hid in a sanctum of his own making, out of the world's reach.	sweep	680	110	-1085	4	o	Bridge Arc	
+683		Small		100	-1163	SpellDamage=4	682,684	Sorcerer		sweep	680	110	-1085	4	o	Bridge Arc	
+684		Small		64	-1149	SpellDamage=4	14,683	Sorcerer		sweep	680	110	-1085	4		Bridge Arc	
+685		Small		72	-505	ManaRegen=8	6,686	Sorcerer		sweep	685	58	-610	5	o	Bridge Arc	
+686		Small		44	-505	MinionDamage=7	685,687	Sorcerer		sweep	685	58	-610	5	o	Bridge Arc	
+687	Thinking Cap	Notable		14	-513	ManaRegen=25,ManaPercent=6	686,688	Sorcerer	A plain skull cap that holds more mana than many a staff.	sweep	685	58	-610	5	o	Bridge Arc	
+688		Small		-17	-535	MinionDamage=7	687,689	Sorcerer		sweep	685	58	-610	5	o	Bridge Arc	
+689		Small		-39	-568	ManaRegen=8	6,688,724	Sorcerer		sweep	685	58	-610	5	+60	Bridge Arc	
+690	Mage Clan Wars	Notable		128	-907	SpellDamage=16,IgniteChance=10	691,692	Sorcerer	When the clans of Kehjistan turned on each other, whole cities burned.	cluster	690	92	-904	2	+45,-45	Lens	
+691		Small		93	-884	SpellDamage=4	690,693	Sorcerer		cluster	690	92	-904	1	+43	Lens	
+692		Small		90	-924	SpellDamage=4	690,693	Sorcerer		cluster	690	92	-904	1	-43	Lens	
+693		Small		57	-901	SpellDamage=4	103,691,692	Sorcerer		cluster	690	92	-904	2		Lens	
+694	Mana Before Flesh	Notable		59	-996	HitDamageFromMana=10,ManaPercent=10	696,697	Sorcerer	A Vizjerei can let the blow fall on his mana instead of his flesh.	set	694	25	-1040	3	+56,-86	Crescent	
+695		Small		32	-1094	EnergyShieldPercent=11	104,697,698	Sorcerer		set	694	25	-1040	3	+92,-57	Crescent	
+696		Small		8	-987	EnergyShieldPercent=11	694,699	Sorcerer		set	694	25	-1040	3	+60	Crescent	
+697		Small		3	-1030	EnergyShieldPercent=11	694,695	Sorcerer		set	694	25	-1040	1		Crescent	
+698		Attribute		-23	-1073	AnyAttribute=5	695,699	Sorcerer		set	694	25	-1040	3	-60	Crescent	
+699		Small		-34	-1021	EnergyShieldPercent=11	696,698	Sorcerer		set	694	25	-1040	3		Crescent	
+700	Bound in Brimstone	Notable		10	-426	FireDamage=12,MinionDamage=11	702	Sorcerer	Brimstone is the one gift a demon brings without being asked.	cluster	700	-46	-401	3	+35	Horns	
+701	Maelstrom	Notable		-16	-347	CastSpeed=10,LightningDamage=12	703	Sorcerer	Faster words, louder thunder.	cluster	700	-46	-401	3	-35	Horns	
+702		Small		-28	-427	LightningDamage=5	700,704	Sorcerer		cluster	700	-46	-401	1	-46	Horns	
+703		Small		-47	-369	LightningDamage=5	701,704	Sorcerer		cluster	700	-46	-401	1	+45	Horns	
+704		Small		-53	-403	LightningDamage=5	702,703,705	Sorcerer		cluster	700	-46	-401	0	-164	Horns	
+705		Small		-84	-413	LightningDamage=5	704,732	Sorcerer		cluster	700	-46	-401	2	-66	Horns	
+706		Small		14	-776	ColdDamage=5	707,709	Sorcerer		cluster	706	-10	-753	2	+37,+49	Horns	
+707		Small		12	-816	ColdDamage=5	706	Sorcerer		cluster	706	-10	-753	4		Horns	
+708		Small		3	-715	ColdDamage=5	100,709	Sorcerer		cluster	706	-10	-753	2	-165	Horns	
+709		Small		-8	-746	ColdDamage=5	706,708,710	Sorcerer		cluster	706	-10	-753	0	+42	Horns	
+710		Small		-40	-747	ColdDamage=5	709,711	Sorcerer		cluster	706	-10	-753	1	-34	Horns	
+711	Glacial Ward	Notable		-61	-777	ColdDamage=10,EnergyShieldPercent=17	710	Sorcerer	A shell of frost turns blows aside.	cluster	706	-10	-753	3		Horns	
+712		Small		-2	-873	ManaPercent=4	102,714	Sorcerer		cluster	712	-35	-888	2	+149	Horns	
+713		Small		-29	-921	ManaPercent=4	714,715	Sorcerer		cluster	712	-35	-888	2	+47,+33	Horns	
+714		Small		-29	-885	ManaPercent=4	712,713,716	Sorcerer		cluster	712	-35	-888	0	+47	Horns	
+715		Small		-54	-946	ManaPercent=4	713	Sorcerer		cluster	712	-35	-888	3		Horns	
+716		Small		-56	-862	ManaPercent=4	714,717	Sorcerer		cluster	712	-35	-888	2	-32	Horns	
+717	Elements of the Clans	Notable		-91	-866	SpellDamage=14,AllResist=5	716	Sorcerer	Fire, storm and ice bow to a master, and spare him.	cluster	712	-35	-888	3		Horns	
+718		Small		-77	-738	LightningDamage=5	109,719	Sorcerer		cluster	718	-130	-797	4	o	Stub	
+719		Attribute		-106	-721	AnyAttribute=5	718,720	Sorcerer		cluster	718	-130	-797	4	o	Stub	
+720	Warding Glyphs	Notable		-146	-720	AllResist=6,EnergyShieldRecharge=15	719	Sorcerer	Glyphs chalked on the sleeve flare and fade as the ward knits.	cluster	718	-130	-797	4		Stub	
+721	Storm Spire	Notable		-72	-656	LightningDamage=20,ShockChance=15	722	Sorcerer	A war staff from the depths that hums before every storm.	cluster	721	-128	-600	4	o	Stub	
+722		Small		-106	-676	LightningDamage=5	721,723	Sorcerer		cluster	721	-128	-600	4	o	Stub	
+723		Small		-134	-679	LightningDamage=5	111,722,744	Sorcerer		cluster	721	-128	-600	4	+59	Stub	
+724		Small		-67	-534	ColdDamage=5	689,726	Sorcerer		cluster	724	-92	-500	2	+193	Fork	
+725	Frozen Heart	Notable		-78	-467	ColdDamage=20,FreezeBuildup=15	726	Sorcerer	Cold magic answers best to those who feel nothing.	cluster	724	-92	-500	2	-67	Fork	
+726		Small		-91	-504	ColdDamage=5	724,725,727	Sorcerer		cluster	724	-92	-500	0	-69	Fork	
+727		Small		-131	-499	ColdDamage=5	726,728	Sorcerer		cluster	724	-92	-500	2	-67	Fork	
+728	The Deeper Well	Notable		-162	-475	ManaSpellDamage=2,ManaPercent=10	727	Sorcerer	The deeper the well, the stronger the spell.	cluster	724	-92	-500	4		Fork	
+729	Ash and Ember	Notable		-73	-379	FireDamage=12,ManaOnKill=4	731	Sorcerer	Burn them, and drink what rises from the ash.	style	729	-121	-390	3	-31	Short Horns	
+730	Immolator	Notable		-103	-435	FireDamage=20,IgniteChance=15	732	Sorcerer	Fire is the first school a Vizjerei apprentice learns, and the last he forgets.	style	729	-121	-390	3	+31	Short Horns	
+731		Small		-106	-371	FireDamage=5	729,733	Sorcerer		style	729	-121	-390	1	+45	Short Horns	
+732		Small		-128	-413	FireDamage=5	705,730,733	Sorcerer		style	729	-121	-390	1	-46	Short Horns	
+733		Small		-139	-380	FireDamage=5	385,731,732	Sorcerer		style	729	-121	-390	1		Short Horns	
+734	Warding Circle	Notable		-176	-876	AllResist=8,MaxColdResist=2	735	Sorcerer	Chalk, salt and old words keep the worst of it out.	cluster	734	-215	-890	2	+43	Stub	
+735		Small		-219	-849	AllResist=3	734,736	Sorcerer		cluster	734	-215	-890	2	+42	Stub	
+736		Small		-255	-878	AllResist=3	735,756	Sorcerer		cluster	734	-215	-890	2	-60	Stub	
+737	Clan Gemcutter	Notable		-176	-782	EnergyShieldPercent=17,SpellDamage=10	738,739	Sorcerer	The clans cut their gems to hold a spell, not to catch the light.	cluster	737	-218	-773	2	-52,+51	Teardrop	
+738		Small		-203	-795	LightningDamage=5	737,740	Sorcerer		cluster	737	-218	-773	1	-53	Teardrop	
+739		Attribute		-195	-759	AnyAttribute=5	737,741	Sorcerer		cluster	737	-218	-773	1	+55	Teardrop	
+740		Small		-234	-797	LightningDamage=5	738,742	Sorcerer		cluster	737	-218	-773	1	-41	Teardrop	
+741		Small		-223	-744	LightningDamage=5	739,742	Sorcerer		cluster	737	-218	-773	1	+41	Teardrop	
+742		Small		-255	-765	LightningDamage=5	740,741,743	Sorcerer		cluster	737	-218	-773	2	+70	Teardrop	
+743		Small		-287	-758	LightningDamage=5	118,742	Sorcerer		cluster	737	-218	-773	4		Teardrop	
+744		Small		-166	-672	LightningDamage=5	723,745,746	Sorcerer		cluster	744	-206	-643	3	+23,-23	Figure Eight	
+745		Small		-176	-639	LightningDamage=5	744,747	Sorcerer		cluster	744	-206	-643	1	+23	Figure Eight	
+746		Small		-194	-678	LightningDamage=5	744,747	Sorcerer		cluster	744	-206	-643	2	-24	Figure Eight	
+747		Small		-204	-644	LightningDamage=5	745,746,748,749	Sorcerer		cluster	744	-206	-643	0	+23,-24	Figure Eight	
+748		Small		-214	-611	LightningDamage=5	747,750	Sorcerer		cluster	744	-206	-643	2	+23	Figure Eight	
+749		Small		-233	-650	LightningDamage=5	747,750	Sorcerer		cluster	744	-206	-643	1	-24	Figure Eight	
+750	Thunder over Kehjistan	Notable		-243	-616	LightningDamage=18,ManaOnKill=4	748,749	Sorcerer	Over the clan towers of Kehjistan the sky never quite cleared.	cluster	744	-206	-643	2		Figure Eight	
+751		Small		-162	-568	LightningDamage=5	752,753	Sorcerer		crossover	751	-224	-568	3	-59,+61	Crook	
+752		Attribute		-189	-612	AnyAttribute=5	751,754	Sorcerer		crossover	751	-224	-568	3	+60	Crook	
+753		Small		-184	-525	LightningDamage=5	751,755	Sorcerer		crossover	751	-224	-568	3	+56	Crook	
+754	Staff and Scroll	Notable		-224	-568	SpellDamage=10,StaffDamage=10	752	Sorcerer	The Horadrim read with one hand and held the staff with the other.	crossover	751	-224	-568	0		Crook	
+755		Small		-230	-514	LightningDamage=5	123,753	Sorcerer		crossover	751	-224	-568	3		Crook	
+756		Small		-287	-873	SpellDamage=4	736,757,758	Sorcerer		cluster	756	-290	-829	2	-47,-41	Crook	
+757	Quickened Words	Notable		-290	-829	CastSpeed=6,ManaCost=-6	756	Sorcerer	The Vizjerei cut every word a demon could twist.	cluster	756	-290	-829	0		Crook	
+758		Small		-319	-851	SpellDamage=4	756,760	Sorcerer		cluster	756	-290	-829	2	-39	Crook	
+759		Small		-310	-789	SpellDamage=4	118,760	Sorcerer		cluster	756	-290	-829	2	+43	Crook	
+760		Attribute		-327	-813	AnyAttribute=5	758,759	Sorcerer		cluster	756	-290	-829	2		Crook	
+761	Oath of the Bough	Notable		-325	-363	MeleeDamage=10,SpellDamage=10	762,764	Monk	Conquered once, the Brotherhood swore to master every way of fighting.	cluster	761	-370	-348	2	-50,+60	Teardrop	
+762		Small		-352	-374	MeleeDamage=6	761,763	Monk		cluster	761	-370	-348	1	-57	Teardrop	
+763		Small		-385	-373	MeleeDamage=6	762,766	Monk		cluster	761	-370	-348	1	-47	Teardrop	
+764		Attribute		-347	-336	AnyAttribute=5	761,765	Monk		cluster	761	-370	-348	1	+62	Teardrop	
+765	Flesh Over Steel	Notable		-377	-316	MeleeDamage=12,LifeOnKill=6	764,766	Monk	Steel can be taken from you. The hand cannot.	cluster	761	-370	-348	1	+41	Teardrop	
+766		Small		-409	-336	MeleeDamage=6	763,765,767	Monk		cluster	761	-370	-348	2	+74	Teardrop	
+767		Small		-442	-325	MeleeDamage=6	766,770	Monk		cluster	761	-370	-348	4	+57	Teardrop	
+768		Attribute		-460	-364	AnyAttribute=5	769,770	Monk		crossover	768	-515	-359	3	+59,+59	Crook	
+769	Pilgrim of the Archive	Notable		-515	-359	MeleeDamage=10,ColdDamage=10	768	Monk	Pilgrims who copied the Horadric books learned the cold spells in the margins.	crossover	768	-515	-359	0		Crook	
+770		Small		-472	-314	MeleeDamage=6	767,768,772	Monk		crossover	768	-515	-359	3	+60	Crook	
+771		Small		-558	-326	MeleeDamage=6	134,772	Monk		crossover	768	-515	-359	3	-56	Crook	
+772		Small		-518	-301	MeleeDamage=6	770,771	Monk		crossover	768	-515	-359	3		Crook	
+773	Shun the Blade	Notable		-482	-251	MeleeDamage=12,EvasionPercent=17	774	Monk	The Brotherhood fights without metal weapons, and is lighter for it.	style	773	-493	-201	3	-28	Short Horns	
+774		Small		-473	-222	MeleeDamage=5	773,775	Monk		style	773	-493	-201	1	+49	Short Horns	
+775		Small		-482	-186	MeleeDamage=5	392,774,777	Monk		style	773	-493	-201	1	+49	Short Horns	
+776	Open Palm	Notable		-544	-205	MeleeDamage=15,AttackSpeed=5	777	Monk	An empty hand hides nothing and needs nothing.	style	773	-493	-201	3	+28	Short Horns	
+777		Small		-519	-188	MeleeDamage=5	775,776	Monk		style	773	-493	-201	1		Short Horns	
+778	Zhar's Library	Notable		-1065	-344	SpellDamage=16,ManaCost=10	779	Monk	'Here, take this and leave me to my work. Trouble me no more!'	cluster	778	-960	-330	5	o	Stub	
+779		Attribute		-1064	-314	AnyAttribute=5	778,780	Monk		cluster	778	-960	-330	5	o	Stub	
+780		Small		-1054	-282	SpellDamage=4	141,779	Monk		cluster	778	-960	-330	5		Stub	
+781	Weathered Body	Notable		-880	-278	EvasionPercent=12,LifePercent=6	782	Monk	Sun, snow and the switch have left nothing soft.	cluster	781	-847	-233	3	+48	Fork	
+782		Small		-856	-264	Vitality=7	781,784	Monk		cluster	781	-847	-233	1	+56	Fork	
+783		Small		-816	-228	Vitality=7	145,784	Monk		cluster	781	-847	-233	1	+139	Fork	
+784		Small		-843	-234	Vitality=7	782,783,785	Monk		cluster	781	-847	-233	0	+63	Fork	
+785	Wood Against Iron	Notable		-868	-207	Dexterity=15,Magic=15	784	Monk	The Brotherhood forswore iron; the staff and the trained body had to be enough.	cluster	781	-847	-233	2		Fork	
+786		Small		-458	-138	EvasionPercent=12,EnergyShieldPercent=11	392,787,788	Monk		defence	786	-450	-113	1	+36,-36	Lens	
+787		Small		-431	-119	EvasionPercent=12,EnergyShieldPercent=11	786,789,809	Monk		defence	786	-450	-113	1	+37,+49	Lens	
+788		Small		-470	-107	EvasionPercent=12,EnergyShieldPercent=11	786,789	Monk		defence	786	-450	-113	1	-36	Lens	
+789	Perfect Harmony	Notable		-443	-87	EvasionPercent=29,ChaosResist=7	787,788	Monk	Order and Chaos, held level, as the Patriarchs hold them.	defence	786	-450	-113	1		Lens	
+790		Small		-957	-227	Vitality=7	148,792	Monk		cluster	790	-990	-235	2	+33	Spur Arc	
+791	Will of the Bough	Notable		-1024	-241	StaffDamage=10,Vitality=8	793	Monk	A bough that bends in the storm is still on the tree in the morning.	cluster	790	-990	-235	2	-35	Spur Arc	
+792		Small		-983	-205	Vitality=7	790,793	Monk		cluster	790	-990	-235	1	+34	Spur Arc	
+793		Small		-1018	-211	Vitality=7	791,792	Monk		cluster	790	-990	-235	2		Spur Arc	
+794	Chamber of Bone	Notable		-1103	-252	ColdDamage=16,SpellDamage=8	795,796	Monk	Arcane knowledge gained!	cluster	794	-1090	-200	3	+61,-59	Teardrop	
+795		Small		-1077	-228	SpellDamage=4	794,797	Monk		cluster	794	-1090	-200	1	+66	Teardrop	
+796		Attribute		-1115	-220	AnyAttribute=5	794,798	Monk		cluster	794	-1090	-200	1	-67	Teardrop	
+797		Small		-1059	-194	SpellDamage=4	795,799	Monk		cluster	794	-1090	-200	1	+48	Teardrop	
+798		Small		-1115	-181	SpellDamage=4	796,799	Monk		cluster	794	-1090	-200	1	-47	Teardrop	
+799		Small		-1080	-155	SpellDamage=4	797,798,800	Monk		cluster	794	-1090	-200	2	-83	Teardrop	
+800		Small		-1071	-117	SpellDamage=4	799,823	Monk		cluster	794	-1090	-200	4	-86	Teardrop	
+801		Small		-778	-172	Vitality=7	145,802	Monk		set	801	-784	-108	3	+166	Bough	
+802		Small		-784	-133	Vitality=7	801,803,804,805,806	Monk		set	801	-784	-108	1	+63,-58,+152,-151	Bough	
+803		Small		-743	-108	Vitality=7	802,808	Monk		set	801	-784	-108	2	+59	Bough	
+804		Small		-825	-116	Vitality=7	802,807	Monk		set	801	-784	-108	2	-59	Bough	
+805		Small		-773	-86	Vitality=7	802,808	Monk		set	801	-784	-108	1	-58	Bough	
+806		Small		-800	-88	Vitality=7	802,807	Monk		set	801	-784	-108	1	+57	Bough	
+807	The Long Walk West	Notable		-841	-74	Vitality=10,LifeRegenRate=4	804,806	Monk	From the East to Khanduras is a long way on foot. Few brothers walk it back.	set	801	-784	-108	3		Bough	
+808		Small		-735	-64	Vitality=7	803,805	Monk		set	801	-784	-108	3		Bough	
+809		Small		-417	-90	LifeRegenRate=2	787,810	Monk		cluster	809	-410	-52	2	-176	Fork	
+810		Small		-409	-56	LifeRegenRate=2	809,811,812	Monk		cluster	809	-410	-52	0	+59,-67	Fork	
+811		Small		-378	-41	LifeRegenRate=2	810,813	Monk		cluster	809	-410	-52	2	+58	Fork	
+812	The Thirteenth Viper	Notable		-434	-26	EvasionPercent=23,LifeOnKill=8	810	Monk	Initiates are thrown into the Pit of Twelve Vipers. No one tells them of the thirteenth.	cluster	809	-410	-52	2		Fork	
+813	Ice in the Veins	Notable		-362	-11	ColdDamage=12,ManaRegen=10	811	Monk	A calm heart strikes colder.	cluster	809	-410	-52	3		Fork	
+814	Iron Body	Notable		-897	-154	Vitality=12,StunThreshold=20	815,816	Monk	Years of training make the body a weapon and a wall.	cluster	814	-906	-113	2	-53,+54	Lens	
+815		Small		-932	-119	Vitality=7	814,817	Monk		cluster	814	-906	-113	1	-52	Lens	
+816		Small		-880	-107	Vitality=7	814,817	Monk		cluster	814	-906	-113	1	+52	Lens	
+817		Small		-915	-74	Vitality=7	153,815,816	Monk		cluster	814	-906	-113	2		Lens	
+818		Small		-583	-66	LifeRegenRate=2	819,820	Monk		cluster	818	-578	-44	1	+50,-41	Lens	
+819	Serpent's Form	Notable		-541	-46	AttackSpeed=6,EvasionPercent=14	818,821	Monk	The form every initiate masters before any other.	cluster	818	-578	-44	2	+43	Lens	
+820		Small		-613	-42	LifeRegenRate=2	152,818,821	Monk		cluster	818	-578	-44	2	-49	Lens	
+821		Small		-572	-21	LifeRegenRate=2	819,820	Monk		cluster	818	-578	-44	1		Lens	
+822		Small		-1020	-77	Spirit=2,MinionDamage=5	156,823	Monk		cluster	822	-1039	28	5	o	Spur Arc	
+823		Small		-1050	-78	Spirit=2,MinionDamage=5	800,822,824	Monk		cluster	822	-1039	28	5	o	Spur Arc	
+824		Attribute		-1081	-69	AnyAttribute=5	823,825	Monk		cluster	822	-1039	28	5	o	Spur Arc	
+825	Veradani Vow	Notable		-1111	-50	Spirit=8,AllResist=5	824	Monk	These holy men undergo intense mental and physical training.	cluster	822	-1039	28	5		Spur Arc	
+826		Small		-741	-33	LifeRegenRate=2	827,828	Monk		cluster	826	-718	3	2	+41,-43	Spur Arc	
+827	Pilgrim's Alms	Notable		-698	-30	ManaOnKill=6,ManaRegen=10	826	Monk	A pilgrim on the road eats what the road gives.	cluster	826	-718	3	2		Spur Arc	
+828		Small		-760	1	LifeRegenRate=2	826,829	Monk		cluster	826	-718	3	2	-40	Spur Arc	
+829		Small		-738	34	LifeRegenRate=2	158,828	Monk		cluster	826	-718	3	2		Spur Arc	
+830		Small		-1134	-18	ManaRegen=8	156,831	Monk		cluster	830	-1039	28	5	o	Stub	
+831		Small		-1143	11	ManaRegen=8	830,832	Monk		cluster	830	-1039	28	5	o	Stub	
+832	Fast of the Patriarchs	Notable		-1142	51	LifeRegenRate=8,StunThreshold=15	831	Monk	A body that has learned to want nothing heals itself.	cluster	830	-1039	28	5		Stub	
+833		Small		-1013	19	StaffDamage=5	153,834	Monk		cluster	833	-929	-46	5	o	Stub	
+834		Small		-985	44	StaffDamage=5	833,835	Monk		cluster	833	-929	-46	5	o	Stub	
+835	Wind of Ivgorod	Notable		-950	58	AttackSpeed=8,Dexterity=10	834	Monk	The fastest hands in the East.	cluster	833	-929	-46	5		Stub	
+836		Small		-641	27	StaffDamage=5	5,837,841	Monk		sweep	836	-680	96	4	o,-58	Bridge Arc	
+837		Small		-614	51	StaffDamage=5	836,838	Monk		sweep	836	-680	96	4	o	Bridge Arc	
+838	Flowing Strikes	Notable		-602	80	AttackSpeed=6,CastSpeed=6	837,839	Monk	Attack and prayer are one movement.	sweep	836	-680	96	4	o	Bridge Arc	
+839		Small		-603	113	StaffDamage=5	838,840	Monk		sweep	836	-680	96	4	o	Bridge Arc	
+840		Small		-619	146	StaffDamage=5	5,839,863	Monk		sweep	836	-680	96	4	+81	Bridge Arc	
+841		Small		-609	27	StaffDamage=6	836,844	Monk		cluster	841	-572	48	2	-191	Fork	
+842		Small		-545	28	StaffDamage=6	843,844	Monk		cluster	841	-572	48	2	+62,-58	Fork	
+843	Rooted Stance	Notable		-510	36	EvasionPercent=21,StunThreshold=15	842	Monk	The bough bends. The root does not.	cluster	841	-572	48	3		Fork	
+844		Small		-575	44	StaffDamage=6	841,842,845	Monk		cluster	841	-572	48	0	-80	Fork	
+845	Exile's Road	Notable		-562	89	StaffDamage=12,Dexterity=8	844	Monk	Conquered and driven into the wilderness, the Brotherhood kept only their staves.	cluster	841	-572	48	2		Fork	
+846	Thundercall	Notable		-1046	103	LightningDamage=12,StaffDamage=12	847,849	Monk	A staff that answers the sky.	set	846	-1069	156	3	-55,+87	Crescent	
+847		Attribute		-1090	110	AnyAttribute=5	846,848	Monk		set	846	-1069	156	3	-52	Crescent	
+848		Small		-1121	156	LightningDamage=4	847,850	Monk		set	846	-1069	156	3	-56	Crescent	
+849		Small		-1089	154	LightningDamage=4	846,851	Monk		set	846	-1069	156	1	+82	Crescent	
+850		Small		-1105	203	LightningDamage=4	848,851	Monk		set	846	-1069	156	3	-56	Crescent	
+851		Small		-1056	207	LightningDamage=4	163,849,850	Monk		set	846	-1069	156	3		Crescent	
+852		Small		-923	97	LightningDamage=4	13,853	Monk		sweep	852	-1015	150	5	o	Bridge Arc	
+853		Attribute		-912	124	AnyAttribute=5	852,854	Monk		sweep	852	-1015	150	5	o	Bridge Arc	
+854	Thunder Palm	Notable		-909	157	LightningDamage=15,MeleeDamage=10	853,855	Monk	A strike that carries the storm in it.	sweep	852	-1015	150	5	o	Bridge Arc	
+855		Small		-916	188	LightningDamage=4	854,856	Monk		sweep	852	-1015	150	5	o	Bridge Arc	
+856		Small		-937	221	LightningDamage=4	13,855	Monk		sweep	852	-1015	150	5		Bridge Arc	
+857	The Quiet Cell	Notable		-808	100	LifeRegenRate=6,ManaRegen=15	858	Monk	A night in a quiet cell mends what a day of fighting broke.	cluster	857	-850	135	3	o	Stub	
+858		Small		-796	135	EvasionPercent=12,EnergyShieldPercent=11	857,859	Monk		cluster	857	-850	135	3	o	Stub	
+859		Small		-805	165	EvasionPercent=12,EnergyShieldPercent=11	162,858	Monk		cluster	857	-850	135	3		Stub	
+860		Small		-502	63	ColdDamage=4	861	Monk		cluster	860	-539	117	3	+37	Horns	
+861		Small		-537	83	ColdDamage=4	860,862	Monk		cluster	860	-539	117	2	-49	Horns	
+862		Small		-546	119	ColdDamage=4	861,863,864	Monk		cluster	860	-539	117	0	+174,-48	Horns	
+863		Small		-580	126	ColdDamage=4	840,862	Monk		cluster	860	-539	117	2		Horns	
+864		Small		-522	147	ColdDamage=4	862,865	Monk		cluster	860	-539	117	2	+37	Horns	
+865	Winter Calm	Notable		-482	149	ColdDamage=10,EvasionPercent=14	864	Monk	Cold hands, cold mind, no wasted motion.	cluster	860	-539	117	3		Horns	
+866		Small		-1019	231	ColdDamage=4	867,868	Monk		cluster	866	-1006	250	1	+43,-40	Lens	
+867	Frost Kata	Notable		-979	233	ColdDamage=16,AttackSpeed=5	866,869	Monk	Learned in the icy winds that batter the high eastern passes.	cluster	866	-1006	250	1	+43	Lens	
+868		Small		-1032	266	ColdDamage=4	163,866,869	Monk		cluster	866	-1006	250	1	-41	Lens	
+869		Small		-994	270	ColdDamage=4	867,868	Monk		cluster	866	-1006	250	1		Lens	
+870	Sky-Struck Staff	Notable		-315	84	StaffDamage=12,ShockChance=15	871	Monk	Ash wood, struck once by lightning. The Patriarchs say it remembers.	cluster	870	-311	141	3	+33	Horns	
+871		Small		-328	117	StaffDamage=6	870,872	Monk		cluster	870	-311	141	1	-43	Horns	
+872		Small		-315	147	StaffDamage=6	871,873,875	Monk		cluster	870	-311	141	0	+147,-43	Horns	
+873		Small		-333	170	StaffDamage=6	872,900	Monk		cluster	870	-311	141	2	-69	Horns	
+874	Pilgrim's Staff	Notable		-254	132	StaffDamage=15,LifeOnKill=6	875	Monk	A walking staff on the road, a weapon at the inn.	cluster	870	-311	141	3	-32	Horns	
+875		Small		-283	152	StaffDamage=6	872,874	Monk		cluster	870	-311	141	1		Horns	
+876	The Protector	Notable		-579	161	StaffDamage=12,EvasionPercent=17	877	Monk	A staff held across the body turns as many blows as it gives.	cluster	876	-605	235	4	o	Stub	
+877		Small		-547	182	StaffDamage=6	876,878	Monk		cluster	876	-605	235	4	o	Stub	
+878		Small		-529	214	StaffDamage=6	168,877,883	Monk		cluster	876	-605	235	4	-68	Stub	
+879		Small		-445	152	ColdDamage=4	881,882	Monk		cluster	879	-451	180	1	+25,-25	Figure Eight	
+880		Small		-491	175	ColdDamage=4	882,883	Monk		cluster	879	-451	180	2	+25,-24	Figure Eight	
+881	Glacier Stance	Notable		-406	158	ColdDamage=14,FreezeBuildup=15	879,884	Monk	Plant your feet in the frost you called.	cluster	879	-451	180	3	+25	Figure Eight	
+882		Small		-453	181	ColdDamage=4	879,880,884,885	Monk		cluster	879	-451	180	0	-25,+24	Figure Eight	
+883		Small		-499	203	ColdDamage=4	878,880,885	Monk		cluster	879	-451	180	3	-25	Figure Eight	
+884		Small		-414	187	ColdDamage=4	881,882	Monk		cluster	879	-451	180	2		Figure Eight	
+885		Small		-461	209	ColdDamage=4	882,883	Monk		cluster	879	-451	180	1		Figure Eight	
+886		Small		-783	322	EvasionPercent=12,EnergyShieldPercent=11	887,889	Monk		cluster	886	-764	343	1	+55,-41	Teardrop	
+887		Small		-751	320	EvasionPercent=12,EnergyShieldPercent=11	886,890	Monk		cluster	886	-764	343	1	+51	Teardrop	
+888		Small		-830	367	EvasionPercent=12,EnergyShieldPercent=11	169,889	Monk		cluster	886	-764	343	4	+68	Teardrop	
+889		Small		-800	356	EvasionPercent=12,EnergyShieldPercent=11	886,888,892	Monk		cluster	886	-764	343	2	-42	Teardrop	
+890	Unseen Hand	Notable		-723	329	EvasionVsSpells=5,Dexterity=10	887,891	Monk	Spells pass where you no longer stand.	cluster	886	-764	343	2	+51	Teardrop	
+891		Small		-739	354	EvasionPercent=12,EnergyShieldPercent=11	890,892	Monk		cluster	886	-764	343	1	+55	Teardrop	
+892		Small		-765	373	EvasionPercent=12,EnergyShieldPercent=11	889,891,903	Monk		cluster	886	-764	343	1	-52	Teardrop	
+893		Small		-859	399	ManaRegen=8	169,894	Monk		cluster	893	-821	473	4	-121	Spiral	
+894		Attribute		-875	490	AnyAttribute=5	893,897	Monk		cluster	893	-821	473	3	-85	Spiral	
+895	Inner Stillness	Notable		-821	473	ManaRegen=25,EnergyShieldRecharge=15	896	Monk	Breathe, and the well refills.	cluster	893	-821	473	0	+37	Spiral	
+896		Small		-793	475	ManaRegen=8	895,897	Monk		cluster	893	-821	473	1	+60	Spiral	
+897		Small		-815	515	ManaRegen=8	894,896	Monk		cluster	893	-821	473	2		Spiral	
+898	Sweeping Staff	Notable		-366	180	StunBuildup=15,AttackSpeed=5	900	Monk	A wide arc that knocks them off their feet.	style	898	-375	230	3	-28	Short Horns	
+899	Daibo Form	Notable		-426	229	StaffDamage=20,ToHit=8	901	Monk	The daibo is the first weapon an initiate of Ivgorod learns, and often the last.	style	898	-375	230	3	+29	Short Horns	
+900		Small		-355	208	StaffDamage=6	873,898,902	Monk		style	898	-375	230	1	+48	Short Horns	
+901		Small		-399	245	StaffDamage=6	899,902	Monk		style	898	-375	230	1	-47	Short Horns	
+902		Small		-363	244	StaffDamage=6	413,900,901	Monk		style	898	-375	230	1		Short Horns	
+903		Small		-743	396	LightningDamage=4	892,904,905	Monk		cluster	903	-710	421	2	+54,-54	Long Lens	
+904		Small		-703	387	LightningDamage=4	903,906	Monk		cluster	903	-710	421	2	+54	Long Lens	
+905		Small		-741	437	LightningDamage=4	903,907	Monk		cluster	903	-710	421	2	-54	Long Lens	
+906		Small		-678	406	LightningDamage=4	904,908	Monk		cluster	903	-710	421	2	+54	Long Lens	
+907		Attribute		-716	456	AnyAttribute=5	905,908	Monk		cluster	903	-710	421	2	-54	Long Lens	
+908	Storm Callers	Notable		-676	447	LightningDamage=12,ShockChance=15	906,907	Monk	To a Sister, a storm is only another kind of arrow.	cluster	903	-710	421	2		Long Lens	
+909		Small		-626	344	LightningDamage=4	910,911	Monk		crossover	909	-616	399	3	-57,+53	Crook	
+910		Small		-665	367	LightningDamage=4	909,912	Monk		crossover	909	-616	399	3	+63	Crook	
+911		Small		-580	365	LightningDamage=4	909,913	Monk		crossover	909	-616	399	3	+52	Crook	
+912	The Sisters' Gift	Notable		-616	399	StaffAppliesToBow=1,BowDamage=10	910	Monk	At the monastery the Brotherhood borrowed the bow, and taught the staff in return.	crossover	909	-616	399	0		Crook	
+913		Small		-561	405	LightningDamage=4	175,911	Monk		crossover	909	-616	399	3		Crook	
+914		Attribute		-444	579	AnyAttribute=5	181,916	Monk		scenic	914	-357	570	4	+286	Crypt Arch	
+915		Small		-348	657	ToHit=5	185,918	Rogue		scenic	914	-357	570	4	+286	Crypt Arch	
+916		Small		-401	526	ToHit=5	914,917	Sightless Eye		scenic	914	-357	570	3	+122	Crypt Arch	
+917	Blindfold Drill	Notable		-302	503	Dexterity=12,ToHit=10	916,918	Sightless Eye	The blindfold stays on until the stones stop hitting you.	scenic	914	-357	570	4	+121	Crypt Arch	
+918		Small		-305	604	ToHit=5	915,917	Sightless Eye		scenic	914	-357	570	3		Crypt Arch	
+919	Field Rations	Notable		-461	385	FlaskRecovery=15,LifeOnKill=6	920,921	Rogue	Bread, salt and one of the priestess's draughts. Save the draught for last.	cluster	919	-423	412	2	+58,-50	Teardrop	
+920		Small		-427	386	EvasionPercent=12	919,923	Rogue		cluster	919	-423	412	1	+63	Teardrop	
+921		Small		-454	413	EvasionPercent=12	919,922	Rogue		cluster	919	-423	412	1	-56	Teardrop	
+922	Hunter's Rest	Notable		-434	439	EvasionPercent=14,LifeRegenRate=6	921,924	Rogue	Sleep light, heal fast, move at dawn.	cluster	919	-423	412	1	-47	Teardrop	
+923		Small		-393	399	EvasionPercent=12	920,924	Rogue		cluster	919	-423	412	1	+40	Teardrop	
+924		Small		-390	436	EvasionPercent=12	922,923,925	Rogue		cluster	919	-423	412	2	-76	Teardrop	
+925		Small		-361	457	EvasionPercent=12	924,929	Rogue		cluster	919	-423	412	4	+59	Teardrop	
+926	Eastern Teachers	Notable		-332	406	StaffDamage=14,AttackSpeed=5	927,928	Rogue	The Sisters took their inner sight from Eastern teachings. The staff came with it.	crossover	926	-307	447	3	-60,+52	Teardrop	
+927		Attribute		-333	441	AnyAttribute=5	926,929	Rogue		crossover	926	-307	447	1	-64	Teardrop	
+928		Small		-303	415	EvasionPercent=12	926,930	Rogue		crossover	926	-307	447	1	+58	Teardrop	
+929		Small		-323	477	EvasionPercent=12	925,927,931	Rogue		crossover	926	-307	447	2	-43	Teardrop	
+930		Small		-278	438	EvasionPercent=12	928,931	Rogue		crossover	926	-307	447	1	+50	Teardrop	
+931		Small		-284	484	EvasionPercent=12	929,930,932	Rogue		crossover	926	-307	447	2	-77	Teardrop	
+932		Small		-265	515	EvasionPercent=12	190,931	Rogue		crossover	926	-307	447	4		Teardrop	
+933	Hoarfrost Shafts	Notable		-474	870	ColdDamage=18,FreezeBuildup=15	934	Rogue	Shafts left out on the monastery walls overnight.	cluster	933	-446	890	2	-33	Spur Arc	
+934		Attribute		-475	901	AnyAttribute=5	933,935	Rogue		cluster	933	-446	890	1	-31	Spur Arc	
+935		Small		-446	921	ColdDamage=4	934,936	Rogue		cluster	933	-446	890	1	-32	Spur Arc	
+936		Small		-420	911	ColdDamage=4	195,935	Rogue		cluster	933	-446	890	2		Spur Arc	
+937		Small		-506	1041	LightningDamage=4	183,938	Rogue		cluster	937	-486	991	3	o	Stub	
+938		Attribute		-473	1043	AnyAttribute=5	937,939	Rogue		cluster	937	-486	991	3	o	Stub	
+939	Lightning Reflexes	Notable		-442	1023	EvasionPercent=17,CastSpeed=6	938	Rogue	Faster than the bolt.	cluster	937	-486	991	3		Stub	
+940		Small		-162	450	MeleeDamage=5	941,942	Rogue		style	940	-138	440	1	+45,+30	Short Horns	
+941		Small		-146	420	MeleeDamage=5	422,940,943	Rogue		style	940	-138	440	1	+54	Short Horns	
+942	Stalker's Step	Notable		-159	482	AttackSpeed=8,EvasionPercent=20	940	Rogue	Step out of the dark, strike, and step back into it.	style	940	-138	440	3		Short Horns	
+943		Small		-109	438	MeleeDamage=5	941,944,960	Rogue		style	940	-138	440	1	-33,+44	Short Horns	
+944	Gonnagal's Dirk	Notable		-87	466	MeleeDamage=15,AttackSpeed=5	943	Rogue	A short blade from the labyrinth, quick and mean.	style	940	-138	440	3		Short Horns	
+945	Quick Hands	Notable		-354	1068	FlaskCharges=20,AttackSpeed=4	946	Rogue	A Sister drinks between heartbeats.	cluster	945	-301	1059	3	o	Spur Arc	
+946		Small		-341	1096	FlaskRecovery=6	945,947	Rogue		cluster	945	-301	1059	3	o	Spur Arc	
+947		Small		-316	1111	FlaskRecovery=6	946,948	Rogue		cluster	945	-301	1059	3	o	Spur Arc	
+948		Small		-282	1109	FlaskRecovery=6	200,947	Rogue		cluster	945	-301	1059	3		Spur Arc	
+949	The Palisade Watch	Notable		-253	765	BowDamage=10,Vitality=8	950	Rogue	The Sisters keep a watch on the palisade every night, and every night the moor tests it.	cluster	949	-190	813	4	-71	Fork	
+950		Small		-229	799	EvasionPercent=12	949,951	Rogue		cluster	949	-190	813	2	-73	Fork	
+951		Small		-191	818	EvasionPercent=12	950,952,953	Rogue		cluster	949	-190	813	0	-71,+201	Fork	
+952	Poisoned Water	Notable		-166	785	ChaosResist=12,EvasionPercent=12	951	Rogue	Something fouled Tristram's water at its source. Pepin begged someone to go down and look.	cluster	949	-190	813	2		Fork	
+953		Small		-176	855	EvasionPercent=12	203,951	Rogue		cluster	949	-190	813	2		Fork	
+954		Small		-297	1001	EvasionPercent=12	15,955	Rogue		sweep	954	-235	1050	4	o	Bridge Arc	
+955		Small		-270	979	EvasionPercent=12	954,956	Rogue		sweep	954	-235	1050	4	o	Bridge Arc	
+956	Nightscape	Notable		-239	971	EvasionPercent=14,FlaskRecovery=15	955,957	Rogue	A dark cape for those who fight from the shadows and mend in them.	sweep	954	-235	1050	4	o	Bridge Arc	
+957		Attribute		-208	976	AnyAttribute=5	956,958	Rogue		sweep	954	-235	1050	4	o	Bridge Arc	
+958		Small		-180	993	EvasionPercent=12	15,957	Rogue		sweep	954	-235	1050	4		Bridge Arc	
+959	Cold Steel	Notable		-153	521	ColdDamage=15,MeleeDamage=8	961	Rogue	Freeze them first, and the knife does the rest.	cluster	959	-124	505	2	+63	Fork	
+960		Small		-119	469	MeleeDamage=5	943,961	Rogue		cluster	959	-124	505	2	-162	Fork	
+961		Small		-122	501	MeleeDamage=5	959,960,962	Rogue		cluster	959	-124	505	0	+56	Fork	
+962		Small		-99	524	MeleeDamage=5	961,963	Rogue		cluster	959	-124	505	1	+55	Fork	
+963	Shadowhawk	Notable		-95	556	MeleeDamage=12,EvasionPercent=12	962	Rogue	A broadsword that keeps its bearer in shadow.	cluster	959	-124	505	3		Fork	
+964		Small		-143	631	MeleeDamage=5	199,965,966	Rogue		cluster	964	-115	614	1	+42,-42	Lens	
+965		Small		-126	596	MeleeDamage=5	964,967	Rogue		cluster	964	-115	614	1	+43	Lens	
+966		Small		-104	633	MeleeDamage=5	964,967	Rogue		cluster	964	-115	614	1	-43	Lens	
+967	Black Razor	Notable		-86	597	OneHandDamage=20,AttackSpeed=6	965,966	Rogue	A thin black dagger that cuts far deeper than its size.	cluster	964	-115	614	2		Lens	
+968		Small		-135	807	EvasionPercent=12	969,970	Rogue		set	968	-76	834	3	+68,-	Drawn Bow	
+969		Attribute		-92	778	AnyAttribute=5	968,971	Rogue		set	968	-76	834	3	+79	Drawn Bow	
+970		Small		-93	858	EvasionPercent=12	203,968,972	Rogue		set	968	-76	834	1		Drawn Bow	
+971	Spare Frame	Notable		-49	794	Dexterity=10,LifePercent=4	969,973	Rogue	A Sister carries her own weight and her bow's, and nothing else.	set	968	-76	834	3	+90	Drawn Bow	
+972		Small		-43	898	EvasionPercent=12	970,973	Rogue		set	968	-76	834	4	-76	Drawn Bow	
+973		Small		-27	842	EvasionPercent=12	971,972	Rogue		set	968	-76	834	3		Drawn Bow	
+974		Small		-129	1067	EvasionPercent=12	206,975,976	Rogue		set	974	-79	1064	3	+64,-64	Sightless Eye	
+975		Small		-99	1045	EvasionPercent=12	974,977,978	Rogue		set	974	-79	1064	1	-,+97	Sightless Eye	
+976		Small		-97	1086	EvasionPercent=12	974,979	Rogue		set	974	-79	1064	1	-97	Sightless Eye	
+977	The Black Mushroom	Notable		-79	1064	FlaskCharges=15,EvasionPercent=12	975,979	Rogue	Adria wanted a big black mushroom for a brew, and never said what it was for.	set	974	-79	1064	0		Sightless Eye	
+978		Small		-61	1043	EvasionPercent=12	975,980	Rogue		set	974	-79	1064	1	+64	Sightless Eye	
+979		Small		-59	1084	EvasionPercent=12	976,977,980	Rogue		set	974	-79	1064	1	-64	Sightless Eye	
+980		Small		-29	1062	EvasionPercent=12	978,979	Rogue		set	974	-79	1064	3		Sightless Eye	
+981	Blood on the Blade	Notable		-50	426	LifeOnKill=8,MeleeDamage=10	983	Rogue	Wipe it after. Never during.	cluster	981	8	407	3	+38	Horns	
+982	Never Still	Notable		-26	334	AttackSpeed=6,Dexterity=8	984	Rogue	A Sister's hands are never at rest.	cluster	981	8	407	4	-44	Horns	
+983		Small		-10	436	MeleeDamage=6	981,985	Rogue		cluster	981	8	407	2	-47	Horns	
+984		Small		8	367	MeleeDamage=6	982,985	Rogue		cluster	981	8	407	2	+59	Horns	
+985		Small		16	411	MeleeDamage=6	983,984,986	Rogue		cluster	981	8	407	0	+198	Horns	
+986		Small		50	431	MeleeDamage=6	985,1026	Rogue		cluster	981	8	407	3	-50	Horns	
+987		Small		-49	1139	FireDamage=4	206,988,993	Rogue		cluster	987	-15	1134	2	+33,-44	Stub	
+988		Small		-31	1110	FireDamage=4	987,989	Rogue		cluster	987	-15	1134	1	+31	Stub	
+989	Burning Pitch	Notable		10	1113	FireDamage=18,IgniteChance=15	988	Rogue	Pitch-soaked heads, lit from the campfire.	cluster	987	-15	1134	1		Stub	
+990	Elusive	Notable		-38	1025	EvasionPercent=29,EvasionVsSpells=5	991	Rogue	Walk where the light does not reach.	cluster	990	-8	980	3	o	Stub	
+991		Small		-10	1034	EvasionPercent=12	990,992	Rogue		cluster	990	-8	980	3	o	Stub	
+992		Small		28	1021	EvasionPercent=12	210,991	Rogue		cluster	990	-8	980	3		Stub	
+993		Small		-17	1144	FlaskRecovery=6	987,994	Rogue		cluster	993	38	1138	3		Triangle	
+994		Small		17	1140	FlaskRecovery=6	993,995,996	Rogue		cluster	993	38	1138	1		Triangle	
+995		Attribute		53	1117	AnyAttribute=5	994,996	Rogue		cluster	993	38	1138	1		Triangle	
+996	Rainbow Cloak	Notable		57	1155	AllResist=6,LifePercent=4	994,995	Rogue	A cloak of many colours that turns aside fire, lightning and cold alike.	cluster	993	38	1138	1		Triangle	
+997	Halls of the Blind	Notable		-12	820	BowDamage=12,StationaryDefences=15	998	Rogue	'Shadows move where light should be.' In the Halls of the Blind an archer holds her ground and shoots at what moves.	cluster	997	22	819	2	+34	Spur Arc	
+998		Small		4	791	EvasionPercent=12	997,999	Rogue		cluster	997	22	819	2	+34	Spur Arc	
+999		Small		38	790	EvasionPercent=12	998,1000	Rogue		cluster	997	22	819	2	+34	Spur Arc	
+1000		Small		55	817	EvasionPercent=12	215,999	Rogue		cluster	997	22	819	2		Spur Arc	
+1001	Stony Field	Notable		-5	547	StunThreshold=15,LifePercent=4	1002	Rogue	The Sisters train on the Stony Field, where any step can turn an ankle.	cluster	1001	26	601	3	-60	Fork	
+1002		Small		-2	582	BowDamage=5	1001,1004	Rogue		cluster	1001	26	601	2	-58	Fork	
+1003		Small		17	643	BowDamage=5	1004,1006	Rogue		cluster	1001	26	601	2	-193,+71	Fork	
+1004		Small		23	605	BowDamage=5	1002,1003,1005	Rogue		cluster	1001	26	601	0	-79	Fork	
+1005	Gnat Sting	Notable		61	579	AttackSpeed=8,ToHit=-10	1004	Rogue	A light bow, and many light arrows.	cluster	1001	26	601	2		Fork	
+1006		Small		4	684	ToHit=4	8,1003,1007	Rogue		sweep	1006	83	755	5	o	Bridge Arc	
+1007		Small		33	661	ToHit=4	1006,1008	Rogue		sweep	1006	83	755	5	o	Bridge Arc	
+1008	Windforce	Notable		71	650	BowDamage=16,StunBuildup=20	1007,1009	Rogue	A great war bow that hurls its target back.	sweep	1006	83	755	5	o	Bridge Arc	
+1009		Small		109	652	ToHit=4	1008,1010	Rogue		sweep	1006	83	755	5	o	Bridge Arc	
+1010		Small		135	663	ToHit=4	8,1009,1031	Rogue		sweep	1006	83	755	5	+44	Bridge Arc	
+1011		Small		24	976	LightningDamage=4	210,1012,1013	Rogue		cluster	1011	54	976	1	-39,+39	Lens	
+1012		Small		54	996	LightningDamage=4	1011,1014	Rogue		cluster	1011	54	976	1	-41	Lens	
+1013		Attribute		54	956	AnyAttribute=5	1011,1014	Rogue		cluster	1011	54	976	1	+41	Lens	
+1014	Storm Arrows	Notable		86	976	LightningDamage=18,ShockChance=15	1012,1013	Rogue	Arrows tipped with captured lightning.	cluster	1011	54	976	1		Lens	
+1015		Small		90	1082	FireDamage=4	1016,1017,1021	Rogue		cluster	1015	131	1072	2	+43,-42,+60	Stub	
+1016		Small		107	1038	FireDamage=4	213,1015	Rogue		cluster	1015	131	1072	2		Stub	
+1017	Flaming Volley	Notable		129	1114	FireDamage=12,PhysicalToFire=15	1015	Rogue	Set the whole field ablaze.	cluster	1015	131	1072	2		Stub	
+1018		Small		97	869	BowDamage=6	217,1019	Rogue		cluster	1018	170	900	4	o	Stub	
+1019		Attribute		119	839	AnyAttribute=5	1018,1020	Rogue		cluster	1018	170	900	4	o	Stub	
+1020	Cold Plains Patrol	Notable		146	824	EvasionPercent=17,LifePercent=5	1019	Rogue	The Sisters walked the Cold Plains in pairs, and came back in pairs.	cluster	1018	170	900	4		Stub	
+1021		Small		122	1076	Dexterity=7	1015,1022,1023	Rogue		cluster	1021	159	1076	2	-48,+48	Lens	
+1022		Small		159	1101	Dexterity=7	1021,1024	Rogue		cluster	1021	159	1076	1	-51	Lens	
+1023		Small		159	1051	Dexterity=7	1021,1024	Rogue		cluster	1021	159	1076	1	+51	Lens	
+1024	Kashya's Command	Notable		199	1076	Dexterity=15,BowDamage=8	1022,1023	Rogue	Kashya leads the Sisters with a hard voice and a harder bow.	cluster	1021	159	1076	2		Lens	
+1025	Akara's Remedy	Notable		69	478	FlaskRecovery=20,LifeRegenRate=4	1026,1027	Rogue	The priestess Akara's draughts kept the Sisters alive.	defence	1025	93	458	1	+36,-43	Lens	
+1026		Small		78	446	FlaskRecovery=6	986,1025,1028	Rogue		defence	1025	93	458	1	+41	Lens	
+1027		Small		108	470	FlaskRecovery=6	1025,1028	Rogue		defence	1025	93	458	1	-34	Lens	
+1028		Small		115	439	FlaskRecovery=6	438,1026,1027	Rogue		defence	1025	93	458	1		Lens	
+1029	Burning the Den	Notable		88	542	BowDamage=12,FireDamage=12	1030	Rogue	The Sisters cleanse a den the old way: bar the door and light the thatch.	cluster	1029	140	589	4	+37	Horns	
+1030		Small		102	580	BowDamage=6	1029,1032	Rogue		cluster	1029	140	589	2	-55	Horns	
+1031		Small		141	631	BowDamage=6	1010,1032	Rogue		cluster	1029	140	589	2	-171	Horns	
+1032		Small		140	597	BowDamage=6	1030,1031,1033	Rogue		cluster	1029	140	589	0	-54	Horns	
+1033		Small		177	579	BowDamage=6	1032,1034	Rogue		cluster	1029	140	589	2	+38	Horns	
+1034		Small		190	540	BowDamage=6	1033	Rogue		cluster	1029	140	589	4		Horns	
+1035	Feast of the Fallen	Notable		205	963	LifeOnKill=10,ManaOnKill=4	1036,1037	Rogue	The Fallen breed fast and die faster.	cluster	1035	223	934	2	+43,-43	Lens	
+1036		Small		205	923	FlaskRecovery=6	1035,1038	Rogue		cluster	1035	223	934	1	+41	Lens	
+1037		Small		241	946	FlaskRecovery=6	1035,1038	Rogue		cluster	1035	223	934	1	-42	Lens	
+1038		Small		240	907	FlaskRecovery=6	1036,1037,1046	Rogue		cluster	1035	223	934	1	+59	Lens	
+1039	Fleshstinger	Notable		130	520	BowDamage=18,LifeOnKill=4	1040	Rogue	Every kill it makes buys the archer another breath.	style	1039	149	476	3	-30	Short Horns	
+1040		Small		125	488	BowDamage=6	1039,1041	Rogue		style	1039	149	476	1	+45	Short Horns	
+1041		Small		140	457	BowDamage=6	438,1040,1042	Rogue		style	1039	149	476	1	+53	Short Horns	
+1042		Small		177	473	BowDamage=6	1041,1043	Rogue		style	1039	149	476	1	-33	Short Horns	
+1043	Eaglehorn Draw	Notable		201	500	BowDamage=12,DamageVsRareUnique=6	1042	Rogue	A battle bow drawn to the ear.	style	1039	149	476	3		Short Horns	
+1044		Attribute		271	903	AnyAttribute=5	1045,1046	Rogue		cluster	1044	294	890	1	-50,+52	Teardrop	
+1045	Scavenged Mail	Notable		284	929	ArmorPercent=20,EvasionPercent=17	1044,1047	Rogue	Taken off the dead on the Burial Grounds, and mended twice.	cluster	1044	294	890	2	-50	Teardrop	
+1046		Small		269	873	BowDamage=6	1038,1044,1048	Rogue		cluster	1044	294	890	1	+41	Teardrop	
+1047		Small		308	913	BowDamage=6	1045,1049	Rogue		cluster	1044	294	890	1	-52	Teardrop	
+1048		Small		303	856	BowDamage=6	1046,1049,1050	Rogue		cluster	1044	294	890	2	+42,+64	Teardrop	
+1049		Small		325	888	BowDamage=6	1047,1048	Rogue		cluster	1044	294	890	1		Teardrop	
+1050		Small		311	827	BowDamage=6	223,1048	Rogue		cluster	1044	294	890	3		Teardrop	
+1051		Small		298	694	ToHit=4	224,1052,1054	Rogue		cluster	1051	252	598	5	o,+78	Stub	
+1052		Small		323	676	ToHit=4	1051,1053	Rogue		cluster	1051	252	598	5	o	Stub	
+1053	Sightless Aim	Notable		343	653	ToHit=12,DamageVsRareUnique=5	1052	Rogue	The Sisters are taught to shoot with the inner eye.	cluster	1051	252	598	5		Stub	
+1054		Small		341	703	BowDamage=6	1051,1055,1056	Rogue		cluster	1054	393	691	3	-25,+25	Figure Eight	
+1055		Small		365	720	BowDamage=6	1054,1057	Rogue		cluster	1054	393	691	2	-25	Figure Eight	
+1056		Small		367	674	BowDamage=6	1054,1057	Rogue		cluster	1054	393	691	1	+25	Figure Eight	
+1057		Small		391	691	BowDamage=6	1055,1056,1058,1059	Rogue		cluster	1054	393	691	0	-25,+25	Figure Eight	
+1058		Small		415	709	BowDamage=6	1057,1060	Rogue		cluster	1054	393	691	1	-25	Figure Eight	
+1059		Small		417	663	BowDamage=6	1057,1060	Rogue		cluster	1054	393	691	2	+25	Figure Eight	
+1060	Blood Moor Squall	Notable		442	680	LightningDamage=14,AttackSpeed=5	1058,1059	Rogue	Squalls roll in over the Blood Moor faster than a rider.	cluster	1054	393	691	3		Figure Eight	
+1061		Small		279	439	BowDamage=6	1062,1063	Rogue		crossover	1061	327	428	3	-53,+53	Crook	
+1062		Small		303	477	BowDamage=6	231,1061	Rogue		crossover	1061	327	428	3		Crook	
+1063		Small		287	389	BowDamage=6	1061,1065	Rogue		crossover	1061	327	428	3	+57	Crook	
+1064	Shoulder to Shoulder	Notable		327	428	BowDamage=10,ArmorPercent=16	1065	Rogue	In the winter after Diablo fell, levy shields and Sisters' bows held the roads of Khanduras together.	crossover	1061	327	428	0	+63	Crook	
+1065		Attribute		327	369	AnyAttribute=5	1063,1064	Rogue		crossover	1061	327	428	3		Crook	
+1066	Cloister Wall	Notable		1040	-424	ArmorPercent=26,EnergyShieldPercent=22	1068	Zakarum Cloister	The cloister walls never fell while a priest still prayed behind them.	cluster	1066	1024	-450	1	+58	Fork	
+1067	Naj's Light Plate	Notable		1075	-473	EnergyShieldPercent=17,ManaPercent=8	1069	Zakarum Cloister	Plate light enough for a mage to wear into battle.	cluster	1066	1024	-450	3	-54	Fork	
+1068		Small		1021	-452	ArmorPercent=9,EnergyShieldPercent=8	1066,1069,1070	Zakarum Cloister		cluster	1066	1024	-450	0	+50,+162	Fork	
+1069		Small		1044	-470	ArmorPercent=9,EnergyShieldPercent=8	1067,1068	Zakarum Cloister		cluster	1066	1024	-450	1		Fork	
+1070		Small		989	-456	ArmorPercent=9,EnergyShieldPercent=8	236,1068	Zakarum Cloister		cluster	1066	1024	-450	2		Fork	
+1071		Small		712	-385	ArmorPercent=9,LifeRegenRate=2	1072,1073	Zakarum Cloister		sweep	1071	663	-447	4	o,o	Stub	
+1072	Fara's Penance	Notable		679	-370	MeleeDamage=10,LifeRegenRate=4	1071	Zakarum Cloister	Fara was once a devout champion of Zakarum. Now she works a forge, and does not say why.	sweep	1071	663	-447	4		Stub	
+1073		Small		732	-408	ArmorPercent=9,LifeRegenRate=2	9,1071	Zakarum Cloister		sweep	1071	663	-447	4		Stub	
+1074	Cornerstone of the World	Notable		752	-485	ArmorPercent=20,FireResist=10	1075	Zakarum Cloister	The first cathedral stood on a cornerstone of Antyrael. When it fell, the stone was lost.	cluster	1074	701	-502	3	o	Stub	
+1075		Small		750	-525	ArmorPercent=9,LifeRegenRate=2	1074,1076	Zakarum Cloister		cluster	1074	701	-502	3	o	Stub	
+1076		Small		723	-551	ArmorPercent=9,LifeRegenRate=2	240,1075	Zakarum Cloister		cluster	1074	701	-502	3		Stub	
+1077		Small		600	-411	FireDamage=5	238,1078	Zakarum Cloister		scenic	1077	539	-428	3	+188	Crypt Arch	
+1078		Small		559	-393	FireDamage=5	1077,1079	Zakarum Cloister		scenic	1077	539	-428	2	+87	Crypt Arch	
+1079	Purifying Flame	Notable		487	-404	FireDamage=12,CastSpeed=5	1078,1081	Zakarum Cloister	The priests burned what they could not cleanse.	scenic	1077	539	-428	3	+74	Crypt Arch	
+1080		Small		554	-478	FireDamage=5	244,1081	Zakarum Cloister		scenic	1077	539	-428	3	+188	Crypt Arch	
+1081		Small		513	-460	FireDamage=5	1079,1080	Zakarum Cloister		scenic	1077	539	-428	2		Crypt Arch	
+1082		Small		923	-668	FireDamage=4	1083,1084	Zakarum Cloister		cluster	1082	910	-691	1		Triangle	
+1083	Lightforge	Notable		928	-711	FireDamage=12,SpellDamage=12	1082,1084	Zakarum Cloister	A forgotten weapon of light and fire from the old Tristram lists.	cluster	1082	910	-691	1		Triangle	
+1084		Small		890	-693	FireDamage=4	1082,1083,1085	Zakarum Cloister		cluster	1082	910	-691	1		Triangle	
+1085		Small		858	-696	FireDamage=4	243,1084	Zakarum Cloister		cluster	1082	910	-691	3		Triangle	
+1086		Small		647	-488	FireDamage=5	9,1087,1088	Zakarum Cloister		cluster	1086	628	-518	2	-43,+44	Lens	
+1087		Small		645	-528	FireDamage=5	1086,1089	Zakarum Cloister		cluster	1086	628	-518	1	-45	Lens	
+1088		Small		611	-507	FireDamage=5	1086,1089	Zakarum Cloister		cluster	1086	628	-518	1	+45	Lens	
+1089	The Inquisition	Notable		609	-549	FireDamage=10,Spirit=8	1087,1088	Zakarum Cloister	In the Time of Troubles the Zakarum asked their questions with fire.	cluster	1086	628	-518	2		Lens	
+1090		Small		896	-761	EnergyShieldPercent=8,ArmorPercent=9	1091,1092	Zakarum Cloister		set	1090	839	-785	3	+27,-27	Horadric Staff	
+1091		Small		866	-746	EnergyShieldPercent=8,ArmorPercent=9	1090,1093	Zakarum Cloister		set	1090	839	-785	3	+27	Horadric Staff	
+1092		Small		877	-797	EnergyShieldPercent=8,ArmorPercent=9	1090,1093	Zakarum Cloister		set	1090	839	-785	2	-27	Horadric Staff	
+1093		Small		847	-782	EnergyShieldPercent=8,ArmorPercent=9	1091,1092,1095	Zakarum Cloister		set	1090	839	-785	0		Horadric Staff	
+1094	Light of Zakarum	Notable		819	-757	FireDamage=12,MeleeDamage=10	1095	Zakarum Cloister	The Zakarum preached that the Light burns away all evil.	set	1090	839	-785	2		Horadric Staff	
+1095		Small		819	-794	EnergyShieldPercent=8,ArmorPercent=9	1093,1094,1096,1097	Zakarum Cloister		set	1090	839	-785	1	-,-147	Horadric Staff	
+1096	Vows of the Order	Notable		832	-823	ManaPercent=8,ArmorPercent=13	1095	Zakarum Cloister	Poverty, obedience, and a mail shirt under the robe.	set	1090	839	-785	2		Horadric Staff	
+1097		Small		786	-806	EnergyShieldPercent=8,ArmorPercent=9	247,1095	Zakarum Cloister		set	1090	839	-785	3		Horadric Staff	
+1098	Bells of Tristram	Notable		718	-655	EnergyShieldPercent=17,LifeRegenRate=4	1099	Zakarum Cloister	The cathedral bells once rang each evening over Tristram. No one has rung them since.	cluster	1098	718	-691	2	+37	Stub	
+1099		Small		684	-682	EnergyShieldPercent=8,ArmorPercent=9	1098,1100	Zakarum Cloister		cluster	1098	718	-691	2	+36	Stub	
+1100		Small		697	-720	EnergyShieldPercent=8,ArmorPercent=9	249,1099	Zakarum Cloister		cluster	1098	718	-691	2		Stub	
+1101		Small		643	-736	FireDamage=5	245,1102	Zakarum Cloister		set	1101	599	-809	4	+96	Censer	
+1102		Small		629	-763	FireDamage=5	1101,1103	Zakarum Cloister		set	1101	599	-809	3		Censer	
+1103		Small		613	-785	FireDamage=5	1102,1104,1105	Zakarum Cloister		set	1101	599	-809	1	-35,+35	Censer	
+1104	Candlelit Rites	Notable		628	-826	CastSpeed=6,FireResist=10	1103,1106	Zakarum Cloister	A rite read quickly by candlelight, before the candle gutters.	set	1101	599	-809	2	-35	Censer	
+1105		Small		576	-787	FireDamage=5	1103,1107	Zakarum Cloister		set	1101	599	-809	1	+35	Censer	
+1106		Small		596	-849	FireDamage=5	1104,1107	Zakarum Cloister		set	1101	599	-809	2	-34	Censer	
+1107		Small		563	-825	FireDamage=5	1105,1106	Zakarum Cloister		set	1101	599	-809	2		Censer	
+1108		Small		680	-831	FireDamage=4	251,1109	Zakarum Cloister		cluster	1108	721	-899	4	o	Stub	
+1109		Small		656	-854	FireDamage=4	1108,1110	Zakarum Cloister		cluster	1108	721	-899	4	o	Stub	
+1110	Akarat's Faith	Notable		644	-883	FireResist=10,LifeRegenRate=6	1109	Zakarum Cloister	Faith in the prophet Akarat kept the paladins standing.	cluster	1108	721	-899	4		Stub	
+1111	Hand of Zakarum	Notable		474	-798	AttackSpeed=6,CastSpeed=6	1112	Zakarum Cloister	The battle priest strikes and prays in one breath.	cluster	1111	469	-873	4	+40	Horns	
+1112		Small		492	-838	ArmorPercent=9,EnergyShieldPercent=8	1111,1114	Zakarum Cloister		cluster	1111	469	-873	2	-58	Horns	
+1113		Small		501	-907	ArmorPercent=9,EnergyShieldPercent=8	255,1114	Zakarum Cloister		cluster	1111	469	-873	2	-192	Horns	
+1114		Small		475	-879	ArmorPercent=9,EnergyShieldPercent=8	1112,1113,1115	Zakarum Cloister		cluster	1111	469	-873	0	-58	Horns	
+1115		Small		433	-893	ArmorPercent=9,EnergyShieldPercent=8	1114,1116	Zakarum Cloister		cluster	1111	469	-873	2	+40	Horns	
+1116	Holy Defender	Notable		394	-873	BlockChance=4,FireResist=10	1115	Zakarum Cloister	A large shield blessed against fire and quick to rise against a blow.	cluster	1111	469	-873	4		Horns	
+1117	Warded Pages	Notable		-454	-1029	SpellDamage=12,EnergyShieldPercent=13	1118	Horadric Archive	Every book in the archive is warded. Some of the wards are on the reader.	cluster	1117	-492	-986	3	-33	Horns	
+1118		Small		-464	-995	SpellDamage=5	1117,1119	Horadric Archive		cluster	1117	-492	-986	1	+42	Horns	
+1119		Small		-492	-980	SpellDamage=5	1118,1121,1122	Horadric Archive		cluster	1117	-492	-986	0	+156,+42	Horns	
+1120	Captured Essence	Notable		-532	-1028	ManaOnKill=5,SpellDamage=10	1122	Horadric Archive	What the soulstones did to demons, the order learned to do in small.	cluster	1117	-492	-986	3	+33	Horns	
+1121		Small		-491	-949	SpellDamage=5	263,1119	Horadric Archive		cluster	1117	-492	-986	2		Horns	
+1122		Small		-521	-994	SpellDamage=5	1119,1120	Horadric Archive		cluster	1117	-492	-986	1		Horns	
+1123	Horadric Winter	Notable		-367	-685	ColdDamage=14,CastSpeed=5	1124	Horadric Archive	The Horadrim did not burn their demons. They froze them still, and took notes.	sweep	1123	-431	-638	4	o	Stub	
+1124		Small		-352	-649	SpellDamage=5	1123,1125	Horadric Archive		sweep	1123	-431	-638	4	o	Stub	
+1125		Small		-357	-609	SpellDamage=5	11,1124	Horadric Archive		sweep	1123	-431	-638	4		Stub	
+1126		Small		-596	-929	ManaRegen=6,SpellDamage=3	1127,1128	Horadric Archive		set	1126	-619	-879	3	+24,-24	Horadric Staff	
+1127		Small		-585	-897	ManaRegen=6,SpellDamage=3	1126,1129	Horadric Archive		set	1126	-619	-879	2	+24	Horadric Staff	
+1128		Small		-627	-917	ManaRegen=6,SpellDamage=3	1126,1129	Horadric Archive		set	1126	-619	-879	2	-24	Horadric Staff	
+1129		Small		-616	-886	ManaRegen=6,SpellDamage=3	1127,1128,1131	Horadric Archive		set	1126	-619	-879	0		Horadric Staff	
+1130	Naj's Puzzler	Notable		-596	-855	CastSpeed=8,ManaCost=8	1131	Horadric Archive	A staff for a mage in a hurry.	set	1126	-619	-879	2		Horadric Staff	
+1131		Small		-627	-861	ManaRegen=6,SpellDamage=3	1129,1130,1132,1133	Horadric Archive		set	1126	-619	-879	1	-,-132	Horadric Staff	
+1132	Cain's Learning	Notable		-652	-879	Magic=12,ManaCost=-6	1131	Horadric Archive	The last of the Horadrim reads by candlelight.	set	1126	-619	-879	1		Horadric Staff	
+1133		Small		-639	-832	ManaRegen=6,SpellDamage=3	267,1131,1150	Horadric Archive		set	1126	-619	-879	3	-48	Horadric Staff	
+1134	Horadric Vigil	Notable		-544	-769	ManaPercent=8,LifePercent=4	1135,1136	Horadric Archive	Father to son, the Horadrim kept the watch. Then only Cain was left.	set	1134	-580	-716	3		Soulstone	
+1135		Small		-543	-725	StaffDamage=5,ColdDamage=3	1134,1137,1138	Horadric Archive		set	1134	-580	-716	2		Soulstone	
+1136		Small		-585	-753	StaffDamage=5,ColdDamage=3	1134,1139	Horadric Archive		set	1134	-580	-716	2		Soulstone	
+1137		Small		-580	-716	StaffDamage=5,ColdDamage=3	1135,1139	Horadric Archive		set	1134	-580	-716	0		Soulstone	
+1138		Small		-575	-678	StaffDamage=5,ColdDamage=3	1135,1140	Horadric Archive		set	1134	-580	-716	2		Soulstone	
+1139		Small		-617	-707	StaffDamage=5,ColdDamage=3	1136,1137,1140	Horadric Archive		set	1134	-580	-716	2		Soulstone	
+1140		Small		-615	-664	StaffDamage=5,ColdDamage=3	274,1138,1139	Horadric Archive		set	1134	-580	-716	3		Soulstone	
+1141		Small		-438	-595	StaffDamage=5,ColdDamage=3	11,1142,1143	Horadric Archive		cluster	1141	-458	-563	2	+45,-46	Lens	
+1142		Small		-441	-553	StaffDamage=5,ColdDamage=3	1141,1144	Horadric Archive		cluster	1141	-458	-563	1	+48	Lens	
+1143		Small		-475	-574	StaffDamage=5,ColdDamage=3	1141,1144	Horadric Archive		cluster	1141	-458	-563	1	-47	Lens	
+1144	Strike and Spell	Notable		-479	-530	StaffDamage=12,CastSpeed=6	1142,1143	Horadric Archive	A blow of the staff, a word of power, and again.	cluster	1141	-458	-563	2		Lens	
+1145		Small		-417	-563	StaffDamage=5,ColdDamage=3	264,1146	Horadric Archive		scenic	1145	-484	-504	4	+84	Bridge Arc	
+1146		Small		-408	-487	StaffDamage=5,ColdDamage=3	1145,1147	Horadric Archive		scenic	1145	-484	-504	4	+83	Bridge Arc	
+1147	The Order's Staff	Notable		-464	-421	StaffDamage=14,ColdDamage=10	1146,1149	Horadric Archive	A Horadric staff was a scholar's tool, until a demon came too close.	scenic	1145	-484	-504	4	+89	Bridge Arc	
+1148		Small		-564	-500	StaffDamage=5,ColdDamage=3	275,1149,1287	Horadric Archive		scenic	1145	-484	-504	4	-86,-	Bridge Arc	
+1149		Small		-539	-431	StaffDamage=5,ColdDamage=3	1147,1148	Horadric Archive		scenic	1145	-484	-504	4		Bridge Arc	
+1150		Small		-669	-844	ColdDamage=4,StaffDamage=3	1133,1151	Horadric Archive		cluster	1150	-710	-844	2	+42	Stub	
+1151		Small		-695	-805	ColdDamage=4,StaffDamage=3	1150,1152	Horadric Archive		cluster	1150	-710	-844	2	+42	Stub	
+1152	Horadric Staff	Notable		-743	-818	SpellDamage=16,CastSpeed=6	1151	Horadric Archive	Staff and amulet joined, the key the Horadrim left to Tal Rasha's tomb.	cluster	1150	-710	-844	2		Stub	
+1153		Small		-719	-741	StaffDamage=5,ColdDamage=3	271,1154	Horadric Archive		cluster	1153	-684	-700	3	o	Stub	
+1154		Small		-735	-718	StaffDamage=5,ColdDamage=3	1153,1155	Horadric Archive		cluster	1153	-684	-700	3	o	Stub	
+1155	Jered Cain's Watch	Notable		-735	-685	Magic=10,ManaRegen=15	1154	Horadric Archive	Jered Cain buried the soulstone in Khanduras and set the order to watch over it.	cluster	1153	-684	-700	3		Stub	
+1156		Small		-695	-670	ManaRegen=6,SpellDamage=3	271,1157	Horadric Archive		cluster	1156	-738	-634	3		Triangle	
+1157		Small		-721	-648	ManaRegen=6,SpellDamage=3	1156,1158,1159	Horadric Archive		cluster	1156	-738	-634	1		Triangle	
+1158		Small		-732	-610	ManaRegen=6,SpellDamage=3	1157,1159	Horadric Archive		cluster	1156	-738	-634	1		Triangle	
+1159	Horadric Scrolls	Notable		-770	-636	SpellDamage=12,ManaRegen=15	1157,1158	Horadric Archive	The Horadrim wrote down everything they learned of the Prime Evils.	cluster	1156	-738	-634	1		Triangle	
+1160		Small		-847	-779	ColdDamage=4,StaffDamage=3	273,1161	Horadric Archive		cluster	1160	-773	-751	4	o	Stub	
+1161		Small		-851	-742	ColdDamage=4,StaffDamage=3	1160,1162	Horadric Archive		cluster	1160	-773	-751	4	o	Stub	
+1162	Frost of the Archive	Notable		-841	-711	ColdDamage=16,FreezeBuildup=12	1161	Horadric Archive	The Horadrim fought demons with pure arcane force.	cluster	1160	-773	-751	4		Stub	
+1163		Small		-872	-455	ColdDamage=4,StaffDamage=3	281,1165	Horadric Archive		cluster	1163	-860	-424	2	-149	Fork	
+1164		Small		-831	-419	ColdDamage=4,StaffDamage=3	1165,1166	Horadric Archive		cluster	1163	-860	-424	1	-52,+52	Fork	
+1165		Small		-860	-428	ColdDamage=4,StaffDamage=3	1163,1164,1167	Horadric Archive		cluster	1163	-860	-424	0	-61	Fork	
+1166	Tyrael's Counsel	Notable		-813	-395	ManaCost=-8,Spirit=8	1164	Horadric Archive	Tyrael gathered the best of the mage clans and named them Horadrim.	cluster	1163	-860	-424	3		Fork	
+1167	Soulstone Ward	Notable		-877	-397	EnergyShieldPercent=17,ChaosResist=8	1165	Horadric Archive	Soulstones held two Prime Evils for centuries.	cluster	1163	-860	-424	1		Fork	
+1168	Mountain Thunder	Notable		-754	497	LightningDamage=12,StaffDamage=10	1169	Sightless Eye	Up in the passes you hear the storm in your teeth.	cluster	1168	-701	508	3	o	Stub	
+1169		Small		-747	536	LightningDamage=5	1168,1170	Sightless Eye		cluster	1168	-701	508	3	o	Stub	
+1170		Small		-724	557	LightningDamage=5	286,1169	Sightless Eye		cluster	1168	-701	508	3		Stub	
+1171		Small		-656	478	LightningDamage=5	286,1172	Sightless Eye		cluster	1171	-701	508	3	o	Stub	
+1172		Small		-647	515	LightningDamage=5	1171,1173	Sightless Eye		cluster	1171	-701	508	3	o	Stub	
+1173	Red Storm	Notable		-664	548	ShockChance=15,AttackSpeed=5	1172	Sightless Eye	The air around fast hands begins to spark.	cluster	1171	-701	508	3		Stub	
+1174	Tracker	Notable		-778	623	DamageVsRareUnique=6,ToHit=8	1175	Sightless Eye	The Sisters read the road east like a book.	cluster	1174	-761	647	1	-56	Fork	
+1175		Small		-760	650	EvasionPercent=7,EnergyShieldPercent=7	1174,1177,1178	Sightless Eye		cluster	1174	-761	647	0	-50,-145	Fork	
+1176	The Monastery Gate	Notable		-718	617	ArmorPercent=18,EvasionPercent=16	1177	Sightless Eye	The Sisters' monastery guarded the only pass between West and East.	cluster	1174	-761	647	3	+47	Fork	
+1177		Small		-733	640	EvasionPercent=7,EnergyShieldPercent=7	1175,1176	Sightless Eye		cluster	1174	-761	647	1		Fork	
+1178		Small		-770	677	EvasionPercent=7,EnergyShieldPercent=7	1175,1179	Sightless Eye		cluster	1174	-761	647	1	+47	Fork	
+1179		Small		-773	709	ToHit=5	289,1178,1180	Sightless Eye		cluster	1179	-736	728	2	-169	Horns	
+1180		Small		-743	724	ToHit=5	1179,1181,1182	Sightless Eye		cluster	1179	-736	728	0	+49,-49	Horns	
+1181		Small		-712	703	ToHit=5	1180,1183	Sightless Eye		cluster	1179	-736	728	2	-37	Horns	
+1182		Small		-742	761	ToHit=5	1180,1184	Sightless Eye		cluster	1179	-736	728	2	+37	Horns	
+1183	Inner Sight	Notable		-673	711	EvasionVsSpells=5,EvasionPercent=17	1181	Sightless Eye	The Sisters learned from Eastern teachers to see without eyes.	cluster	1179	-736	728	3		Horns	
+1184	Wizardspike	Notable		-713	789	MeleeDamage=10,SpellDamage=10	1182	Sightless Eye	A mage's dagger, as quick to a spell as to a throat.	cluster	1179	-736	728	3		Horns	
+1185		Small		-765	854	ToHit=5	1186,1187,1188	Sightless Eye		cluster	1185	-752	883	1	-31,+33,-	Wheel	
+1186		Small		-779	893	ToHit=5	1185,1188,1189	Sightless Eye		cluster	1185	-752	883	1	-,-33	Wheel	
+1187		Small		-734	855	ToHit=5	1185,1190	Sightless Eye		cluster	1185	-752	883	2	+31	Wheel	
+1188	Swift Strikes	Notable		-752	883	AttackSpeed=6,EvasionPercent=14	1185,1186	Sightless Eye	Strike and be gone.	cluster	1185	-752	883	0		Wheel	
+1189		Small		-750	917	ToHit=5	1186,1190	Sightless Eye		cluster	1185	-752	883	2	-31	Wheel	
+1190		Small		-725	888	ToHit=5	297,1187,1189	Sightless Eye		cluster	1185	-752	883	1		Wheel	
+1191		Small		-579	669	LightningDamage=5	1192,1194	Sightless Eye		set	1191	-555	703	2	+59,-59	Bough	
+1192	Never Where It Struck	Notable		-546	638	EvasionPercent=14,LightningDamage=10	1191,1195	Sightless Eye	Move with the storm, and it takes you for weather.	set	1191	-555	703	3	+56	Bough	
+1193		Small		-611	735	LightningDamage=5	293,1194	Sightless Eye		set	1191	-555	703	3	-164	Bough	
+1194		Small		-578	714	LightningDamage=5	1191,1193,1195,1196,1197	Sightless Eye		set	1191	-555	703	1	+150,-154,-63	Bough	
+1195		Small		-544	681	LightningDamage=5	1192,1194	Sightless Eye		set	1191	-555	703	1		Bough	
+1196		Small		-530	705	LightningDamage=5	1194,1198	Sightless Eye		set	1191	-555	703	1	+57	Bough	
+1197		Small		-539	742	LightningDamage=5	1194,1198	Sightless Eye		set	1191	-555	703	2	-59	Bough	
+1198		Small		-495	731	LightningDamage=5	1196,1197	Sightless Eye		set	1191	-555	703	3		Bough	
+1199		Small		-614	854	EvasionPercent=7,EnergyShieldPercent=7	1200,1201	Sightless Eye		set	1199	-572	896	3	-56,+56	Crescent	
+1200		Small		-624	902	EvasionPercent=7,EnergyShieldPercent=7	297,1199,1202	Sightless Eye		set	1199	-572	896	3	-81	Crescent	
+1201	Two Disciplines	Notable		-565	844	Dexterity=8,Magic=8	1199,1203	Sightless Eye	Eye and breath are taught in the same courtyard, by the same switch.	set	1199	-572	896	3	+52	Crescent	
+1202		Small		-567	877	EvasionPercent=7,EnergyShieldPercent=7	1200,1204	Sightless Eye		set	1199	-572	896	1	-87	Crescent	
+1203		Small		-524	881	EvasionPercent=7,EnergyShieldPercent=7	1201,1204	Sightless Eye		set	1199	-572	896	3	+56	Crescent	
+1204	Monastery Discipline	Notable		-522	926	ToHit=10,AttackSpeed=6	1202,1203	Sightless Eye	The monastery of the Sightless Eye trains hand and eye until they are one.	set	1199	-572	896	3		Crescent	
+1205	Still Waters	Notable		-680	957	EnergyShieldPercent=17,EvasionPercent=17	1206	Sightless Eye	Stand still enough and the blow has nowhere to land.	cluster	1205	-651	912	3	o	Stub	
+1206		Small		-641	965	EvasionPercent=7,EnergyShieldPercent=7	1205,1207	Sightless Eye		cluster	1205	-651	912	3	o	Stub	
+1207		Small		-615	953	EvasionPercent=7,EnergyShieldPercent=7	299,1206	Sightless Eye		cluster	1205	-651	912	3		Stub	
+1208		Small		-466	667	ToHit=5	7,1209	Sightless Eye		sweep	1208	-468	721	3	o	Stub	
+1209		Small		-438	676	ToHit=5	1208,1210	Sightless Eye		sweep	1208	-468	721	3	o	Stub	
+1210	The Road to Lut Gholein	Notable		-418	701	EvasionPercent=17,LifeRegenRate=4	1209	Sightless Eye	Snow closes the pass by autumn. Whoever is still on it stays till spring.	sweep	1208	-468	721	3		Stub	
+1211		Small		-441	756	ToHit=5	7,1212,1213	Sightless Eye		cluster	1211	-408	777	2	-51,+50	Lens	
+1212		Small		-421	799	ToHit=5	1211,1214	Sightless Eye		cluster	1211	-408	777	1	-53	Lens	
+1213		Small		-394	754	ToHit=5	1211,1214	Sightless Eye		cluster	1211	-408	777	1	+54	Lens	
+1214	Kashya's Drill	Notable		-372	799	AttackSpeed=6,Damage=8	1212,1213	Sightless Eye	Kashya drills the young Sisters until the bow moves before the thought does.	cluster	1211	-408	777	2		Lens	
+1215	Levy Shieldmen	Notable		229	1112	BlockChance=4,MeleeDamage=10	1217	Khanduras Muster	Leoric's levies marched north with a sword in hand and a shield on the arm.	cluster	1215	258	1051	4	-61	Fork	
+1216	Adria's Brews	Notable		233	1037	FlaskRecovery=15,ManaRegen=10	1218	Khanduras Muster	The witch by the river sells what Pepin will not.	cluster	1215	258	1051	1	+55	Fork	
+1217		Small		253	1086	FlaskRecovery=6	1215,1218	Khanduras Muster		cluster	1215	258	1051	2	-62	Fork	
+1218		Small		262	1051	FlaskRecovery=6	1216,1217,1219	Khanduras Muster		cluster	1215	258	1051	0	+169	Fork	
+1219		Small		289	1031	FlaskRecovery=6	309,1218	Khanduras Muster		cluster	1215	258	1051	2		Fork	
+1220		Small		579	962	BowDamage=5,EvasionPercent=6	313,1221,1222	Khanduras Muster		cluster	1220	609	967	1	-40,+39	Lens	
+1221		Small		606	987	BowDamage=5,EvasionPercent=6	1220,1223	Khanduras Muster		cluster	1220	609	967	1	-40	Lens	
+1222		Small		612	947	BowDamage=5,EvasionPercent=6	1220,1223	Khanduras Muster		cluster	1220	609	967	1	+40	Lens	
+1223	Grave Matters	Notable		640	972	ChaosResist=10,LifePercent=4	1221,1222	Khanduras Muster	'I'd keep my mind on what lies below the cathedral and not what lies below our topsoil.'	cluster	1220	609	967	1		Lens	
+1224	Poachers of Khanduras	Notable		557	835	BowDamage=12,LifeOnKill=6	1225	Khanduras Muster	The king's foresters hanged poachers. In the war they made them archers.	cluster	1224	581	798	2	-45	Stub	
+1225		Small		610	831	BowDamage=5,EvasionPercent=6	1224,1226	Khanduras Muster		cluster	1224	581	798	2	-44	Stub	
+1226		Small		623	784	BowDamage=5,EvasionPercent=6	320,1225	Khanduras Muster		cluster	1224	581	798	2		Stub	
+1227		Small		678	931	ArmorPercent=9,EvasionPercent=8	1228,1229	Khanduras Muster		set	1227	709	885	3	-,-72	Crown	
+1228	Wirt's Wares	Notable		707	951	EvasionPercent=17,FlaskRecovery=12	1227	Khanduras Muster	Wirt asks a fortune and will not say where any of it came from.	set	1227	709	885	3		Crown	
+1229		Small		682	903	ArmorPercent=9,EvasionPercent=8	1227,1230	Khanduras Muster		set	1227	709	885	1	-73	Crown	
+1230		Small		692	876	ArmorPercent=9,EvasionPercent=8	317,1229,1231,1233	Khanduras Muster		set	1227	709	885	1	-,-74	Crown	
+1231		Small		722	893	ArmorPercent=9,EvasionPercent=8	1230,1232	Khanduras Muster		set	1227	709	885	1		Crown	
+1232	Farnham's Courage	Notable		750	908	StunThreshold=15,LifePercent=4	1231	Khanduras Muster	Farnham saw what lies below and lived. Barely.	set	1227	709	885	3		Crown	
+1233		Small		710	853	ArmorPercent=9,EvasionPercent=8	1230,1234	Khanduras Muster		set	1227	709	885	1	-69	Crown	
+1234		Small		731	836	ArmorPercent=9,EvasionPercent=8	1233,1235	Khanduras Muster		set	1227	709	885	3		Crown	
+1235		Small		763	849	ArmorPercent=9,EvasionPercent=8	1234	Khanduras Muster		set	1227	709	885	3		Crown	
+1236		Small		433	536	ArmorPercent=9,Damage=3	1237,1238	Khanduras Muster		cluster	1236	451	527	1	-46,+48	Lens	
+1237		Small		468	560	ArmorPercent=9,Damage=3	10,1236,1239	Khanduras Muster		cluster	1236	451	527	2	-46	Lens	
+1238	Quartermaster's Ledger	Notable		432	491	FlaskCharges=15,ArmorPercent=13	1236,1239	Khanduras Muster	Every arrow, every potion and every boot, counted twice.	cluster	1236	451	527	2	+49	Lens	
+1239		Small		469	517	ArmorPercent=9,Damage=3	1237,1238	Khanduras Muster		cluster	1236	451	527	1		Lens	
+1240	Lester's Orchard	Notable		517	629	Damage=10,LifeOnKill=6	1241	Khanduras Muster	"At the edge of my orchard... there's a horrible thing swelling out of the ground!"	sweep	1240	478	591	3	o	Stub	
+1241		Small		531	603	ArmorPercent=9,Damage=3	1240,1242	Khanduras Muster		sweep	1240	478	591	3	o	Stub	
+1242		Small		527	568	ArmorPercent=9,Damage=3	10,1241	Khanduras Muster		sweep	1240	478	591	3		Stub	
+1243		Small		679	734	ArmorPercent=9,EvasionPercent=8	320,1244,1245	Khanduras Muster		cluster	1243	705	716	1	-41,+42	Lens	
+1244		Small		717	734	ArmorPercent=9,EvasionPercent=8	1243,1246	Khanduras Muster		cluster	1243	705	716	1	-44	Lens	
+1245		Small		693	698	ArmorPercent=9,EvasionPercent=8	1243,1246	Khanduras Muster		cluster	1243	705	716	1	+44	Lens	
+1246	Militia Drill	Notable		734	697	ArmorPercent=26,EvasionPercent=23	1244,1245	Khanduras Muster	Every able man of Tristram drilled on the green before Leoric's march.	cluster	1243	705	716	2		Lens	
+1247	Captain of the Levy	Notable		787	828	Damage=10,Strength=8	1248	Khanduras Muster	A captain fights with whatever the armoury had left.	cluster	1247	709	813	4	o	Stub	
+1248		Small		786	792	ArmorPercent=9,EvasionPercent=8	1247,1249	Khanduras Muster		cluster	1247	709	813	4	o	Stub	
+1249		Small		770	762	ArmorPercent=9,EvasionPercent=8	321,1248,1258	Khanduras Muster		cluster	1247	709	813	4	+52	Stub	
+1250		Small		574	575	ArmorPercent=9,Damage=3	1252,1253	Khanduras Muster		set	1250	599	543	2	+58,+39	Ribcage	
+1251		Small		623	616	ArmorPercent=9,Damage=3	323,1253	Khanduras Muster		set	1250	599	543	4	+179	Ribcage	
+1252		Small		555	535	ArmorPercent=9,Damage=3	1250,1254	Khanduras Muster		set	1250	599	543	2	+57	Ribcage	
+1253		Small		616	581	ArmorPercent=9,Damage=3	1250,1251,1254,1255	Khanduras Muster		set	1250	599	543	2	-196,+29	Ribcage	
+1254		Small		597	547	ArmorPercent=9,Damage=3	1252,1253,1256,1257	Khanduras Muster		set	1250	599	543	0	-,+55	Ribcage	
+1255		Small		643	565	ArmorPercent=9,Damage=3	1253,1257	Khanduras Muster		set	1250	599	543	3	-56	Ribcage	
+1256	The Talsande Ford	Notable		590	500	StunBuildup=15,StunThreshold=15	1254	Khanduras Muster	The levy held the ford on the Talsande for a day and a night.	set	1250	599	543	2		Ribcage	
+1257		Small		632	524	ArmorPercent=9,Damage=3	1254,1255	Khanduras Muster		set	1250	599	543	2		Ribcage	
+1258		Small		799	750	FlaskRecovery=6	1249,1259	Khanduras Muster		cluster	1258	826	715	2	-179	Horns	
+1259		Small		821	722	FlaskRecovery=6	1258,1260,1261	Khanduras Muster		cluster	1258	826	715	0	-43,+55	Horns	
+1260		Small		852	733	FlaskRecovery=6	1259,1262	Khanduras Muster		cluster	1258	826	715	1	+35	Horns	
+1261		Small		812	681	FlaskRecovery=6	1259,1263	Khanduras Muster		cluster	1258	826	715	2	-40	Horns	
+1262	Ogden's Provisions	Notable		883	711	FlaskRecovery=30,FlaskCharges=-15	1260	Khanduras Muster	Ogden poured strong for anyone with the nerve to go below, and never had enough to go round.	cluster	1258	826	715	3		Horns	
+1263	Gillian's Hearth	Notable		829	641	LifeOnKill=8,FlaskCharges=15	1261	Khanduras Muster	Gillian kept the Rising Sun warm for whoever came back up.	cluster	1258	826	715	4		Horns	
+1264		Small		399	858	Damage=6	222,1265	Warrior		profane	1264	630	603	6			leoric:8
+1265		Small		469	798	BowDamage=9	1264,1266	Warrior		profane	1264	630	603	6			leoric:7
+1266	The Larder	Notable		569	748	KingsDeadPact=1,ArrowDamageMod=100	1265,1267	Warrior	The Butcher never chased his meat. It came to him.	profane	1264	630	603	6			leoric:6
+1267		Small		659	658	TwoHandDamage=4,BowDamage=4	1266,1268	Warrior		profane	1264	630	603	3			leoric:5
+1268		Small		709	588	BowDamage=6	1267,1269	Warrior		profane	1264	630	603	4			leoric:4
+1269	The Butcher's Hook	Notable		739	518	TwoHandDamage=12,Cull=10,DeadDoNotRest=1	1268,1270	Warrior	Under the cathedral, a room of bodies hung on hooks. Whoever walks this road learns the trade.	profane	1264	630	603	6			leoric:3
+1270		Small		739	388	ArmorPercent=9	1269,1271	Warrior		profane	1264	630	603	6			leoric:2
+1271		Small		759	268	TwoHandDamage=6	66,1270	Warrior		profane	1264	630	603	6			leoric:1
+1272		Small		850	-425	LifePercent=5	35,1273	Sorcerer		profane	1272	576	-623	6			bartuc:8
+1273		Small		790	-505	TwoHandDamage=9	1272,1274	Sorcerer		profane	1272	576	-623	6			bartuc:7
+1274	Paid in Blood	Notable		730	-585	TwoHandDamage=10,PaidInBlood=1	1273,1275	Sorcerer	Bartuc paid for every stroke in blood. His own came first.	profane	1272	576	-623	6			bartuc:6
+1275		Small		640	-645	TwoHandDamage=6	1274,1276	Sorcerer		profane	1272	576	-623	4			bartuc:5
+1276		Small		520	-675	Magic=7	1275,1277	Sorcerer		profane	1272	576	-623	4			bartuc:4
+1277	Bartuc's Hunger	Notable		440	-695	SpellDamage=12,CastSpeed=5,LifeOnKill=10,BartucsHunger=1	1276,1278	Sorcerer	Bartuc bathed in the blood of his foes and called it strength.	profane	1272	576	-623	6			bartuc:3
+1278		Small		360	-715	LifePercent=3	1277,1279	Sorcerer		profane	1272	576	-623	6			bartuc:2
+1279		Small		280	-735	SpellDamage=5	92,1278	Sorcerer		profane	1272	576	-623	6			bartuc:1
+1280		Small		-216	-1109	EnergyShieldPercent=12	108,1281	Monk		profane	1280	-390	-856	6			sickness:8
+1281		Small		-286	-1069	SpellDamage=8	1280,1282	Monk		profane	1280	-390	-856	6			sickness:7
+1282	The Vizjerei Pact	Notable		-346	-1009	HiveBreath=1	1281,1283	Monk	The Vizjerei warned that mortal hands that hold raw elements are burned by them. He held them anyway.	profane	1280	-390	-856	6			sickness:6
+1283		Small		-376	-899	SpellDamage=5	1282,1284	Monk		profane	1280	-390	-856	2			sickness:5
+1284		Small		-406	-819	FireDamage=4,ColdDamage=4,LightningDamage=4	1283,1285	Monk		profane	1280	-390	-856	2			sickness:4
+1285	Stolen Elements	Notable		-446	-709	MeleeDamage=12,KillBurst=10,DarkSickness=1	1284,1286	Monk	In the Horadric Archive, a brother found Vizjerei scrolls on raw elements. His order forbade him to read them.	profane	1280	-390	-856	6			sickness:3
+1286		Small		-496	-649	IgniteChance=5,ShockChance=5,FreezeBuildup=5	1285,1287	Monk		profane	1280	-390	-856	6			sickness:2
+1287		Small		-546	-589	MeleeDamage=5	1148,1286	Monk		profane	1280	-390	-856	6			sickness:1
+1288		Small		-965	482	StaffDamage=9	167,1289	Rogue		profane	1288	-583	635	6			maiden:8
+1289		Small		-855	542	LightningDamage=8	1288,1290	Rogue		profane	1288	-583	635	6			maiden:7
+1290	Out of Darkness	Notable		-735	582	OutOfDarkness=1	1289,1291	Rogue	You would do well to tread lightly upon the dark path you have chosen to explore.	profane	1288	-583	635	6			maiden:6
+1291		Small		-605	582	StaffDamage=6	1290,1292	Rogue		profane	1288	-583	635	3			maiden:5
+1292		Small		-495	632	Damage=4	1291,1293	Rogue		profane	1288	-583	635	4			maiden:4
+1293	The Maiden's Whisper	Notable		-415	662	BowDamage=10,FirstStrike=40,EyesInTheDark=1	1292,1294	Rogue	A voice in the dark promises a Sister everything she has ever wanted.	profane	1288	-583	635	6			maiden:3
+1294		Small		-345	762	EvasionPercent=12	1293,1295	Rogue		profane	1288	-583	635	6			maiden:2
+1295		Small		-245	832	BowDamage=6	203,1294	Rogue		profane	1288	-583	635	6			maiden:1
+1296	The Red Soulstone	Notable		-473	-887	SpellLevels=1,AllResist=-5	260,1297	Horadric Archive	To hold Diablo, the hero of Tristram drove the stone into his own brow.	profane	1296	-583	-770	6	-509		
+1297		Small		-550	-823	ManaPercent=4	1296,1298	Horadric Archive		profane	1296	-583	-770	3	-505		
+1298		Small		-613	-746	ManaPercent=4	272,1297	Horadric Archive		profane	1296	-583	-770	2			
+1299		Small		-698	-623	ManaPercent=4	272,276	Horadric Archive		profane	1296	-583	-770	6			
+1300		Small		379	823	AllResist=2	223,1301	Khanduras Muster		profane	1300	580	743	6	-247		
+1301		Small		463	828	AllResist=2	1300,1302	Khanduras Muster		profane	1300	580	743	6	-249		
+1302		Small		527	812	AllResist=2	1301,1303	Khanduras Muster		profane	1300	580	743	4	-249		
+1303		Small		592	774	AllResist=2	322,1302	Khanduras Muster		profane	1300	580	743	2			
+1304		Small		667	683	AllResist=2	322,1305	Khanduras Muster		profane	1300	580	743	5	+223		
+1305		Small		699	653	AllResist=2	1304,1306	Khanduras Muster		profane	1300	580	743	6	+224		
+1306	Gharbad's Bargain	Notable		736	629	FlaskRecovery=15,FlaskFrenzy=1,AllResist=-4	327,1305	Khanduras Muster	Gharbad begged for his life and promised a gift. In the end it had to be taken from his corpse.	profane	1300	580	743	6			
+1307	Knight of Khanduras	Ascendancy	Warrior	135	39	Strength=10	1308	Tristram		ascendancy	1307	0	0	0			
+1308	Shield Bearer	AscendancyNotable	Warrior	92	26	ArmorPercent=30	1307,1309,1310	Tristram		ascendancy	1307	0	0	0	+170,-170		
+1309	Khanduran Steel	AscendancyNotable	Warrior	44	73	LifePercent=10,Strength=10	1308,1311	Tristram		ascendancy	1307	0	0	0	+161		
+1310	Crusader's Blow	AscendancyNotable	Warrior	76	-39	Damage=25	1308,1311	Tristram		ascendancy	1307	0	0	0	-162		
+1311	Holy Vigil	AscendancyNotable	Warrior	35	10	Damage=20,ToHit=10	1309,1310,1312	Tristram		ascendancy	1307	0	0	0			
+1312	Bulwark of Light	AscendancyNotable	Warrior	-33	-9	LifePercent=15,ArmorPercent=20	1311,1313	Tristram		ascendancy	1307	0	0	0			
+1313	Never Kneel	AscendancyNotable	Warrior	-104	-30	Vitality=20,LifeRegen=5	1312	Tristram		ascendancy	1307	0	0	0			
+1314	Blood Warlord	Ascendancy	Warrior	134	-41	Vitality=10	1315	Tristram		ascendancy	1314	0	0	0			
+1315	War Cry	AscendancyNotable	Warrior	76	-38	Damage=20	1314,1316	Tristram		ascendancy	1314	0	0	0			
+1316	Battle Frenzy	AscendancyNotable	Warrior	18	-37	AttackSpeed=10	1315,1317	Tristram		ascendancy	1314	0	0	0			
+1317	Scarred Veteran	AscendancyNotable	Warrior	-40	-34	AllResist=10	1316,1318,1320	Tristram		ascendancy	1314	0	0	0	+117,+96		
+1318	Bloodlust	AscendancyNotable	Warrior	-36	34	LifeRegen=8	1317,1319	Tristram		ascendancy	1314	0	0	0	-71		
+1319	Iron Hide	AscendancyNotable	Warrior	-102	37	ArmorPercent=40	1318,1320	Tristram		ascendancy	1314	0	0	0	-86		
+1320	Butcher's Cleaver	AscendancyNotable	Warrior	-113	-43	Damage=30,ToHit=15	1317,1319	Tristram		ascendancy	1314	0	0	0			
+1321	Taan Elementalist	Ascendancy	Sorcerer	39	-135	Magic=10	1322	Tristram		ascendancy	1321	0	0	0			
+1322	Storm Channel	AscendancyNotable	Sorcerer	24	-83	CastSpeed=10	1321,1323	Tristram		ascendancy	1321	0	0	0			
+1323	Lightning Unchained	AscendancyNotable	Sorcerer	7	-23	SpellLevels=1	1322,1324,1325,1326	Tristram		ascendancy	1321	0	0	0			
+1324	Tempest Ward	AscendancyNotable	Sorcerer	97	-41	LightningResist=20,ManaPercent=15	1323,1326	Tristram		ascendancy	1321	0	0	0	+137		
+1325	Mana Shield	AscendancyNotable	Sorcerer	-61	-86	EnergyShieldPercent=30	1323,1326	Tristram		ascendancy	1321	0	0	0	-137		
+1326	Inferno	AscendancyNotable	Sorcerer	-19	67	Damage=25	1323,1324,1325,1327	Tristram		ascendancy	1321	0	0	0			
+1327	Elemental Dominion	AscendancyNotable	Sorcerer	-35	121	SpellLevels=1,ManaRegen=30	1326	Tristram		ascendancy	1321	0	0	0			
+1328	Vizjerei Summoner	Ascendancy	Sorcerer	-41	-134	Vitality=10	1329	Tristram		ascendancy	1328	0	0	0			
+1329	Pact of Fire	AscendancyNotable	Sorcerer	-23	-75	FireResist=20,LifePercent=10	1328,1330,1333	Tristram		ascendancy	1328	0	0	0	-79,+79		
+1330	Binding Rites	AscendancyNotable	Sorcerer	-78	-1	Spirit=30	1329,1331	Tristram		ascendancy	1328	0	0	0	-79		
+1331	Golem Maker	AscendancyNotable	Sorcerer	-25	74	MinionDamage=40	1330,1332,1334	Tristram		ascendancy	1328	0	0	0	-78,-		
+1332	Demonic Pact	AscendancyNotable	Sorcerer	62	47	Damage=20	1331,1333,1334	Tristram		ascendancy	1328	0	0	0	-79,-		
+1333	Blood Ward	AscendancyNotable	Sorcerer	64	-45	LifeRegen=6,EnergyShieldPercent=20	1329,1332	Tristram		ascendancy	1328	0	0	0			
+1334	Lord of the Bound	AscendancyNotable	Sorcerer	0	0	MinionDamage=60,Spirit=20	1331,1332	Tristram		ascendancy	1328	0	0	0			
+1335	Exile of the Bough	Ascendancy	Monk	-117	36	Dexterity=10	1336,1339	Tristram		ascendancy	1335	-19	6	0	+103,-102		
+1336	Flowing Water	AscendancyNotable	Monk	-96	-61	EvasionPercent=25,EnergyShieldPercent=25	1335,1337	Tristram		ascendancy	1335	-19	6	0	+102		
+1337	Inner Peace	AscendancyNotable	Monk	-14	-96	AllResist=10	1336,1338	Tristram		ascendancy	1335	-19	6	0	+102		
+1338	Thousand Fists	AscendancyNotable	Monk	62	-56	Damage=25	1337	Tristram		ascendancy	1335	-19	6	0			
+1339	Whirlwind Kata	AscendancyNotable	Monk	-46	104	AttackSpeed=10	1335,1340	Tristram		ascendancy	1335	-19	6	0	-103		
+1340	Blessed Staff	AscendancyNotable	Monk	42	87	Damage=20,ToHit=15	1339,1341	Tristram		ascendancy	1335	-19	6	0	-103		
+1341	Perfect Form	AscendancyNotable	Monk	83	11	Damage=30	1340	Tristram		ascendancy	1335	-19	6	0			
+1342	Ivgorod Patriarch	Ascendancy	Monk	-135	-39	Magic=10	1343,1344	Tristram		ascendancy	1342	0	0	0			
+1343	Faith Ward	AscendancyNotable	Monk	-69	-64	ColdResist=20	1342,1345	Tristram		ascendancy	1342	0	0	0			
+1344	Meditation	AscendancyNotable	Monk	-92	17	ManaRegen=40	1342,1346	Tristram		ascendancy	1342	0	0	0			
+1345	Smite	AscendancyNotable	Monk	-2	-44	Damage=20	1343,1347	Tristram		ascendancy	1342	0	0	0	+194		
+1346	Spirit of Ivgorod	AscendancyNotable	Monk	-25	37	ManaPercent=20	1344,1347	Tristram		ascendancy	1342	0	0	0	-194		
+1347	Iron Skin	AscendancyNotable	Monk	48	14	EnergyShieldPercent=30	1345,1346,1348	Tristram		ascendancy	1342	0	0	0			
+1348	Divine Wrath	AscendancyNotable	Monk	108	31	Damage=30,CastSpeed=10	1347	Tristram		ascendancy	1342	0	0	0			
+1349	Sister of the Sightless Eye	Ascendancy	Rogue	-39	135	Dexterity=10	1350	Tristram		ascendancy	1349	0	0	0			
+1350	Far Sight	AscendancyNotable	Rogue	-18	62	Damage=20	1349,1351,1352,1355	Tristram		ascendancy	1349	0	0	0	-156,+156,-		
+1351	Eye of the Sightless	AscendancyNotable	Rogue	-102	-23	ToHit=20	1350,1353	Tristram		ascendancy	1349	0	0	0	-150		
+1352	Rapid Volley	AscendancyNotable	Rogue	98	34	AttackSpeed=10	1350,1354	Tristram		ascendancy	1349	0	0	0	+150		
+1353	Through the Heart	AscendancyNotable	Rogue	-24	-63	Damage=25	1351,1354	Tristram		ascendancy	1349	0	0	0	-203		
+1354	Blessed Aim	AscendancyNotable	Rogue	53	-41	Dexterity=15,EvasionPercent=20	1352,1353	Tristram		ascendancy	1349	0	0	0			
+1355	Hail of Arrows	AscendancyNotable	Rogue	0	0	Damage=30	1350	Tristram		ascendancy	1349	0	0	0			
+1356	Viz-Jaq'taar	Ascendancy	Rogue	41	134	Vitality=10	1357	Tristram		ascendancy	1356	0	0	0			
+1357	Shadow Step	AscendancyNotable	Rogue	33	86	EvasionPercent=30	1356,1358,1362	Tristram		ascendancy	1356	0	0	0	-165,+134		
+1358	Venom Lore	AscendancyNotable	Rogue	56	25	LifeRegen=6	1357,1359	Tristram		ascendancy	1356	0	0	0	-168		
+1359	Mage Slayer	AscendancyNotable	Rogue	42	-40	AllResist=12	1358,1360	Tristram		ascendancy	1356	0	0	0	-170		
+1360	Poisoned Blades	AscendancyNotable	Rogue	-4	-89	Damage=20,LightningResist=10	1359,1361,1362	Tristram		ascendancy	1356	0	0	0	-174,-123		
+1361	Death Mark	AscendancyNotable	Rogue	-69	-111	Damage=30	1360	Tristram		ascendancy	1356	0	0	0			
+1362	Cloak of Shadows	AscendancyNotable	Rogue	-17	26	LifePercent=12,ManaPercent=12	1357,1360	Tristram		ascendancy	1356	0	0	0			

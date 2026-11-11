@@ -174,32 +174,23 @@ void BilinearDownscaleByHalf8(SDL_Surface *src, const uint8_t paletteBlendingTab
 	    + static_cast<size_t>((srcClipRect.y * src->pitch) + srcClipRect.x);
 	auto *const dstPixelsBegin = static_cast<uint8_t *>(dst->pixels)
 	    + static_cast<size_t>((dstClipRect.y * dst->pitch) + dstClipRect.x);
+	// Transparent pixels are never blended: while the palette cycles (caves, crypt, hive) the table no longer maps
+	// the transparent index to itself, and a see-through square came out as a solid colour.
+	const auto blend = [&](uint8_t a, uint8_t b) -> uint8_t {
+		if (a == transparentIndex)
+			return b;
+		if (b == transparentIndex || a == b)
+			return a;
+		const uint8_t mixed = paletteBlendingTable[a][b];
+		return mixed == transparentIndex ? a : mixed;
+	};
 	for (unsigned y = 0, h = static_cast<unsigned>(dstClipRect.h); y < h; ++y) {
 		const uint8_t *srcPixels = srcPixelsBegin + static_cast<size_t>(2 * y * src->pitch);
 		uint8_t *dstPixels = dstPixelsBegin + static_cast<size_t>(y * dst->pitch);
 		for (unsigned x = 0, w = static_cast<unsigned>(dstClipRect.w); x < w; ++x) {
-			uint8_t quad[] = {
-				srcPixels[0],
-				srcPixels[1],
-				srcPixels[src->pitch],
-				srcPixels[src->pitch + 1]
-			};
-			// Attempt to avoid blending with transparent pixels
-			if (quad[0] == transparentIndex)
-				quad[0] = quad[1];
-			if (quad[1] == transparentIndex)
-				quad[1] = quad[0];
-			if (quad[2] == transparentIndex)
-				quad[2] = quad[3];
-			if (quad[3] == transparentIndex)
-				quad[3] = quad[2];
-			uint8_t top = paletteBlendingTable[quad[0]][quad[1]];
-			uint8_t bottom = paletteBlendingTable[quad[2]][quad[3]];
-			if (top == transparentIndex)
-				top = bottom;
-			if (bottom == transparentIndex)
-				bottom = top;
-			*dstPixels++ = paletteBlendingTable[top][bottom];
+			const uint8_t top = blend(srcPixels[0], srcPixels[1]);
+			const uint8_t bottom = blend(srcPixels[src->pitch], srcPixels[src->pitch + 1]);
+			*dstPixels++ = blend(top, bottom);
 			srcPixels += 2;
 		}
 	}

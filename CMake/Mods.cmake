@@ -19,6 +19,7 @@ set(hellfire_mod
   txtdata/items/item_suffixes.tsv
   txtdata/items/unique_itemdat.tsv
   txtdata/missiles/misdat.tsv
+  txtdata/towners/towners.tsv
   txtdata/missiles/missile_sprites.tsv
   txtdata/monsters/monstdat.tsv
   txtdata/sound/effects.tsv
@@ -72,5 +73,103 @@ else()
     add_custom_target(hellfire_copied_assets DEPENDS ${HELLFIRE_OUTPUT_FILES})
     add_dependencies(hellfire_copied_assets hellfire_trim_assets)
     add_dependencies(libdevilutionx hellfire_copied_assets)
+  endif()
+endif()
+
+# POE2 Mashup mod (requires Hellfire).
+set(poe2_mod
+  manifest.ini
+  lua/mods/poe2/init.lua
+  sfx/poe2/glacial_spike.wav
+  sfx/poe2/blizzard_cast.wav
+  sfx/poe2/blizzard_shard1.wav
+  sfx/poe2/blizzard_shard2.wav
+  sfx/poe2/blizzard_shard3.wav
+  sfx/poe2/blizzard_shard4.wav
+  txtdata/Experience.tsv
+  txtdata/classes/barbarian/starting_loadout.tsv
+  txtdata/classes/bard/starting_loadout.tsv
+  txtdata/classes/monk/starting_loadout.tsv
+  txtdata/classes/rogue/starting_loadout.tsv
+  txtdata/classes/sorcerer/starting_loadout.tsv
+  txtdata/classes/warrior/starting_loadout.tsv
+  txtdata/items/itemdat.tsv
+  txtdata/items/item_suffixes.tsv
+  txtdata/missiles/misdat.tsv
+  txtdata/spells/spelldat.tsv
+  txtdata/towners/towners.tsv
+  txtdata/poe2/area_levels.tsv
+  txtdata/poe2/augments.tsv
+  txtdata/poe2/base_meta.tsv
+  txtdata/poe2/bound_demons.tsv
+  txtdata/poe2/catacombs_rooms.tsv
+  txtdata/poe2/caves_rooms.tsv
+  txtdata/poe2/hell_rooms.tsv
+  txtdata/poe2/hive_rooms.tsv
+  txtdata/poe2/crypt_rooms.tsv
+  txtdata/poe2/diablo_unique_homes.tsv
+  txtdata/poe2/essences.tsv
+  txtdata/poe2/cathedral_rooms.tsv
+  txtdata/poe2/experience_bosses.tsv
+  txtdata/poe2/experience_level_gap.tsv
+  txtdata/poe2/loot_filter_items.tsv
+  txtdata/poe2/loot_filter_styles.tsv
+  txtdata/poe2/map_icons.tsv
+  txtdata/poe2/monster_experience.tsv
+  txtdata/poe2/monster_bosses.tsv
+  txtdata/poe2/monster_armour.tsv
+  txtdata/poe2/monster_chaos_resistance.tsv
+  txtdata/poe2/monster_cold_resistance.tsv
+  txtdata/poe2/monster_levels.tsv
+  txtdata/poe2/monster_types.tsv
+  txtdata/poe2/modifier_families.tsv
+  txtdata/poe2/modifier_tiers.tsv
+  txtdata/poe2/omens.tsv
+  txtdata/poe2/passive_tree.tsv
+  txtdata/poe2/quest_tracker.tsv
+  txtdata/poe2/rune_bonds.tsv
+  txtdata/poe2/shrines.tsv
+  txtdata/poe2/skill_looks.tsv
+  txtdata/poe2/skill_speed.tsv
+  txtdata/poe2/spell_damage.tsv
+  txtdata/poe2/unique_lore.tsv
+  txtdata/poe2/uniques.tsv)
+
+if(APPLE)
+  foreach(asset_file ${poe2_mod})
+    set(src "${CMAKE_CURRENT_SOURCE_DIR}/mods/poe2/${asset_file}")
+    get_filename_component(_asset_dir "${asset_file}" DIRECTORY)
+    set_source_files_properties("${src}" PROPERTIES
+      MACOSX_PACKAGE_LOCATION "Resources/mods/poe2/${_asset_dir}"
+      XCODE_EXPLICIT_FILE_TYPE compiled)
+    target_sources(${BIN_TARGET} PRIVATE "${src}")
+  endforeach()
+else()
+  copy_files(
+    FILES ${poe2_mod}
+    SRC_PREFIX "mods/poe2/"
+    OUTPUT_DIR "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/poe2"
+    OUTPUT_VARIABLE POE2_OUTPUT_FILES)
+  add_trim_target(poe2_trim_assets
+    ROOT_FOLDER "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/poe2"
+    CURRENT_FILES ${poe2_mod})
+
+  if(BUILD_ASSETS_MPQ)
+    set(POE2_MPQ "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/poe2.mpq")
+    add_custom_command(
+      COMMENT "Building poe2.mpq"
+      OUTPUT "${POE2_MPQ}"
+      COMMAND ${CMAKE_COMMAND} -E remove -f "${POE2_MPQ}"
+      COMMAND ${SMPQ} -A -M 1 -C BZIP2 -c "${POE2_MPQ}" ${poe2_mod}
+      WORKING_DIRECTORY "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/poe2"
+      DEPENDS ${TRIM_COMMAND_BYPRODUCT} ${POE2_OUTPUT_FILES}
+      VERBATIM)
+    add_custom_target(poe2_mpq DEPENDS "${POE2_MPQ}")
+    add_dependencies(poe2_mpq poe2_trim_assets)
+    add_dependencies(libdevilutionx poe2_mpq)
+  else()
+    add_custom_target(poe2_copied_assets DEPENDS ${POE2_OUTPUT_FILES})
+    add_dependencies(poe2_copied_assets poe2_trim_assets)
+    add_dependencies(libdevilutionx poe2_copied_assets)
   endif()
 endif()

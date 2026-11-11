@@ -183,6 +183,24 @@ void AutomapZoomOut();
 void DrawAutomap(const Surface &out);
 
 /**
+ * @brief POE2 Mashup: how the corner map is drawn (poe2/corner_map.hpp works it out from the options).
+ */
+struct CornerMapView {
+	/** @brief Where the map goes on the screen. */
+	Rectangle rect;
+	/** @brief Map scale, as AutoMapScale. */
+	int scale;
+	/** @brief Where the map is centred, from the view position, in map tiles (as AutomapOffset). */
+	Displacement offset;
+};
+
+/**
+ * @brief POE2 Mashup: draws the small always-on map in the corner. Uses the minimap drawing, with its own rectangle,
+ * scale and centre, and without the level text.
+ */
+void DrawCornerMap(const Surface &out, const CornerMapView &view);
+
+/**
  * @brief Updates automap explorer at point if value is higher than existing.
  */
 void UpdateAutomapExplorer(Point map, MapExplorationType explorer);

@@ -31,6 +31,8 @@
 #include "mods/mod_identity.h"
 #include "mpq/mpq_common.hpp"
 #include "pack.h"
+#include "poe2/hardcore.hpp"
+#include "poe2/skill_gems.hpp"
 #include "qol/stash.h"
 #include "tables/playerdat.hpp"
 #include "utils/endian_read.hpp"
@@ -96,8 +98,10 @@ std::string GetSavePath(uint32_t saveNum, std::string_view savePrefix = {})
 std::string GetStashSavePath()
 {
 	const std::string_view ext = GetSaveExtension();
+	// POE2 Mashup: Hardcore heroes share their own stash.
+	const bool hardcore = MyPlayer != nullptr && IsHardcoreHero(*MyPlayer);
 	return StrCat(paths::PrefPath(),
-	    gbIsSpawn ? "stash_spawn" : "stash",
+	    gbIsSpawn ? "stash_spawn" : "stash", hardcore ? "_hardcore" : "",
 #ifdef UNPACKED_SAVES
 	    "_", ext, DIRECTORY_SEPARATOR_STR
 #else
@@ -188,6 +192,15 @@ SaveWriter GetStashWriter()
 	return SaveWriter(GetStashSavePath(), /*carryForward=*/true);
 }
 
+/** @brief POE2 Mashup: keeps the previous save as "<file>.bak", so a crash mid-write can't lose the hero or stash. */
+void BackUpSaveFile([[maybe_unused]] const std::string &savePath)
+{
+#ifndef UNPACKED_SAVES
+	if (FileExists(savePath))
+		CopyFileOverwrite(savePath.c_str(), StrCat(savePath, ".bak").c_str());
+#endif
+}
+
 #ifndef DISABLE_DEMOMODE
 void CopySaveFile(uint32_t saveNum, std::string targetPath)
 {
@@ -220,6 +233,7 @@ void Game2UiPlayer(const Player &player, _uiheroinfo *heroinfo, bool bHasSaveFil
 	heroinfo->hassaved = bHasSaveFile;
 	heroinfo->herorank = player.pDiabloKillLevel;
 	heroinfo->spawned = gbIsSpawn;
+	heroinfo->hardcore = player.poe2.hardcore;
 }
 
 bool GetFileName(uint8_t lvl, char *dst)
@@ -538,6 +552,7 @@ void pfile_write_hero(SaveWriter &saveWriter, bool writeGameData)
 	if (!gbVanilla) {
 		SaveHotkeys(saveWriter, myPlayer);
 		SaveHeroItems(saveWriter, myPlayer);
+		SavePoe2HeroData(saveWriter, myPlayer);
 	}
 }
 
@@ -644,6 +659,7 @@ const char *pfile_get_password()
 
 void pfile_write_hero(bool writeGameData)
 {
+	BackUpSaveFile(GetSavePath(gSaveNumber));
 	SaveWriter saveWriter = GetSaveWriter(gSaveNumber, /*carryForward=*/writeGameData);
 	pfile_write_hero(saveWriter, writeGameData);
 
@@ -685,6 +701,7 @@ void sfile_write_stash()
 	if (!Stash.dirty)
 		return;
 
+	BackUpSaveFile(GetStashSavePath());
 	SaveWriter stashWriter = GetStashWriter();
 
 	SaveStash(stashWriter);
@@ -714,6 +731,9 @@ bool pfile_ui_set_hero_infos(bool (*uiAddHeroInfo)(_uiheroinfo *))
 				LoadHeroItems(player);
 				RemoveAllInvalidItems(player);
 				CalcPlrInv(player, false);
+				size_t modeLength = 0;
+				const std::unique_ptr<std::byte[]> mode = ReadArchive(*archive, "poe2mode", &modeLength);
+				player.poe2.hardcore = mode != nullptr && modeLength >= 1 && mode[0] != std::byte { 0 };
 
 				Game2UiPlayer(player, &uihero, hasSaveGame);
 				uiAddHeroInfo(&uihero);
@@ -761,14 +781,41 @@ bool pfile_ui_save_create(_uiheroinfo *heroinfo)
 	Player &player = Players[0];
 	CreatePlayer(player, heroinfo->heroclass);
 	CopyUtf8(player._pName, heroinfo->name, PlayerNameLength);
+	player.poe2.clear();
+	player.poe2.hardcore = gbIsPoe2 && heroinfo->hardcore;
+	if (gbIsPoe2)
+		GrantStarterSkill(player);
 	PackPlayer(pkplr, player);
 	EncodeHero(saveWriter, &pkplr);
 	Game2UiPlayer(player, heroinfo, false);
 	if (!gbVanilla) {
 		SaveHotkeys(saveWriter, player);
 		SaveHeroItems(saveWriter, player);
+		SavePoe2HeroData(saveWriter, player);
 	}
 
+	return true;
+}
+
+bool pfile_create_lab_hero(uint32_t saveNum, HeroClass heroClass, std::string_view name)
+{
+	PlayerPack pkplr;
+	giNumberOfLevels = gbIsHellfire ? 25 : 17;
+
+	SaveWriter saveWriter = GetSaveWriter(saveNum, /*carryForward=*/false);
+	saveWriter.RemoveHashEntries(GetFileName);
+
+	Player &player = Players[0];
+	CreatePlayer(player, heroClass);
+	CopyUtf8(player._pName, name, PlayerNameLength);
+	player.poe2.clear();
+	PackPlayer(pkplr, player);
+	EncodeHero(saveWriter, &pkplr);
+	if (!gbVanilla) {
+		SaveHotkeys(saveWriter, player);
+		SaveHeroItems(saveWriter, player);
+		SavePoe2HeroData(saveWriter, player);
+	}
 	return true;
 }
 
@@ -778,6 +825,7 @@ bool pfile_delete_save(_uiheroinfo *heroInfo)
 	if (saveNum < MAX_CHARACTERS) {
 		hero_names[saveNum][0] = '\0';
 		RemoveFile(GetSavePath(saveNum).c_str());
+		RemoveFile(StrCat(GetSavePath(saveNum), ".bak").c_str());
 	}
 	return true;
 }
@@ -838,6 +886,16 @@ void pfile_update(bool forceSave)
 	prevTick = tick;
 	pfile_write_hero();
 	sfile_write_stash();
+}
+
+std::string pfile_hero_save_path()
+{
+	return GetSavePath(gSaveNumber);
+}
+
+std::string pfile_stash_save_path()
+{
+	return GetStashSavePath();
 }
 
 } // namespace devilution

@@ -1,7 +1,11 @@
 #include "control_flasks.hpp"
 #include "control.hpp"
 
+#include "engine/render/text_render.hpp"
 #include "engine/surface.hpp"
+#include "game_mode.hpp"
+#include "player.h"
+#include "poe2/hud_globes.hpp"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -101,24 +105,40 @@ void DrawFlaskLower(const Surface &out, const Surface &sourceBuffer, int offset,
 
 void DrawLifeFlaskUpper(const Surface &out)
 {
+	if (gbIsPoe2) {
+		DrawPoe2LifeGlobe(out, true);
+		return;
+	}
 	constexpr int LifeFlaskUpperOffset = 107;
 	DrawFlaskUpper(out, *pLifeBuff, LifeFlaskUpperOffset, MyPlayer->_pHPPer);
 }
 
 void DrawManaFlaskUpper(const Surface &out)
 {
+	if (gbIsPoe2) {
+		DrawPoe2ManaGlobe(out, true);
+		return;
+	}
 	constexpr int ManaFlaskUpperOffset = 475;
 	DrawFlaskUpper(out, *pManaBuff, ManaFlaskUpperOffset, MyPlayer->_pManaPer);
 }
 
 void DrawLifeFlaskLower(const Surface &out, bool drawFilledPortion)
 {
+	if (gbIsPoe2) {
+		DrawPoe2LifeGlobe(out, false);
+		return;
+	}
 	constexpr int LifeFlaskLowerOffset = 96;
 	DrawFlaskLower(out, *pLifeBuff, LifeFlaskLowerOffset, MyPlayer->_pHPPer, drawFilledPortion);
 }
 
 void DrawManaFlaskLower(const Surface &out, bool drawFilledPortion)
 {
+	if (gbIsPoe2) {
+		DrawPoe2ManaGlobe(out, false);
+		return;
+	}
 	constexpr int ManaFlaskLowerOffset = 464;
 	DrawFlaskLower(out, *pManaBuff, ManaFlaskLowerOffset, MyPlayer->_pManaPer, drawFilledPortion);
 }

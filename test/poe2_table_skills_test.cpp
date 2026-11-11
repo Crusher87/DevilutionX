@@ -1,0 +1,1480 @@
+#include <algorithm>
+#include <array>
+#include <optional>
+#include <set>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+#include "engine/assets.hpp"
+#include "game_mode.hpp"
+#include "items.h"
+#include "levels/dun_tile_data.hpp"
+#include "levels/gendung.h"
+#include "lighting.h"
+#include "missiles.h"
+#include "monster.h"
+#include "objects.h"
+#include "player.h"
+#include "poe2/bases.hpp"
+#include "poe2/gem_levels.hpp"
+#include "poe2/monster_mods.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/skill_resources.hpp"
+#include "poe2/spell_base.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
+#include "poe2/weapon_skills.hpp"
+#include "spells.h"
+#include "storm/storm_net.hpp"
+#include "tables/monstdat.h"
+#include "tables/playerdat.hpp"
+
+namespace devilution {
+namespace {
+
+class Poe2TableSkillsTest : public ::testing::Test {
+public:
+	void SetUp() override
+	{
+		Players.resize(1);
+		MyPlayer = &Players[0];
+		*MyPlayer = {};
+		MyPlayer->poe2.clear();
+		gbIsSpawn = false;
+		gbIsMultiplayer = false;
+		gbIsHellfire = true;
+		gbIsPoe2 = true;
+		UnloadModArchives();
+		LoadModArchives({ { "hf", "poe2" } });
+		LoadItemData();
+		LoadSpellData();
+		LoadPlayerDataFiles();
+		LoadMissileData();
+		Missiles.clear();
+	}
+
+	void TearDown() override
+	{
+		Missiles.clear();
+		ClearSkillZones();
+		gbIsPoe2 = false;
+		UnloadModArchives();
+	}
+
+	/** @brief A hero who hits often, in a dungeon with monsters' data loaded and the network up for their hits. */
+	static Player &SetUpFight()
+	{
+		leveltype = DTYPE_CATHEDRAL;
+		LoadMonsterData();
+		LevelMonsterTypes[0].type = MT_NZOMBIE;
+		MyPlayerId = 0;
+		SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
+		Player &player = *MyPlayer;
+		player.setCharacterLevel(30);
+		player._pBaseDex = player._pDexterity = 200;
+		player._pBaseStr = player._pStrength = 100;
+		player._pIMinDam = 20;
+		player._pIMaxDam = 30;
+		player.position.tile = { 40, 40 };
+		player._pdir = Direction::East;
+		return player;
+	}
+
+	/** @brief A normal monster standing on the tile, with plenty of life. */
+	static Monster &PlaceMonster(size_t slot, Point tile)
+	{
+		Monster &monster = Monsters[slot];
+		monster = {};
+		monster.levelType = 0;
+		monster.uniqueType = UniqueMonsterType::None;
+		monster.talkMsg = TEXT_NONE;
+		monster.lightId = NO_LIGHT;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
+		monster.position.tile = monster.position.old = monster.position.future = tile;
+		dMonster[tile.x][tile.y] = static_cast<int16_t>(slot + 1);
+		ActiveMonsters[ActiveMonsterCount] = static_cast<unsigned>(slot);
+		ActiveMonsterCount++;
+		return monster;
+	}
+
+	static void ClearMonsters()
+	{
+		for (int x = 30; x < 50; x++) {
+			for (int y = 30; y < 50; y++)
+				dMonster[x][y] = 0;
+		}
+		ActiveMonsterCount = 0;
+	}
+};
+
+/** @brief Gives the monster a seed that rolls the rarity (GetMonsterAffixes). */
+void MakeRarity(Monster &monster, MonsterRarity rarity)
+{
+	for (uint32_t seed = 1; seed < 100000; seed++) {
+		monster.rndItemSeed = seed;
+		if (GetMonsterAffixes(monster).rarity == rarity)
+			break;
+	}
+	EXPECT_EQ(GetMonsterAffixes(monster).rarity, rarity);
+}
+
+// Q36 (Curtis 2026-11-07): Decrepify is only a slow, like POE2's Temporal Chains: 30% less action speed, 20% on a rare,
+// 10% on a unique. Its weaken and its extra physical damage taken are gone.
+TEST_F(Poe2TableSkillsTest, DecrepifyIsOnlyASlow)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	Monster &normal = PlaceMonster(0, { 45, 40 });
+	MakeRarity(normal, MonsterRarity::Normal);
+	Monster &rare = PlaceMonster(1, { 46, 40 });
+	MakeRarity(rare, MonsterRarity::Rare);
+	Monster &unique = PlaceMonster(2, { 47, 40 });
+	unique.uniqueType = static_cast<UniqueMonsterType>(0);
+	ASSERT_TRUE(unique.isUnique());
+	const std::pair<Monster *, int> Slows[] = { { &normal, 30 }, { &rare, 20 }, { &unique, 10 } };
+	for (const auto &[monster, slow] : Slows) {
+		ApplyTableCurse(player, *monster, WeaponSkill::Decrepify, 100);
+		EXPECT_GT(monster->poe2.decrepifyTicks, 0);
+		EXPECT_EQ(DecrepifySlowPercentFor(*monster), slow);
+		EXPECT_EQ(monster->poe2.chillPercent, slow);
+		EXPECT_EQ(TableCurseShownPercent(*monster, TableCurse::Decrepify), slow);
+		EXPECT_EQ(TableCurseDamageTakenPercent(*monster, DamageType::Physical), 0);
+	}
+	// It no longer softens the monster's hits.
+	const Fixed26_6 hit = Fixed26_6::fromInt(100);
+	EXPECT_EQ(ApplyTableSkillDefences(normal, player, hit), hit);
+	ClearMonsters();
+}
+
+// Q36: Attract makes the cursed monster a decoy for 3 seconds: the monsters within 5 tiles attack it. Normal and magic
+// ones always, rares half the time, uniques never. It no longer sets the monster berserk.
+TEST_F(Poe2TableSkillsTest, AttractDrawsTheMonstersNearIt)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	Monster &cursed = PlaceMonster(0, { 45, 40 });
+	Monster &nearby = PlaceMonster(1, { 47, 40 });
+	MakeRarity(nearby, MonsterRarity::Normal);
+	Monster &distant = PlaceMonster(2, { 45, 47 });
+	MakeRarity(distant, MonsterRarity::Normal);
+	Monster &unique = PlaceMonster(3, { 44, 40 });
+	unique.uniqueType = static_cast<UniqueMonsterType>(0);
+	// The hero is on the level, the enemy the pack would have without the curse.
+	player.plractive = true;
+	setlevel = false;
+	player.setLevel(currlevel);
+	ApplyTableCurse(player, cursed, WeaponSkill::Attract, 100);
+	EXPECT_EQ(cursed.poe2.attractTicks, FindTableSkill(WeaponSkill::Attract)->duration);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Attract)->duration, 3 * 20);
+	EXPECT_EQ(cursed.flags & MFLAG_BERSERK, 0U);
+	EXPECT_EQ(cursed.poe2.confuseTicks, 0);
+	EXPECT_TRUE(MonsterObeysAttract(nearby, cursed));
+	EXPECT_FALSE(MonsterObeysAttract(unique, cursed));
+
+	M_UpdateEnemy(nearby);
+	EXPECT_EQ(nearby.enemy, 0);
+	EXPECT_NE(nearby.flags & MFLAG_TARGETS_MONSTER, 0U);
+	M_UpdateEnemy(distant);
+	EXPECT_EQ(distant.flags & MFLAG_TARGETS_MONSTER, 0U);
+	M_UpdateEnemy(unique);
+	EXPECT_EQ(unique.flags & MFLAG_TARGETS_MONSTER, 0U);
+
+	// A rare obeys for some rolls of the curse and not others, the same all through one curse.
+	Monster &rare = PlaceMonster(4, { 46, 41 });
+	MakeRarity(rare, MonsterRarity::Rare);
+	int obeyed = 0;
+	for (int seed = 0; seed < 8; seed++) {
+		cursed.poe2.attractSeed = static_cast<uint8_t>(seed);
+		obeyed += MonsterObeysAttract(rare, cursed) ? 1 : 0;
+		EXPECT_EQ(MonsterObeysAttract(rare, cursed), MonsterObeysAttract(rare, cursed));
+	}
+	EXPECT_EQ(obeyed, 4);
+
+	// When it runs out, the pack goes back to the hero.
+	for (int i = 0; i < 3 * 20; i++)
+		ProcessTableCurses(cursed);
+	EXPECT_EQ(cursed.poe2.attractTicks, 0);
+	M_UpdateEnemy(nearby);
+	EXPECT_EQ(nearby.flags & MFLAG_TARGETS_MONSTER, 0U);
+	EXPECT_EQ(nearby.enemy, 0);
+	player.plractive = false;
+	ClearMonsters();
+}
+
+// Q36: Berserk merged into Confuse. From gem level 10, the rare or unique Confuse is aimed at goes berserk (Berserk's
+// 120-129% harder blows) for the curse's length; below it, nothing new.
+TEST_F(Poe2TableSkillsTest, ConfuseFromLevelTenSendsARareBerserk)
+{
+	Player &player = SetUpFight();
+	const TableSkillData &confuse = *FindTableSkill(WeaponSkill::Confuse);
+	player.poe2.skillSlots[0] = SkillSlot::ForAttack(WeaponSkill::Confuse);
+	for (const int level : { ConfuseBerserkGemLevel - 1, ConfuseBerserkGemLevel }) {
+		player.poe2.slotLevels[0] = static_cast<uint8_t>(level);
+		ClearMonsters();
+		Monster &rare = PlaceMonster(0, { 45, 40 });
+		MakeRarity(rare, MonsterRarity::Rare);
+		Monster &unique = PlaceMonster(1, { 49, 40 });
+		unique.uniqueType = static_cast<UniqueMonsterType>(0);
+		ExecuteTableSkill(player, confuse, rare.position.tile);
+		ExecuteTableSkill(player, confuse, unique.position.tile);
+		if (level < ConfuseBerserkGemLevel) {
+			EXPECT_EQ(rare.poe2.berserkPercent, 0);
+			EXPECT_EQ(unique.poe2.berserkPercent, 0);
+			EXPECT_EQ(unique.flags & MFLAG_BERSERK, 0U);
+			continue;
+		}
+		for (Monster *monster : { &rare, &unique }) {
+			EXPECT_GE(monster->poe2.berserkPercent, 120);
+			EXPECT_LE(monster->poe2.berserkPercent, 129);
+			EXPECT_NE(monster->flags & MFLAG_BERSERK, 0U);
+			EXPECT_EQ(monster->poe2.confuseTicks, confuse.duration);
+		}
+		const int blow = ScaleMonsterBlow(unique, 6400);
+		unique.poe2.berserkPercent = 0;
+		EXPECT_GT(blow, ScaleMonsterBlow(unique, 6400));
+		unique.poe2.berserkPercent = 125;
+		// It ends with the curse.
+		for (int i = 0; i < confuse.duration; i++)
+			ProcessTableCurses(unique);
+		EXPECT_EQ(unique.poe2.berserkPercent, 0);
+		EXPECT_EQ(unique.flags & MFLAG_BERSERK, 0U);
+	}
+	player.poe2.skillSlots[0] = {};
+	ClearMonsters();
+}
+
+// Q37 (Curtis 2026-11-07): Zeal's uses 1 to 3 are quick stabs at the monster in front; every fourth is a heavy blow at
+// 150% on the three tiles in front, as Cleave sweeps (Q43: no longer all 8). The count starts over 3 seconds after the
+// last Zeal.
+TEST_F(Poe2TableSkillsTest, ZealEveryFourthUseIsAHeavyBlowInFront)
+{
+	Player &player = SetUpFight();
+	int sideOnStabs = 0;
+	int sideOnHeavy = 0;
+	int behindHit = 0;
+	for (uint32_t seed = 1; seed <= 6; seed++) {
+		ClearMonsters();
+		player.poe2.zealCount = 0;
+		player.poe2.zealTicks = 0;
+		player._pdir = Direction::SouthEast;
+		PlaceMonster(0, { 41, 40 });
+		// Facing south-east: south is beside the target, in front; south-west is beside the hero, not in front.
+		Monster &side = PlaceMonster(1, { 41, 41 });
+		Monster &behind = PlaceMonster(2, { 40, 41 });
+		for (int use = 1; use <= ZealHeavyEvery; use++) {
+			const Fixed26_6 before = side.hitPoints;
+			const Fixed26_6 behindBefore = behind.hitPoints;
+			SetRndSeed(seed * 10 + use);
+			ExecuteSkillCast(player, WeaponSkill::Zeal, { 41, 40 });
+			EXPECT_EQ(player.poe2.zealCount, use % ZealHeavyEvery);
+			if (side.hitPoints < before)
+				(use == ZealHeavyEvery ? sideOnHeavy : sideOnStabs)++;
+			if (behind.hitPoints < behindBefore)
+				behindHit++;
+		}
+	}
+	EXPECT_EQ(sideOnStabs, 0);
+	EXPECT_GT(sideOnHeavy, 0);
+	EXPECT_EQ(behindHit, 0);
+	EXPECT_EQ(ZealHeavyPercent, 150);
+	ExecuteSkillCast(player, WeaponSkill::Zeal, { 41, 40 });
+	EXPECT_EQ(player.poe2.zealCount, 1);
+	for (int i = 0; i < ZealResetTicks; i++)
+		player.poe2.tick();
+	EXPECT_EQ(player.poe2.zealCount, 0);
+	ClearMonsters();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q37: Falling Sword fades the hero out in light (untargetable) as the cast begins; the blade lands on the target in
+// radius 2, the hero comes out of the light there, and holy ground burns for 20% of the hit a second for 3 seconds.
+TEST_F(Poe2TableSkillsTest, FallingSwordFadesOutAndLeavesHolyGround)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	ClearSkillZones();
+	player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(100);
+	const TableSkillData &sword = *FindTableSkill(WeaponSkill::FallingSword);
+	EXPECT_EQ(sword.shape, TableShape::Burst);
+	EXPECT_EQ(sword.radius, 2);
+	BeginTableSkillCast(player, sword);
+	EXPECT_EQ(player.poe2.untouchableTicks, FallingSwordFadeTicks);
+	EXPECT_EQ(FallingSwordFadeTicks * 50, 400);
+	Monster &monster = PlaceMonster(0, { 45, 40 });
+	ExecuteSkillCast(player, WeaponSkill::FallingSword, { 45, 40 });
+	EXPECT_NE(player.position.tile, Point(40, 40));
+	EXPECT_LE(Point(player.position.tile).WalkingDistance(Point(45, 40)), 2);
+	EXPECT_FALSE(player.poe2.isUntouchable());
+	ASSERT_EQ(SkillZoneCount(), 1U);
+	int burns = 0;
+	for (int tick = 0; tick < FallingSwordGroundTicks + 5; tick++) {
+		const Fixed26_6 before = monster.hitPoints;
+		ProcessSkillZones(player);
+		if (monster.hitPoints < before)
+			burns++;
+	}
+	EXPECT_EQ(burns, 3);
+	EXPECT_EQ(SkillZoneCount(), 0U);
+	ClearMonsters();
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q37: Explosive Arrow sticks where it lands and blows a second later; a poison cloud or ground its blast touches
+// bursts in fire and ends.
+TEST_F(Poe2TableSkillsTest, ExplosiveArrowWaitsASecondAndBurstsPoisonClouds)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	ClearSkillZones();
+	player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(100);
+	ExecuteSkillCast(player, WeaponSkill::WitchsBog, { 41, 40 });
+	ASSERT_EQ(SkillZoneCount(), 1U);
+	ExecuteSkillCast(player, WeaponSkill::ExplosiveBolt, { 42, 40 });
+	ASSERT_EQ(SkillZoneCount(), 2U);
+	const int flight = 2 * 2;
+	for (int tick = 0; tick < flight + ExplosiveArrowFuseTicks; tick++)
+		ProcessSkillZones(player);
+	EXPECT_EQ(SkillZoneCount(), 2U) << "the arrow has not blown yet";
+	ProcessSkillZones(player);
+	EXPECT_EQ(SkillZoneCount(), 1U) << "the arrow blew";
+	ProcessSkillZones(player);
+	EXPECT_EQ(SkillZoneCount(), 0U) << "the bog burst in fire";
+	EXPECT_EQ(ExplosiveArrowFuseTicks, 20);
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q37: Shield Wall is POE2's wall of earth: 5 segments across the hero's front for 6 seconds, each with 20% of his
+// life. Monsters can't step on one, and break it with their blows; a slam or a war cry shatters it.
+TEST_F(Poe2TableSkillsTest, ShieldWallIsAWallOfEarth)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	ClearSkillZones();
+	player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(100);
+	const TableSkillData &wall = *FindTableSkill(WeaponSkill::ShieldWall);
+	ExecuteSkillCast(player, WeaponSkill::ShieldWall, { 42, 40 });
+	ASSERT_EQ(ShieldWallSegmentCount(), 5U);
+	const Point middle = player.position.tile + Displacement { Direction::East } * 2;
+	EXPECT_TRUE(IsShieldWallTile(middle));
+	EXPECT_FALSE(IsShieldWallTile(player.position.tile + Direction::East));
+	// It is no longer a defence.
+	Monster &brute = PlaceMonster(0, middle + Direction::East);
+	const Fixed26_6 hit = Fixed26_6::fromInt(100);
+	EXPECT_EQ(ApplyTableSkillDefences(brute, player, hit), hit);
+	EXPECT_FALSE(IsTileAvailable(brute, middle));
+	// Its blows break the segments beside it: 20 life each, 10 a blow, a blow a second.
+	brute.minDamage = brute.maxDamage = 10;
+	for (int tick = 0; tick < 2 * 20 + 1; tick++)
+		ProcessSkillZones(player);
+	EXPECT_FALSE(IsShieldWallTile(middle));
+	EXPECT_LT(ShieldWallSegmentCount(), 5U);
+	EXPECT_GT(ShieldWallSegmentCount(), 0U);
+	// It wears out with its time.
+	for (int tick = 0; tick < wall.duration; tick++)
+		ProcessSkillZones(player);
+	EXPECT_EQ(ShieldWallSegmentCount(), 0U);
+	ClearMonsters();
+
+	// A war cry shatters the segments within 2 tiles of the hero, each exploding for a weapon hit around it.
+	ExecuteSkillCast(player, WeaponSkill::ShieldWall, { 42, 40 });
+	ASSERT_EQ(ShieldWallSegmentCount(), 5U);
+	ExecuteSkillCast(player, WeaponSkill::WarCry, { 41, 40 });
+	EXPECT_FALSE(IsShieldWallTile(middle));
+	EXPECT_LT(ShieldWallSegmentCount(), 5U);
+	ClearSkillZones();
+	// So does a slam where it lands, or Shield Charge's landing.
+	int damaged = 0;
+	for (uint32_t seed = 1; seed <= 5; seed++) {
+		ExecuteSkillCast(player, WeaponSkill::ShieldWall, { 42, 40 });
+		ASSERT_EQ(ShieldWallSegmentCount(), 5U);
+		Monster &near = PlaceMonster(1, middle + Direction::East);
+		SetRndSeed(seed);
+		EXPECT_EQ(ShatterShieldWall(player, middle), 5);
+		if (near.hitPoints < near.maxHitPoints)
+			damaged++;
+		ClearMonsters();
+	}
+	EXPECT_GT(damaged, 0);
+	EXPECT_EQ(ShieldWallSegmentCount(), 0U);
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q37: Holy Shield also blocks 15% more often while it lasts, with a shield to block with.
+TEST_F(Poe2TableSkillsTest, HolyShieldBlocksMoreOften)
+{
+	Player &player = *MyPlayer;
+	player.poe2.shieldBlockChance = 20;
+	const int without = player.GetBlockChance();
+	player.poe2.holyShieldTicks = 10;
+	EXPECT_EQ(player.GetBlockChance(), without + HolyShieldBlockChance);
+	EXPECT_EQ(HolyShieldBlockChance, 15);
+	player.poe2.shieldBlockChance = 0;
+	EXPECT_EQ(player.GetBlockChance(), 0);
+	player.poe2.holyShieldTicks = 0;
+}
+
+// Q37: Blessed Shield is a thrown shield: it stuns what it hits and bounces to up to 3 more monsters within 4 tiles,
+// each bounce at 75%, never straight back.
+TEST_F(Poe2TableSkillsTest, BlessedShieldBouncesOnToThreeMore)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	Missiles.clear();
+	const TableSkillData &shield = *FindTableSkill(WeaponSkill::BlessedShield);
+	EXPECT_EQ(shield.shape, TableShape::Projectiles);
+	Monster &first = PlaceMonster(0, { 44, 40 });
+	Monster &second = PlaceMonster(1, { 46, 41 });
+	Monster &third = PlaceMonster(2, { 49, 41 });
+	// The shields in the air (the hits' effects are missiles too).
+	const auto shields = []() {
+		std::vector<Missile> thrown;
+		for (const Missile &missile : Missiles) {
+			if (missile._mitype == MissileID::Arrow)
+				thrown.push_back(missile);
+		}
+		return thrown;
+	};
+	ExecuteSkillCast(player, WeaponSkill::BlessedShield, { 44, 40 });
+	ASSERT_EQ(shields().size(), 1U);
+	const Missile thrown = shields().back();
+	EXPECT_EQ(thrown.poe2.look, vfx::SpinningBladeLook);
+	EXPECT_EQ(thrown.poe2.chainsLeft, BlessedShieldBounces);
+	OnTableMissileHit(thrown, player, first, 40, false);
+	ASSERT_EQ(shields().size(), 2U);
+	const Missile bounce = shields().back();
+	EXPECT_EQ(Point(bounce.position.start), Point(first.position.tile));
+	EXPECT_EQ(bounce.poe2.chainsLeft, BlessedShieldBounces - 1);
+	EXPECT_EQ(bounce.poe2.lastHitMonster, static_cast<int16_t>(first.getId()));
+	EXPECT_EQ(bounce.poe2.damagePercent, thrown.poe2.damagePercent * BlessedShieldBouncePercent / 100);
+	// It flies on to the next, at the same 75%, and not back to the first.
+	OnTableMissileHit(bounce, player, second, 40, false);
+	ASSERT_EQ(shields().size(), 3U);
+	const Missile last = shields().back();
+	EXPECT_EQ(last.poe2.damagePercent, bounce.poe2.damagePercent);
+	EXPECT_EQ(last.poe2.lastHitMonster, static_cast<int16_t>(second.getId()));
+	EXPECT_EQ(last.poe2.chainsLeft, BlessedShieldBounces - 2);
+	// From the third nothing is near but the one before.
+	OnTableMissileHit(last, player, third, 40, false);
+	EXPECT_EQ(shields().size(), 3U);
+	ClearMonsters();
+	Missiles.clear();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q37: Guided Arrow homes in on the monster it was shot at.
+TEST_F(Poe2TableSkillsTest, GuidedArrowHomesOnItsTarget)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	Missiles.clear();
+	Monster &target = PlaceMonster(0, { 46, 40 });
+	ExecuteSkillCast(player, WeaponSkill::GuidedArrow, { 46, 40 });
+	ASSERT_EQ(Missiles.size(), 1U);
+	EXPECT_EQ(Missiles.back().poe2.homingMonster, static_cast<int16_t>(target.getId()));
+	// Shot at nothing, it flies straight.
+	ClearMonsters();
+	Missiles.clear();
+	ExecuteSkillCast(player, WeaponSkill::GuidedArrow, { 46, 40 });
+	ASSERT_EQ(Missiles.size(), 1U);
+	EXPECT_EQ(Missiles.back().poe2.homingMonster, -1);
+	Missiles.clear();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q38 (Curtis 2026-11-07): Rend gives 3 Rage for each monster it hits.
+TEST_F(Poe2TableSkillsTest, RendGivesRageForEachMonsterHit)
+{
+	Player &player = SetUpFight();
+	int hitSome = 0;
+	for (uint32_t seed = 1; seed <= 8; seed++) {
+		ClearMonsters();
+		player.poe2.rage = 0;
+		const std::array<Monster *, 3> monsters { &PlaceMonster(0, player.position.tile + Direction::East), &PlaceMonster(1, player.position.tile + Direction::NorthEast),
+			&PlaceMonster(2, player.position.tile + Direction::SouthEast) };
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::Rend, player.position.tile + Direction::East);
+		int hit = 0;
+		for (const Monster *monster : monsters)
+			hit += monster->hitPoints < monster->maxHitPoints ? 1 : 0;
+		EXPECT_EQ(player.poe2.rage, RendRagePerHit * hit) << seed;
+		if (hit > 1)
+			hitSome++;
+	}
+	EXPECT_GT(hitSome, 0);
+	EXPECT_EQ(RendRagePerHit, 3);
+	player.poe2.rage = 0;
+	ClearMonsters();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q38: Cobra Strike makes the poison already on the enemy deal all it has left at once, then puts its own on.
+TEST_F(Poe2TableSkillsTest, CobraStrikeBurstsThePoisonLeft)
+{
+	Player &player = SetUpFight();
+	const auto strike = [&](uint32_t seed, int poisonLeft) {
+		ClearMonsters();
+		Monster &monster = PlaceMonster(0, player.position.tile + Direction::East);
+		if (poisonLeft > 0) {
+			monster.poe2.poisonTicks = 40;
+			monster.poe2.poisonDamagePerTick = poisonLeft * 64 / 40;
+			monster.poe2.poisonSource = 0;
+		}
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::ViperStrike, monster.position.tile);
+		const bool hit = monster.hitPoints < monster.maxHitPoints || monster.poe2.poisonTicks != (poisonLeft > 0 ? 40 : 0);
+		if (hit)
+			EXPECT_GT(monster.poe2.poisonDamagePerTick, 0);
+		return std::make_pair(hit, (monster.maxHitPoints - monster.hitPoints).raw());
+	};
+	int compared = 0;
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		const auto [plainHit, plain] = strike(seed, 0);
+		const auto [poisonedHit, poisoned] = strike(seed, 50);
+		ASSERT_EQ(plainHit, poisonedHit) << seed;
+		if (!plainHit)
+			continue;
+		compared++;
+		EXPECT_EQ(poisoned - plain, 50 * 64) << seed;
+	}
+	EXPECT_GT(compared, 0);
+	ClearMonsters();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q42 (Curtis 2026-11-07): spammed, Cobra Strike doesn't consume its own last poison; only another skill's.
+TEST_F(Poe2TableSkillsTest, CobraStrikeLeavesItsOwnPoison)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	Monster &monster = PlaceMonster(0, player.position.tile + Direction::East);
+	monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100000);
+	bool poisoned = false;
+	for (uint32_t seed = 1; seed <= 20 && !poisoned; seed++) {
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::ViperStrike, monster.position.tile);
+		poisoned = monster.poe2.poisonTicks > 0;
+	}
+	ASSERT_TRUE(poisoned);
+	EXPECT_TRUE(monster.poe2.poisonFromCobra);
+	// Its own poison: the next strike lands its hit and keeps the poison going, with no burst.
+	const int32_t perTick = monster.poe2.poisonDamagePerTick;
+	int strikesAfter = 0;
+	for (uint32_t seed = 30; seed <= 50; seed++) {
+		const Fixed26_6 before = monster.hitPoints;
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::ViperStrike, monster.position.tile);
+		if (monster.hitPoints < before) {
+			strikesAfter++;
+			EXPECT_GT(monster.poe2.poisonTicks, 0) << seed;
+			EXPECT_GE(monster.poe2.poisonDamagePerTick, perTick) << seed;
+		}
+	}
+	EXPECT_GT(strikesAfter, 0);
+	// Another skill's poison takes over, and the next strike may consume it.
+	ASSERT_TRUE(AddPoison(monster, monster.poe2.poisonDamagePerTick * 2, 40, 1));
+	EXPECT_FALSE(monster.poe2.poisonFromCobra);
+	ClearMonsters();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q38: the next Shadow Lunge or Cobra Strike on a Death-Marked monster uses up the mark for double damage.
+TEST_F(Poe2TableSkillsTest, DeathMarkIsUsedUpForDoubleDamage)
+{
+	Monster monster {};
+	EXPECT_EQ(ConsumeDeathMark(monster), 100);
+	monster.poe2.deathMarkTicks = 50;
+	EXPECT_EQ(ConsumeDeathMark(monster), DeathMarkConsumePercent);
+	EXPECT_EQ(monster.poe2.deathMarkTicks, 0);
+	EXPECT_EQ(DeathMarkConsumePercent, 200);
+
+	Player &player = SetUpFight();
+	int compared = 0;
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		std::array<int32_t, 2> taken {};
+		std::array<bool, 2> hit {};
+		for (int marked = 0; marked < 2; marked++) {
+			ClearMonsters();
+			Monster &target = PlaceMonster(0, player.position.tile + Direction::East);
+			target.poe2.deathMarkTicks = marked != 0 ? 50 : 0;
+			SetRndSeed(seed);
+			ExecuteSkillCast(player, WeaponSkill::ViperStrike, target.position.tile);
+			hit[marked] = target.hitPoints < target.maxHitPoints;
+			taken[marked] = (target.maxHitPoints - target.hitPoints).raw();
+			// A hit uses the mark up; a miss leaves it.
+			if (marked != 0)
+				EXPECT_EQ(target.poe2.deathMarkTicks, hit[marked] ? 0 : 50) << seed;
+		}
+		if (!hit[0] || !hit[1])
+			continue;
+		compared++;
+		EXPECT_GT(taken[1], taken[0] * 3 / 2) << seed;
+	}
+	EXPECT_GT(compared, 0);
+	ClearMonsters();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q38: Wave of Light at full Combo spends it on a great bell in front of the hero: 200% in radius 2 as it lands, then
+// it stands 6 seconds and each hit on it tolls for 50% in radius 2. One bell at a time; below full Combo, as before.
+TEST_F(Poe2TableSkillsTest, WaveOfLightDropsABellAtFullCombo)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	ClearSkillZones();
+	player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(100);
+	player.poe2.combo = MaxCombo - 1;
+	ExecuteSkillCast(player, WeaponSkill::WaveOfLight, { 42, 40 });
+	EXPECT_FALSE(WaveBellTile().has_value());
+
+	const Point front = player.position.tile + player._pdir;
+	int landed = 0;
+	int tolled = 0;
+	for (uint32_t seed = 1; seed <= 6; seed++) {
+		ClearMonsters();
+		Monster &near = PlaceMonster(0, front + Direction::East);
+		player.poe2.combo = MaxCombo;
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::WaveOfLight, { 42, 40 });
+		EXPECT_EQ(player.poe2.combo, 0);
+		ASSERT_EQ(WaveBellTile(), std::optional<Point>(front));
+		if (near.hitPoints < near.maxHitPoints)
+			landed++;
+		// A strike on it tolls, at most once a swing.
+		const Fixed26_6 before = near.hitPoints;
+		StrikeWaveBell(player, front);
+		EXPECT_EQ(near.hitPoints, before) << "its own landing doesn't toll it";
+		for (int tick = 0; tick < WaveBellTollCooldown; tick++)
+			ProcessSkillZones(player);
+		StrikeWaveBell(player, front + Direction::East);
+		StrikeWaveBell(player, front);
+		if (near.hitPoints < before)
+			tolled++;
+	}
+	EXPECT_GT(landed, 0);
+	EXPECT_GT(tolled, 0);
+	// It stands 6 seconds.
+	for (int tick = 0; tick < WaveBellTicks; tick++)
+		ProcessSkillZones(player);
+	EXPECT_FALSE(WaveBellTile().has_value());
+	EXPECT_EQ(WaveBellTicks, 6 * 20);
+	ClearMonsters();
+	ClearSkillZones();
+	player.poe2.combo = 0;
+	leveltype = DTYPE_TOWN;
+}
+
+// Q38: a frozen monster Glacial Spike hits takes double and loses the freeze.
+TEST_F(Poe2TableSkillsTest, GlacialSpikeShattersTheFrozen)
+{
+	Player &player = SetUpFight();
+	player._pMagic = 100;
+	player._pMaxHP = player._pHitPoints = Fixed26_6::fromInt(100);
+	const auto spike = [&](uint32_t seed, bool frozen) {
+		ClearMonsters();
+		ClearSkillZones();
+		Monster &monster = PlaceMonster(0, { 44, 40 });
+		monster.poe2.freezeTicks = frozen ? 60 : 0;
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::GlacialSpike, monster.position.tile);
+		for (int tick = 0; tick < 40 && SkillZoneCount() > 0; tick++)
+			ProcessSkillZones(player);
+		if (frozen)
+			EXPECT_EQ(monster.poe2.freezeTicks, 0);
+		return (monster.maxHitPoints - monster.hitPoints).raw();
+	};
+	const int32_t plain = spike(3, false);
+	const int32_t frozen = spike(3, true);
+	ASSERT_GT(plain, 0);
+	EXPECT_GT(frozen, plain * 3 / 2);
+	EXPECT_EQ(GlacialSpikeFrozenPercent, 200);
+	ClearMonsters();
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+// Q39 (Curtis 2026-11-07): Whirlwind hits each monster along its dash once, like Dashing Strike.
+TEST_F(Poe2TableSkillsTest, WhirlwindHitsEachMonsterOnItsPath)
+{
+	Player &player = SetUpFight();
+	std::array<int, 3> hits {};
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		ClearMonsters();
+		player.position.tile = { 44, 40 };
+		player.poe2.dashStart = Point(40, 40);
+		const std::array<Monster *, 3> monsters {
+			&PlaceMonster(0, { 41, 41 }), // beside the start of the path
+			&PlaceMonster(1, { 45, 41 }), // beside where it stopped
+			&PlaceMonster(2, { 38, 40 }), // behind where it started: out of reach
+		};
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::Whirlwind, { 46, 40 });
+		for (size_t i = 0; i < monsters.size(); i++)
+			hits[i] += monsters[i]->hitPoints < monsters[i]->maxHitPoints ? 1 : 0;
+		EXPECT_EQ(player.poe2.dashStart, Point());
+	}
+	EXPECT_GT(hits[0], 0);
+	EXPECT_GT(hits[1], 0);
+	EXPECT_EQ(hits[2], 0);
+	ClearMonsters();
+	player.poe2.dashStart = {};
+	leveltype = DTYPE_TOWN;
+}
+
+// Q39: Double Throw, Fan of Blades and Blade Fury throw spinning blades from a short flick.
+TEST_F(Poe2TableSkillsTest, ThrownBladesSpin)
+{
+	Player &player = SetUpFight();
+	ClearMonsters();
+	for (const WeaponSkill skill : { WeaponSkill::DoubleThrow, WeaponSkill::FanOfBlades, WeaponSkill::BladeFury }) {
+		EXPECT_TRUE(IsThrowingSkill(skill));
+		Missiles.clear();
+		ExecuteSkillCast(player, skill, { 46, 40 });
+		ASSERT_FALSE(Missiles.empty()) << WeaponSkillName(skill);
+		for (const Missile &missile : Missiles) {
+			if (missile._mitype == MissileID::Arrow)
+				EXPECT_EQ(missile.poe2.look, vfx::SpinningBladeLook) << WeaponSkillName(skill);
+		}
+		player.poe2.volleySkill = WeaponSkill::None;
+		player.poe2.volleyShotsLeft = 0;
+	}
+	EXPECT_FALSE(IsThrowingSkill(WeaponSkill::Multishot));
+	Missiles.clear();
+	ExecuteSkillCast(player, WeaponSkill::Multishot, { 46, 40 });
+	for (const Missile &missile : Missiles)
+		EXPECT_NE(missile.poe2.look, vfx::SpinningBladeLook);
+	Missiles.clear();
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, SpellBaseRollMatchesTheTooltipRange)
+{
+	Player &player = *MyPlayer;
+	player._pMagic = 80;
+	EXPECT_EQ(SpellBaseMin(player, 3), 15);
+	EXPECT_EQ(SpellBaseMax(player, 3), 24);
+	for (uint32_t seed = 1; seed < 50; seed++) {
+		SetRndSeed(seed);
+		const int rolled = RollSpellBase(player, 3);
+		EXPECT_GE(rolled, SpellBaseMin(player, 3));
+		EXPECT_LE(rolled, SpellBaseMax(player, 3));
+		SetRndSeed(seed);
+		EXPECT_EQ(rolled, GenerateRnd(10) + (80 / 8) + 3 + 2) << "same roll as before the helper";
+	}
+}
+
+TEST_F(Poe2TableSkillsTest, EveryTableSkillHasAGem)
+{
+	std::set<WeaponSkill> seen;
+	size_t gems = 0;
+	for (const TableSkillData &data : TableSkills()) {
+		EXPECT_TRUE(seen.insert(data.skill).second) << data.name;
+		EXPECT_EQ(FindTableSkill(data.skill), &data);
+		// A caster weapon's granted skills have no gem (caster-weapons-plan-v2.md 9.1).
+		if (IsGrantedTableSkill(data)) {
+			EXPECT_FALSE(SkillGemItemIndex(SkillSlot::ForAttack(data.skill)).has_value()) << data.name;
+			continue;
+		}
+		gems++;
+		const std::optional<size_t> index = SkillGemItemIndex(SkillSlot::ForAttack(data.skill));
+		ASSERT_TRUE(index.has_value()) << data.name;
+		EXPECT_EQ(AllItemsList[*index].iMinMLvl, data.level) << data.name;
+	}
+	// 55, then Despair (chaos damage plan step 11), Plague Arrow and Hex Rupture, then Bone Spikes, Bone Spear and Blood Nova,
+	// then the poison skills plan's eleven, then the draft gems' Staff batch of twelve (Q48), then the Mace and Axe batch's twenty-one, then the Sword and Shield batch's five, then the Bow batch's nine, then the Dagger batch's nine.
+	EXPECT_EQ(gems, 128U);
+}
+
+TEST_F(Poe2TableSkillsTest, TheTableCoversTheRestOfTheRoster)
+{
+	for (int i = static_cast<int>(WeaponSkill::Whirlwind); i < static_cast<int>(FirstGrantedSkill); i++)
+		EXPECT_NE(FindTableSkill(static_cast<WeaponSkill>(i)), nullptr) << i;
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Cleave), nullptr);
+	// The granted skills come in as they are built; those that are in are granted rows, and only they are.
+	for (int i = static_cast<int>(WeaponSkill::Whirlwind); i <= static_cast<int>(WeaponSkill::Last); i++) {
+		const auto skill = static_cast<WeaponSkill>(i);
+		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr)
+			EXPECT_EQ(IsGrantedTableSkill(*table), IsGrantedSkill(skill)) << table->name;
+	}
+	EXPECT_NE(FindTableSkill(WeaponSkill::FreezingShards), nullptr);
+}
+
+TEST_F(Poe2TableSkillsTest, TableSkillsHaveNamesCostsAndCurves)
+{
+	LoadBaseData();
+	for (const TableSkillData &data : TableSkills()) {
+		EXPECT_EQ(WeaponSkillName(data.skill), data.name);
+		EXPECT_FALSE(WeaponSkillDescription(data.skill).empty()) << data.name;
+		if (IsGrantedTableSkill(data)) {
+			// A granted skill has no gem tier, cost or gemcutting tab, and a base grants it (caster-weapons-plan-v2.md 9.1).
+			EXPECT_EQ(data.level, 0) << data.name;
+			EXPECT_EQ(data.mana, 0) << data.name;
+			EXPECT_EQ(data.tabs, 0) << data.name;
+			EXPECT_EQ(WeaponSkillManaCost(data.skill), 0) << data.name;
+			EXPECT_NE(data.flags & TF_Spell, 0) << data.name;
+			bool granted = false;
+			for (size_t i = 0; i < AllItemsList.size(); i++) {
+				const BaseMeta *base = BaseMetaFor(static_cast<int>(i));
+				granted = granted || (base != nullptr && base->grantedSkill == SkillSlot::ForAttack(data.skill));
+			}
+			EXPECT_TRUE(granted) << data.name;
+		} else {
+			EXPECT_GT(WeaponSkillManaCost(data.skill), 0) << data.name;
+		}
+		EXPECT_EQ(WeaponSkillNeedsWeapon(data.skill), data.weapon != TableWeapon::None) << data.name;
+		if (data.weapon != TableWeapon::None)
+			EXPECT_FALSE(WeaponSkillWeapons(data.skill).empty()) << data.name;
+		// The gem grows with its level, unless it is a flat curse or buff.
+		const SkillSlot slot = SkillSlot::ForAttack(data.skill);
+		EXPECT_GE(GemDamagePercent(slot, 20), GemDamagePercent(slot, 1)) << data.name;
+	}
+}
+
+TEST_F(Poe2TableSkillsTest, EveryTableSkillGoesOffInAnEmptyDungeon)
+{
+	leveltype = DTYPE_CATHEDRAL;
+	for (const TableSkillData &data : TableSkills()) {
+		Missiles.clear();
+		MyPlayer->position.tile = { 40, 40 };
+		MyPlayer->_pdir = Direction::South;
+		MyPlayer->poe2.castSkill = data.skill;
+		ExecuteSkillCast(*MyPlayer, data.skill, { 43, 40 });
+		for (int tick = 0; tick < 400; tick++) {
+			ProcessSkillVolley(*MyPlayer);
+			ProcessSkillZones(*MyPlayer);
+			MyPlayer->poe2.tick();
+		}
+		EXPECT_EQ(SkillZoneCount(), 0U) << data.name;
+		ClearSkillZones();
+	}
+	MyPlayer->poe2.castSkill = WeaponSkill::None;
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, CursesMakeMonstersTakeMoreDamage)
+{
+	Monster monster {};
+	EXPECT_EQ(TableCurseDamageTakenPercent(monster, DamageType::Physical), 0);
+	monster.poe2.deathMarkTicks = 10;
+	EXPECT_GT(TableCurseDamageTakenPercent(monster, DamageType::Physical), 0);
+	monster.poe2.deathMarkTicks = 0;
+	monster.poe2.lowerResistTicks = 10;
+	// Lower Resist lowers resistance rather than adding damage taken.
+	EXPECT_EQ(TableCurseDamageTakenPercent(monster, DamageType::Physical), 0);
+	EXPECT_EQ(TableCurseDamageTakenPercent(monster, DamageType::Fire), 0);
+	ProcessTableCurses(monster);
+	EXPECT_EQ(monster.poe2.lowerResistTicks, 9);
+}
+
+TEST_F(Poe2TableSkillsTest, SoulsAddDamage)
+{
+	EXPECT_EQ(SoulHarvestDamagePercent(*MyPlayer), 0);
+	MyPlayer->poe2.soulStacks = 3;
+	EXPECT_GT(SoulHarvestDamagePercent(*MyPlayer), 0);
+}
+
+TEST_F(Poe2TableSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
+{
+	// Area skills hit each monster for 50-80% of a hit; a delay, crowd control, a leap or damage over time leaves some
+	// outside that band.
+	const std::pair<WeaponSkill, int> Percents[] = {
+		// Q43 (Curtis 2026-11-07): Whirlwind 85 -> 70, Falling Sword 135 -> 90; Q45 Blessed Shield 70 -> 150.
+		{ WeaponSkill::Whirlwind, 70 },
+		{ WeaponSkill::Fissure, 65 },
+		// Tier moves keep each skill's score (Curtis 2026-11-07): Shockwave x1.35, Call of the Ancients x1.20, Falling
+		// Sword x1.35, Lashing Tail Kick x1.45.
+		{ WeaponSkill::Shockwave, 95 },
+		{ WeaponSkill::CallOfTheAncients, 72 },
+		{ WeaponSkill::FallingSword, 90 },
+		{ WeaponSkill::LashingTailKick, 94 },
+		{ WeaponSkill::WaveOfLight, 50 },
+		{ WeaponSkill::CycloneStrike, 50 },
+		{ WeaponSkill::BlessedHammer, 20 },
+		{ WeaponSkill::Condemn, 50 },
+		{ WeaponSkill::BlessedShield, 150 },
+		{ WeaponSkill::FistOfTheHeavens, 110 },
+		// Q30 (Curtis 2026-11-07): Corpse Explosion V to VII (50 -> 60).
+		{ WeaponSkill::CorpseExplosion, 60 },
+		// Curtis 2026-10-28: 35 -> 400, a tier V area spike (audit-casters-v3.md); then 200 with Firebolt (Q27); then
+		// tier III to IX, 350 (Q30); 250 (Q44).
+		{ WeaponSkill::GlacialSpike, 250 },
+		{ WeaponSkill::Blizzard, 21 },
+		// Frozen Orb, Meteor and Thunderstorm moved to tier XI (Q30, Q35): 70, 150 -> 145, 100 -> 136.
+		{ WeaponSkill::FrozenOrb, 70 },
+		{ WeaponSkill::Meteor, 145 },
+		{ WeaponSkill::Thunderstorm, 136 },
+		{ WeaponSkill::SpikeTrap, 75 },
+		{ WeaponSkill::BladeSentinel, 35 },
+		{ WeaponSkill::Sentry, 60 },
+		{ WeaponSkill::SiegeVolley, 75 },
+		{ WeaponSkill::FreezingArrow, 100 },
+		{ WeaponSkill::ExplosiveBolt, 110 },
+		// Each monster on the dash (Curtis 2026-10-28; it was 150% around where it landed).
+		{ WeaponSkill::DashingStrike, 80 },
+	};
+	for (const auto &[skill, percent] : Percents) {
+		const TableSkillData *data = FindTableSkill(skill);
+		ASSERT_NE(data, nullptr);
+		EXPECT_EQ(data->damagePercent, percent) << data->name;
+	}
+	EXPECT_EQ(FindTableSkill(WeaponSkill::BlessedHammer)->radius, 1);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::SpikeTrap)->radius, 1);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::FallingSword)->curveEnd, 340);
+
+	// Pulses: Blessed Hammer 4 x 20 = 80 a monster; Blade Sentinel 5 x 35 = 175 over its 5 seconds.
+	const TableSkillData &hammer = *FindTableSkill(WeaponSkill::BlessedHammer);
+	EXPECT_EQ(hammer.duration / hammer.interval, 4);
+	EXPECT_EQ(hammer.damagePercent * hammer.duration / hammer.interval, 80);
+	const TableSkillData &sentinel = *FindTableSkill(WeaponSkill::BladeSentinel);
+	EXPECT_EQ(sentinel.duration / sentinel.interval, 5);
+	EXPECT_EQ(sentinel.damagePercent * sentinel.duration / sentinel.interval, 175);
+
+	// Landing bursts: a set share of a base hit on top of the arrow; Fire Arrow keeps two thirds of its hit.
+	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::FreezingArrow)), 40);
+	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::ExplosiveBolt)), 45);
+	// Fire Arrow's burst is 45% of its arrow (Curtis 2026-11-07, Q32).
+	EXPECT_EQ(TableLandingBurstPercent(*FindTableSkill(WeaponSkill::ClusterBolt)), 45);
+}
+
+TEST_F(Poe2TableSkillsTest, TableSpellsGrowLikeDiabloSpells)
+{
+	// Every damaging table spell on Fireball's steps ends at 312% at gem level 20, like the Diablo spells.
+	const int fireball = GemCurveDamagePercent(SkillSlot::ForSpell(SpellID::Fireball), 20);
+	EXPECT_EQ(fireball, 312);
+	int spells = 0;
+	for (const TableSkillData &data : TableSkills()) {
+		if ((data.flags & TF_Spell) == 0 || data.curve != TableCurve::Fireball)
+			continue;
+		// The caster weapons' granted skills follow the same curve; the count is of the gems'.
+		if (!IsGrantedTableSkill(data))
+			spells++;
+		EXPECT_EQ(data.curveEnd, 312) << data.name;
+		EXPECT_EQ(GemCurveDamagePercent(SkillSlot::ForAttack(data.skill), 20), fireball) << data.name;
+	}
+	// 12, then Hex Rupture, then Bone Prison, Bone Spikes, Bone Spear and Blood Nova, then Venom Bolt, Poison Explosion,
+	// Poison Nova and Acid Cloud.
+	EXPECT_EQ(spells, 21);
+}
+
+TEST_F(Poe2TableSkillsTest, PulsingZonesHitOncePerInterval)
+{
+	leveltype = DTYPE_CATHEDRAL;
+	Player &player = *MyPlayer;
+	player._pHitPoints = player._pMaxHP = Fixed26_6::fromInt(100);
+	// Each pulse plays the skill's effect, so a tick that adds missiles is a pulse.
+	const auto pulses = [&player](WeaponSkill skill) {
+		Missiles.clear();
+		ClearSkillZones();
+		player.position.tile = { 40, 40 };
+		player._pdir = Direction::South;
+		player.poe2.castSkill = skill;
+		ExecuteSkillCast(player, skill, { 43, 40 });
+		int count = 0;
+		for (int tick = 0; tick < 400 && SkillZoneCount() > 0; tick++) {
+			const size_t before = Missiles.size();
+			ProcessSkillZones(player);
+			if (Missiles.size() > before)
+				count++;
+		}
+		player.poe2.castSkill = WeaponSkill::None;
+		return count;
+	};
+	EXPECT_EQ(pulses(WeaponSkill::BlessedHammer), 4);
+	EXPECT_EQ(pulses(WeaponSkill::BladeSentinel), 5);
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, WarCryOnlyStuns)
+{
+	// Curtis 2026-10-23: War Cry gave Battle Cry's +50% (with no Battle Cry socketed) and shared its timer. Now it stuns only.
+	leveltype = DTYPE_CATHEDRAL;
+	Player &player = *MyPlayer;
+	player.position.tile = { 40, 40 };
+	player._pdir = Direction::South;
+	ExecuteSkillCast(player, WeaponSkill::WarCry, { 41, 40 });
+	EXPECT_EQ(player.poe2.warcryTicks, 0);
+
+	// A Battle Cry already running keeps its own time left.
+	player.poe2.warcryTicks = 37;
+	ExecuteSkillCast(player, WeaponSkill::WarCry, { 41, 40 });
+	EXPECT_EQ(player.poe2.warcryTicks, 37);
+	player.poe2.warcryTicks = 0;
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, FistOfTheHeavensBoltsHitForHalfTheSpellBase)
+{
+	leveltype = DTYPE_CATHEDRAL;
+	Player &player = *MyPlayer;
+	player._pMagic = 80;
+	player.position.tile = { 40, 40 };
+	player._pdir = Direction::South;
+	Missiles.clear();
+	ExecuteSkillCast(player, WeaponSkill::FistOfTheHeavens, { 44, 40 });
+	const int curve = GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::FistOfTheHeavens), player.poe2.skillLevel(WeaponSkill::FistOfTheHeavens));
+	int bolts = 0;
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype != MissileID::ChargedBolt)
+			continue;
+		bolts++;
+		EXPECT_EQ(missile.poe2.damagePercent, curve * BurstBoltDamagePercent / 100);
+		EXPECT_GE(missile._midam, SpellBaseMin(player, 1));
+		EXPECT_LE(missile._midam, SpellBaseMax(player, 1));
+	}
+	EXPECT_EQ(bolts, FindTableSkill(WeaponSkill::FistOfTheHeavens)->count);
+	EXPECT_EQ(BurstBoltDamagePercent, 50);
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, FrostNovaShardsHitForTheSpellBase)
+{
+	// About two shards reach a monster: 2 x 100 = 200% of the spell base (Curtis 2026-10-28: 25 -> 100 a shard).
+	leveltype = DTYPE_CATHEDRAL;
+	Player &player = *MyPlayer;
+	player._pMagic = 80;
+	player.position.tile = { 40, 40 };
+	player._pdir = Direction::South;
+	Missiles.clear();
+	ExecuteSkillCast(player, WeaponSkill::FrostNova, { 44, 40 });
+	const int curve = GemDamagePercent(SkillSlot::ForAttack(WeaponSkill::FrostNova), 1);
+	int shards = 0;
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype != MissileID::BlueFlare)
+			continue;
+		shards++;
+		EXPECT_EQ(missile.poe2.damagePercent, curve * FrostNovaShardDamagePercent / 100);
+	}
+	EXPECT_GT(shards, 0);
+	// 25 -> 100 a shard, then 50 with Firebolt (Curtis 2026-10-28, Q27).
+	EXPECT_EQ(FrostNovaShardDamagePercent, 50);
+	// Its mana 14 -> 10, and Arcing Sparks' 10 -> 6, at gem level 1 (Curtis 2026-10-28); then a third more as spells,
+	// 13 and 8 (Curtis 2026-10-29).
+	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::FrostNova), 1), 13);
+	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Spark), 1), 8);
+	// Haunt: 150 -> 350 over its 5 seconds (Curtis 2026-10-28).
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Haunt)->damagePercent, 350);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Haunt)->duration, 100); // 5 seconds of 20 ticks
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, GlacialSpikeLeadsAWalkingMonster)
+{
+	// Curtis 2026-10-28: the spike came up behind moving enemies. It erupts where the monster will be.
+	Monster monster {};
+	monster.mode = MonsterMode::MoveSideways;
+	monster.position.tile = { 10, 10 };
+	monster.position.future = { 11, 10 };
+	monster.var1 = 1;
+	monster.var2 = 0;
+	monster.animInfo.numberOfFrames = 8;
+	monster.animInfo.ticksPerFrame = 1;
+	monster.animInfo.currentFrame = 2;
+	monster.animInfo.tickCounterOfCurrentFrame = 0;
+	// 6 ticks are left of this step, then 8 a tile.
+	EXPECT_EQ(PredictMonsterTile(monster, 0), Point(10, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 5), Point(10, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 6), Point(11, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 13), Point(11, 10));
+	EXPECT_EQ(PredictMonsterTile(monster, 14), Point(12, 10));
+	// A very fast monster outruns the lead.
+	EXPECT_EQ(PredictMonsterTile(monster, 200), Point(10 + MaxPredictedSteps, 10));
+	// One standing still is hit where it stands.
+	monster.mode = MonsterMode::Stand;
+	EXPECT_EQ(PredictMonsterTile(monster, 14), Point(10, 10));
+	// Glacial Spike's delay is short; the lead covers it.
+	EXPECT_LT(FindTableSkill(WeaponSkill::GlacialSpike)->delay, 8);
+}
+
+/** @brief The visual effects with this look that are waiting or playing. */
+int VisualEffectsShowing(MissileGraphicID look)
+{
+	int count = 0;
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype == MissileID::VisualEffect && static_cast<MissileGraphicID>(missile._mispllvl & 0xFF) == look)
+			count++;
+	}
+	return count;
+}
+
+TEST_F(Poe2TableSkillsTest, HauntIsASpiritThatJumps)
+{
+	// Curtis 2026-10-28: "is it a bleed skill, or a ghost that finds a monster then jumps?"
+	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::Haunt), "A spirit drains the enemy with chaos over time. When it dies, the spirit jumps to the nearest enemy.");
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Haunt)->effect, MissileGraphicID::BoneSpirit);
+
+	leveltype = DTYPE_CATHEDRAL;
+	LoadMonsterData();
+	LevelMonsterTypes[0].type = MT_NZOMBIE;
+	ActiveMonsterCount = 2;
+	for (size_t i = 0; i < 2; i++) {
+		Monster &monster = Monsters[i];
+		monster = {};
+		monster.levelType = 0;
+		monster.uniqueType = UniqueMonsterType::None;
+		monster.maxHitPoints = monster.hitPoints = Fixed26_6::fromInt(100);
+		monster.position.tile = { static_cast<WorldTileCoord>(40 + (3 * i)), 40 };
+		monster.talkMsg = TEXT_NONE;
+		ActiveMonsters[i] = static_cast<unsigned>(i);
+	}
+	Monster &haunted = Monsters[0];
+	haunted.poe2.hauntTicks = 100;
+	haunted.poe2.chaosTicks = 11;
+	haunted.poe2.chaosSource = -1;
+	// The spirit shows on the monster it drains, not a wound.
+	ProcessUniqueMonsterAilments(haunted);
+	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BoneSpirit), 1);
+	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::RedFlareExplosion), 0);
+
+	// When it dies, the spirit leaves it and shows up on the next one.
+	Missiles.clear();
+	haunted.poe2.chaosSource = 0;
+	haunted.poe2.chaosSkill = WeaponSkill::Haunt;
+	OnTableCursedMonsterKilled(haunted);
+	EXPECT_EQ(Monsters[1].poe2.hauntTicks, 100);
+	EXPECT_EQ(Monsters[1].poe2.chaosSkill, WeaponSkill::Haunt);
+	EXPECT_EQ(Monsters[1].poe2.bleedTicks, 0);
+	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BoneSpirit), 2);
+	EXPECT_EQ(VisualEffectsShowing(MissileGraphicID::BloodStarRedExplosion), 0);
+	ActiveMonsterCount = 0;
+}
+
+TEST_F(Poe2TableSkillsTest, CycloneStrikePullsWhatItHitsIn)
+{
+	// Curtis 2026-10-28, "Cyclone pulls": it was a copy of Wave of Light (radius 3 around the hero).
+	Player &player = SetUpFight();
+	const auto place = PlaceMonster;
+	const auto clearTiles = ClearMonsters;
+	const auto cast = [&](WeaponSkill skill, uint32_t seed, bool &farWasHit) {
+		clearTiles();
+		Monster &far = place(0, { 43, 40 });
+		Monster &beside = place(1, { 41, 41 });
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, skill, { 43, 40 });
+		farWasHit = far.hitPoints < far.maxHitPoints;
+		// One beside the hero stays where it is.
+		EXPECT_EQ(beside.position.tile, Point(41, 41));
+		return Point(far.position.tile);
+	};
+	int pulled = 0;
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		bool hit = false;
+		const Point after = cast(WeaponSkill::CycloneStrike, seed, hit);
+		// A monster it hits comes a step in; one it misses stays.
+		EXPECT_EQ(after, hit ? Point(42, 40) : Point(43, 40)) << seed;
+		if (hit)
+			pulled++;
+	}
+	EXPECT_GT(pulled, 0);
+	// Wave of Light only hits.
+	for (uint32_t seed = 1; seed <= 3; seed++) {
+		bool hit = false;
+		EXPECT_EQ(cast(WeaponSkill::WaveOfLight, seed, hit), Point(43, 40)) << seed;
+	}
+	clearTiles();
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, DashingStrikeHitsEachMonsterOnItsPathOnce)
+{
+	// Curtis 2026-10-28: 150% around where it landed, now 80% to each monster along the dash.
+	Player &player = SetUpFight();
+	const TableSkillData &dash = *FindTableSkill(WeaponSkill::DashingStrike);
+	EXPECT_EQ(dash.damagePercent, 80);
+	ASSERT_EQ(dash.radius, 1);
+	const auto strike = [&](bool dashed, uint32_t seed, std::array<bool, 4> &hit) {
+		ClearMonsters();
+		// The hero dashed from (40, 40) east to (44, 40).
+		player.position.tile = { 44, 40 };
+		player.poe2.dashStart = dashed ? Point(40, 40) : Point();
+		const std::array<Monster *, 4> monsters {
+			&PlaceMonster(0, { 41, 41 }), // beside the start of the path
+			&PlaceMonster(1, { 42, 39 }), // beside its middle, and beside three of its tiles
+			&PlaceMonster(2, { 45, 41 }), // beside where it landed
+			&PlaceMonster(3, { 38, 40 }), // behind where it started: out of reach
+		};
+		const std::array<Fixed26_6, 4> before { monsters[0]->hitPoints, monsters[1]->hitPoints, monsters[2]->hitPoints, monsters[3]->hitPoints };
+		SetRndSeed(seed);
+		ExecuteSkillCast(player, WeaponSkill::DashingStrike, { 46, 40 });
+		for (size_t i = 0; i < monsters.size(); i++)
+			hit[i] = monsters[i]->hitPoints < before[i];
+		// The start is used once.
+		EXPECT_EQ(player.poe2.dashStart, Point());
+	};
+	std::array<int, 4> hits {};
+	for (uint32_t seed = 1; seed <= 10; seed++) {
+		std::array<bool, 4> hit {};
+		strike(true, seed, hit);
+		for (size_t i = 0; i < hit.size(); i++)
+			hits[i] += hit[i] ? 1 : 0;
+		// Without a dash, only around where the hero stands.
+		strike(false, seed, hit);
+		EXPECT_FALSE(hit[0]) << seed;
+		EXPECT_FALSE(hit[1]) << seed;
+		EXPECT_FALSE(hit[3]) << seed;
+	}
+	EXPECT_GT(hits[0], 0);
+	EXPECT_GT(hits[1], 0);
+	EXPECT_GT(hits[2], 0);
+	EXPECT_EQ(hits[3], 0);
+	ClearMonsters();
+	ClearSkillZones();
+	player.poe2.dashStart = {};
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, StackingZonesAreOneCastAtATime)
+{
+	// Curtis 2026-10-28: Thunderstorm stacked to 11 at once. Thunderstorm, Blessed Hammer and Blizzard are one cast at a
+	// time and a recast replaces it; traps and sentries keep their 3.
+	leveltype = DTYPE_CATHEDRAL;
+	Player &player = *MyPlayer;
+	player._pMagic = 80;
+	player.position.tile = { 40, 40 };
+	player._pdir = Direction::South;
+	for (const WeaponSkill skill : { WeaponSkill::Thunderstorm, WeaponSkill::BlessedHammer, WeaponSkill::Blizzard }) {
+		ClearSkillZones();
+		for (int cast = 0; cast < 4; cast++)
+			ExecuteSkillCast(player, skill, { 43, 40 });
+		EXPECT_EQ(SkillZoneCount(), 1U) << FindTableSkill(skill)->name;
+	}
+	ClearSkillZones();
+	for (int cast = 0; cast < 5; cast++)
+		ExecuteSkillCast(player, WeaponSkill::SpikeTrap, { 43, 40 });
+	EXPECT_EQ(SkillZoneCount(), 3U);
+	ClearSkillZones();
+	leveltype = DTYPE_TOWN;
+}
+
+/** @brief Open floor around the hero at 40,40, with no objects or missiles on it. */
+void ClearFloor()
+{
+	SOLData[0] = TileProperties::None;
+	SOLData[1] = TileProperties::None;
+	for (int x = 30; x < 60; x++) {
+		for (int y = 30; y < 60; y++) {
+			dPiece[x][y] = 0;
+			dObject[x][y] = 0;
+			dFlags[x][y] = {};
+		}
+	}
+}
+
+/** @brief Lays one of the hero's runes aimed at the target, as a cast does: the rune, or nullptr if none went down. */
+Missile *LayRune(Player &player, MissileID rune, Point target)
+{
+	Missile *missile = AddMissile(player.position.tile, target, GetDirection(player.position.tile, target), rune, TARGET_MONSTERS, player, 0, 1);
+	return missile != nullptr && !missile->_miDelFlag ? missile : nullptr;
+}
+
+int LiveRunes(MissileID rune)
+{
+	return static_cast<int>(std::count_if(Missiles.begin(), Missiles.end(), [rune](const Missile &missile) { return missile._mitype == rune && !missile._miDelFlag; }));
+}
+
+TEST_F(Poe2TableSkillsTest, TrapsAndRunesAreThreeAtATimeAndEndlessHordeAddsTwo)
+{
+	// Curtis 2026-10-29: he spammed runes and killed the Butcher in 9 seconds. Three of each trap or rune at once, the
+	// fourth takes away the oldest, as in POE2; Endless Horde makes it five.
+	EXPECT_EQ(MaxPlacedTraps, 3);
+	EXPECT_EQ(LegionExtraTraps, 2);
+	leveltype = DTYPE_CATHEDRAL;
+	ClearFloor();
+	Player &player = *MyPlayer;
+	player._pMagic = 80;
+	player.position.tile = { 40, 40 };
+	player._pdir = Direction::East;
+
+	// Spike Trap, a table skill's trap.
+	ClearSkillZones();
+	for (int cast = 0; cast < 5; cast++)
+		ExecuteSkillCast(player, WeaponSkill::SpikeTrap, { 43, 36 + (2 * cast) });
+	ASSERT_EQ(SkillZoneCount(), 3U);
+	// The two oldest went: the ones left are the last three, oldest first.
+	EXPECT_EQ(SkillZoneCenter(0), std::optional<Point>(Point { 43, 40 }));
+	EXPECT_EQ(SkillZoneCenter(2), std::optional<Point>(Point { 43, 44 }));
+	player.poe2.skillSlots[0] = SkillSlot::ForAttack(WeaponSkill::SpikeTrap);
+	player.poe2.slotSupports[0][0] = SupportGem::Legion;
+	EXPECT_EQ(SupportTrapLimit(player, SkillSlot::ForAttack(WeaponSkill::SpikeTrap)), 5);
+	for (int cast = 0; cast < 7; cast++)
+		ExecuteSkillCast(player, WeaponSkill::SpikeTrap, { 44, 36 + cast });
+	EXPECT_EQ(SkillZoneCount(), 5U);
+	ClearSkillZones();
+	player.poe2.skillSlots[0] = {};
+	player.poe2.slotSupports[0] = {};
+
+	// Rune of Fire, the Sorcerer's rune: the fourth takes away the first.
+	Missiles.clear();
+	Missile *first = LayRune(player, MissileID::RuneOfFire, { 43, 37 });
+	ASSERT_NE(first, nullptr);
+	for (int y = 39; y <= 43; y += 2)
+		ASSERT_NE(LayRune(player, MissileID::RuneOfFire, { 43, y }), nullptr);
+	EXPECT_EQ(LiveRunes(MissileID::RuneOfFire), 3);
+	EXPECT_TRUE(first->_miDelFlag) << "the oldest rune goes";
+	// Each kind of rune counts on its own.
+	ASSERT_NE(LayRune(player, MissileID::RuneOfLight, { 45, 40 }), nullptr);
+	EXPECT_EQ(LiveRunes(MissileID::RuneOfFire), 3);
+	EXPECT_EQ(LiveRunes(MissileID::RuneOfLight), 1);
+	// Endless Horde on the rune's gem: five.
+	player.poe2.skillSlots[0] = SkillSlot::ForSpell(SpellID::RuneOfFire);
+	player.poe2.slotSupports[0][0] = SupportGem::Legion;
+	for (int y = 36; y <= 44; y += 2)
+		ASSERT_NE(LayRune(player, MissileID::RuneOfFire, { 46, y }), nullptr);
+	EXPECT_EQ(LiveRunes(MissileID::RuneOfFire), 5);
+	player.poe2.skillSlots[0] = {};
+	player.poe2.slotSupports[0] = {};
+
+	// Outside POE2 mode runes have no limit.
+	gbIsPoe2 = false;
+	Missiles.clear();
+	for (int y = 36; y <= 44; y += 2)
+		ASSERT_NE(LayRune(player, MissileID::RuneOfFire, { 43, y }), nullptr);
+	EXPECT_EQ(LiveRunes(MissileID::RuneOfFire), 5);
+	gbIsPoe2 = true;
+	Missiles.clear();
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, RunesAndTrapsGoOnlyWhereTheHeroCanSee)
+{
+	// Curtis 2026-10-29: he laid runes "inside the Butcher's room", behind its closed door. A rune or trap aimed past a
+	// wall or a closed door lands on the last tile in sight on the way, as a projectile stops at the wall.
+	leveltype = DTYPE_CATHEDRAL;
+	ClearFloor();
+	SOLData[1] = TileProperties::Solid | TileProperties::BlockLight | TileProperties::BlockMissile;
+	// A wall down x = 44 with a closed door in it at 44,40.
+	for (int y = 30; y < 60; y++)
+		dPiece[44][y] = 1;
+	dPiece[44][40] = 0;
+	Object &door = Objects[0];
+	door = {};
+	door._otype = OBJ_L1LDOOR;
+	door.position = { 44, 40 };
+	door._oSolidFlag = true;
+	door._oMissFlag = false;
+	dObject[44][40] = 1;
+	const Point hero { 40, 40 };
+	ASSERT_TRUE(IsMissileBlockedByTile({ 44, 40 }));
+
+	// Through the closed door: the tile before it. Past the wall: the last tile before it on the line.
+	EXPECT_EQ(LastTileInSight(hero, { 47, 40 }), Point(43, 40));
+	EXPECT_EQ(LastTileInSight(hero, { 47, 42 }), Point(43, 41));
+	// In sight: the target itself.
+	EXPECT_EQ(LastTileInSight(hero, { 42, 38 }), Point(42, 38));
+	EXPECT_EQ(LastTileInSight(hero, hero), hero);
+	// The door open, the room is in sight.
+	door._oMissFlag = true;
+	EXPECT_EQ(LastTileInSight(hero, { 47, 40 }), Point(47, 40));
+	door._oMissFlag = false;
+
+	Player &player = *MyPlayer;
+	player._pMagic = 80;
+	player.position.tile = hero;
+	player._pdir = Direction::East;
+
+	// A rune aimed into the room goes down in front of the door, in sight.
+	Missiles.clear();
+	Missile *rune = LayRune(player, MissileID::RuneOfFire, { 47, 40 });
+	ASSERT_NE(rune, nullptr);
+	EXPECT_EQ(rune->position.tile, Point(43, 40));
+	EXPECT_TRUE(LineClearMovingMissile(hero, rune->position.tile));
+	// One aimed past the wall stays on the hero's side of it.
+	rune = LayRune(player, MissileID::RuneOfNova, { 50, 44 });
+	ASSERT_NE(rune, nullptr);
+	EXPECT_LT(rune->position.tile.x, 44);
+	EXPECT_TRUE(LineClearMovingMissile(hero, rune->position.tile));
+	// With the door open, the room.
+	door._oMissFlag = true;
+	rune = LayRune(player, MissileID::RuneOfLight, { 47, 40 });
+	ASSERT_NE(rune, nullptr);
+	EXPECT_EQ(rune->position.tile, Point(47, 40));
+	door._oMissFlag = false;
+
+	// Spike Trap, the same.
+	ClearSkillZones();
+	ExecuteSkillCast(player, WeaponSkill::SpikeTrap, { 47, 40 });
+	EXPECT_EQ(SkillZoneCenter(0), std::optional<Point>(Point { 43, 40 }));
+	ClearSkillZones();
+
+	// Diablo's runes are as they were: its line check passes doors.
+	gbIsPoe2 = false;
+	Missiles.clear();
+	rune = LayRune(player, MissileID::RuneOfFire, { 47, 40 });
+	ASSERT_NE(rune, nullptr);
+	EXPECT_EQ(rune->position.tile, Point(47, 40));
+	gbIsPoe2 = true;
+
+	Missiles.clear();
+	door = {};
+	ClearFloor();
+	leveltype = DTYPE_TOWN;
+}
+
+TEST_F(Poe2TableSkillsTest, EverySkillHasACastAndASpellSound)
+{
+	// Curtis 2026-10-29: Freezing Shards, Lightning Bolt, Withering Bolt and Mana Drain made no sound, cast or spell.
+	// Every row is heard as it is cast and as it goes off, and a spell's bolts as they land.
+	for (const TableSkillData &data : TableSkills()) {
+		const SkillSounds sounds = TableSkillSounds(data);
+		EXPECT_FALSE(sounds.cast.empty()) << data.name << " has no cast sound";
+		EXPECT_FALSE(sounds.spell.empty()) << data.name << " has no spell sound";
+		if ((data.flags & TF_Spell) != 0 && (data.shape == TableShape::Projectiles || data.shape == TableShape::Stream)) {
+			EXPECT_FALSE(sounds.hit.empty()) << data.name << "'s bolts land without a sound";
+		}
+	}
+	const auto soundsOf = [](WeaponSkill skill) { return TableSkillSounds(*FindTableSkill(skill)); };
+	// The ones Curtis named, each by its element.
+	EXPECT_EQ(soundsOf(WeaponSkill::FreezingShards).cast.sfx, SfxID::CastSkill);
+	EXPECT_EQ(soundsOf(WeaponSkill::FreezingShards).spell.sfx, SfxID::SpellHolyBolt);
+	EXPECT_EQ(soundsOf(WeaponSkill::FreezingShards).hit.mod, "sfx\\poe2\\blizzard_shard1.wav");
+	EXPECT_EQ(soundsOf(WeaponSkill::LightningBolt).cast.sfx, SfxID::CastLightning);
+	EXPECT_EQ(soundsOf(WeaponSkill::LightningBolt).spell.sfx, SfxID::SpellLightning);
+	EXPECT_EQ(soundsOf(WeaponSkill::WitheringBolt).cast.sfx, SfxID::CastSkill);
+	EXPECT_EQ(soundsOf(WeaponSkill::WitheringBolt).spell.sfx, SfxID::SpellBloodStar);
+	EXPECT_EQ(soundsOf(WeaponSkill::WitheringBolt).hit.sfx, SfxID::SpellBloodStarHit);
+	EXPECT_EQ(soundsOf(WeaponSkill::ManaDrain).cast.sfx, SfxID::CastSkill);
+	EXPECT_EQ(soundsOf(WeaponSkill::ManaDrain).hit.sfx, SfxID::SpellEnd);
+	// An attack is heard as it swings or shoots; Blizzard keeps its own sounds.
+	EXPECT_EQ(soundsOf(WeaponSkill::Multishot).cast.sfx, SfxID::ShootBow2);
+	EXPECT_EQ(soundsOf(WeaponSkill::Sacrifice).cast.sfx, SfxID::Swing);
+	EXPECT_EQ(soundsOf(WeaponSkill::Blizzard).spell.mod, "sfx\\poe2\\blizzard_cast.wav");
+	// Rogue run 2: Plague Arrow's burst spits like the acid beasts (their Acid missile's sound).
+	EXPECT_EQ(soundsOf(WeaponSkill::PlagueArrow).hit.sfx, SfxID::SpellAcid);
+	EXPECT_EQ(soundsOf(WeaponSkill::PlagueArrow).hit.sfx, GetMissileData(MissileID::Acid).castSound);
+}
+
+TEST_F(Poe2TableSkillsTest, OnlyLightningSkillsFlashInFrontOfTheHero)
+{
+	// Rogue run 2: physical skills flashed a blue Charged Bolt spark (Plague Arrow looked like lightning), fire skills a
+	// burst of flame at the hero's feet (Fire Arrow).
+	for (const TableSkillData &data : TableSkills()) {
+		const std::optional<MissileGraphicID> flash = TableSkillCastFlash(data);
+		EXPECT_EQ(flash.has_value(), data.type == DamageType::Lightning) << data.name;
+		if (flash) {
+			EXPECT_EQ(*flash, MissileGraphicID::Lightning) << data.name;
+		}
+	}
+	for (const WeaponSkill skill : { WeaponSkill::ClusterBolt, WeaponSkill::PlagueArrow, WeaponSkill::Multishot }) {
+		const TableSkillData *data = FindTableSkill(skill);
+		ASSERT_NE(data, nullptr);
+		EXPECT_FALSE(TableSkillCastFlash(*data).has_value()) << data->name;
+	}
+	// Fire Arrow bursts into a small flame where it lands instead; Explosive and Freezing Arrow keep their explosions.
+	EXPECT_TRUE(TableLandingBurstIsSmall(*FindTableSkill(WeaponSkill::ClusterBolt)));
+	EXPECT_FALSE(TableLandingBurstIsSmall(*FindTableSkill(WeaponSkill::ExplosiveBolt)));
+	EXPECT_FALSE(TableLandingBurstIsSmall(*FindTableSkill(WeaponSkill::FreezingArrow)));
+	EXPECT_FALSE(TableLandingBurstIsSmall(*FindTableSkill(WeaponSkill::PlagueArrow)));
+	EXPECT_LT(SmallLandingBurstSize, 0.6F);
+}
+
+} // namespace
+} // namespace devilution

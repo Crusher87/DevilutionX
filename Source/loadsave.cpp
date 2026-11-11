@@ -5,6 +5,7 @@
  */
 #include "loadsave.h"
 
+#include <algorithm>
 #include <climits>
 #include <cstddef>
 #include <cstdint>
@@ -12,6 +13,7 @@
 #include <expected>
 #include <numeric>
 #include <string>
+#include <vector>
 
 #include <ankerl/unordered_dense.h>
 
@@ -33,8 +35,30 @@
 #include "monster.h"
 #include "monsters/validation.hpp"
 #include "mpq/mpq_common.hpp"
+#include "panels/passive_tree_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/bases.hpp"
+#include "poe2/charms.hpp"
+#include "poe2/craft_state.hpp"
+#include "poe2/crafting_items.hpp"
+#include "poe2/economy.hpp"
+#include "poe2/flasks.hpp"
+#include "poe2/floors.hpp"
+#include "poe2/meta_gems.hpp"
+#include "poe2/minion_gems.hpp"
+#include "poe2/minion_travel.hpp"
+#include "poe2/monster_levels.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/shrines.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/spirit.hpp"
+#include "poe2/stash_tabs.hpp"
+#include "poe2/summon_commands.hpp"
+#include "poe2/support_gems.hpp"
+#include "poe2/support_tiers.hpp"
+#include "poe2/waystones.hpp"
+#include "poe2/weapon_swap.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/playerdat.hpp"
@@ -268,36 +292,53 @@ struct LevelConversionData {
 
 [[nodiscard]] bool LoadItemData(LoadHelper &file, Item &item)
 {
+	// A blank item first. The save doesn't hold an item's POE2 modifiers and stats, rare powers, tiers or life and mana
+	// regeneration; RestoreRareItemPowers rebuilds them from the seed, but not on a normal item without a POE2 base or
+	// crafting. Such an item (an Orb of Alchemy) kept those of whatever the Item held before: the previous item of the
+	// bag in LoadMatchingItems, the item at its place in the bag before an in-game load, or an old floor item in Items[].
+	item = {};
+	// POE2 Mashup: crafting state lives in the alignment bytes, which older saves leave at zero.
+	std::array<uint8_t, CraftStateSaveSize> craftBytes {};
+	size_t craftRead = 0;
+	const auto readCraft = [&](size_t size) {
+		file.NextBytes(&craftBytes[craftRead], size);
+		craftRead += size;
+	};
 	item._iSeed = file.NextLE<uint32_t>();
 	item._iCreateInfo = file.NextLE<uint16_t>();
-	file.Skip(2); // Alignment
+	readCraft(2); // Alignment
 	item._itype = static_cast<ItemType>(file.NextLE<uint32_t>());
 	item.position.x = file.NextLE<int32_t>();
 	item.position.y = file.NextLE<int32_t>();
 	item._iAnimFlag = file.NextBool32();
-	file.Skip(4); // Skip pointer _iAnimData
+	readCraft(4); // Skip pointer _iAnimData
 	item.AnimInfo = {};
 	item.AnimInfo.numberOfFrames = file.NextLENarrow<int32_t, int8_t>();
 	item.AnimInfo.currentFrame = file.NextLENarrow<int32_t, int8_t>(-1);
-	file.Skip(8); // Skip _iAnimWidth and _iAnimWidth2
-	file.Skip(4); // Unused since 1.02
+	// _iAnimWidth and _iAnimWidth2, or a POE2 item's crafting extension.
+	std::array<uint8_t, CraftExtensionSaveSize> extensionBytes {};
+	file.NextBytes(extensionBytes.data(), extensionBytes.size());
+	readCraft(4); // Unused since 1.02
 	item.selectionRegion = static_cast<SelectionRegion>(file.NextLE<uint8_t>());
-	file.Skip(3); // Alignment
+	readCraft(3); // Alignment
 	item._iPostDraw = file.NextBool32();
 	item._iIdentified = file.NextBool32();
 	item._iMagical = static_cast<item_quality>(file.NextLE<int8_t>());
+	// POE2 Mashup: normal items have nothing to identify.
+	if (gbIsPoe2 && item._iMagical == ITEM_QUALITY_NORMAL)
+		item._iIdentified = true;
 	file.NextBytes(item._iName, ItemNameLength);
 	TerminateUtf8(item._iName, ItemNameLength);
 	file.NextBytes(item._iIName, ItemNameLength);
 	TerminateUtf8(item._iIName, ItemNameLength);
 	item._iLoc = static_cast<item_equip_type>(file.NextLE<int8_t>());
 	item._iClass = static_cast<item_class>(file.NextLE<uint8_t>());
-	file.Skip(1); // Alignment
+	readCraft(1); // Alignment
 	item._iCurs = file.NextLE<int32_t>();
 	item._ivalue = file.NextLE<int32_t>();
 	item._iIvalue = file.NextLE<int32_t>();
-	item._iMinDam = file.NextLE<int32_t>();
-	item._iMaxDam = file.NextLE<int32_t>();
+	item._iMinDam = static_cast<uint16_t>(std::clamp<int32_t>(file.NextLE<int32_t>(), 0, UINT16_MAX));
+	item._iMaxDam = static_cast<uint16_t>(std::clamp<int32_t>(file.NextLE<int32_t>(), 0, UINT16_MAX));
 	item._iAC = file.NextLE<int32_t>();
 	item._iFlags = static_cast<ItemSpecialEffect>(file.NextLE<uint32_t>());
 	item._iMiscId = static_cast<item_misc_id>(file.NextLE<int32_t>());
@@ -323,7 +364,7 @@ struct LevelConversionData {
 	item._iPLLight = file.NextLE<int32_t>();
 	item._iSplLvlAdd = file.NextLE<int8_t>();
 	item._iRequest = file.NextBool8();
-	file.Skip(2); // Alignment
+	readCraft(2); // Alignment
 
 	const auto uniqueMappingId = file.NextLE<int32_t>();
 	if (item._iMagical == ITEM_QUALITY_UNIQUE) {
@@ -345,15 +386,15 @@ struct LevelConversionData {
 	item._iPLEnAc = file.NextLE<int32_t>();
 	item._iPrePower = static_cast<item_effect_type>(file.NextLE<int8_t>());
 	item._iSufPower = static_cast<item_effect_type>(file.NextLE<int8_t>());
-	file.Skip(2); // Alignment
+	readCraft(2); // Alignment
 	item._iVAdd1 = file.NextLE<int32_t>();
 	item._iVMult1 = file.NextLE<int32_t>();
 	item._iVAdd2 = file.NextLE<int32_t>();
 	item._iVMult2 = file.NextLE<int32_t>();
-	item._iMinStr = file.NextLE<int8_t>();
+	item._iMinStr = file.NextLE<uint8_t>();
 	item._iMinMag = file.NextLE<uint8_t>();
-	item._iMinDex = file.NextLE<int8_t>();
-	file.Skip(1); // Alignment
+	item._iMinDex = file.NextLE<uint8_t>();
+	readCraft(1); // Alignment
 	item._iStatFlag = file.NextBool32();
 
 	auto itemMappingId = file.NextLE<int32_t>();
@@ -376,6 +417,24 @@ struct LevelConversionData {
 	else
 		item._iDamAcFlags = ItemSpecialEffectHf::None;
 	UpdateHellfireFlag(item, item._iIName);
+	item._iPoe2Craft = (item.dwBuff & CF_POE2) != 0 ? UnpackCraftState(craftBytes) : Poe2Craft {};
+	if ((item.dwBuff & CF_POE2) != 0)
+		UnpackCraftExtension(extensionBytes, item._iPoe2Craft);
+	// POE2 Mashup: an item saved before the runes rework gets today's augment and essence ids.
+	const Poe2Craft savedCraft = item._iPoe2Craft;
+	if (gbIsPoe2)
+		ConvertLegacyCraftingIds(item);
+	RestoreRareItemPowers(item);
+	// And one saved before the runes took their own numbers (build spec step 5) gets what its augments do now.
+	if (gbIsPoe2 && (item.dwBuff & CF_POE2) != 0 && SavedBeforeRuneNumbers(craftBytes))
+		MigrateRuneNumbers(item, savedCraft);
+	// And one saved after that but before the soulstones and relics took theirs (step 6) gets what they do now.
+	else if (gbIsPoe2 && (item.dwBuff & CF_POE2) != 0 && SavedBeforeSoulstoneNumbers(craftBytes))
+		MigrateRuneNumbers(item, savedCraft, /*soulstonesOnly=*/true);
+	// POE2 Mashup: a caster weapon of the rework keeps the modifiers it rolled, written out, from now on.
+	LockCasterWeaponMods(item);
+	FinishFlask(item);
+	ClearStarterBaseRequirements(item);
 
 	return true;
 }
@@ -389,6 +448,13 @@ void LoadAndValidateItemData(LoadHelper &file, Item &item)
 	}
 
 	RemoveInvalidItem(item);
+	// POE2 Mashup: an item that now takes one cell gets the one-cell copy of the picture it was saved with, and a
+	// charm saved with an older picture gets its one-cell one (the Stone Charm was the 2x2 Magic Rock until 10-17).
+	if (gbIsPoe2 && !item.isEmpty() && item.IDidx >= 0 && static_cast<size_t>(item.IDidx) < AllItemsList.size()) {
+		const item_cursor_graphic cursor = AllItemsList[item.IDidx].iCurs;
+		if (cursor != item._iCurs && (FullSizeItemCursor(cursor) == item._iCurs || IsCharm(item)))
+			item._iCurs = cursor;
+	}
 }
 
 void LoadPlayer(LoadHelper &file, Player &player)
@@ -584,6 +650,8 @@ void LoadPlayer(LoadHelper &file, Player &player)
 
 	for (int8_t &cell : player.InvGrid)
 		cell = file.NextLE<int8_t>();
+	if (gbIsPoe2)
+		FitOneCellItems(player);
 
 	for (Item &item : player.SpdList)
 		LoadAndValidateItemData(file, item);
@@ -670,7 +738,8 @@ bool gbSkipSync = false;
 	monster.goalVar1 = file->NextLENarrow<int32_t, int16_t>();
 	monster.goalVar2 = file->NextLENarrow<int32_t, int8_t>();
 	monster.goalVar3 = file->NextLENarrow<int32_t, int8_t>();
-	file->Skip(4); // Unused
+	// POE2 Mashup: Leoric's Road's King's dead kept their time left in this spare slot until 2026-10-30; now unused.
+	file->Skip<int32_t>();
 	monster.pathCount = file->NextLE<uint8_t>();
 	file->Skip(3); // Alignment
 	monster.position.tile.x = file->NextLE<int32_t>();
@@ -769,6 +838,13 @@ bool gbSkipSync = false;
 	if (monster.mode == MonsterMode::Petrified)
 		monster.animInfo.isPetrified = true;
 
+	// POE2 Mashup: the level's monster types are rebuilt by the running build, so a saved type index can point past them
+	// (a type with no pictures, or past the table). Such a monster is dropped instead of crashing when it's drawn.
+	if (monster.levelType >= LevelMonsterTypeCount) {
+		LogWarn("Monster type {} is not on this level any more, skipping it.", monster.levelType);
+		return false;
+	}
+
 	if (monster.isUnique()) {
 		// check if the unique monster is still valid (it could no longer be valid e.g. because the loaded mods changed and the unique monsters changed as a consequence)
 		const bool valid = IsMonsterValid(monster);
@@ -792,18 +868,34 @@ void LoadMonsters(LoadHelper &file, ankerl::unordered_dense::set<unsigned> &remo
 		if (levelConversionData != nullptr)
 			monsterConversionData = &levelConversionData->monsterConversionData[ActiveMonsters[i]];
 		const bool valid = LoadMonster(&file, monster, monsterConversionData);
-		if (!valid) {
-			Monsters[ActiveMonsters[i]] = {};
-			removedMonsterIds.insert(ActiveMonsters[i]);
+		// Ailments don't carry over from whatever used this slot before.
+		monster.poe2 = {};
+		// POE2 Mashup: Leoric's Road is retired (2026-10-30). One of its King's dead saved alive leaves quietly, and a
+		// monster that rose hostile stays as an ordinary one.
+		const bool kingsDead = (monster.flags & MFLAG_KINGS_DEAD) != 0;
+		monster.flags &= ~MFLAG_RISEN;
+		if (!valid || kingsDead) {
+			const unsigned removedId = ActiveMonsters[i];
+			Monsters[removedId] = {};
+			removedMonsterIds.insert(removedId);
 			for (size_t j = i + 1; j < ActiveMonsterCount; j++) {
 				ActiveMonsters[j - 1] = ActiveMonsters[j];
 			}
 			--ActiveMonsterCount;
+			// Its slot goes back among the free ones.
+			ActiveMonsters[ActiveMonsterCount] = removedId;
 			continue;
 		}
 
 		if (applyLight && monster.isUnique() && monster.lightId != NO_LIGHT)
 			Lights[monster.lightId].isInvalid = false;
+		// POE2 Mashup: a hero's minion that is no golem or gem minion was raised by Revive, so it still counts as Revive's
+		// and goes along with the hero (Curtis 2026-10-29).
+		if (gbIsPoe2 && monster.isPlayerMinion() && monster.type().type != MT_GOLEM && !IsMinionGemType(monster.type().type))
+			monster.poe2.revived = true;
+		// POE2 Mashup: a monster saved before the monster level tables (or on a kept floor) moves onto them once,
+		// keeping its life fraction; monsters already on them are left as they are.
+		RescaleLoadedMonster(monster);
 
 		i++;
 	}
@@ -1079,9 +1171,8 @@ bool LevelFileExists(SaveWriter &archive)
 
 void LoadMatchingItems(LoadHelper &file, const Player &player, const int n, Item *pItem)
 {
-	Item heroItem;
-
 	for (int i = 0; i < n; i++) {
+		Item heroItem;
 		Item &unpackedItem = pItem[i];
 		const bool success = LoadItemData(file, heroItem);
 		if (!success) {
@@ -1099,7 +1190,7 @@ void LoadMatchingItems(LoadHelper &file, const Player &player, const int n, Item
 			// game's item generation logic before attempting to use it for validation
 			if ((heroItem.dwBuff & CF_HELLFIRE) != (unpackedItem.dwBuff & CF_HELLFIRE)) {
 				unpackedItem = {};
-				RecreateItem(player, unpackedItem, heroItem.IDidx, heroItem._iCreateInfo, heroItem._iSeed, heroItem._ivalue, heroItem.dwBuff);
+				RecreateItem(player, unpackedItem, heroItem.IDidx, heroItem._iCreateInfo, heroItem._iSeed, heroItem._ivalue, heroItem.dwBuff, heroItem._iPoe2Craft);
 				unpackedItem._iIdentified = heroItem._iIdentified;
 				unpackedItem._iMaxDur = heroItem._iMaxDur;
 				unpackedItem._iDurability = ClampDurability(unpackedItem, heroItem._iDurability);
@@ -1169,23 +1260,36 @@ void SaveItem(SaveHelper &file, const Item &item)
 		iType = ItemType::None;
 	}
 
+	// POE2 Mashup: crafting state goes in the alignment bytes.
+	const Poe2Craft savedCraft = SavedCraftState(item);
+	const std::array<uint8_t, CraftStateSaveSize> craftBytes = PackCraftState(savedCraft);
+	size_t craftWritten = 0;
+	const auto writeCraft = [&](size_t size) {
+		file.WriteBytes(&craftBytes[craftWritten], size);
+		craftWritten += size;
+	};
 	file.WriteLE<uint32_t>(item._iSeed);
 	file.WriteLE<int16_t>(item._iCreateInfo);
-	file.Skip(2); // Alignment
+	writeCraft(2); // Alignment
 	file.WriteLE<int32_t>(static_cast<int32_t>(iType));
 	file.WriteLE<int32_t>(item.position.x);
 	file.WriteLE<int32_t>(item.position.y);
 	file.WriteLE<uint32_t>(item._iAnimFlag ? 1 : 0);
-	file.Skip(4); // Skip pointer _iAnimData
+	writeCraft(4); // Skip pointer _iAnimData
 	file.WriteLE<int32_t>(item.AnimInfo.numberOfFrames);
 	file.WriteLE<int32_t>(item.AnimInfo.currentFrame + 1);
-	// write _iAnimWidth for vanilla compatibility
-	file.WriteLE<int32_t>(ItemAnimWidth);
-	// write _iAnimWidth2 for vanilla compatibility
-	file.WriteLE<int32_t>(CalculateSpriteTileCenterX(ItemAnimWidth));
-	file.Skip<uint32_t>(); // _delFlag, unused since 1.02
+	// POE2 Mashup: a POE2 item's crafting extension, when it has one, goes where the anim widths are.
+	if (const auto extension = (item.dwBuff & CF_POE2) != 0 ? PackCraftExtension(savedCraft) : std::nullopt) {
+		file.WriteBytes(extension->data(), extension->size());
+	} else {
+		// write _iAnimWidth for vanilla compatibility
+		file.WriteLE<int32_t>(ItemAnimWidth);
+		// write _iAnimWidth2 for vanilla compatibility
+		file.WriteLE<int32_t>(CalculateSpriteTileCenterX(ItemAnimWidth));
+	}
+	writeCraft(4); // _delFlag, unused since 1.02
 	file.WriteLE<uint8_t>(static_cast<uint8_t>(item.selectionRegion));
-	file.Skip(3); // Alignment
+	writeCraft(3); // Alignment
 	file.WriteLE<uint32_t>(item._iPostDraw ? 1 : 0);
 	file.WriteLE<uint32_t>(item._iIdentified ? 1 : 0);
 	file.WriteLE<int8_t>(item._iMagical);
@@ -1193,7 +1297,7 @@ void SaveItem(SaveHelper &file, const Item &item)
 	file.WriteBytes(item._iIName, ItemNameLength);
 	file.WriteLE<int8_t>(item._iLoc);
 	file.WriteLE<uint8_t>(item._iClass);
-	file.Skip(1); // Alignment
+	writeCraft(1); // Alignment
 	file.WriteLE<int32_t>(item._iCurs);
 	file.WriteLE<int32_t>(item._ivalue);
 	file.WriteLE<int32_t>(item._iIvalue);
@@ -1224,7 +1328,7 @@ void SaveItem(SaveHelper &file, const Item &item)
 	file.WriteLE<int32_t>(item._iPLLight);
 	file.WriteLE<int8_t>(item._iSplLvlAdd);
 	file.WriteLE<int8_t>(item._iRequest ? 1 : 0);
-	file.Skip(2); // Alignment
+	writeCraft(2); // Alignment
 	file.WriteLE<int32_t>(UniqueItems[item._iUid].mappingId);
 	file.WriteLE<int32_t>(item._iFMinDam);
 	file.WriteLE<int32_t>(item._iFMaxDam);
@@ -1233,15 +1337,15 @@ void SaveItem(SaveHelper &file, const Item &item)
 	file.WriteLE<int32_t>(item._iPLEnAc);
 	file.WriteLE<int8_t>(item._iPrePower);
 	file.WriteLE<int8_t>(item._iSufPower);
-	file.Skip(2); // Alignment
+	writeCraft(2); // Alignment
 	file.WriteLE<int32_t>(item._iVAdd1);
 	file.WriteLE<int32_t>(item._iVMult1);
 	file.WriteLE<int32_t>(item._iVAdd2);
 	file.WriteLE<int32_t>(item._iVMult2);
-	file.WriteLE<int8_t>(item._iMinStr);
+	file.WriteLE<uint8_t>(item._iMinStr);
 	file.WriteLE<uint8_t>(item._iMinMag);
-	file.WriteLE<int8_t>(item._iMinDex);
-	file.Skip(1); // Alignment
+	file.WriteLE<uint8_t>(item._iMinDex);
+	writeCraft(1); // Alignment
 	file.WriteLE<uint32_t>(item._iStatFlag ? 1 : 0);
 	file.WriteLE<int32_t>(idx);
 	file.WriteLE<uint32_t>(item.dwBuff);
@@ -1509,7 +1613,8 @@ void SaveMonster(SaveHelper *file, Monster &monster, MonsterConversionData *mons
 	file->WriteLE<int32_t>(monster.goalVar1);
 	file->WriteLE<int32_t>(monster.goalVar2);
 	file->WriteLE<int32_t>(monster.goalVar3);
-	file->Skip(4); // Unused
+	// POE2 Mashup: a spare slot (Leoric's Road's King's dead kept their time left here until 2026-10-30).
+	file->WriteLE<int32_t>(0);
 	file->WriteLE<uint8_t>(monster.pathCount);
 	file->Skip(3); // Alignment
 	file->WriteLE<int32_t>(monster.position.tile.x);
@@ -2003,6 +2108,9 @@ void SaveLevel(SaveWriter &saveWriter, LevelConversionData *levelConversionData)
 		myPlayer._pLvlVisited[currlevel] = true;
 	else
 		myPlayer._pSLvlVisited[setlvlnum] = true;
+	// POE2 Mashup: the floor is kept as saved until its timer runs out.
+	if (levelConversionData == nullptr)
+		Poe2FloorSaved(setlevel ? static_cast<int>(setlvlnum) : static_cast<int>(currlevel), setlevel);
 }
 
 std::expected<void, std::string> LoadLevel(LevelConversionData *levelConversionData)
@@ -2109,9 +2217,9 @@ std::expected<void, std::string> LoadLevel(LevelConversionData *levelConversionD
 const int DiabloItemSaveSize = 368;
 const int HellfireItemSaveSize = 372;
 
-bool IsStashSizeValid(size_t stashSize, uint32_t pages, uint32_t itemCount)
+bool IsStashSizeValid(size_t stashSize, uint32_t pages, uint32_t itemCount, bool hellfireItems = gbIsHellfire)
 {
-	const size_t itemSize = (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize);
+	const size_t itemSize = (hellfireItems ? HellfireItemSaveSize : DiabloItemSaveSize);
 
 	const size_t expectedSize = sizeof(uint8_t)
 	    + sizeof(uint32_t)
@@ -2392,6 +2500,705 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
 	file.WriteLE<uint8_t>(static_cast<uint8_t>(player._pRSplType));
 }
 
+/**
+ * Version 1 holds support gem links per spell, version 2 adds flask charges, version 3 the skill bar,
+ * version 4 the passive tree, version 5 the supports socketed in each skill bar slot, version 6 the open map,
+ * version 7 the rebuilt passive tree with two-byte node ids, version 8 the 12-socket Skills panel and the skill tray,
+ * version 9 the fifth flask, version 10 each socketed gem's level, version 11 the Spirit skulls and version 12 the
+ * reworked passive tree with the attribute picked on each "any Attribute" node, version 13 the socketed jewels and
+ * version 14 their crafting state. Version 17 adds currency shards, version 18 the tier of each socketed support and
+ * version 19 the weapon sets (the set that is out, the Books of Specialisation, each set's passives and the other set's
+ * weapons) and the hardcore flag. Version 20 adds the default attack's supports, and version 21 the shape of the passive
+ * tree the hero's points were spent on and the quests that gave passive points. Version 22 adds the support sockets
+ * Jeweller's Orbs opened on each Skills panel row. Version 25 adds the skills inside meta gems. Version 26 adds whether a
+ * support gem has dropped for the hero and the kills without one; shards became items then, and an older hero's counted
+ * shards turn into shard items when they load. Version 27 adds the minions waiting in town to go with the hero to the next dungeon
+ * level.
+ */
+constexpr uint8_t Poe2HeroDataVersion = 28;
+/**
+ * @brief The socket byte saved with an emptied middle mouse button. Heroes from before default attacks saved the
+ * button empty with socket 0, and get the attack on loading; one the player emptied stays empty.
+ */
+constexpr uint8_t EmptiedMiddleButtonMark = 0xFF;
+/** @brief Bytes each socketed jewel takes in the hero data: socket, base, creation info, seed, buffs and identified. */
+constexpr size_t SavedJewelSize = 1 + 2 + 2 + 4 + 4 + 1;
+
+namespace {
+
+/** @brief Moves supports linked to spells (before version 5) into the sockets of the Skills panel socket holding the spell. */
+void MigrateSpellSupports(Player &player, const std::array<std::array<SupportGem, MaxSupportsPerSpell>, MaxPoe2Spells> &spellSupports)
+{
+	for (size_t spell = 0; spell < MaxPoe2Spells; spell++) {
+		const std::optional<size_t> slot = FindSkillSlot(player, SkillSlot::ForSpell(static_cast<SpellID>(spell)));
+		if (!slot)
+			continue;
+		for (size_t i = 0; i < MaxSupportsPerSpell; i++)
+			player.poe2.slotSupports[*slot][i] = spellSupports[spell][i];
+	}
+}
+
+void ReadSkillSockets(LoadHelper &file, Player &player, size_t first, size_t end)
+{
+	for (size_t slot = first; slot < end; slot++) {
+		const SkillSlot skill { static_cast<SkillKind>(file.NextLE<uint8_t>()), file.NextLE<uint8_t>() };
+		// Drop skills whose gem no longer exists, e.g. from a newer build.
+		if (SkillGemItemIndex(skill))
+			player.poe2.skillSlots[slot] = skill;
+	}
+}
+
+void ReadSocketSupports(LoadHelper &file, Player &player, size_t first, size_t end)
+{
+	for (size_t slot = first; slot < end; slot++) {
+		for (SupportGem &support : player.poe2.slotSupports[slot]) {
+			const uint8_t gem = file.NextLE<uint8_t>();
+			if (gem < static_cast<uint8_t>(SupportGem::Count) && !player.poe2.skillSlots[slot].isEmpty())
+				support = static_cast<SupportGem>(gem);
+		}
+	}
+}
+
+/** @return The version of the data that was read, or 0 if there was none. */
+uint8_t ReadPoe2HeroData(Player &player)
+{
+	LoadHelper file(OpenSaveArchive(gSaveNumber), "poe2hero");
+	if (!file.IsValid(2 * sizeof(uint8_t)))
+		return 0;
+
+	uint8_t version = file.NextLE<uint8_t>();
+	if (version == 0)
+		return 0;
+	// POE2 Mashup: hero data only ever gains fields at the end, so a hero saved by a newer build is read as far as this
+	// build knows. Returning 0 here would wipe the gems, tree, jewels and swap weapons on the next save.
+	if (version > Poe2HeroDataVersion) {
+		LogError("POE2 hero data version {} is newer than this build's {}; reading the parts this build knows", version, Poe2HeroDataVersion);
+		version = Poe2HeroDataVersion;
+	}
+
+	// Older heroes linked supports to spells; they move into the skill bar once it's read.
+	std::array<std::array<SupportGem, MaxSupportsPerSpell>, MaxPoe2Spells> spellSupports {};
+	const uint8_t spellCount = file.NextLE<uint8_t>();
+	for (uint8_t i = 0; i < spellCount; i++) {
+		if (!file.IsValid(1 + MaxSupportsPerSpell))
+			break;
+		const auto spell = static_cast<size_t>(file.NextLE<uint8_t>());
+		for (size_t slot = 0; slot < MaxSupportsPerSpell; slot++) {
+			const uint8_t gem = file.NextLE<uint8_t>();
+			if (spell < MaxPoe2Spells && gem < static_cast<uint8_t>(SupportGem::Count))
+				spellSupports[spell][slot] = static_cast<SupportGem>(gem);
+		}
+	}
+
+	if (version < 2 || !file.IsValid(OldNumFlasks))
+		return version;
+	for (size_t flask = 0; flask < OldNumFlasks; flask++)
+		player.poe2.flaskCharges[flask] = std::min(file.NextLE<uint8_t>(), MaxFlaskChargesCap);
+
+	// The first 6 Skills panel sockets sit where the old skill bar's slots were; the rest follow the map.
+	if (version < 3 || !file.IsValid(OldNumSkillSlots * 2))
+		return version;
+	ReadSkillSockets(file, player, 0, OldNumSkillSlots);
+	if (version < 5)
+		MigrateSpellSupports(player, spellSupports);
+	if (version < 8)
+		MigrateOldSkillBar(player);
+
+	if (version < 4)
+		return version;
+	if (version < 7) {
+		// The tree was rebuilt in version 7, so older allocations are refunded.
+		if (!file.IsValid(1))
+			return version;
+		const uint8_t passiveCount = file.NextLE<uint8_t>();
+		for (uint8_t i = 0; i < passiveCount && file.IsValid(1); i++)
+			file.NextLE<uint8_t>();
+	} else {
+		if (!file.IsValid(2))
+			return version;
+		const uint16_t passiveCount = file.NextLE<uint16_t>();
+		for (uint16_t i = 0; i < passiveCount && file.IsValid(2); i++) {
+			const uint16_t node = file.NextLE<uint16_t>();
+			// The tree was reworked again in version 12, so older allocations are refunded.
+			if (node < MaxPassiveNodes && version >= 12)
+				player.poe2.passives.set(node);
+		}
+	}
+
+	if (version < 5 || !file.IsValid(OldNumSkillSlots * MaxSupportSockets))
+		return version;
+	ReadSocketSupports(file, player, 0, OldNumSkillSlots);
+
+	if (version < 6 || !file.IsValid(2))
+		return version;
+	const uint8_t mapLevel = file.NextLE<uint8_t>();
+	const uint8_t mapTier = file.NextLE<uint8_t>();
+	if (mapLevel < NUMLEVELS && mapTier <= MaxWaystoneTier) {
+		player.poe2.mapLevel = mapLevel;
+		player.poe2.mapTier = mapTier;
+	}
+
+	constexpr size_t NewSockets = NumSkillSlots - OldNumSkillSlots;
+	if (version < 8 || !file.IsValid((NewSockets * (2 + MaxSupportSockets)) + (NumTraySlots * 2)))
+		return version;
+	ReadSkillSockets(file, player, OldNumSkillSlots, NumSkillSlots);
+	ReadSocketSupports(file, player, OldNumSkillSlots, NumSkillSlots);
+	for (size_t slot = 0; slot < NumTraySlots; slot++) {
+		const auto action = file.NextLE<uint8_t>();
+		const uint8_t socket = file.NextLE<uint8_t>();
+		if (action > static_cast<uint8_t>(TrayAction::Last))
+			continue;
+		TrayBinding binding { static_cast<TrayAction>(action), socket };
+		// The old Move/attack and Interact choices become the first weapon set's attack; the readied spell is what an
+		// empty right button does anyway.
+		if (IsAnyOf(binding.action, TrayAction::MoveAndAttack, TrayAction::Interact))
+			binding = { TrayAction::WeaponAttack, 0 };
+		else if (binding.action == TrayAction::ReadiedSpell)
+			continue;
+		const SkillSlot skill = socket < NumSkillSlots ? player.poe2.skillSlots[socket] : SkillSlot {};
+		if (binding.isGem() && (skill.isEmpty() || skill.kind == SkillKind::Persistent))
+			continue;
+		// A Command stays only while its minion gem is in the socket.
+		if (binding.isCommand() && CommandForGem(skill.persistent()) == SummonCommand::None)
+			continue;
+		if (!TrayBindingFits(binding, static_cast<TraySlot>(slot)))
+			continue;
+		player.poe2.tray[slot] = binding;
+	}
+	// Heroes from before default attacks get theirs on the middle mouse button if it was free, unless the player
+	// emptied it.
+	TrayBinding &middle = player.poe2.tray[static_cast<size_t>(TraySlot::MiddleMouse)];
+	if (middle.action == TrayAction::None)
+		middle = middle.socket == EmptiedMiddleButtonMark ? TrayBinding {} : DefaultTrayBinding(TraySlot::MiddleMouse);
+
+	// The fifth flask slot came in version 9; older heroes start it full.
+	if (version < 9 || !file.IsValid(NumFlasks - OldNumFlasks))
+		return version;
+	for (size_t flask = OldNumFlasks; flask < NumFlasks; flask++)
+		player.poe2.flaskCharges[flask] = std::min(file.NextLE<uint8_t>(), MaxFlaskChargesCap);
+
+	if (version < 10 || !file.IsValid(NumSkillSlots))
+		return version;
+	for (uint8_t &level : player.poe2.slotLevels)
+		level = static_cast<uint8_t>(std::clamp<int>(file.NextLE<uint8_t>(), 1, MaxGemLevel));
+
+	if (version < 11 || !file.IsValid(1))
+		return version;
+	player.poe2.spiritSkulls = static_cast<uint8_t>(file.NextLE<uint8_t>() & AllSpiritSkulls);
+
+	if (version < 12 || !file.IsValid(2))
+		return version;
+	const uint16_t attributeCount = file.NextLE<uint16_t>();
+	for (uint16_t i = 0; i < attributeCount && file.IsValid(3); i++) {
+		const uint16_t node = file.NextLE<uint16_t>();
+		const uint8_t attribute = file.NextLE<uint8_t>();
+		if (node < MaxPassiveNodes && attribute < static_cast<uint8_t>(PassiveAttribute::Count))
+			SetChosenPassiveAttribute(player, node, static_cast<PassiveAttribute>(attribute), PassivePool::Main);
+	}
+
+	if (version < 13 || !file.IsValid(1))
+		return version;
+	const uint8_t jewelCount = file.NextLE<uint8_t>();
+	// Rebuilding the jewels from their seeds mustn't change the game's random numbers.
+	const uint32_t rngState = GetLCGEngineState();
+	const size_t jewelSize = SavedJewelSize + (version >= 14 ? CraftStateSaveSize : 0);
+	for (uint8_t i = 0; i < jewelCount && file.IsValid(jewelSize); i++) {
+		const uint8_t socket = file.NextLE<uint8_t>();
+		const auto idx = static_cast<_item_indexes>(file.NextLE<int16_t>());
+		const uint16_t createInfo = file.NextLE<uint16_t>();
+		const uint32_t seed = file.NextLE<uint32_t>();
+		const uint32_t dwBuff = file.NextLE<uint32_t>();
+		const bool identified = file.NextLE<uint8_t>() != 0;
+		std::array<uint8_t, CraftStateSaveSize> craftBytes {};
+		if (version >= 14)
+			file.NextBytes(craftBytes.data(), craftBytes.size());
+		if (socket >= MaxJewelSockets || idx < 0 || static_cast<size_t>(idx) >= AllItemsList.size() || AllItemsList[idx].iMiscId != IMISC_JEWEL)
+			continue;
+		Item &jewel = player.jewels[socket];
+		// Item::clear() keeps the old stats, and rebuilding adds to them, so start from an empty item.
+		jewel = {};
+		RecreateItem(player, jewel, idx, createInfo, seed, 0, dwBuff, UnpackCraftState(craftBytes));
+		jewel._iIdentified = identified;
+		jewel._iStatFlag = true;
+	}
+	SetRndSeed(rngState);
+
+	// Version 15: the open map's waystone, revives and boss, and the maps completed.
+	if (version < 15 || !file.IsValid(CraftStateSaveSize + 6))
+		return version;
+	std::array<uint8_t, CraftStateSaveSize> waystoneBytes {};
+	file.NextBytes(waystoneBytes.data(), waystoneBytes.size());
+	player.poe2.mapWaystone = UnpackCraftState(waystoneBytes);
+	player.poe2.mapRevives = std::min<uint8_t>(file.NextLE<uint8_t>(), MaxMapRevives);
+	player.poe2.mapBoss = file.NextLE<int16_t>();
+	player.poe2.mapBossKilled = file.NextLE<uint8_t>() != 0;
+	player.poe2.mapsCompleted = file.NextLE<uint16_t>();
+
+	// Version 16: the open map's tablets, encounters, chests and pinnacle, and the Atlas.
+	if (version < 16 || !file.IsValid(MapRunSaveSize + AtlasNodeCount + 2))
+		return version;
+	MapRunState &run = player.poe2.mapRun;
+	for (MapTablet &tablet : run.tablets) {
+		tablet.kind = file.NextLE<uint8_t>();
+		tablet.rarity = std::min<uint8_t>(file.NextLE<uint8_t>(), ITEM_QUALITY_RARE);
+		for (Poe2CraftMod &mod : tablet.mods) {
+			mod.family = file.NextLE<uint8_t>();
+			mod.tier = file.NextLE<uint8_t>();
+			mod.salt = file.NextLE<uint8_t>();
+		}
+	}
+	run.encounters = file.NextLE<uint16_t>();
+	run.encountersDone = file.NextLE<uint16_t>();
+	for (int16_t &leader : run.leaders)
+		leader = file.NextLE<int16_t>();
+	for (MapChest &chest : run.chests) {
+		chest.x = file.NextLE<uint8_t>();
+		chest.y = file.NextLE<uint8_t>();
+		chest.profile = file.NextLE<uint8_t>();
+	}
+	run.pinnacle = file.NextLE<uint8_t>();
+	run.placed = file.NextLE<uint8_t>() != 0;
+	for (uint8_t &rank : player.poe2.atlas.ranks)
+		rank = file.NextLE<uint8_t>();
+	player.poe2.atlas.pinnaclesDefeated = file.NextLE<uint16_t>();
+
+	// Version 17: currency shards and the gambler's charges.
+	if (version < 17 || !file.IsValid(EconomySaveSize))
+		return version;
+	for (uint8_t &shards : player.poe2.economy.shards)
+		shards = std::min<uint8_t>(file.NextLE<uint8_t>(), ShardsPerOrb - 1);
+	player.poe2.economy.gambleCharges = std::min(file.NextLE<uint8_t>(), MaxGambleCharges);
+
+	// Version 18: the tier of each socketed support; older supports are all tier I.
+	if (version < 18 || !file.IsValid(NumSkillSlots * MaxSupportSockets))
+		return version;
+	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			const int tier = file.NextLE<uint8_t>();
+			player.poe2.slotSupportTiers[slot][socket] = static_cast<uint8_t>(std::clamp(tier, 1, SupportTierCount(player.poe2.slotSupports[slot][socket])));
+		}
+	}
+
+	// Version 19: the weapon sets and the hardcore flag.
+	if (version < 19 || !file.IsValid(4))
+		return version;
+	player.poe2.weaponSet = static_cast<uint8_t>(file.NextLE<uint8_t>() % NumWeaponSets);
+	player.poe2.specBooks = static_cast<uint8_t>(file.NextLE<uint8_t>() & ((1 << NumSpecBooks) - 1));
+	player.poe2.hardcore = file.NextLE<uint8_t>() != 0;
+	file.Skip<uint8_t>();
+	for (auto &set : player.poe2.setPassives) {
+		if (!file.IsValid(sizeof(uint16_t)))
+			return version;
+		const uint16_t count = file.NextLE<uint16_t>();
+		if (!file.IsValid(count * 3))
+			return version;
+		for (uint16_t i = 0; i < count; i++) {
+			const uint16_t node = file.NextLE<uint16_t>();
+			const uint8_t attribute = file.NextLE<uint8_t>();
+			if (node >= MaxPassiveNodes || player.poe2.passives.test(node))
+				continue;
+			set.set(node);
+			if (PassiveNeedsAttributeChoice(node)) {
+				const PassivePool pool = &set == &player.poe2.setPassives[0] ? PassivePool::SetI : PassivePool::SetII;
+				SetChosenPassiveAttribute(player, node, static_cast<PassiveAttribute>(std::min<uint8_t>(attribute, static_cast<uint8_t>(PassiveAttribute::Count) - 1)), pool);
+			}
+		}
+	}
+	const size_t itemSize = gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize;
+	for (Item &item : player.swapHands) {
+		if (!file.IsValid(1))
+			return version;
+		if (file.NextLE<uint8_t>() == 0 || !file.IsValid(itemSize))
+			continue;
+		LoadItem(file, item);
+	}
+
+	// Version 20: the supports of the weapon's default attack, and their tiers.
+	if (version < 20 || !file.IsValid(MaxSupportSockets * 2))
+		return version;
+	for (SupportGem &gem : player.poe2.defaultSupports) {
+		const uint8_t value = file.NextLE<uint8_t>();
+		gem = value < static_cast<uint8_t>(SupportGem::Count) ? static_cast<SupportGem>(value) : SupportGem::None;
+	}
+	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+		const int tier = file.NextLE<uint8_t>();
+		player.poe2.defaultSupportTiers[socket] = static_cast<uint8_t>(std::clamp(tier, 1, SupportTierCount(player.poe2.defaultSupports[socket])));
+	}
+
+	// Version 21: the passive tree's shape and the quests that gave passive points.
+	if (version < 21 || !file.IsValid(8))
+		return version;
+	player.poe2.passiveTreeHash = file.NextLE<uint32_t>();
+	player.poe2.questsRewarded = file.NextLE<uint32_t>();
+
+	// Version 22: the support sockets Jeweller's Orbs opened.
+	if (version < 22 || !file.IsValid(player.poe2.openedSockets.size()))
+		return version;
+	for (uint8_t &opened : player.poe2.openedSockets)
+		opened = std::min<uint8_t>(file.NextLE<uint8_t>(), static_cast<uint8_t>(MaxSupportSockets - BaseSupportSockets));
+
+	// Version 23: the number of minions set for each minion gem, as skill and count pairs.
+	if (version < 23 || !file.IsValid(1))
+		return version;
+	const uint8_t minionGems = file.NextLE<uint8_t>();
+	if (!file.IsValid(minionGems * 2U))
+		return version;
+	for (uint8_t i = 0; i < minionGems; i++) {
+		const auto skill = static_cast<PersistentSkill>(file.NextLE<uint8_t>());
+		const uint8_t count = file.NextLE<uint8_t>();
+		if (const int index = MinionCountSkillIndex(skill); index >= 0)
+			player.poe2.minionCounts[static_cast<size_t>(index)] = count == DefaultMinionCount ? count : std::min(count, MaxMinionsPerGem);
+	}
+
+	// Version 24: the Spirit gems switched on in the Skills panel.
+	if (version < 24 || !file.IsValid(2))
+		return version;
+	player.poe2.spiritGemsOn = file.NextLE<uint16_t>();
+
+	// Version 25: the skills inside meta gems, and their levels.
+	if (version < 25 || !file.IsValid(NumSkillSlots * MaxSupportSockets * 3))
+		return version;
+	for (size_t row = 0; row < NumSkillSlots; row++) {
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			const SkillSlot skill { static_cast<SkillKind>(file.NextLE<uint8_t>()), file.NextLE<uint8_t>() };
+			const int level = file.NextLE<uint8_t>();
+			if (skill.isEmpty() || !IsMetaGem(player.poe2.skillSlots[row]) || !SkillGemItemIndex(skill))
+				continue;
+			player.poe2.metaSkills[row][socket] = skill;
+			player.poe2.metaSkillLevels[row][socket] = static_cast<uint8_t>(std::clamp(level, 1, MaxGemLevel));
+		}
+	}
+
+	// Version 26: whether a support gem has dropped for the hero, and the kills on levels 1 and 2 without one.
+	if (version < 26 || !file.IsValid(SupportDropSaveSize))
+		return version;
+	player.poe2.economy.supportGemDropped = file.NextLE<uint8_t>() != 0;
+	player.poe2.economy.supportDroughtKills = file.NextLE<uint8_t>();
+
+	// Version 27: the minions waiting in town to go with the hero (poe2/minion_travel.hpp).
+	if (version < 27 || !file.IsValid(1))
+		return version;
+	const uint8_t travellingMinions = file.NextLE<uint8_t>();
+	if (!file.IsValid(travellingMinions * TravellingMinionSaveSize))
+		return version;
+	std::vector<uint8_t> minionBytes(1 + (travellingMinions * TravellingMinionSaveSize));
+	minionBytes[0] = travellingMinions;
+	for (size_t i = 1; i < minionBytes.size(); i++)
+		minionBytes[i] = file.NextLE<uint8_t>();
+	UnpackTravellingMinions(player.poe2, minionBytes);
+
+	// Version 28: whether an uncut skill gem has dropped for the hero, and the kills on levels 1 and 2 without one. A
+	// hero from before counts as having had one once past level 2, so the promise only helps new heroes.
+	if (version < 28 || !file.IsValid(SkillGemDropSaveSize)) {
+		player.poe2.economy.skillGemDropped = player.poe2.economy.supportGemDropped;
+		return version;
+	}
+	player.poe2.economy.skillGemDropped = file.NextLE<uint8_t>() != 0;
+	player.poe2.economy.skillDroughtKills = file.NextLE<uint8_t>();
+	return version;
+}
+
+} // namespace
+
+void ReadPoe2Floors()
+{
+	Poe2FloorsReset();
+	LoadHelper file(OpenSaveArchive(gSaveNumber), "poe2floors");
+	if (!file.IsValid(sizeof(uint32_t)))
+		return;
+	const uint32_t size = file.NextLE<uint32_t>();
+	if (size == 0 || !file.IsValid(size))
+		return;
+	std::vector<uint8_t> data(size);
+	for (uint8_t &byte : data)
+		byte = file.NextLE<uint8_t>();
+	if (!Poe2UnpackFloors(data))
+		Poe2FloorsReset();
+}
+
+/** @brief The hero's shrine buffs, in their own entry; a save from before shrine buffs has none. */
+void ReadPoe2Shrines(Player &player)
+{
+	player.poe2.shrines = {};
+	LoadHelper file(OpenSaveArchive(gSaveNumber), "poe2shrines");
+	if (!file.IsValid(sizeof(uint32_t)))
+		return;
+	const uint32_t size = file.NextLE<uint32_t>();
+	if (size == 0 || !file.IsValid(size))
+		return;
+	std::vector<uint8_t> data(size);
+	for (uint8_t &byte : data)
+		byte = file.NextLE<uint8_t>();
+	UnpackShrineBuffs(player.poe2.shrines, data);
+}
+
+void LoadPoe2HeroData(Player &player)
+{
+	player.poe2.clear();
+	for (Item &jewel : player.jewels)
+		jewel.clear();
+	for (Item &item : player.swapHands)
+		item.clear();
+	const uint8_t version = ReadPoe2HeroData(player);
+	if (&player == MyPlayer) {
+		ReadPoe2Floors();
+		ReadPoe2Shrines(player);
+	}
+	// Heroes from before the skill bar start with the skill for their class's weapon.
+	if (version < 3 && gbIsPoe2)
+		GrantStarterSkill(player);
+	// Before gems had levels they grew with the character, so socketed gems keep the level they had.
+	if (version < 10)
+		player.poe2.slotLevels.fill(static_cast<uint8_t>(GemSpellLevel(player.getCharacterLevel())));
+	// Every hero had 30 Spirit before Spirit came from skulls, so older heroes keep it as the first skull.
+	if (version > 0 && version < 11)
+		player.poe2.spiritSkulls = 1;
+	// Before Jeweller's Orbs, sockets opened with the hero's level; heroes keep the ones they had.
+	if (version > 0 && version < 22)
+		player.poe2.openedSockets.fill(LevelOpenedSockets(player.getCharacterLevel()));
+	// Before the number of minions could be set, it grew with the hero's level; heroes keep the number they had.
+	if (version > 0 && version < 23) {
+		SetChosenMinionCount(player, PersistentSkill::SkeletalWarriors, SkeletalWarriorCount(player.getCharacterLevel()));
+		SetChosenMinionCount(player, PersistentSkill::SkeletalMages, SkeletalMageCount(player.getCharacterLevel()));
+	}
+	// Spirit gems were always on before they could be switched off; heroes keep theirs running.
+	if (version > 0 && version < 24)
+		player.poe2.spiritGemsOn = static_cast<uint16_t>((1U << NumSkillSlots) - 1);
+	// POE2 Mashup: shards became items (Curtis 2026-10-29); the ones a hero had counted go in the bag, once. A kind that
+	// doesn't fit stays counted, and is tried again next time.
+	if (version > 0 && gbIsPoe2) {
+		// Making the items mustn't change the game's random numbers.
+		const uint32_t rngState = GetLCGEngineState();
+		ConvertCountedShards(player);
+		SetRndSeed(rngState);
+	}
+	// Cast on Dodge and the other trigger supports became meta gems.
+	if (version > 0)
+		MigrateTriggerSupports(player);
+	// Points spent on an older tree come back when the tree changes shape, and quest points became Books (tree start
+	// redesign); the hero stays where they were and sees the tree open with one line saying what changed.
+	if (version > 0) {
+		const int bookChange = gbIsPoe2 ? MigrateToBooks(player) : 0;
+		const bool redrawn = PassiveTreeHash() != 0 && player.poe2.passiveTreeHash != PassiveTreeHash();
+		RefundPassivesForNewTree(player);
+		const bool refunded = redrawn || RefundOverspentPassives(player);
+		RefundOverspentWeaponSets(player);
+		if (&player == MyPlayer && gbIsPoe2 && (refunded || bookChange != 0))
+			QueueTreeNotice(redrawn, refunded, bookChange);
+	}
+}
+
+void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
+{
+	{
+		// The league on its own, so the hero list can show it without reading the rest.
+		SaveHelper mode(saveWriter, "poe2mode", 1);
+		mode.WriteLE<uint8_t>(player.poe2.hardcore ? 1 : 0);
+	}
+	if (&player == MyPlayer) {
+		// Which floors are still kept and the game clock they go stale by.
+		const std::vector<uint8_t> floors = Poe2PackFloors();
+		SaveHelper floorsFile(saveWriter, "poe2floors", sizeof(uint32_t) + floors.size());
+		floorsFile.WriteLE<uint32_t>(static_cast<uint32_t>(floors.size()));
+		for (const uint8_t byte : floors)
+			floorsFile.WriteLE<uint8_t>(byte);
+	}
+	if (&player == MyPlayer) {
+		// Shrine buffs still running.
+		const std::vector<uint8_t> shrines = PackShrineBuffs(player.poe2.shrines);
+		SaveHelper shrinesFile(saveWriter, "poe2shrines", sizeof(uint32_t) + shrines.size());
+		shrinesFile.WriteLE<uint32_t>(static_cast<uint32_t>(shrines.size()));
+		for (const uint8_t byte : shrines)
+			shrinesFile.WriteLE<uint8_t>(byte);
+	}
+
+	std::vector<uint16_t> passives;
+	std::vector<uint16_t> attributes;
+	for (size_t node = 0; node < MaxPassiveNodes; node++) {
+		if (!player.poe2.passives.test(node))
+			continue;
+		passives.push_back(static_cast<uint16_t>(node));
+		if (PassiveNeedsAttributeChoice(static_cast<PassiveNodeId>(node)))
+			attributes.push_back(static_cast<uint16_t>(node));
+	}
+
+	size_t jewelCount = 0;
+	for (const Item &jewel : player.jewels) {
+		if (!jewel.isEmpty())
+			jewelCount++;
+	}
+
+	const size_t setNodeCount = player.poe2.setPassives[0].count() + player.poe2.setPassives[1].count();
+	size_t swapItemCount = 0;
+	for (const Item &item : player.swapHands) {
+		if (!item.isEmpty())
+			swapItemCount++;
+	}
+	const size_t weaponSetsSize = 4 + (2 * sizeof(uint16_t)) + (setNodeCount * 3) + player.swapHands.size() + (swapItemCount * (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize));
+	const std::vector<uint8_t> travellingMinions = PackTravellingMinions(player.poe2);
+
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8 + player.poe2.openedSockets.size() + 1 + (MinionCountSkills.size() * 2) + sizeof(uint16_t) + (NumSkillSlots * MaxSupportSockets * 3) + SupportDropSaveSize + travellingMinions.size() + SkillGemDropSaveSize);
+	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
+	// Supports linked to spells (before version 5); they're in the skill bar now.
+	file.WriteLE<uint8_t>(0);
+	for (size_t flask = 0; flask < OldNumFlasks; flask++)
+		file.WriteLE<uint8_t>(player.poe2.flaskCharges[flask]);
+	const auto writeSockets = [&](size_t first, size_t end) {
+		for (size_t slot = first; slot < end; slot++) {
+			file.WriteLE<uint8_t>(static_cast<uint8_t>(player.poe2.skillSlots[slot].kind));
+			file.WriteLE<uint8_t>(player.poe2.skillSlots[slot].id);
+		}
+	};
+	const auto writeSupports = [&](size_t first, size_t end) {
+		for (size_t slot = first; slot < end; slot++) {
+			for (const SupportGem gem : player.poe2.slotSupports[slot])
+				file.WriteLE<uint8_t>(static_cast<uint8_t>(gem));
+		}
+	};
+	writeSockets(0, OldNumSkillSlots);
+	file.WriteLE<uint16_t>(static_cast<uint16_t>(passives.size()));
+	for (const uint16_t node : passives)
+		file.WriteLE<uint16_t>(node);
+	writeSupports(0, OldNumSkillSlots);
+	file.WriteLE<uint8_t>(player.poe2.mapLevel);
+	file.WriteLE<uint8_t>(player.poe2.mapTier);
+	// Version 8: the Skills panel's other 6 sockets and the skill tray.
+	writeSockets(OldNumSkillSlots, NumSkillSlots);
+	writeSupports(OldNumSkillSlots, NumSkillSlots);
+	for (size_t slot = 0; slot < NumTraySlots; slot++) {
+		const TrayBinding &binding = player.poe2.tray[slot];
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(binding.action));
+		const bool emptiedMiddle = static_cast<TraySlot>(slot) == TraySlot::MiddleMouse && binding.action == TrayAction::None;
+		file.WriteLE<uint8_t>(emptiedMiddle ? EmptiedMiddleButtonMark : binding.socket);
+	}
+	// Version 9: the fifth flask slot.
+	for (size_t flask = OldNumFlasks; flask < NumFlasks; flask++)
+		file.WriteLE<uint8_t>(player.poe2.flaskCharges[flask]);
+	// Version 10: each socketed gem's level.
+	for (size_t socket = 0; socket < NumSkillSlots; socket++)
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(player.poe2.gemLevel(socket)));
+	// Version 11: the Spirit skulls the hero has broken.
+	file.WriteLE<uint8_t>(player.poe2.spiritSkulls);
+	// Version 12: the attribute picked on each allocated "any Attribute" node.
+	file.WriteLE<uint16_t>(static_cast<uint16_t>(attributes.size()));
+	for (const uint16_t node : attributes) {
+		file.WriteLE<uint16_t>(node);
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(ChosenPassiveAttributeIn(player, node, PassivePool::Main)));
+	}
+	// Version 13: the jewels in the passive tree's sockets.
+	file.WriteLE<uint8_t>(static_cast<uint8_t>(jewelCount));
+	for (size_t socket = 0; socket < player.jewels.size(); socket++) {
+		const Item &jewel = player.jewels[socket];
+		if (jewel.isEmpty())
+			continue;
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(socket));
+		file.WriteLE<int16_t>(static_cast<int16_t>(jewel.IDidx));
+		file.WriteLE<uint16_t>(jewel._iCreateInfo);
+		file.WriteLE<uint32_t>(jewel._iSeed);
+		file.WriteLE<uint32_t>(jewel.dwBuff);
+		file.WriteLE<uint8_t>(jewel._iIdentified ? 1 : 0);
+		// Version 14: its crafting state.
+		const std::array<uint8_t, CraftStateSaveSize> craftBytes = PackCraftState(jewel._iPoe2Craft);
+		file.WriteBytes(craftBytes.data(), craftBytes.size());
+	}
+	// Version 15: the open map's waystone, revives and boss, and the maps completed.
+	const std::array<uint8_t, CraftStateSaveSize> waystoneBytes = PackCraftState(player.poe2.mapWaystone);
+	file.WriteBytes(waystoneBytes.data(), waystoneBytes.size());
+	file.WriteLE<uint8_t>(player.poe2.mapRevives);
+	file.WriteLE<int16_t>(player.poe2.mapBoss);
+	file.WriteLE<uint8_t>(player.poe2.mapBossKilled ? 1 : 0);
+	file.WriteLE<uint16_t>(player.poe2.mapsCompleted);
+	// Version 16: the open map's tablets, encounters, chests and pinnacle, and the Atlas.
+	const MapRunState &run = player.poe2.mapRun;
+	for (const MapTablet &tablet : run.tablets) {
+		file.WriteLE<uint8_t>(tablet.kind);
+		file.WriteLE<uint8_t>(tablet.rarity);
+		for (const Poe2CraftMod &mod : tablet.mods) {
+			file.WriteLE<uint8_t>(mod.family);
+			file.WriteLE<uint8_t>(mod.tier);
+			file.WriteLE<uint8_t>(mod.salt);
+		}
+	}
+	file.WriteLE<uint16_t>(run.encounters);
+	file.WriteLE<uint16_t>(run.encountersDone);
+	for (const int16_t leader : run.leaders)
+		file.WriteLE<int16_t>(leader);
+	for (const MapChest &chest : run.chests) {
+		file.WriteLE<uint8_t>(chest.x);
+		file.WriteLE<uint8_t>(chest.y);
+		file.WriteLE<uint8_t>(chest.profile);
+	}
+	file.WriteLE<uint8_t>(run.pinnacle);
+	file.WriteLE<uint8_t>(run.placed ? 1 : 0);
+	for (const uint8_t rank : player.poe2.atlas.ranks)
+		file.WriteLE<uint8_t>(rank);
+	file.WriteLE<uint16_t>(player.poe2.atlas.pinnaclesDefeated);
+	// Version 17: currency shards and the gambler's charges.
+	for (const uint8_t shards : player.poe2.economy.shards)
+		file.WriteLE<uint8_t>(shards);
+	file.WriteLE<uint8_t>(player.poe2.economy.gambleCharges);
+	// Version 18.
+	for (const SupportTiers &tiers : player.poe2.slotSupportTiers) {
+		for (const uint8_t tier : tiers)
+			file.WriteLE<uint8_t>(tier);
+	}
+	// Version 19: the weapon sets and the hardcore flag.
+	file.WriteLE<uint8_t>(player.poe2.weaponSet);
+	file.WriteLE<uint8_t>(player.poe2.specBooks);
+	file.WriteLE<uint8_t>(player.poe2.hardcore ? 1 : 0);
+	file.WriteLE<uint8_t>(0);
+	for (const auto &set : player.poe2.setPassives) {
+		file.WriteLE<uint16_t>(static_cast<uint16_t>(set.count()));
+		for (size_t node = 0; node < MaxPassiveNodes; node++) {
+			if (!set.test(node))
+				continue;
+			file.WriteLE<uint16_t>(static_cast<uint16_t>(node));
+			file.WriteLE<uint8_t>(static_cast<uint8_t>(ChosenPassiveAttributeIn(player, static_cast<PassiveNodeId>(node), &set == &player.poe2.setPassives[0] ? PassivePool::SetI : PassivePool::SetII)));
+		}
+	}
+	for (const Item &item : player.swapHands) {
+		file.WriteLE<uint8_t>(item.isEmpty() ? 0 : 1);
+		if (!item.isEmpty())
+			SaveItem(file, item);
+	}
+	// Version 20: the default attack's supports.
+	for (const SupportGem gem : player.poe2.defaultSupports)
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(gem));
+	for (const uint8_t tier : player.poe2.defaultSupportTiers)
+		file.WriteLE<uint8_t>(tier);
+	// Version 21: the passive tree's shape and the quests that gave passive points.
+	file.WriteLE<uint32_t>(PassiveTreeHash() != 0 ? PassiveTreeHash() : player.poe2.passiveTreeHash);
+	file.WriteLE<uint32_t>(player.poe2.questsRewarded);
+	// Version 22: the support sockets Jeweller's Orbs opened.
+	for (const uint8_t opened : player.poe2.openedSockets)
+		file.WriteLE<uint8_t>(opened);
+	// Version 23: the number of minions set for each minion gem.
+	file.WriteLE<uint8_t>(static_cast<uint8_t>(MinionCountSkills.size()));
+	for (size_t i = 0; i < MinionCountSkills.size(); i++) {
+		file.WriteLE<uint8_t>(static_cast<uint8_t>(MinionCountSkills[i]));
+		file.WriteLE<uint8_t>(player.poe2.minionCounts[i]);
+	}
+	// Version 24: the Spirit gems switched on in the Skills panel.
+	file.WriteLE<uint16_t>(player.poe2.spiritGemsOn);
+	// Version 25: the skills inside meta gems, and their levels.
+	for (size_t row = 0; row < NumSkillSlots; row++) {
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			const SkillSlot skill = player.poe2.metaSkills[row][socket];
+			file.WriteLE<uint8_t>(static_cast<uint8_t>(skill.kind));
+			file.WriteLE<uint8_t>(skill.id);
+			file.WriteLE<uint8_t>(player.poe2.metaSkillLevels[row][socket]);
+		}
+	}
+	// Version 26: whether a support gem has dropped for the hero, and the kills without one.
+	file.WriteLE<uint8_t>(player.poe2.economy.supportGemDropped ? 1 : 0);
+	file.WriteLE<uint8_t>(player.poe2.economy.supportDroughtKills);
+	// Version 27: the minions waiting in town to go with the hero.
+	file.WriteBytes(travellingMinions.data(), travellingMinions.size());
+	// Version 28: whether an uncut skill gem has dropped for the hero, and the kills without one.
+	file.WriteLE<uint8_t>(player.poe2.economy.skillGemDropped ? 1 : 0);
+	file.WriteLE<uint8_t>(player.poe2.economy.skillDroughtKills);
+}
+
 void LoadHeroItems(Player &player)
 {
 	LoadHelper file(OpenSaveArchive(gSaveNumber), "heroitems");
@@ -2409,6 +3216,28 @@ void LoadHeroItems(Player &player)
 
 constexpr uint8_t StashVersion = 0;
 
+namespace {
+
+/** @return The version of the tabs read, or 0 if there were none. */
+uint8_t LoadTabs(const char *filename)
+{
+	LoadHelper file(OpenStashArchive(), filename);
+	if (!file.IsValid(sizeof(uint32_t)))
+		return 0;
+	const uint32_t size = file.NextLE<uint32_t>();
+	if (size > 4096 || !file.IsValid(size))
+		return 0;
+	std::vector<uint8_t> data(size);
+	for (uint8_t &byte : data)
+		byte = file.NextLE<uint8_t>();
+	uint8_t version = 0;
+	if (!DeserializeStashTabs(data, StashTabs, &version))
+		return 0;
+	return version;
+}
+
+} // namespace
+
 void LoadStash()
 {
 	const char *filename;
@@ -2418,6 +3247,7 @@ void LoadStash()
 		filename = "mpstashitems";
 
 	Stash = {};
+	StashTabs.reset();
 
 	LoadHelper file(OpenStashArchive(), filename);
 	if (!file.IsValid())
@@ -2442,17 +3272,55 @@ void LoadStash()
 	}
 
 	auto itemCount = file.NextLE<uint32_t>();
-	if (!IsStashSizeValid(file.Size(), pages, itemCount)) {
+	// POE2 Mashup: POE2 stashes share one file name with and without Hellfire, and POE2 now forces Hellfire on, so a
+	// stash written with the other item size is read in that size and rewritten, never thrown away.
+	bool hellfireItems = gbIsHellfire;
+	if (!IsStashSizeValid(file.Size(), pages, itemCount, hellfireItems) && gbIsPoe2 && IsStashSizeValid(file.Size(), pages, itemCount, !hellfireItems))
+		hellfireItems = !hellfireItems;
+	if (!IsStashSizeValid(file.Size(), pages, itemCount, hellfireItems)) {
 		Stash = {};
 		EventPlrMsg(_("Stash size invalid. If you attempt to access your stash, data will be overwritten!!"), UiFlags::ColorRed);
 		return;
 	}
+	const bool wasHellfireSaveGame = gbIsHellfireSaveGame;
+	gbIsHellfireSaveGame = hellfireItems;
 	Stash.stashList.resize(itemCount);
 	for (unsigned i = 0; i < itemCount; i++) {
 		LoadAndValidateItemData(file, Stash.stashList[i]);
 	}
+	gbIsHellfireSaveGame = wasHellfireSaveGame;
+	if (hellfireItems != gbIsHellfire)
+		Stash.dirty = true;
+	if (gbIsPoe2)
+		FitOneCellStashItems();
 
-	Stash.SetPage(file.NextLE<uint32_t>());
+	const uint32_t openPage = file.NextLE<uint32_t>();
+
+	// POE2 tab names, colours, affinities and kinds; every page with items gets a tab.
+	if (gbIsPoe2) {
+		const uint8_t tabsVersion = LoadTabs(gbIsMultiplayer ? "mpstashtabs" : "spstashtabs");
+		if (tabsVersion == 0) {
+			// A stash from before tabs: its pages are blank tabs.
+			StashTabs.tabs.assign(DefaultBlankStashTabs, StashTab {});
+		}
+		unsigned usedPages = 0;
+		for (const auto &[key, grid] : Stash.stashGrids) {
+			if (c_any_of(grid, [](const auto &row) { return c_any_of(row, [](StashStruct::StashCell cell) { return cell > 0; }); }))
+				usedPages = std::max(usedPages, StashGridPage(key) + 1);
+		}
+		StashTabs.ensureCount(usedPages);
+		// Stashes from before premade tabs get one of each at the end, and stashes from before the Runes and Essences tabs
+		// (version 4) get those; RepairStashTabs then moves the augments and essences there from the Currency tab.
+		if (tabsVersion < 4)
+			StashTabs.addMissingPremadeTabs(tabsVersion);
+		// The open tab is set first so that it stays open as tabs are merged.
+		Stash.SetPage(openPage);
+		RepairStashTabs();
+		ConsolidateStashTabs();
+		return;
+	}
+
+	Stash.SetPage(openPage);
 }
 
 void RemoveEmptyInventory(Player &player)
@@ -2535,6 +3403,9 @@ std::expected<void, std::string> LoadGame(bool firstflag)
 	}
 
 	RETURN_IF_ERROR(LoadGameLevel(firstflag, ENTRY_LOAD));
+	// POE2 Mashup: loading keeps only the floor you stand on and the one your portal leads to.
+	// (The floor records themselves are read with the hero data inside LoadGameLevel.)
+	Poe2FloorsAfterLoadGame();
 	SetPlrAnims(myPlayer);
 	SyncPlrAnim(myPlayer);
 
@@ -2706,6 +3577,14 @@ void SaveHeroItems(SaveWriter &saveWriter, Player &player)
 
 void SaveStash(SaveWriter &stashWriter)
 {
+	if (gbIsPoe2) {
+		const std::vector<uint8_t> tabs = SerializeStashTabs(StashTabs, StashTabsSaveVersion);
+		SaveHelper tabsFile(stashWriter, gbIsMultiplayer ? "mpstashtabs" : "spstashtabs", sizeof(uint32_t) + tabs.size());
+		tabsFile.WriteLE<uint32_t>(static_cast<uint32_t>(tabs.size()));
+		for (const uint8_t byte : tabs)
+			tabsFile.WriteLE<uint8_t>(byte);
+	}
+
 	const char *filename;
 	if (!gbIsMultiplayer)
 		filename = "spstashitems";

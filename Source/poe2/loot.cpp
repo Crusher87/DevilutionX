@@ -1,0 +1,573 @@
+#include "poe2/loot.hpp"
+
+#include <algorithm>
+#include <numeric>
+
+#include "engine/random.hpp"
+#include "game_mode.hpp"
+#include "monster.h"
+#include "player.h"
+#include "poe2/area_levels.hpp"
+#include "poe2/modifiers.hpp"
+#include "poe2/monster_mods.hpp"
+#include "poe2/waystones.hpp"
+#include "poe2/weapon_kinds.hpp"
+#include "tables/itemdat.h"
+#include "utils/is_of.hpp"
+
+namespace devilution {
+
+namespace {
+
+template <size_t N>
+size_t RollWeighted(const std::array<int, N> &weights)
+{
+	const int total = std::accumulate(weights.begin(), weights.end(), 0);
+	if (total <= 0)
+		return 0;
+	int roll = LootRandom(total);
+	for (size_t i = 0; i < N; i++) {
+		if (roll < weights[i])
+			return i;
+		roll -= weights[i];
+	}
+	return N - 1;
+}
+
+} // namespace
+
+int LootRandom(int bound)
+{
+	if (bound <= 1)
+		return 0;
+	const uint32_t high = static_cast<uint32_t>(AdvanceRndSeed()) >> 16;
+	const uint32_t low = static_cast<uint32_t>(AdvanceRndSeed()) >> 16;
+	return static_cast<int>((((high & 0x7FFF) << 15) | (low & 0x7FFF)) % static_cast<uint32_t>(bound));
+}
+
+LootSource GetLootSource(const Monster &monster)
+{
+	if (IsAnyOf(monster.type().type, MT_DIABLO, MT_NAKRUL, MT_CLEAVER))
+		return LootSource::Boss;
+	if (monster.isUnique()) {
+		// The named quest uniques come first in the unique monster table; the rest are wandering minibosses.
+		const bool questBoss = static_cast<uint8_t>(monster.uniqueType) <= static_cast<uint8_t>(UniqueMonsterType::NaKrul);
+		return questBoss ? LootSource::Boss : LootSource::Miniboss;
+	}
+	switch (GetMonsterAffixes(monster).rarity) {
+	case MonsterRarity::Magic:
+		return LootSource::Magic;
+	case MonsterRarity::Rare:
+		return LootSource::Rare;
+	default:
+		return LootSource::Normal;
+	}
+}
+
+int ExpectedLootRollsPerMille(LootSource source)
+{
+	// Below the bundle's 0.18/0.65/2/3.25/6 (Curtis 2026-10-23: too much loot, a quest boss dropped a pile of rares).
+	// POE2 doesn't publish its numbers; these keep its feel of a few items from a rare monster and a handful from a boss.
+	switch (source) {
+	case LootSource::Magic:
+		return 550;
+	case LootSource::Rare:
+		return 1500;
+	case LootSource::Miniboss:
+		return 2500;
+	case LootSource::Boss:
+		return 4000;
+	default:
+		return 150;
+	}
+}
+
+int RollLootCount(LootSource source, const LootBonus &bonus)
+{
+	const int expected = ExpectedLootRollsPerMille(source) * bonus.quantity / 100;
+	int count = expected / 1000;
+	const int fraction = expected % 1000;
+	if (fraction > 0 && LootRandom(1000) < fraction)
+		count++;
+	return count;
+}
+
+std::array<int, static_cast<size_t>(LootCategory::Count)> LootCategoryWeights(LootSource source, const LootBonus &bonus)
+{
+	// Equipment, gold, currency, flask or charm, gem, endgame, misc, jewel. Augments (4) aren't in the game yet, so
+	// their weight goes to jewels for now. Uncut gems take 5 instead of the bible's 3, from gold, since skills only
+	// level with them (Curtis 2026-10-20: none dropped in a whole Rogue run; 4 to 6 a run feels right). It was 4
+	// until kills gave fewer rolls (2026-10-23); 5 keeps about as many gems a run.
+	std::array<int, static_cast<size_t>(LootCategory::Count)> weights { 48, 20, 15, 4, 5, 3, 1, 4 };
+	if (IsAnyOf(source, LootSource::Miniboss, LootSource::Boss)) {
+		// Bosses favour equipment and give less of the low-value categories.
+		weights[static_cast<size_t>(LootCategory::Equipment)] *= 2;
+		weights[static_cast<size_t>(LootCategory::Gold)] /= 2;
+		weights[static_cast<size_t>(LootCategory::Misc)] = 0;
+	}
+	weights[static_cast<size_t>(LootCategory::Endgame)] = weights[static_cast<size_t>(LootCategory::Endgame)] * bonus.waystones / 100;
+	weights[static_cast<size_t>(LootCategory::Equipment)] = weights[static_cast<size_t>(LootCategory::Equipment)] * bonus.equipment / 100;
+	return weights;
+}
+
+LootCategory RollLootCategory(LootSource source, const LootBonus &bonus)
+{
+	return static_cast<LootCategory>(RollWeighted(LootCategoryWeights(source, bonus)));
+}
+
+namespace {
+
+std::array<int, 4> BaseRarityWeights(LootSource source)
+{
+	// Normal, magic, rare, unique, in hundredths of a percent. The bundle's tables (57/35/7.75/0.25 for a normal
+	// monster) made about one item in six rare (Curtis 2026-10-23: three rares, two of them rings, in the first two
+	// minutes). POE2 doesn't publish its tables either; these give about one rare in sixteen, mostly from rare monsters
+	// and bosses. Uniques are a third of the bundle's (25, 50, 150, 500), keeping its curve (Curtis, Rogue run 2: five
+	// uniques in 67 minutes, a unique staff on the first floor; "much rarer"); normal items take the difference.
+	switch (source) {
+	case LootSource::Magic:
+		return { 5633, 3700, 650, 17 };
+	case LootSource::Rare:
+		return { 3250, 5000, 1700, 50 };
+	case LootSource::Miniboss:
+	case LootSource::Boss:
+		return { 1833, 5000, 3000, 167 };
+	default:
+		return { 7517, 2275, 200, 8 };
+	}
+}
+
+} // namespace
+
+std::array<int, 4> EquipmentRarityWeights(LootSource source, const LootBonus &bonus)
+{
+	std::array<int, 4> weights = BaseRarityWeights(source);
+	// Item rarity makes magic, rare and unique items more likely; normal ones take what's left.
+	int total = 0;
+	weights[3] = weights[3] * bonus.unique / 100;
+	for (size_t i = 1; i < weights.size(); i++) {
+		weights[i] = weights[i] * bonus.rarity / 100;
+		total += weights[i];
+	}
+	weights[0] = std::max(10000 - total, 0);
+	return weights;
+}
+
+item_quality RollEquipmentRarity(LootSource source, const LootBonus &bonus)
+{
+	constexpr std::array<item_quality, 4> Rarities { ITEM_QUALITY_NORMAL, ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE, ITEM_QUALITY_UNIQUE };
+	return Rarities[RollWeighted(EquipmentRarityWeights(source, bonus))];
+}
+
+std::array<int, static_cast<size_t>(UniqueTier::Count)> UniqueTierWeights(LootSource source)
+{
+	switch (source) {
+	case LootSource::Rare:
+	case LootSource::Miniboss:
+	case LootSource::Boss:
+		return { 6500, 2300, 1000, 200 };
+	default:
+		return { 8400, 1200, 350, 50 };
+	}
+}
+
+UniqueTier RollUniqueTier(LootSource source)
+{
+	return static_cast<UniqueTier>(RollWeighted(UniqueTierWeights(source)));
+}
+
+UniqueTier LegacyUniqueTier(int minLevel)
+{
+	if (minLevel <= 8)
+		return UniqueTier::Common;
+	if (minLevel < 20)
+		return UniqueTier::Uncommon;
+	return UniqueTier::Rare;
+}
+
+int LootItemLevelBonus(LootSource source)
+{
+	switch (source) {
+	case LootSource::Rare:
+		return 1;
+	case LootSource::Miniboss:
+	case LootSource::Boss:
+		return 2;
+	default:
+		return 0;
+	}
+}
+
+CurrencyBand RollCurrencyBand()
+{
+	// Common 56%, uncommon 28%, rare 12%, premium 3.8%, chase 0.2%.
+	constexpr std::array<int, static_cast<size_t>(CurrencyBand::Count)> Weights { 5600, 2800, 1200, 380, 20 };
+	return static_cast<CurrencyBand>(RollWeighted(Weights));
+}
+
+CurrencyBand OrbCurrencyBand(item_misc_id miscId)
+{
+	switch (miscId) {
+	case IMISC_ORB_REGAL:
+	case IMISC_ORB_ALCHEMY:
+	case IMISC_ORB_ETCHER:
+	case IMISC_ORB_ARTIFICER:
+	case IMISC_ORB_CATALYST:
+	case IMISC_ORB_LESSER_JEWELLER:
+	case IMISC_AUGMENT:
+	case IMISC_ESSENCE:
+		return CurrencyBand::Uncommon;
+	case IMISC_ORB_EXALTED:
+	case IMISC_ORB_CHAOS:
+	case IMISC_ORB_SCOURING:
+	case IMISC_ORB_VAAL:
+	case IMISC_ORB_CHANCE:
+	case IMISC_ORB_ANNUL:
+	case IMISC_ORB_DESECRATE:
+	case IMISC_OMEN:
+	case IMISC_ORB_GREATER_JEWELLER:
+		return CurrencyBand::Rare;
+	case IMISC_ORB_DIVINE:
+	case IMISC_ORB_GREATER_EXALTED:
+	case IMISC_ORB_GREATER_CHAOS:
+	case IMISC_ORB_PERFECT_JEWELLER:
+		return CurrencyBand::Premium;
+	case IMISC_ORB_PERFECT_EXALTED:
+	case IMISC_ORB_PERFECT_CHAOS:
+		return CurrencyBand::Chase;
+	default:
+		return CurrencyBand::Common;
+	}
+}
+
+int CurrencyDropLevel(item_misc_id miscId)
+{
+	// The bundle's drop levels, except Alchemy, which waits for Regal's 12, and Scouring, which the bundle doesn't
+	// have (Curtis 2026-10-20: both were dropping far too early), and the Lesser Jeweller's Orb, which waits for
+	// Act 2's first floor as in POE2 (Curtis 2026-10-22). The rest are the item table's levels on this scale.
+	switch (miscId) {
+	case IMISC_ORB_BAUBLE:
+		return 8;
+	case IMISC_ORB_ETCHER:
+		return 10;
+	case IMISC_ORB_LESSER_JEWELLER:
+		return 14;
+	case IMISC_AUGMENT:
+		return 11;
+	case IMISC_ORB_REGAL:
+	case IMISC_ORB_ALCHEMY:
+	case IMISC_ORB_EXALTED:
+	case IMISC_ORB_CHAOS:
+	case IMISC_ORB_CHANCE:
+		return 12;
+	case IMISC_ORB_VAAL:
+	case IMISC_ORB_ARTIFICER:
+		return 15;
+	case IMISC_ORB_SCOURING:
+	case IMISC_ESSENCE:
+		return 20;
+	case IMISC_ORB_GREATER_JEWELLER:
+		return 24;
+	case IMISC_ORB_DESECRATE:
+		return 25;
+	case IMISC_ORB_ANNUL:
+	case IMISC_ORB_DIVINE:
+	case IMISC_ORB_CATALYST:
+		return 35;
+	case IMISC_OMEN:
+		return 41;
+	case IMISC_ORB_PERFECT_JEWELLER:
+		return 46;
+	case IMISC_ORB_GREATER_EXALTED:
+	case IMISC_ORB_GREATER_CHAOS:
+		return 72;
+	case IMISC_ORB_PERFECT_EXALTED:
+	case IMISC_ORB_PERFECT_CHAOS:
+		return 79;
+	default:
+		return 1;
+	}
+}
+
+int CurrencyBandWeight(item_misc_id miscId)
+{
+	// The bundle's within-band weights; the ones it doesn't list sit with the scarcer orbs of their band.
+	switch (miscId) {
+	case IMISC_ORB_TRANSMUTE:
+	case IMISC_ORB_AUGMENT:
+		return 800;
+	case IMISC_ORB_WHETSTONE:
+	case IMISC_ORB_SCRAP:
+		return 500;
+	case IMISC_ORB_REGAL:
+		return 450;
+	case IMISC_ORB_ALCHEMY:
+		return 400;
+	case IMISC_ORB_EXALTED:
+		return 350;
+	case IMISC_ORB_BAUBLE:
+		return 260;
+	case IMISC_ORB_ETCHER:
+		return 250;
+	case IMISC_ORB_CHAOS:
+	case IMISC_ORB_ARTIFICER:
+	case IMISC_ORB_LESSER_JEWELLER:
+		return 220;
+	case IMISC_ORB_VAAL:
+		return 200;
+	case IMISC_ORB_ANNUL:
+	case IMISC_ORB_DESECRATE:
+		return 180;
+	case IMISC_ORB_CHANCE:
+		return 160;
+	case IMISC_ORB_GREATER_EXALTED:
+		return 130;
+	case IMISC_ORB_DIVINE:
+		return 120;
+	case IMISC_ORB_GREATER_CHAOS:
+	case IMISC_ORB_PERFECT_JEWELLER:
+		return 100;
+	case IMISC_ORB_PERFECT_EXALTED:
+		return 30;
+	case IMISC_ORB_PERFECT_CHAOS:
+		return 24;
+	default:
+		return 150;
+	}
+}
+
+int Poe2AreaDropLevel(item_misc_id miscId)
+{
+	// Curtis 2026-10-23: a Golden Charm, Amethyst Charms and four jewels dropped on Cathedral floors 3 and 4. POE2's own
+	// levels (Path of Building's charm bases; poe2db's jewel bases): the Golden Charm only in the late campaign and maps.
+	switch (miscId) {
+	case IMISC_JEWEL:
+		return 20;
+	case IMISC_CHARM_MAGIC:
+		return 40;
+	case IMISC_CHARM_GOLDEN:
+		return 50;
+	default:
+		return 0;
+	}
+}
+
+bool IsHellfireRune(item_misc_id miscId)
+{
+	return miscId > IMISC_RUNEFIRST && miscId < IMISC_RUNELAST;
+}
+
+int LootAreaLevel(int floorItemLevel)
+{
+	if (const int tier = ActiveMapTier(); tier > 0)
+		return std::max(floorItemLevel, MapAreaLevelBase + tier);
+	return floorItemLevel;
+}
+
+bool LineageSupportsDropAt(int areaLevel)
+{
+	return areaLevel > MapAreaLevelBase;
+}
+
+int FirstSupportChancePerMille(const Player &player, LootSource source, int dungeonLevel)
+{
+	if (!gbIsPoe2 || player.poe2.economy.supportGemDropped || dungeonLevel < 1 || dungeonLevel > FirstSupportLastLevel)
+		return 0;
+	if (dungeonLevel == FirstSupportLastLevel && IsAnyOf(source, LootSource::Rare, LootSource::Miniboss, LootSource::Boss))
+		return 1000;
+	return std::min<int>(FirstSupportStartPerMille + (FirstSupportClimbPerMille * player.poe2.economy.supportDroughtKills), 1000);
+}
+
+bool RollFirstSupportDrop(Player &player, LootSource source, int dungeonLevel)
+{
+	const int chance = FirstSupportChancePerMille(player, source, dungeonLevel);
+	if (chance <= 0)
+		return false;
+	if (chance >= 1000)
+		return true;
+	if (LootRandom(1000) < chance)
+		return true;
+	uint8_t &kills = player.poe2.economy.supportDroughtKills;
+	kills = static_cast<uint8_t>(std::min<int>(kills + 1, UINT8_MAX));
+	return false;
+}
+
+int FirstSkillGemChancePerMille(const Player &player, LootSource source, int dungeonLevel)
+{
+	if (!gbIsPoe2 || player.poe2.economy.skillGemDropped || dungeonLevel < 1 || dungeonLevel > FirstSupportLastLevel)
+		return 0;
+	if (dungeonLevel == FirstSupportLastLevel && IsAnyOf(source, LootSource::Rare, LootSource::Miniboss, LootSource::Boss))
+		return 1000;
+	return std::min<int>(FirstSupportStartPerMille + (FirstSupportClimbPerMille * player.poe2.economy.skillDroughtKills), 1000);
+}
+
+bool RollFirstSkillGemDrop(Player &player, LootSource source, int dungeonLevel)
+{
+	const int chance = FirstSkillGemChancePerMille(player, source, dungeonLevel);
+	if (chance <= 0)
+		return false;
+	if (chance >= 1000)
+		return true;
+	if (LootRandom(1000) < chance)
+		return true;
+	uint8_t &kills = player.poe2.economy.skillDroughtKills;
+	kills = static_cast<uint8_t>(std::min<int>(kills + 1, UINT8_MAX));
+	return false;
+}
+
+int RollNaturalRareAffixCount()
+{
+	// POE2's dropped rares can have 3; most still have 4 or more (Curtis 2026-10-23).
+	return RareModCountFromRoll(LootRandom(RareModCountRolls));
+}
+
+int BaseRecencyPercent(int itemLevel, int baseLevel)
+{
+	// The bible's gaps (5, 12, 20) are in POE2 levels, which run about twice as far as Diablo's monster levels.
+	const int gap = itemLevel - baseLevel;
+	if (gap <= 3)
+		return 100;
+	if (gap <= 7)
+		return 70;
+	if (gap <= 12)
+		return 35;
+	return 10;
+}
+
+int EquipmentClassWeight(ItemType type)
+{
+	switch (type) {
+	case ItemType::LightArmor:
+	case ItemType::MediumArmor:
+	case ItemType::HeavyArmor:
+		// Body armour, split over its three weights.
+		return 5;
+	case ItemType::Helm:
+		return 9;
+	case ItemType::Shield:
+		return 8;
+	case ItemType::Sword:
+	case ItemType::Bow:
+	case ItemType::Ring:
+		return 7;
+	case ItemType::Mace:
+	case ItemType::Staff:
+		return 6;
+	case ItemType::Axe:
+		return 5;
+	case ItemType::Amulet:
+		return 4;
+	default:
+		return 0;
+	}
+}
+
+size_t EquipmentBucketOf(int itemIndex)
+{
+	const ItemData &data = AllItemsList[static_cast<size_t>(itemIndex)];
+	if (IsAnyOf(data.itype, ItemType::Mace, ItemType::Staff)) {
+		switch (WeaponKindOf(itemIndex)) {
+		case WeaponKind::Wand:
+			return FirstKindBucket + static_cast<size_t>(KindBucket::Wand);
+		case WeaponKind::Sceptre:
+			return FirstKindBucket + static_cast<size_t>(KindBucket::Sceptre);
+		case WeaponKind::CasterStaff:
+			return FirstKindBucket + static_cast<size_t>(KindBucket::CasterStaff);
+		case WeaponKind::Quarterstaff:
+			return FirstKindBucket + static_cast<size_t>(KindBucket::Quarterstaff);
+		default:
+			break;
+		}
+	}
+	return static_cast<size_t>(data.itype);
+}
+
+int EquipmentBucketWeight(size_t bucket)
+{
+	if (bucket < FirstKindBucket)
+		return EquipmentClassWeight(static_cast<ItemType>(bucket));
+	switch (static_cast<KindBucket>(bucket - FirstKindBucket)) {
+	case KindBucket::Wand:
+		return 4;
+	case KindBucket::Sceptre:
+		return 3;
+	case KindBucket::CasterStaff:
+		return 4;
+	case KindBucket::Quarterstaff:
+		// The Staff type's weight, which the quarterstaves had to themselves.
+		return EquipmentClassWeight(ItemType::Staff);
+	default:
+		return 0;
+	}
+}
+
+int Poe2ItemLevel(int areaLevel, int bonus)
+{
+	return std::clamp(((areaLevel * 13) + 5) / 10 + bonus, 1, MaxPoe2ItemLevel);
+}
+
+int Poe2ItemLevel(const Monster &monster, int difficulty)
+{
+	const int bonus = LootItemLevelBonus(GetLootSource(monster));
+	if (const int areaLevel = gbIsPoe2 ? CurrentAreaLevel(difficulty) : 0; areaLevel > 0)
+		return AreaItemLevel(areaLevel, bonus);
+	return Poe2CurrencyLevel(monster, difficulty);
+}
+
+int Poe2CurrencyLevel(const Monster &monster, int difficulty)
+{
+	return Poe2ItemLevel(monster.data().level + (15 * difficulty), LootItemLevelBonus(GetLootSource(monster)));
+}
+
+int AreaItemLevel(int areaLevel, int bonus)
+{
+	return std::clamp(areaLevel + bonus, 1, MaxPoe2ItemLevel);
+}
+
+int VendorAreaLevel(const Player &player, int difficulty)
+{
+	if (AreaLevelForFloor(1) == 0)
+		return 0;
+	int deepest = AreaLevelForFloor(1); // the first floor counts before any floor is visited
+	for (int floor = 1; floor < NUMLEVELS; floor++) {
+		if (player._pLvlVisited[floor])
+			deepest = std::max(deepest, AreaLevelForFloor(floor));
+	}
+	return std::min(deepest + (AreaLevelsPerDifficulty * difficulty) + VendorAreaLevelBonus, MaxPoe2ItemLevel);
+}
+
+int GetPoe2ItemLevel(const Item &item)
+{
+	if (EquipmentClassWeight(item._itype) == 0 && item._iMiscId != IMISC_JEWEL)
+		return 0;
+	return static_cast<int>((item.dwBuff & CF_POE2_ILVL) >> 16);
+}
+
+void SetPoe2ItemLevel(Item &item, int level)
+{
+	item.dwBuff = (item.dwBuff & ~(CF_POE2_ILVL | CF_POE2_MODS)) | ((static_cast<uint32_t>(std::clamp(level, 0, MaxPoe2ItemLevel)) << 16) & CF_POE2_ILVL);
+	// Items made with an item level roll their affixes from the itemization tables.
+	if (level > 0)
+		item.dwBuff |= CF_POE2_MODS;
+}
+
+int VendorSellValue(int value)
+{
+	if (gbIsPoe2)
+		return std::max(value * 18 / 100, 1);
+	return std::max(value / 4, 1);
+}
+
+std::optional<item_quality> GetLootRarity(const Item &item)
+{
+	if ((item.dwBuff & CF_POE2_LOOT_SET) == 0)
+		return std::nullopt;
+	return static_cast<item_quality>((item.dwBuff & CF_POE2_LOOT_RARITY) >> 28);
+}
+
+void SetLootRarity(Item &item, item_quality rarity)
+{
+	item.dwBuff = (item.dwBuff & ~(CF_POE2_LOOT_RARITY | CF_POE2_LOOT_SET)) | ((static_cast<uint32_t>(rarity) << 28) & CF_POE2_LOOT_RARITY) | CF_POE2_LOOT_SET;
+}
+
+} // namespace devilution

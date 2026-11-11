@@ -4,6 +4,7 @@
  * Implementation of functions for handling the engines color palette.
  */
 #include "engine/palette.h"
+#include "engine/render/text_render.hpp"
 
 #include <algorithm>
 #include <array>
@@ -25,6 +26,7 @@
 #include "engine/random.hpp"
 #include "headless_mode.hpp"
 #include "hwcursor.hpp"
+#include "levels/tileset_mix.hpp"
 #include "options.h"
 #include "utils/display.h"
 #include "utils/palette_blending.hpp"
@@ -183,6 +185,7 @@ void LoadPalette(const char *path)
 	for (unsigned i = 0; i < palData.size(); i++) {
 		logical_palette[i] = palData[i].toSDL();
 	}
+	SetTextRenderPalette(&logical_palette);
 }
 
 void LoadPaletteAndInitBlending(const char *path)
@@ -190,6 +193,8 @@ void LoadPaletteAndInitBlending(const char *path)
 	assert(path != nullptr);
 	if (HeadlessMode) return;
 	LoadPalette(path);
+	if (tilesetmix::Active())
+		tilesetmix::ApplyMixedPalette();
 	if (leveltype == DTYPE_CAVES || leveltype == DTYPE_CRYPT) {
 		GenerateBlendedLookupTable(logical_palette.data(), /*skipFrom=*/1, /*skipTo=*/31);
 	} else if (leveltype == DTYPE_NEST) {

@@ -521,6 +521,9 @@ if(VITA)
   set(VITA_VERSION  "01.00")
   set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d PARENTAL_LEVEL=1")
   set(VITA_MKSFOEX_FLAGS "${VITA_MKSFOEX_FLAGS} -d ATTRIBUTE2=12")
+  # Leaves room after the code segment for the SCE module data that vita-elf-create appends;
+  # without it the data segment can start too close and the conversion fails.
+  target_link_options(${BIN_TARGET} PRIVATE "LINKER:--defsym=__sce_headroom=0x4000")
   vita_create_self(devilutionx.self devilutionx UNSAFE)
   if(BUILD_ASSETS_MPQ OR SRC_DIST)
     vita_create_vpk(devilutionx.vpk ${VITA_TITLEID} devilutionx.self
@@ -632,6 +635,11 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
     endif()
     set(CPACK_STRIP_FILES TRUE)
     install(TARGETS ${BIN_TARGET} DESTINATION .)
+    if(MINGW)
+      # POE2 Mashup: a link map, so the crash offsets in poe2_logs can be named.
+      target_link_options(${BIN_TARGET} PRIVATE "-Wl,-Map=${CMAKE_BINARY_DIR}/devilutionx.map")
+      install(FILES "${CMAKE_BINARY_DIR}/devilutionx.map" DESTINATION ".")
+    endif()
     install(FILES "${PROJECT_SOURCE_DIR}/Packaging/windows/README.txt"
       DESTINATION "."
     )
@@ -639,6 +647,9 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
       DESTINATION "."
     )
     install(FILES "${HELLFIRE_MPQ}"
+      DESTINATION "mods"
+    )
+    install(FILES "${POE2_MPQ}"
       DESTINATION "mods"
     )
 
@@ -703,6 +714,9 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
       DESTINATION "share/diasurgical/${project_name}"
     )
     install(FILES "${HELLFIRE_MPQ}"
+      DESTINATION "share/diasurgical/${project_name}/mods"
+    )
+    install(FILES "${POE2_MPQ}"
       DESTINATION "share/diasurgical/${project_name}/mods"
     )
     install(FILES "${PROJECT_SOURCE_DIR}/Packaging/resources/icon_flat.png"

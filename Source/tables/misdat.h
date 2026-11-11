@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <expected>
 #include <string>
+#include <string_view>
 #include <type_traits>
 
 #include "effects.h"
@@ -28,8 +29,10 @@ enum class DamageType : uint8_t {
 	Physical,
 	Fire,
 	Lightning,
-	Magic,
-	Acid,
+	/** Diablo's magic, POE2's cold. Still 3, the value network messages carry. */
+	Cold,
+	/** Diablo's acid, POE2's chaos. Still 4, the value network messages carry. */
+	Chaos,
 };
 
 enum class MissileGraphicID : uint8_t {
@@ -121,8 +124,9 @@ enum class MissileDataFlags : uint8_t {
 	Physical = static_cast<uint8_t>(DamageType::Physical),
 	Fire = static_cast<uint8_t>(DamageType::Fire),
 	Lightning = static_cast<uint8_t>(DamageType::Lightning),
-	Magic = static_cast<uint8_t>(DamageType::Magic),
-	Acid = static_cast<uint8_t>(DamageType::Acid),
+	/** Diablo's magic, POE2's cold (Town Portal, Mana Shield and other spells without damage carry it too). */
+	Cold = static_cast<uint8_t>(DamageType::Cold),
+	Chaos = static_cast<uint8_t>(DamageType::Chaos),
 	Arrow = 1 << 4,
 	Invisible = 1 << 5,
 };
@@ -241,7 +245,13 @@ struct MissileFileData {
 };
 
 const MissileData &GetMissileData(MissileID missileId);
+/** @brief Whether the loaded missile table has this missile's row. */
+bool HasMissileData(MissileID missileId);
+/** @brief A missile flag from the missile table; the damage type reads under Diablo's names (Magic, Acid) or POE2's (Cold, Chaos). */
+std::expected<MissileDataFlags, std::string> ParseMissileDataFlag(std::string_view value);
 MissileFileData &GetMissileSpriteData(MissileGraphicID graphicId);
+/** @brief Whether the loaded sprite table has this graphic (some only come with the Hellfire mod). */
+bool HasMissileSpriteData(MissileGraphicID graphicId);
 
 void LoadMissileData();
 

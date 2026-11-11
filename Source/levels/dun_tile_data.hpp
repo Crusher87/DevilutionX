@@ -26,7 +26,7 @@
 namespace devilution {
 
 #define MAXTHEMES 50
-#define MAXTILES 1379
+#define MAXTILES 4096 // Hellfire town alone has 1379; a map drawn from two tile sets needs the sum of both
 
 extern DVL_API_FOR_TEST uint8_t currlevel;
 extern bool setlevel;
@@ -115,7 +115,7 @@ extern int8_t dPlayer[MAXDUNX][MAXDUNY];
  * (monsters array index) in the dungeon.
  * Negative id indicates monsters moving.
  */
-extern int16_t dMonster[MAXDUNX][MAXDUNY];
+extern DVL_API_FOR_TEST int16_t dMonster[MAXDUNX][MAXDUNY];
 /**
  * Contains the dead numbers (deads array indices) and dead direction of
  * the map, encoded as specified by the pseudo-code below.
@@ -152,7 +152,7 @@ extern int8_t dSpecial[MAXDUNX][MAXDUNY];
 extern int themeCount;
 extern THEME_LOC themeLoc[MAXTHEMES];
 
-extern uint32_t DungeonSeeds[NUMLEVELS];
+extern DVL_API_FOR_TEST uint32_t DungeonSeeds[NUMLEVELS];
 extern DVL_API_FOR_TEST std::optional<uint32_t> LevelSeeds[NUMLEVELS];
 
 DVL_ALWAYS_INLINE constexpr bool InDungeonBounds(Point position)
@@ -222,6 +222,12 @@ constexpr bool IsTileLit(Point position)
 }
 
 std::expected<void, std::string> LoadLevelSOLData();
+
+/**
+ * @brief Re-encodes the loaded dungeon cels for the first `pieceCount` entries of `DPieceMicros` and
+ * renumbers their frames. SetDungeonMicros ends with this; the tile-set mix fills DPieceMicros itself first.
+ */
+void FinishDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, size_t pieceCount, uint_fast8_t microTileLen);
 void SetDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8_t &microTileLen);
 
 } // namespace devilution

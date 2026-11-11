@@ -3,6 +3,7 @@ include(functions/devilutionx_library)
 include(functions/genex)
 
 set(libdevilutionx_SRCS
+  admin_menu.cpp
   appfat.cpp
   automap.cpp
   capture.cpp
@@ -27,6 +28,38 @@ set(libdevilutionx_SRCS
   nthread.cpp
   pfile.cpp
   plrmsg.cpp
+  poe2/autosave.cpp
+  poe2/craft_state.cpp
+  poe2/item_search.cpp
+  poe2/meta_gems.cpp
+  poe2/skill_details.cpp
+  poe2/spell_damage.cpp
+  poe2/crafting_items.cpp
+  poe2/desecration.cpp
+  poe2/economy.cpp
+  poe2/endgame.cpp
+  poe2/map_mods.cpp
+  poe2/map_play.cpp
+  poe2/currency.cpp
+  poe2/stacking.cpp
+  poe2/dodge_roll.cpp
+  poe2/hud_globes.cpp
+  poe2/hud_minions.cpp
+  poe2/overhead_bars.cpp
+  poe2/corner_map.cpp
+  poe2/quest_tracker.cpp
+  poe2/skill_lab.cpp
+  poe2/skill_lab_notes.cpp
+  poe2/skill_looks.cpp
+  poe2/vfx.cpp
+  poe2/weather.cpp
+  poe2/hd.cpp
+  poe2/hd_light.cpp
+  poe2/hd_ui.cpp
+  poe2/loot_filter.cpp
+  poe2/rune_icons.cpp
+  poe2/stash_layouts.cpp
+  poe2/stash_tabs.cpp
   portal.cpp
   restrict.cpp
   sync.cpp
@@ -74,6 +107,7 @@ set(libdevilutionx_SRCS
   engine/animationinfo.cpp
   engine/backbuffer_state.cpp
   engine/dx.cpp
+  engine/ui_scale.cpp
   engine/events.cpp
   engine/palette.cpp
   engine/sound_position.cpp
@@ -86,6 +120,7 @@ set(libdevilutionx_SRCS
 
   levels/setmaps.cpp
   levels/themes.cpp
+  levels/tileset_mix.cpp
   levels/tile_properties.cpp
   levels/town.cpp
   levels/trigs.cpp
@@ -95,6 +130,7 @@ set(libdevilutionx_SRCS
   lua/lua_global.cpp
   lua/modules/audio.cpp
   lua/modules/hellfire.cpp
+  lua/modules/poe2.cpp
   lua/modules/dev.cpp
   lua/modules/dev/display.cpp
   lua/modules/dev/items.cpp
@@ -128,6 +164,20 @@ set(libdevilutionx_SRCS
   panels/mainpanel.cpp
   panels/partypanel.cpp
   panels/quest_log.cpp
+  panels/item_spawner.cpp
+  panels/monster_spawner.cpp
+  panels/skill_lab_panel.cpp
+  panels/atlas_panel.cpp
+  panels/anvil_panel.cpp
+  panels/desecration_panel.cpp
+  panels/gemcutting_panel.cpp
+  panels/passive_tree_panel.cpp
+  panels/skill_bar.cpp
+  panels/skills_panel.cpp
+  panels/monster_banner.cpp
+  panels/quest_reward_panel.cpp
+  panels/stack_split_panel.cpp
+  panels/stash_tabs_panel.cpp
   panels/spell_book.cpp
   panels/spell_icons.cpp
   panels/spell_list.cpp
@@ -228,11 +278,19 @@ target_link_dependencies(libdevilutionx_cl2_to_clx
   libdevilutionx_endian_write
 )
 
+add_devilutionx_object_library(libdevilutionx_hd_hooks
+  poe2/hd_hooks.cpp
+)
+target_link_dependencies(libdevilutionx_hd_hooks PUBLIC
+  DevilutionX::SDL
+)
+
 add_devilutionx_object_library(libdevilutionx_clx_render
   engine/render/clx_render.cpp
 )
 target_link_dependencies(libdevilutionx_clx_render PUBLIC
   DevilutionX::SDL
+  libdevilutionx_hd_hooks
   libdevilutionx_light_render
   libdevilutionx_palette_blending
   libdevilutionx_strings
@@ -351,6 +409,7 @@ add_devilutionx_object_library(libdevilutionx_dun_render
 target_link_dependencies(libdevilutionx_dun_render
   PUBLIC
   DevilutionX::SDL
+  libdevilutionx_hd_hooks
   libdevilutionx_light_render
   libdevilutionx_surface
   libdevilutionx_palette_blending
@@ -454,6 +513,15 @@ target_link_dependencies(libdevilutionx_init PUBLIC
   libdevilutionx_options
   PRIVATE
   libdevilutionx_sdl2_to_1_2_backports
+  libdevilutionx_wasd_movement
+)
+
+add_devilutionx_object_library(libdevilutionx_wasd_movement
+  controls/wasd_movement.cpp
+)
+target_link_dependencies(libdevilutionx_wasd_movement PUBLIC
+  DevilutionX::SDL
+  libdevilutionx_options
 )
 
 add_devilutionx_object_library(libdevilutionx_load_cel
@@ -463,6 +531,7 @@ target_link_dependencies(libdevilutionx_load_cel
   PUBLIC
   tl
   PRIVATE
+  libdevilutionx_hd_hooks
   libdevilutionx_strings
 )
 if(SUPPORTS_MPQ)
@@ -734,6 +803,66 @@ endif()
 
 add_devilutionx_object_library(libdevilutionx_player
   player.cpp
+  poe2/defenses.cpp
+  poe2/area_levels.cpp
+  poe2/bases.cpp
+  poe2/bound_demons.cpp
+  poe2/weapon_kinds.cpp
+  poe2/belt_uniques.cpp
+  poe2/boss_loot.cpp
+  poe2/camera_shake.cpp
+  poe2/cathedral_floors.cpp
+  poe2/charms.cpp
+  poe2/experience.cpp
+  poe2/flasks.cpp
+  poe2/floor_chests.cpp
+  poe2/floor_packs.cpp
+  poe2/floor_rooms.cpp
+  poe2/floors.cpp
+  poe2/gem_levels.cpp
+  poe2/gemcutting.cpp
+  poe2/tears.cpp
+  poe2/jewels.cpp
+  poe2/level_census.cpp
+  poe2/loot.cpp
+  poe2/modifiers.cpp
+  poe2/monster_armour.cpp
+  poe2/monster_levels.cpp
+  poe2/monster_mods.cpp
+  poe2/monster_resistance.cpp
+  poe2/passive_tree.cpp
+  poe2/profane_roads.cpp
+  poe2/regen.cpp
+  poe2/skill_gems.cpp
+  poe2/skill_resources.cpp
+  poe2/table_skills.cpp
+  poe2/shrines.cpp
+  poe2/effect_primitives.cpp
+  poe2/rune_fusing.cpp
+  poe2/summon_commands.cpp
+  poe2/support_table.cpp
+  poe2/support_tiers.cpp
+  poe2/spirit.cpp
+  poe2/spirit_buffs.cpp
+  poe2/spirit_skills.cpp
+  poe2/spirit_uses.cpp
+  poe2/spirit_auras.cpp
+  poe2/minion_gems.cpp
+  poe2/minion_travel.cpp
+  poe2/support_gems.cpp
+  poe2/telemetry.cpp
+  poe2/telemetry_events.cpp
+  poe2/tree_telemetry.cpp
+  poe2/hit_trace.cpp
+  poe2/unique_effects.cpp
+  poe2/uniques.cpp
+  poe2/waystones.cpp
+  poe2/hardcore.cpp
+  poe2/weapon_swap.cpp
+  poe2/default_attack.cpp
+  poe2/aim.cpp
+  poe2/attack_speed.cpp
+  poe2/weapon_skills.cpp
   tables/playerdat.cpp
 )
 target_link_dependencies(libdevilutionx_player
@@ -745,8 +874,13 @@ target_link_dependencies(libdevilutionx_player
   unordered_dense::unordered_dense
   libdevilutionx_game_mode
   PRIVATE
+  libdevilutionx_config
   libdevilutionx_control
+  libdevilutionx_file_util
   libdevilutionx_load_cl2
+  libdevilutionx_options
+  libdevilutionx_paths
+  libdevilutionx_questdat
   libdevilutionx_strings
 )
 
@@ -1078,6 +1212,7 @@ target_link_dependencies(libdevilutionx PUBLIC
   libdevilutionx_headless_mode
   libdevilutionx_ini
   libdevilutionx_init
+  libdevilutionx_wasd_movement
   libdevilutionx_items
   libdevilutionx_level_objects
   libdevilutionx_light_render

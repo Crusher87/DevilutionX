@@ -37,6 +37,9 @@ void RemoveEmptyInventory(Player &player);
  */
 std::expected<void, std::string> LoadGame(bool firstflag);
 void SaveHotkeys(SaveWriter &saveWriter, const Player &player);
+/** @brief Loads the POE2 Mashup character state (support gems, ...) of the current hero. */
+void LoadPoe2HeroData(Player &player);
+void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player);
 void SaveHeroItems(SaveWriter &saveWriter, Player &player);
 void SaveGameData(SaveWriter &saveWriter);
 void SaveGame();

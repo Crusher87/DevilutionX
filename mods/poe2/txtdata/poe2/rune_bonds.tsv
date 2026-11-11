@@ -1,0 +1,29 @@
+family	kind	effect	value1	value2	rule	ruleValue	text
+Ral	weapon	IgniteMagnitude	15	0		0	15% stronger ignites
+Ral	staff	IgniteMagnitude	15	0		0	15% stronger ignites
+Ral	armour	Life	10	0		0	+10 to maximum life and mana
+Ral	armour	Mana	10	0		0	
+Thul	weapon	FreezeBuildup	15	0		0	15% more freeze buildup
+Thul	staff	FreezeBuildup	15	0		0	15% more freeze buildup
+Thul	armour	Life	10	0		0	+10 to maximum life and mana
+Thul	armour	Mana	10	0		0	
+Ort	weapon	ShockMagnitude	15	0		0	15% stronger shocks
+Ort	staff	ShockMagnitude	15	0		0	15% stronger shocks
+Ort	armour	Life	10	0		0	+10 to maximum life and mana
+Ort	armour	Mana	10	0		0	
+Ohm	armour	Life	10	0		0	+10 to maximum life and mana
+Ohm	armour	Mana	10	0		0	
+Amn	weapon	LifePercent	3	0		0	3% increased maximum life
+Amn	staff	LifePercent	3	0		0	3% increased maximum life
+Vex	weapon	ManaPercent	2	0		0	2% increased maximum mana
+Vex	staff	ManaPercent	2	0		0	2% increased maximum mana
+Io	weapon	LifeRegenPercent	20	0		0	Regenerate 0.2% of maximum life a second
+Tir	weapon	ManaCostAsLife	6	0		0	6% of mana costs paid with life
+Sol	weapon		0	0	MoreVsStunned	20	20% more damage to heavily stunned enemies
+Gul	weapon	AttackCritChance	5	0		0	+0.5% chance for attacks to crit
+Fal	weapon	AddedPhysical	3	5		0	Adds 3 to 5 physical and fire damage
+Fal	weapon	AddedFire	3	5		0	
+Ko	weapon	AddedPhysical	3	5		0	Adds 3 to 5 physical and cold damage
+Ko	weapon	AddedCold	3	5		0	
+Lum	weapon	AddedPhysical	3	5		0	Adds 3 to 5 physical and lightning damage
+Lum	weapon	AddedLightning	3	5		0	

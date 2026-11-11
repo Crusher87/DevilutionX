@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <expected>
+#include <optional>
 #include <string_view>
 #include <vector>
 
@@ -15,6 +16,7 @@
 
 #include "tables/objdat.h"
 #include "tables/spelldat.h"
+#include "utils/attributes.h"
 
 namespace devilution {
 
@@ -282,6 +284,12 @@ enum item_cursor_graphic : uint8_t {
 	ICURS_BLITZEN                     = 219,
 	ICURS_DEMON_PLATE_ARMOR           = 225,
 	ICURS_BOVINE                      = 226,
+	// POE2 Mashup: one-cell copies of bigger pictures, for items that take one cell in POE2 (made in cursor.cpp).
+	ICURS_MAGIC_ROCK_SMALL            = 229,
+	ICURS_MAP_OF_THE_STARS_SMALL      = 230,
+	ICURS_BOOK_RED_SMALL              = 231,
+	ICURS_TORN_NOTE_1_SMALL           = 232,
+	ICURS_RECONSTRUCTED_NOTE_SMALL    = 233,
 
 	ICURS_DEFAULT = static_cast<uint8_t>(-1),
 	// clang-format on
@@ -430,7 +438,7 @@ enum class ItemSpecialEffectHf : uint8_t {
 };
 use_enum_as_flags(ItemSpecialEffectHf);
 
-enum item_misc_id : int8_t {
+enum item_misc_id : int16_t {
 	IMISC_NONE,
 	IMISC_USEFIRST,
 	IMISC_FULLHEAL,
@@ -487,6 +495,133 @@ enum item_misc_id : int8_t {
 	IMISC_AURIC,
 	IMISC_NOTE,
 	IMISC_ARENAPOT,
+	// POE2 Mashup support gems
+	IMISC_SUPPORTFIRST,
+	IMISC_SUPPORT_MULTIPROJ,
+	IMISC_SUPPORT_EMPOWER,
+	IMISC_SUPPORT_FASTCAST,
+	IMISC_SUPPORT_EFFICIENCY,
+	IMISC_SUPPORT_PIERCE,
+	IMISC_SUPPORT_FORK,
+	IMISC_SUPPORT_CHAIN,
+	IMISC_SUPPORT_CONCENTRATED,
+	IMISC_SUPPORT_FASTERPROJ,
+	IMISC_SUPPORT_BRUTALITY,
+	IMISC_SUPPORT_MARTIALTEMPO,
+	IMISC_SUPPORT_KNOCKBACK,
+	IMISC_SUPPORTLAST,
+	// POE2 Mashup currency orbs
+	IMISC_ORB_TRANSMUTE,
+	IMISC_ORB_ALCHEMY,
+	IMISC_ORB_CHAOS,
+	IMISC_ORB_SCOURING,
+	IMISC_ORB_AUGMENT,
+	IMISC_ORB_REGAL,
+	IMISC_ORB_EXALTED,
+	IMISC_ORB_DIVINE,
+	IMISC_ORB_VAAL,
+	IMISC_SKILLGEMFIRST,
+	/** Grants the spell in the item's spell column. */
+	IMISC_SKILLGEM_SPELL,
+	IMISC_SKILLGEM_CLEAVE,
+	IMISC_SKILLGEM_GROUNDSLAM,
+	IMISC_SKILLGEM_BARRAGE,
+	IMISC_SKILLGEM_WHIRL,
+	IMISC_SKILLGEM_FLURRY,
+	IMISC_SKILLGEM_LEAPSLAM,
+	IMISC_SKILLGEM_RAINOFARROWS,
+	IMISC_SKILLGEM_SHIELDCHARGE,
+	IMISC_SKILLGEM_BATTLECRY,
+	IMISC_SKILLGEM_LIGHTNINGARROW,
+	IMISC_SKILLGEM_ESCAPESHOT,
+	IMISC_SKILLGEM_EMBERFUSILLADE,
+	IMISC_SKILLGEM_SPARK,
+	IMISC_SPIRITGEM_HERALDASH,
+	IMISC_SPIRITGEM_HERALDTHUNDER,
+	IMISC_SPIRITGEM_PURITY,
+	IMISC_SPIRITGEM_GOLEM,
+	IMISC_SPIRITGEM_SKELETONS,
+	IMISC_SKILLGEMLAST,
+	/** Cut into a skill gem of up to the item's level at the gemcutting panel. */
+	IMISC_UNCUT_SKILL,
+	/** Cut into a support gem of up to the item's level at the gemcutting panel. */
+	IMISC_UNCUT_SUPPORT,
+	/** Charms go off on their own from the belt. */
+	IMISC_CHARM_LIFE,
+	IMISC_CHARM_MANA,
+	IMISC_CHARM_GUARD,
+	/** Opens a map (POE2 Mashup endgame) when used in town. */
+	IMISC_WAYSTONE,
+	/** Charms that go off when a fire, lightning or magic hit lands, when you're stunned, or when you kill a rare. */
+	IMISC_CHARM_FIRE,
+	IMISC_CHARM_LIGHTNING,
+	/** The Amethyst Charm, which answers chaos (named for Diablo's magic, which it answered before chaos damage). */
+	IMISC_CHARM_MAGIC,
+	IMISC_CHARM_STUN,
+	IMISC_CHARM_GOLDEN,
+	/** Glassblower's Bauble: adds quality to a flask. */
+	IMISC_ORB_BAUBLE,
+	/** Cut into a Spirit gem of up to the item's level at the gemcutting panel. */
+	IMISC_UNCUT_SPIRIT,
+	/** Broken for a permanent boost to maximum Spirit, like POE2's Gemrot Skull. */
+	IMISC_SPIRIT_SKULL,
+	/** Goes in an allocated jewel socket of the passive tree (POE2 Ruby, Emerald or Sapphire). */
+	IMISC_JEWEL,
+	/** POE2 Mashup crafting currency. */
+	IMISC_ORB_CHANCE,
+	IMISC_ORB_ANNUL,
+	IMISC_ORB_WHETSTONE,
+	IMISC_ORB_ETCHER,
+	IMISC_ORB_SCRAP,
+	IMISC_ORB_GREATER_EXALTED,
+	IMISC_ORB_PERFECT_EXALTED,
+	IMISC_ORB_GREATER_CHAOS,
+	IMISC_ORB_PERFECT_CHAOS,
+	IMISC_ORB_ARTIFICER,
+	IMISC_ORB_DESECRATE,
+	/** Adds quality to jewellery; which catalyst it is is in the create flags (poe2/crafting_items.hpp). */
+	IMISC_ORB_CATALYST,
+	/** Essences, omens and augments come in kinds kept in the create flags. */
+	IMISC_ESSENCE,
+	IMISC_OMEN,
+	IMISC_AUGMENT,
+	/** Endgame: tablets add to maps, fragments assemble into keys for pinnacle bosses (poe2/endgame.hpp). */
+	IMISC_TABLET,
+	IMISC_MAP_FRAGMENT,
+	IMISC_MAP_KEY,
+	/** The second wave of skill gems, Spirit gems and supports. */
+	IMISC_SKILLGEM_ICEBOLT,
+	IMISC_SKILLGEM_FROSTNOVA,
+	IMISC_SKILLGEM_RIPOSTE,
+	IMISC_SKILLGEM_SHADOWSTEP,
+	IMISC_SKILLGEM_FRENZY,
+	IMISC_SKILLGEM_SMITE,
+	IMISC_SKILLGEM_FISTSOFTHUNDER,
+	IMISC_SKILLGEM_RAPIDFIRE,
+	IMISC_SKILLGEM_SHIELDBASH,
+	IMISC_SKILLGEM_AMPLIFYDAMAGE,
+	IMISC_SPIRITGEM_HERALDFROST,
+	IMISC_SPIRITGEM_SKELETALMAGES,
+	IMISC_SUPPORT_BATTLERAGE,
+	/** The skills described by the skill table (poe2/table_skills.hpp), told apart by the item name. */
+	IMISC_SKILLGEM_TABLE,
+	/** The supports described by the support table (poe2/support_table.hpp), told apart by the item name. */
+	IMISC_SUPPORT_TABLE,
+	/** The later Spirit gems (poe2/spirit_skills.hpp), told apart by the item name. */
+	IMISC_SPIRITGEM_TABLE,
+	/** Read for weapon set passive points, like POE2's Book of Specialisation (poe2/weapon_swap.hpp). */
+	IMISC_SPEC_BOOK,
+	/** Jeweller's Orbs: open a skill's third, fourth and fifth support sockets in the Skills panel. */
+	IMISC_ORB_LESSER_JEWELLER,
+	IMISC_ORB_GREATER_JEWELLER,
+	IMISC_ORB_PERFECT_JEWELLER,
+	/** POE2 Mashup: shards stack like currency, and a stack of ten becomes their orb (Curtis 2026-10-29). */
+	IMISC_SHARD_TRANSMUTE,
+	IMISC_SHARD_REGAL,
+	IMISC_SHARD_CHANCE,
+	IMISC_SHARD_ARTIFICER,
+	/** The Sapphire Charm: raises cold resistance when a cold hit lands (IMISC_CHARM_MAGIC is the Amethyst, chaos). */
+	IMISC_CHARM_COLD,
 	IMISC_INVALID = -1,
 };
 
@@ -501,10 +636,11 @@ struct ItemData {
 	std::string iSName;
 	uint8_t iMinMLvl;
 	uint8_t iDurability;
-	uint8_t iMinDam;
-	uint8_t iMaxDam;
-	uint8_t iMinAC;
-	uint8_t iMaxAC;
+	// POE2 Mashup: 16 bits, for POE2-sized bases (damage past 255, armour to about 500).
+	uint16_t iMinDam;
+	uint16_t iMaxDam;
+	uint16_t iMinAC;
+	uint16_t iMaxAC;
 	uint8_t iMinStr;
 	uint8_t iMinMag;
 	uint8_t iMinDex;
@@ -597,6 +733,10 @@ enum item_effect_type : int8_t {
 	IPL_ACUNDEAD,
 	IPL_MANATOLIFE,
 	IPL_LIFETOMANA,
+	/** POE2 Mashup: regenerates life per second. */
+	IPL_LIFEREGEN,
+	/** POE2 Mashup: increased mana regeneration rate in percent. */
+	IPL_MANAREGEN,
 	IPL_INVALID = -1,
 };
 
@@ -652,14 +792,18 @@ struct UniqueItem {
 extern DVL_API_FOR_TEST std::vector<ItemData> AllItemsList;
 extern ankerl::unordered_dense::map<int32_t, int16_t> ItemMappingIdsToIndices;
 extern std::vector<PLStruct> ItemPrefixes;
-extern std::vector<PLStruct> ItemSuffixes;
+extern DVL_API_FOR_TEST std::vector<PLStruct> ItemSuffixes;
 extern DVL_API_FOR_TEST std::vector<UniqueItem> UniqueItems;
 extern ankerl::unordered_dense::map<int32_t, int32_t> UniqueItemMappingIdsToIndices;
 
 std::expected<_item_indexes, std::string> ParseItemId(std::string_view value);
+/** @brief POE2 Mashup: the row of the item data with this 'poe2:' id, if the loaded data has one. */
+std::optional<_item_indexes> FindPoe2ItemId(std::string_view id);
 void LoadItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t baseMappingId);
 void LoadUniqueItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t baseMappingId);
 void LoadItemData();
+/** @brief POE2 Mashup: the full-size picture a one-cell copy is made from, or the cursor itself when it isn't one. */
+item_cursor_graphic FullSizeItemCursor(item_cursor_graphic cursor);
 
 } // namespace devilution
 

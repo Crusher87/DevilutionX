@@ -11,13 +11,20 @@
 #include "controls/control_mode.hpp"
 #include "controls/game_controls.h"
 #include "controls/plrctrls.h"
+#include "controls/wasd_movement.hpp"
 #include "cursor.h"
 #include "engine/point.hpp"
+#include "game_mode.hpp"
 #include "levels/dun_tile_data.hpp"
+#include "levels/trigs.h"
 #include "monster.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/aim.hpp"
+#include "poe2/default_attack.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "stores.h"
+#include "utils/is_of.hpp"
 
 namespace devilution {
 
@@ -95,6 +102,11 @@ void RepeatWalk(Player &player)
 	if (IsWalkingRequestRedundant(player, cursPosition))
 		return;
 
+	// POE2 Mashup: holding the button over stairs or a quest entrance takes it, as clicking it does.
+	if (trigflag)
+		ChooseLevelExitAt(cursPosition);
+	else
+		ForgetChosenLevelExit();
 	NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
 }
 
@@ -144,18 +156,35 @@ void RepeatPlayerAction()
 		return;
 	if (!myPlayer.CanChangeAction())
 		return;
+	// POE2 Mashup: a held attack or spell waits for a dodge roll to finish, rather than cutting it short (Curtis 2026-10-29).
+	if (gbIsPoe2 && myPlayer.poe2.isDodging())
+		return;
 
-	const bool rangedAttack = myPlayer.UsesRangedWeapon();
+	// POE2 Mashup: held, a caster weapon's granted skill keeps casting at the cursor.
+	if (UsesGrantedSkill(myPlayer) && IsAnyOf(LastPlayerAction, PlayerActionType::Attack, PlayerActionType::AttackMonsterTarget)) {
+		TryUseGrantedSkill(myPlayer);
+		return;
+	}
+
+	// A bow, or the staff bolt of a caster's staff or a sceptre.
+	const bool rangedAttack = AttacksAtRange(myPlayer);
 	switch (LastPlayerAction) {
 	case PlayerActionType::Attack:
-		if (InDungeonBounds(cursPosition))
-			NetSendCmdLoc(MyPlayerId, true, rangedAttack ? CMD_RATTACKXY : CMD_SATTACKXY, cursPosition);
+		if (InDungeonBounds(cursPosition)) {
+			// POE2 Mashup: held, a bow keeps shooting exactly where the cursor points.
+			const Point target = gbIsPoe2 && rangedAttack ? AimAlongCursor(myPlayer, AimTiles) : cursPosition;
+			NetSendCmdLoc(MyPlayerId, true, rangedAttack ? CMD_RATTACKXY : CMD_SATTACKXY, target);
+		}
 		break;
 	case PlayerActionType::AttackMonsterTarget:
 		if (pcursmonst != -1) {
 			if (!rangedAttack && IsMeleeAttackRedundant(myPlayer, Monsters[pcursmonst].position.future))
 				break;
 			NetSendCmdParam1(true, rangedAttack ? CMD_RATTACKID : CMD_ATTACKID, pcursmonst);
+		} else if (gbIsPoe2 && rangedAttack && IsWasdMovementEnabled() && InDungeonBounds(cursPosition)) {
+			// POE2 Mashup: once the target dies or slips out of sight, a held bow keeps shooting toward the cursor.
+			LastPlayerAction = PlayerActionType::Attack;
+			NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, AimAlongCursor(myPlayer, AimTiles));
 		}
 		break;
 	case PlayerActionType::AttackPlayerTarget:

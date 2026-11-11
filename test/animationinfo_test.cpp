@@ -1,4 +1,5 @@
 #include <iomanip>
+#include <utility>
 
 #include <gtest/gtest.h>
 
@@ -546,4 +547,48 @@ TEST(AnimationInfo, Stand) // Distribution Logic shouldn't change anything here
 	        new GameTickData(0, 3),
 	        new RenderingData(0.6f, 0),
 	    });
+}
+
+/**
+ * POE2 Mashup: a timed animation lasts its ticks, slower or faster than its frames; the logic meets the action frame
+ * once, after the wind-up's ticks, and rendering shows every sprite frame in order, up to the last one.
+ */
+TEST(AnimationInfo, TimedAnimationTakesItsTicks)
+{
+	constexpr int8_t SpriteFrames = 16;
+	constexpr int8_t ActionFrame = 8;
+	for (const auto &[toAction, afterAction] : { std::pair<int8_t, int8_t> { 8, 7 }, { 5, 4 }, { 14, 12 }, { 2, 1 } }) {
+		SCOPED_TRACE(testing::Message() << "wind-up " << static_cast<int>(toAction) << ", follow-through " << static_cast<int>(afterAction));
+		AnimationInfo animInfo = {};
+		animInfo.setTimedAnimation(std::nullopt, SpriteFrames, ActionFrame, toAction, afterAction, AnimationDistributionFlags::ProcessAnimationPending);
+		// The game processes the animation on the tick it starts too.
+		animInfo.processAnimation();
+		int ticks = 0;
+		int actionTick = -1;
+		int lastRendered = 0;
+		while (true) {
+			for (const uint8_t progress : { uint8_t { 0 }, uint8_t { 64 }, uint8_t { 127 } }) {
+				ProgressToNextGameTick = progress;
+				const int rendered = animInfo.getFrameToUseForRendering();
+				EXPECT_GE(rendered, lastRendered);
+				EXPECT_LT(rendered, SpriteFrames);
+				lastRendered = rendered;
+			}
+			ticks++;
+			// The game logic sees this frame on this tick.
+			if (animInfo.currentFrame == ActionFrame) {
+				EXPECT_EQ(actionTick, -1);
+				actionTick = ticks;
+			}
+			if (animInfo.isLastFrame() || ticks > 100)
+				break;
+			const int8_t frame = animInfo.currentFrame;
+			animInfo.processAnimation();
+			EXPECT_EQ(animInfo.currentFrame, frame + 1);
+		}
+		EXPECT_EQ(actionTick, toAction);
+		EXPECT_EQ(ticks, toAction + afterAction);
+		ProgressToNextGameTick = 0;
+		EXPECT_EQ(animInfo.getFrameToUseForRendering(), SpriteFrames - 1);
+	}
 }

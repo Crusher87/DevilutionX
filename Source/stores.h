@@ -39,6 +39,10 @@ constexpr int NumWitchItems = 17;
 constexpr int NumWitchItemsHf = 24;
 constexpr int NumWitchPinnedItems = 3;
 
+/** POE2 Mashup: Griswold and Adria keep enough stock to fill a shop tab for each kind of item they sell. */
+constexpr int NumSmithBasicItemsPoe2 = 130;
+constexpr int NumWitchItemsPoe2 = 40;
+
 constexpr int NumStoreLines = 104;
 
 enum class TalkID : uint8_t {
@@ -66,6 +70,12 @@ enum class TalkID : uint8_t {
 	Tavern,
 	Drunk,
 	Barmaid,
+	/** POE2 Mashup: Wirt's gambling. */
+	Gamble,
+	/** POE2 Mashup: the Fountain of Tears trade window. */
+	Tears,
+	/** POE2 Mashup: Cain fuses runes (build spec step 5). */
+	RuneFusing,
 };
 
 /** Currently active store */
@@ -79,7 +89,7 @@ extern int8_t PlayerItemIndexes[48];
 extern DVL_API_FOR_TEST Item PlayerItems[48];
 
 /** Items sold by Griswold */
-extern DVL_API_FOR_TEST StaticVector<Item, NumSmithBasicItemsHf> SmithItems;
+extern DVL_API_FOR_TEST StaticVector<Item, NumSmithBasicItemsPoe2> SmithItems;
 /** Number of premium items for sale by Griswold */
 extern DVL_API_FOR_TEST int PremiumItemCount;
 /** Base level of current premium items sold by Griswold */
@@ -91,7 +101,7 @@ extern DVL_API_FOR_TEST StaticVector<Item, NumSmithItemsHf> PremiumItems;
 extern DVL_API_FOR_TEST StaticVector<Item, NumHealerItemsHf> HealerItems;
 
 /** Items sold by Adria */
-extern DVL_API_FOR_TEST StaticVector<Item, NumWitchItemsHf> WitchItems;
+extern DVL_API_FOR_TEST StaticVector<Item, NumWitchItemsPoe2> WitchItems;
 
 /** Current level of the item sold by Wirt */
 extern DVL_API_FOR_TEST int BoyItemLevel;
@@ -171,6 +181,25 @@ void DrawSLine(const Surface &out, int sy);
 void DrawSTextHelp();
 void ClearSText(int s, int e);
 void StartStore(TalkID s);
+/** @brief POE2 Mashup: redraws Cain's rune fusing list after a fusing, when it is open. */
+void RefreshRuneFusing();
+/** @brief Opens the shared stash beside the inventory. */
+void OpenStashPanel();
+/** @brief POE2 Mashup: Cain identifies everything the hero carries, for free, and says how many. */
+/** @brief POE2 Mashup: Cain identifies everything the hero carries; how says how he was asked, for the play log. */
+void CainIdentifyAll(std::string_view how);
+
+/** @brief Remembers where the hero stood when a stash or vendor panel opened, so walking away closes it. */
+void RememberInteractionSpot();
+
+/**
+ * @brief Closes the stash and vendor panels once the hero walks more than a few tiles from where they opened, and in
+ * POE2 a towner's talk menu as soon as the hero moves at all.
+ */
+void CloseInteractionPanelsWhenAway();
+
+/** @brief Closes a towner's talk menu completely, whatever page it is on, and stops the towner's speech. */
+void CloseTalkMenu();
 void DrawSText(const Surface &out);
 void StoreESC();
 void StoreUp();
@@ -179,6 +208,10 @@ void StorePrior();
 void StoreNext();
 void TakePlrsMoney(int cost);
 void StoreEnter();
+/** @brief Whether the mouse is over the talk menu's window. */
+bool StoreWindowContainsMouse();
+/** @brief Whether the talk menu's window is at that point. */
+bool StoreWindowContains(Point position);
 void CheckStoreBtn();
 void ReleaseStoreBtn();
 bool IsPlayerInStore();

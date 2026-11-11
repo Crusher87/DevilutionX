@@ -5,10 +5,13 @@
  */
 #include "portal.h"
 
+#include <optional>
+
 #include "lighting.h"
 #include "missiles.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/floors.hpp"
 #include "tables/misdat.h"
 
 namespace devilution {
@@ -98,7 +101,11 @@ void ActivatePortal(const Player &player, Point position, int lvl, dungeon_type 
 
 void DeactivatePortal(const Player &player)
 {
-	Portals[player.getId()].open = false;
+	Portal &portal = Portals[player.getId()];
+	// POE2 Mashup: the floor the portal kept alive starts its timer now.
+	if (&player == MyPlayer && portal.open && portal.level != 0)
+		Poe2PortalClosed(portal.level, portal.setlvl);
+	portal.open = false;
 }
 
 bool PortalOnLevel(const Player &player)
@@ -184,6 +191,32 @@ bool PosOkPortal(int lvl, Point position)
 			return true;
 	}
 	return false;
+}
+
+namespace {
+
+/** @brief The town portal the local hero clicked, if any. */
+std::optional<Point> ChosenPortal;
+
+} // namespace
+
+void ChoosePortalAt(Point tile)
+{
+	ChosenPortal = std::nullopt;
+	for (const Missile &missile : Missiles) {
+		if (missile._mitype == MissileID::TownPortal && missile.position.tile == tile)
+			ChosenPortal = tile;
+	}
+}
+
+void ForgetChosenPortal()
+{
+	ChosenPortal = std::nullopt;
+}
+
+bool ChosePortal(Point tile)
+{
+	return ChosenPortal == tile;
 }
 
 } // namespace devilution

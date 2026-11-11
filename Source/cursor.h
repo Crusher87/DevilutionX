@@ -15,7 +15,7 @@
 namespace devilution {
 
 extern int pcursmonst;
-extern int8_t pcursinvitem;
+extern DVL_API_FOR_TEST int8_t pcursinvitem;
 extern uint16_t pcursstashitem;
 extern int8_t pcursitem;
 
@@ -43,6 +43,13 @@ void InitLevelCursor();
 void CheckRportal();
 void CheckTown();
 void CheckCursMove();
+/**
+ * @brief Whether UI covers that screen point, so the world under it can't be hovered: the main panel and open side
+ * panels, and in POE2 mode also the skill tray and its popup, the stash drawer, the talk menu, the quest reward
+ * popup, party portraits, and the panels that take every click while open (passive tree, gemcutting, anvil, atlas,
+ * stack split, stash tab popups and the like).
+ */
+bool IsCursorOverUi(Point position);
 
 void DrawSoftwareCursor(const Surface &out, Point position, int cursId);
 

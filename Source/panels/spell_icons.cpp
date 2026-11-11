@@ -151,6 +151,14 @@ void DrawSmallSpellIcon(const Surface &out, Point position, SpellID spell)
 	ClxDrawTRN(out, position, (*SmallSpellIcons)[GetSpellIconFrame(spell)], SplTransTbl);
 }
 
+void DrawSmallSpellIcon(const Surface &out, Point position, SpellIcon icon)
+{
+#ifdef UNPACKED_MPQS
+	ClxDrawTRN(out, position, (*SmallSpellIconsBackground)[0], SplTransTbl);
+#endif
+	ClxDrawTRN(out, position, (*SmallSpellIcons)[static_cast<uint8_t>(icon)], SplTransTbl);
+}
+
 void DrawLargeSpellIconBorder(const Surface &out, Point position, uint8_t color)
 {
 	const int width = (*LargeSpellIcons)[0].width();

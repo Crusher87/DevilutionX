@@ -75,6 +75,11 @@ bool Quest::IsAvailable() const
 	return true;
 }
 
+bool Quest::IsRewardPending() const
+{
+	return IsAvailable() && _qactive != QUEST_DONE;
+}
+
 void LoadQuestData()
 {
 	const std::string_view filename = "txtdata\\quests\\questdat.tsv";

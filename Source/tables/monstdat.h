@@ -14,6 +14,7 @@
 
 #include "cursor_defs.hpp"
 #include "tables/textdat.h"
+#include "utils/attributes.h"
 
 namespace devilution {
 
@@ -347,9 +348,9 @@ struct UniqueMonsterData {
 	_speech_id mtalkmsg;
 };
 
-extern std::vector<MonsterData> MonstersData;
+extern DVL_API_FOR_TEST std::vector<MonsterData> MonstersData;
 extern const _monster_id MonstConvTbl[];
-extern std::vector<UniqueMonsterData> UniqueMonstersData;
+extern DVL_API_FOR_TEST std::vector<UniqueMonsterData> UniqueMonstersData;
 
 void LoadMonstDatFromFile(DataFile &dataFile, std::string_view filename, bool grow);
 void LoadUniqueMonstDatFromFile(DataFile &dataFile, std::string_view filename);

@@ -1,0 +1,1126 @@
+/**
+ * Golden save (chaos damage plan, step 0): a POE2 hero saved on the build before chaos damage, with every kind of item
+ * a save holds, and what each item rebuilt to when it loaded then: its base, rarity, name, modifiers by family id with
+ * tiers and values, implicits, POE2 stats and crafting bytes. Every later step must load it the same, so no saved item
+ * changes.
+ *
+ * The fixture is test/fixtures/poe2_save/: hero.sv (the hero, its bag, belt, jewels, weapon set and a town floor with
+ * items on it), stash.sv and snapshot.txt. Remake it (only when a change is meant to move it) with
+ * POE2_SAVE_FIXTURE_OUT=<folder> set; the test then builds the hero, saves it and writes the three files there.
+ *
+ * Vendor stock is in the stash (two of Griswold's premium wares): the game data file that holds the vendors' own lists
+ * goes through the same item record, but needs a whole game to load. The snapshot records what loading did on the day
+ * it was made, quirks too: the socketed jewel's increased damage comes back doubled (pl 32 for its 16%), while the
+ * same kind of jewel in the bag keeps its own.
+ */
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <fstream>
+#include <initializer_list>
+#include <optional>
+#include <sstream>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#include <gtest/gtest.h>
+
+#include "DiabloUI/diabloui.h"
+#include "cursor.h"
+#include "engine/assets.hpp"
+#include "engine/random.hpp"
+#include "game_mode.hpp"
+#include "init.hpp"
+#include "inv.h"
+#include "items.h"
+#include "levels/gendung.h"
+#include "loadsave.h"
+#include "menu.h"
+#include "pfile.h"
+#include "player.h"
+#include "poe2/bases.hpp"
+#include "poe2/belt_uniques.hpp"
+#include "poe2/craft_state.hpp"
+#include "poe2/crafting_items.hpp"
+#include "poe2/currency.hpp"
+#include "poe2/desecration.hpp"
+#include "poe2/loot.hpp"
+#include "poe2/modifiers.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/stash_layouts.hpp"
+#include "poe2/stash_tabs.hpp"
+#include "poe2/uniques.hpp"
+#include "poe2/waystones.hpp"
+#include "qol/stash.h"
+#include "spells.h"
+#include "stores.h"
+#include "tables/monstdat.h"
+#include "tables/playerdat.hpp"
+#include "utils/file_util.h"
+#include "utils/paths.h"
+
+namespace devilution {
+namespace {
+
+constexpr std::string_view FixtureFolder = "test/fixtures/poe2_save/";
+
+class Poe2SaveFixtureTest : public ::testing::Test {
+public:
+	void SetUp() override
+	{
+		LoadCoreArchives();
+		LoadGameArchives();
+		haveMainData_ = HaveMainData();
+		Players.resize(1);
+		MyPlayerId = 0;
+		MyPlayer = &Players[0];
+		*MyPlayer = {};
+		gbVanilla = false;
+		gbIsSpawn = false;
+		gbIsMultiplayer = false;
+		gbIsHellfire = true;
+		gbIsHellfireSaveGame = true;
+		gbIsPoe2 = true;
+		sgGameInitInfo.nDifficulty = DIFF_NORMAL;
+		UnloadModArchives();
+		LoadModArchives({ { "hf", "poe2" } });
+		LoadItemData();
+		LoadSpellData();
+		LoadPlayerDataFiles();
+		LoadMonsterData();
+		LoadModifierData();
+		LoadPassiveTreeData();
+		previousPrefPath_ = paths::PrefPath();
+		// A folder of its own: other tests save heroes in the build folder at the same time.
+		folder_ = ::testing::TempDir() + "poe2_save_fixture_" + ::testing::UnitTest::GetInstance()->current_test_info()->name() + DIRECTORY_SEPARATOR_STR;
+		CreateDir(folder_.c_str());
+		for (const std::string &file : ListFiles(folder_.c_str()))
+			RemoveFile((folder_ + file).c_str());
+		paths::SetPrefPath(folder_);
+		gSaveNumber = 0;
+	}
+
+	void TearDown() override
+	{
+		Stash = {};
+		StashTabs.reset();
+		ActiveItemCount = 0;
+		memset(dItem, 0, sizeof(dItem));
+		paths::SetPrefPath(previousPrefPath_);
+		gbIsPoe2 = false;
+		gbIsHellfire = false;
+		gbIsHellfireSaveGame = false;
+		leveltype = DTYPE_TOWN;
+		currlevel = 0;
+		LoadPassiveTreeData();
+		LoadModifierData();
+		UnloadModArchives();
+	}
+
+	static _item_indexes Row(std::string_view name)
+	{
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iName == name && AllItemsList[i].iMiscId != IMISC_UNIQUE)
+				return static_cast<_item_indexes>(i);
+		}
+		ADD_FAILURE() << name;
+		return IDI_GOLD;
+	}
+
+	/** An item of the base as a drop makes it. */
+	static Item Make(std::string_view base, uint32_t seed, item_quality rarity, int itemLevel)
+	{
+		Item item = {};
+		SetLootRarity(item, rarity);
+		SetPoe2ItemLevel(item, itemLevel);
+		SetRndSeed(seed);
+		SetupAllItems(*MyPlayer, item, Row(base), AdvanceRndSeed(), 30, 1, /*onlygood=*/true, /*pregen=*/false, 0, /*forceNotUnique=*/true);
+		item._iIdentified = true;
+		EXPECT_FALSE(item.isEmpty()) << base;
+		return item;
+	}
+
+	static Item MakeBundleUnique(std::string_view name, uint32_t seed)
+	{
+		Item item;
+		const Poe2Unique *unique = FindPoe2Unique(name);
+		if (unique == nullptr || !CreatePoe2Unique(*MyPlayer, item, unique->uid, seed)) {
+			ADD_FAILURE() << name;
+			return item;
+		}
+		item._iIdentified = true;
+		return item;
+	}
+
+	/** The first Diablo unique a staff's home row rolls, the way a unique monster's drop makes it. */
+	static Item MakeDiabloUnique()
+	{
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iItemId != UITYPE_LONGSTAFF || AllItemsList[i].dropRate == 0)
+				continue;
+			for (uint32_t seed = 1; seed <= 600; seed++) {
+				Item item = {};
+				SetRndSeed(seed * 2654435761U);
+				SetupAllItems(*MyPlayer, item, static_cast<_item_indexes>(i), AdvanceRndSeed(), 20, 15, /*onlygood=*/true, /*pregen=*/false);
+				if (item._iMagical == ITEM_QUALITY_UNIQUE) {
+					item._iIdentified = true;
+					return item;
+				}
+			}
+			break;
+		}
+		ADD_FAILURE() << "no Diablo unique";
+		return {};
+	}
+
+	static Item MakeWaystone(uint32_t seed, int tier)
+	{
+		Item item = {};
+		item.dwBuff |= CF_POE2;
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iMiscId != IMISC_WAYSTONE)
+				continue;
+			SetRndSeed(seed);
+			SetupAllItems(*MyPlayer, item, static_cast<_item_indexes>(i), AdvanceRndSeed(), 30, 1, /*onlygood=*/false, /*pregen=*/false);
+			RollWaystone(item, tier);
+			return item;
+		}
+		ADD_FAILURE() << "no waystone";
+		return item;
+	}
+
+	static Item MakeBeltUnique(BeltUniqueId id, uint32_t seed)
+	{
+		const BeltUnique *unique = GetBeltUnique(id);
+		Item item {};
+		if (unique == nullptr || !BeltUniqueBase(*unique)) {
+			ADD_FAILURE();
+			return item;
+		}
+		InitializeItem(item, static_cast<_item_indexes>(*BeltUniqueBase(*unique)));
+		item._iSeed = seed;
+		item.dwBuff |= CF_POE2;
+		devilution::MakeBeltUnique(item, id);
+		return item;
+	}
+
+	/** An essence, rune, soul core or talisman with the variant, as a save from before the runes rework holds it. */
+	static Item MakeCraftingItem(item_misc_id miscId, uint8_t variant)
+	{
+		Item item {};
+		for (size_t i = 0; i < AllItemsList.size(); i++) {
+			if (AllItemsList[i].iMiscId == miscId && AllItemsList[i].dropRate > 0) {
+				InitializeItem(item, static_cast<_item_indexes>(i));
+				break;
+			}
+		}
+		EXPECT_FALSE(item.isEmpty()) << static_cast<int>(miscId);
+		item.dwBuff |= CF_POE2;
+		SetCraftingItemVariant(item, variant);
+		FinishCraftingItem(item);
+		return item;
+	}
+
+	/** The item with an augment in each of its sockets, the way the Artificer's Orb and the augment put them there. */
+	static Item Socketed(Item item, std::initializer_list<AugmentId> augments)
+	{
+		for (const AugmentId augment : augments) {
+			EXPECT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Artificer, *MyPlayer, item));
+			EXPECT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Augment, *MyPlayer, item, static_cast<uint8_t>(augment)));
+		}
+		return item;
+	}
+
+	/** Saves the loaded hero, stash and town floor again, with today's code. */
+	static void SaveAgain()
+	{
+		pfile_write_hero(/*writeGameData=*/false);
+		Stash.dirty = true;
+		sfile_write_stash();
+		pfile_save_level();
+	}
+
+	/** The snapshot without its crafting bytes, which change when ids convert. */
+	static std::string WithoutCraftBytes(const std::string &snapshot)
+	{
+		std::string out;
+		for (const std::string &line : Lines(snapshot)) {
+			if (line.rfind("  craft", 0) != 0)
+				out += line + "\n";
+		}
+		return out;
+	}
+
+	/** The snapshot without the names of runes and essences, which take their rows' names of today when they load. */
+	static std::string WithoutCraftingNames(const std::string &snapshot)
+	{
+		std::string out;
+		for (std::string line : Lines(snapshot)) {
+			if (line.find(": Rune (row ") != std::string::npos || line.find(": Essence (row ") != std::string::npos)
+				line = line.substr(0, line.find('"'));
+			out += line + "\n";
+		}
+		return out;
+	}
+
+	static Item MakeBase(std::string_view name)
+	{
+		Item item {};
+		InitializeItem(item, Row(name));
+		return item;
+	}
+
+	/** Makes the hero with every kind of item and saves it, its stash and a town floor with items on it. */
+	void BuildAndSave()
+	{
+		_uiheroinfo info {};
+		info.heroclass = HeroClass::Sorcerer;
+		CopyUtf8(info.name, "Golden", sizeof(info.name));
+		ASSERT_TRUE(pfile_ui_save_create(&info));
+		pfile_read_player_from_save(0, *MyPlayer);
+		LoadPoe2HeroData(*MyPlayer);
+		Player &player = *MyPlayer;
+		player.setCharacterLevel(60);
+		player._pgfxnum = 0;
+		// Placing items in the bag and the stash needs the cursor graphics (a new hero's starting items free them).
+		InitCursor();
+
+		// Worn: rares, a normal ring with its implicit, a quest unique, a bundle unique and a locked caster wand.
+		player.InvBody[INVLOC_HEAD] = Make("Iron Cap", 101, ITEM_QUALITY_RARE, 60);
+		player.InvBody[INVLOC_CHEST] = Make("Full Plate", 102, ITEM_QUALITY_RARE, 70);
+		player.InvBody[INVLOC_RING_LEFT] = Make("Ruby Ring", 103, ITEM_QUALITY_NORMAL, 40);
+		player.InvBody[INVLOC_RING_RIGHT] = Make("Sapphire Ring", 104, ITEM_QUALITY_RARE, 75);
+		MakeFixedUnique(player, player.InvBody[INVLOC_AMULET], IDI_OPTAMULET, 16, UITEM_OPTAMULET);
+		player.InvBody[INVLOC_HAND_LEFT] = Make("Bone Wand", 106, ITEM_QUALITY_RARE, 65);
+		player.InvBody[INVLOC_HAND_RIGHT] = MakeBundleUnique("Eye of the Deep", 107);
+
+		// The bag, after the starting items: a locked caster staff, a magic wand, jewels, a normal ring with its
+		// implicit, a waystone, a rare amulet, a magic focus and a Diablo unique.
+		const std::vector<Item> bag = {
+			Make("Gelid Staff", 201, ITEM_QUALITY_RARE, 80),
+			Make("Withered Wand", 202, ITEM_QUALITY_MAGIC, 30),
+			Make("Ruby", 205, ITEM_QUALITY_RARE, 50),
+			Make("Emerald", 206, ITEM_QUALITY_MAGIC, 30),
+			Make("Golden Hoop", 207, ITEM_QUALITY_NORMAL, 20),
+			Make("Jade Amulet", 213, ITEM_QUALITY_RARE, 50),
+			Make("Carved Focus", 212, ITEM_QUALITY_MAGIC, 45),
+			MakeWaystone(209, 7),
+			MakeDiabloUnique(),
+		};
+		for (const Item &item : bag)
+			ASSERT_TRUE(AutoPlaceItemInInventory(player, item)) << item._iIName;
+
+		// A charm and a belt unique beside the starting flasks.
+		player.SpdList[4] = MakeBase("Ruby Charm");
+		player.SpdList[2] = MakeBeltUnique(BeltUniqueId::RedMercy, 4321);
+
+		// A jewel in the tree and a staff in the other weapon set.
+		player.jewels[0] = Make("Sapphire", 301, ITEM_QUALITY_RARE, 60);
+		player.swapHands[0] = Make("Voltaic Staff", 302, ITEM_QUALITY_RARE, 70);
+
+		// The stash: a quarterstaff, a staff from before the caster weapons rework, bundle uniques, magic and rare armour,
+		// and two of Griswold's premium wares.
+		Stash = {};
+		StashTabs.reset();
+		const std::vector<Item> stash = {
+			Make("Heavy Ash Staff", 203, ITEM_QUALITY_RARE, 55),
+			Make("Focused Ashen Staff", 204, ITEM_QUALITY_RARE, 60),
+			Make("Hide Buckler", 208, ITEM_QUALITY_MAGIC, 25),
+			Make("Leather Vest", 401, ITEM_QUALITY_RARE, 50),
+			MakeBundleUnique("Ashen Covenant", 210),
+			MakeBundleUnique("Wolfsplitter", 211),
+		};
+		for (const Item &item : stash)
+			ASSERT_TRUE(AutoPlaceItemInStash(item, true)) << item._iIName;
+		SetRndSeed(402);
+		PremiumItems.clear();
+		PremiumItemLevel = 1;
+		SpawnPremium(player);
+		ASSERT_GE(PremiumItems.size(), 2U);
+		for (size_t i = 0; i < 2; i++)
+			ASSERT_TRUE(AutoPlaceItemInStash(PremiumItems[i], true));
+		Stash.dirty = true;
+
+		// The town floor, with items lying on it.
+		leveltype = DTYPE_TOWN;
+		currlevel = 0;
+		setlevel = false;
+		player.setLevel(0);
+		memset(dItem, 0, sizeof(dItem));
+		ActiveItemCount = 0;
+		const std::vector<Item> ground = {
+			Make("Iron Cap", 501, ITEM_QUALITY_MAGIC, 20),
+			Make("Ochre Sceptre", 502, ITEM_QUALITY_RARE, 60),
+			MakeBundleUnique("Red Harvest", 503),
+		};
+		for (const Item &item : ground) {
+			const int ii = ActiveItemCount;
+			ActiveItems[ii] = static_cast<uint8_t>(ii);
+			Items[ii] = item;
+			Items[ii].position = { 60 + ii, 70 };
+			dItem[60 + ii][70] = static_cast<int8_t>(ii + 1);
+			ActiveItemCount++;
+		}
+
+		FreeCursor();
+		pfile_write_hero(/*writeGameData=*/false);
+		sfile_write_stash();
+		pfile_save_level();
+	}
+
+	/** Loads the hero, the stash and the town floor from the saves in the folder. */
+	static void Load()
+	{
+		*MyPlayer = {};
+		Stash = {};
+		StashTabs.reset();
+		pfile_read_player_from_save(0, *MyPlayer);
+		LoadPoe2HeroData(*MyPlayer);
+		LoadStash();
+		leveltype = DTYPE_TOWN;
+		currlevel = 0;
+		setlevel = false;
+		MyPlayer->plractive = false;
+		ASSERT_TRUE(LoadLevel().has_value());
+	}
+
+	static void AddItem(std::ostringstream &out, std::string_view where, const Item &item)
+	{
+		if (item.isEmpty())
+			return;
+		out << where << ": " << AllItemsList[item.IDidx].iName << " (row " << static_cast<int>(item.IDidx) << ") rarity " << static_cast<int>(item._iMagical)
+		    << " level " << GetPoe2ItemLevel(item) << " \"" << item._iIName << "\"";
+		const BeltUnique *beltUnique = GetBeltUnique(item);
+		if (beltUnique != nullptr)
+			out << " belt unique " << beltUnique->name << " effect " << BeltUniqueEffect(item);
+		else if (item._iMagical == ITEM_QUALITY_UNIQUE)
+			out << " unique " << UniqueItems[item._iUid].UIName;
+		out << "\n";
+		// The Diablo stats the save holds and the rebuild may change.
+		out << "  base ac " << item._iAC << " dam " << item._iMinDam << "-" << item._iMaxDam << " pl " << item._iPLDam << " " << item._iPLToHit << " "
+		    << item._iPLAC << " attr " << item._iPLStr << " " << item._iPLMag << " " << item._iPLDex << " " << item._iPLVit << " res " << item._iPLFR << " "
+		    << item._iPLLR << " " << item._iPLMR << " hp " << item._iPLHP.raw() << " mana " << item._iPLMana.raw() << " flags " << static_cast<uint32_t>(item._iFlags)
+		    << " req " << static_cast<int>(item._iMinStr) << " " << static_cast<int>(item._iMinMag) << " " << static_cast<int>(item._iMinDex) << "\n";
+		if (item._iMagical == ITEM_QUALITY_UNIQUE && beltUnique == nullptr) {
+			for (const auto &[effect, value] : RollUniqueEffects(item))
+				out << "  unique effect " << static_cast<int>(effect->mod) << " " << static_cast<int>(effect->rule) << " " << value << "\n";
+		}
+		for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+			const ModFamily *family = ItemModFamily(mod);
+			if (family == nullptr)
+				continue;
+			out << "  mod " << family->id << " T" << static_cast<int>(mod.tier) << " " << mod.values[0] << " " << mod.values[1] << "\n";
+		}
+		for (const ItemImplicit &implicit : ItemImplicits(item))
+			out << "  implicit " << static_cast<int>(implicit.implicit->effect) << " " << implicit.values[0] << " " << implicit.values[1] << "\n";
+		bool any = false;
+		for (size_t stat = 0; stat < item._iPoe2Stats.size(); stat++) {
+			if (item._iPoe2Stats[stat] == 0)
+				continue;
+			out << (any ? " " : "  stats ") << stat << "=" << item._iPoe2Stats[stat];
+			any = true;
+		}
+		if (any)
+			out << "\n";
+		out << "  craft";
+		char hex[3];
+		for (const uint8_t b : PackCraftState(item._iPoe2Craft)) {
+			snprintf(hex, sizeof(hex), "%02x", b);
+			out << hex;
+		}
+		out << "\n";
+	}
+
+	/** Every item of the loaded hero, stash and floor, as it rebuilt. */
+	static std::string Snapshot()
+	{
+		std::ostringstream out;
+		const Player &player = *MyPlayer;
+		for (int slot = 0; slot < NUM_INVLOC; slot++)
+			AddItem(out, "body " + std::to_string(slot), player.InvBody[slot]);
+		for (int i = 0; i < player._pNumInv; i++)
+			AddItem(out, "bag " + std::to_string(i), player.InvList[i]);
+		for (int i = 0; i < MaxBeltItems; i++)
+			AddItem(out, "belt " + std::to_string(i), player.SpdList[i]);
+		for (size_t i = 0; i < player.jewels.size(); i++)
+			AddItem(out, "jewel " + std::to_string(i), player.jewels[i]);
+		for (size_t i = 0; i < player.swapHands.size(); i++)
+			AddItem(out, "swap " + std::to_string(i), player.swapHands[i]);
+		for (size_t i = 0; i < Stash.stashList.size(); i++)
+			AddItem(out, "stash " + std::to_string(i), Stash.stashList[i]);
+		for (int i = 0; i < ActiveItemCount; i++)
+			AddItem(out, "ground " + std::to_string(i), Items[ActiveItems[i]]);
+		return out.str();
+	}
+
+	static bool CopyFile(const std::string &from, const std::string &to)
+	{
+		std::ifstream in(from, std::ios::binary);
+		if (!in)
+			return false;
+		std::ofstream out(to, std::ios::binary | std::ios::trunc);
+		out << in.rdbuf();
+		return static_cast<bool>(out);
+	}
+
+	static std::string ReadText(const std::string &path)
+	{
+		std::ifstream in(path, std::ios::binary);
+		std::ostringstream text;
+		text << in.rdbuf();
+		return text.str();
+	}
+
+	static std::vector<std::string> Lines(const std::string &text)
+	{
+		std::vector<std::string> lines;
+		std::istringstream in(text);
+		for (std::string line; std::getline(in, line);)
+			lines.push_back(line);
+		return lines;
+	}
+
+	bool haveMainData_ = false;
+	std::string previousPrefPath_;
+	std::string folder_;
+};
+
+TEST_F(Poe2SaveFixtureTest, GoldenSaveLoadsAsRecorded)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	const char *out = std::getenv("POE2_SAVE_FIXTURE_OUT");
+	if (out != nullptr) {
+		BuildAndSave();
+		ASSERT_FALSE(HasFatalFailure());
+		const std::string target = std::string(out) + DIRECTORY_SEPARATOR_STR;
+		ASSERT_TRUE(CopyFile(pfile_hero_save_path(), target + "hero.sv"));
+		ASSERT_TRUE(CopyFile(pfile_stash_save_path(), target + "stash.sv"));
+		Load();
+		std::ofstream(target + "snapshot.txt", std::ios::binary) << Snapshot();
+		return;
+	}
+
+	const std::string fixtures = paths::BasePath() + std::string(FixtureFolder);
+	ASSERT_TRUE(CopyFile(fixtures + "hero.sv", pfile_hero_save_path()));
+	ASSERT_TRUE(CopyFile(fixtures + "stash.sv", pfile_stash_save_path()));
+	Load();
+
+	const std::vector<std::string> expected = Lines(ReadText(fixtures + "snapshot.txt"));
+	const std::vector<std::string> actual = Lines(Snapshot());
+	ASSERT_GT(expected.size(), 50U);
+	for (size_t i = 0; i < std::max<size_t>(expected.size(), actual.size()); i++) {
+		const std::string_view want = i < expected.size() ? std::string_view(expected[i]) : std::string_view("(nothing)");
+		const std::string_view got = i < actual.size() ? std::string_view(actual[i]) : std::string_view("(nothing)");
+		EXPECT_EQ(want, got) << "line " << i + 1 << " of snapshot.txt";
+		if (want != got)
+			break;
+	}
+	// Every kind of item the fixture holds came back.
+	const std::string snapshot = Snapshot();
+	for (const std::string_view kind : { "body ", "bag ", "belt ", "jewel ", "swap ", "stash ", "ground " })
+		EXPECT_NE(snapshot.find(kind), std::string::npos) << kind;
+}
+
+TEST_F(Poe2SaveFixtureTest, GoldenSaveSavedAgainLoadsTheSame)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	const std::string fixtures = paths::BasePath() + std::string(FixtureFolder);
+	ASSERT_TRUE(CopyFile(fixtures + "hero.sv", pfile_hero_save_path()));
+	ASSERT_TRUE(CopyFile(fixtures + "stash.sv", pfile_stash_save_path()));
+	Load();
+	const std::string first = Snapshot();
+	SaveAgain();
+	Load();
+	const std::vector<std::string> expected = Lines(first);
+	const std::vector<std::string> actual = Lines(Snapshot());
+	ASSERT_EQ(expected.size(), actual.size());
+	for (size_t i = 0; i < expected.size(); i++) {
+		EXPECT_EQ(expected[i], actual[i]) << "line " << i + 1;
+		if (expected[i] != actual[i])
+			break;
+	}
+}
+
+/**
+ * Runes rework, step 2: a save from before it holds only the legacy augment and essence ids, packed narrow. Today's
+ * code writes such an item exactly as the old code did (the narrow layout is unchanged), so a hero saved with them
+ * stands for an old save. Loading gives every place a save holds items (bag, worn gear, stash, floor) today's ids,
+ * with the same stats; saving that writes the wide layout, which loads the same again.
+ */
+TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Sorcerer;
+	CopyUtf8(info.name, "Runes", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(60);
+	player._pgfxnum = 0;
+	InitCursor();
+
+	// Worn: body armour with a rune and a soul core, and a caster staff with a rune and a talisman.
+	player.InvBody[INVLOC_CHEST] = Socketed(Make("Full Plate", 102, ITEM_QUALITY_RARE, 70), { AugmentId::WindRune, AugmentId::HeartCore });
+	player.InvBody[INVLOC_HAND_LEFT] = Socketed(Make("Gelid Staff", 201, ITEM_QUALITY_RARE, 80), { AugmentId::EmberRune, AugmentId::HunterTalisman });
+	for (const int slot : { INVLOC_CHEST, INVLOC_HAND_LEFT }) {
+		ASSERT_EQ(player.InvBody[slot]._iPoe2Craft.sockets, 2);
+		ASSERT_EQ(PackCraftState(player.InvBody[slot]._iPoe2Craft)[0], 0xC2) << "packed as before the runes rework";
+	}
+	// The bag: a helmet with a soul core, runes and essences of the first and the last legacy kinds.
+	const std::vector<Item> bag = {
+		Socketed(Make("Iron Cap", 101, ITEM_QUALITY_RARE, 60), { AugmentId::KeenCore }),
+		MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::IronRune)),
+		MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::GuardianTalisman)),
+		MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Vigor, EssenceTier::Lesser)),
+		MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Summoning, EssenceTier::Perfect)),
+	};
+	for (const Item &item : bag)
+		ASSERT_TRUE(AutoPlaceItemInInventory(player, item)) << item._iIName;
+	// The stash, as a stash of stash tabs version 3 has it: armour with a soul core on a blank tab, and a rune and an
+	// essence in the Currency tab's old places for them (40 + id - 1, and 70 + 4 * (kind - 1) + tier).
+	Stash = {};
+	StashTabs.reset();
+	StashTabs.tabs.resize(DefaultBlankStashTabs + 4);
+	unsigned currencyPage = 0;
+	for (unsigned page = 0; page < StashTabs.count(); page++) {
+		if (StashTabs.kind(page) == StashTabKind::Currency)
+			currencyPage = page;
+	}
+	const auto putInSlot = [](unsigned page, unsigned slot, const Item &item) {
+		Stash.stashList.push_back(item);
+		const Point cell { static_cast<int>(slot % 10), static_cast<int>((slot % 100) / 10) };
+		Stash.stashList.back().position = cell;
+		Stash.stashGrids[StashGridKey(page, slot / 100)][cell.x][cell.y] = static_cast<StashStruct::StashCell>(Stash.stashList.size());
+	};
+	Stash.SetPage(0);
+	ASSERT_TRUE(AutoPlaceItemInStash(Socketed(Make("Leather Vest", 401, ITEM_QUALITY_RARE, 50), { AugmentId::MindCore }), true));
+	putInSlot(currencyPage, 40 + static_cast<unsigned>(AugmentId::StormRune) - 1, MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::StormRune)));
+	putInSlot(currencyPage, 70 + (4 * (static_cast<unsigned>(EssenceKind::Warding) - 1)) + static_cast<unsigned>(EssenceTier::Greater),
+	    MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Warding, EssenceTier::Greater)));
+	ASSERT_EQ(Stash.stashList.size(), 3u);
+	Stash.dirty = true;
+	StashTabsSaveVersion = 3;
+	// The town floor: a rune and a sword with one.
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	const std::vector<Item> ground = {
+		MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::FrostRune)),
+		Socketed(Make("Shortsword", 502, ITEM_QUALITY_RARE, 40), { AugmentId::IronRune }),
+	};
+	for (const Item &item : ground) {
+		const int ii = ActiveItemCount;
+		ActiveItems[ii] = static_cast<uint8_t>(ii);
+		Items[ii] = item;
+		Items[ii].position = { 60 + ii, 70 };
+		dItem[60 + ii][70] = static_cast<int8_t>(ii + 1);
+		ActiveItemCount++;
+	}
+	FreeCursor();
+	const std::string saved = Snapshot();
+	// What loading makes of the socketed items: today's ids, and their augments' numbers of today (the runes' since
+	// build spec step 5, the soulstones' and relics' since step 6).
+	std::vector<Item *> socketed = { &player.InvBody[INVLOC_CHEST], &player.InvBody[INVLOC_HAND_LEFT], &Items[ActiveItems[1]] };
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (player.InvList[i]._iPoe2Craft.sockets > 0)
+			socketed.push_back(&player.InvList[i]);
+	}
+	for (Item &item : Stash.stashList) {
+		if (item._iPoe2Craft.sockets > 0)
+			socketed.push_back(&item);
+	}
+	ASSERT_EQ(socketed.size(), 5u);
+	std::vector<std::pair<Item *, Item>> runeItems;
+	for (Item *item : socketed) {
+		runeItems.emplace_back(item, *item);
+		const Poe2Craft savedCraft = item->_iPoe2Craft;
+		ConvertLegacyCraftingIds(*item);
+		RestoreRareItemPowers(*item);
+		MigrateRuneNumbers(*item, savedCraft);
+	}
+	const std::string expected = Snapshot();
+	for (auto &[item, original] : runeItems)
+		*item = original;
+	pfile_write_hero(/*writeGameData=*/false);
+	sfile_write_stash();
+	StashTabsSaveVersion = StashTabsVersion;
+	pfile_save_level();
+
+	Load();
+	const std::string loaded = Snapshot();
+	// Every item came back with the same stats but for its runes' share, and runes and essences with their rows' names
+	// of today.
+	EXPECT_EQ(WithoutCraftingNames(WithoutCraftBytes(loaded)), WithoutCraftingNames(WithoutCraftBytes(expected)));
+	EXPECT_NE(WithoutCraftingNames(WithoutCraftBytes(loaded)), WithoutCraftingNames(WithoutCraftBytes(saved)));
+	EXPECT_NE(loaded.find("\"Lesser Ort Rune\""), std::string::npos);
+	EXPECT_EQ(loaded.find("\"Storm Rune\""), std::string::npos);
+	EXPECT_NE(loaded.find("\"Greater Essence of Enhancement\""), std::string::npos);
+	// And today's ids.
+	const auto expectSockets = [](const Item &item, std::initializer_list<AugmentId> augments) {
+		ASSERT_EQ(item._iPoe2Craft.sockets, augments.size()) << item._iIName;
+		size_t i = 0;
+		for (const AugmentId augment : augments)
+			EXPECT_EQ(item._iPoe2Craft.augments[i++], static_cast<uint8_t>(augment)) << item._iIName;
+		// Today's ids pack wide, with the marker of the soulstones' own numbers, so they don't move again.
+		EXPECT_EQ(PackCraftState(item._iPoe2Craft)[0], 0xC6) << item._iIName;
+	};
+	expectSockets(player.InvBody[INVLOC_CHEST], { AugmentId::LesserShael, AugmentId::LordOfThePit });
+	expectSockets(player.InvBody[INVLOC_HAND_LEFT], { AugmentId::LesserRal, AugmentId::RelicOfRakkis });
+	std::vector<AugmentId> augments;
+	std::vector<uint8_t> essences;
+	bool sawHelmet = false;
+	for (int i = 0; i < player._pNumInv; i++) {
+		const Item &item = player.InvList[i];
+		if (item._iMiscId == IMISC_AUGMENT)
+			augments.push_back(GetAugmentId(item));
+		else if (item._iMiscId == IMISC_ESSENCE)
+			essences.push_back(CraftingItemVariant(item));
+		else if (item._iPoe2Craft.sockets == 1 && item._itype == ItemType::Helm) {
+			expectSockets(item, { AugmentId::StareyeTheWitch });
+			sawHelmet = true;
+		}
+	}
+	EXPECT_TRUE(sawHelmet);
+	EXPECT_NE(std::find(augments.begin(), augments.end(), AugmentId::LesserOhm), augments.end());
+	EXPECT_NE(std::find(augments.begin(), augments.end(), AugmentId::RelicOfAkarat), augments.end());
+	EXPECT_NE(std::find(essences.begin(), essences.end(), EssenceVariant(EssenceKind::Body, EssenceTier::Lesser)), essences.end());
+	EXPECT_NE(std::find(essences.begin(), essences.end(), EssenceVariant(EssenceKind::Command, EssenceTier::Perfect)), essences.end());
+	ASSERT_EQ(Stash.stashList.size(), 3u);
+	// The stash got the Runes and Essences tabs, and they moved there from the Currency tab (stash step 3).
+	ASSERT_EQ(StashTabs.count(), DefaultStashTabs);
+	std::optional<unsigned> runesPage;
+	std::optional<unsigned> essencesPage;
+	for (unsigned page = 0; page < StashTabs.count(); page++) {
+		if (StashTabs.kind(page) == StashTabKind::Runes)
+			runesPage = page;
+		if (StashTabs.kind(page) == StashTabKind::Essences)
+			essencesPage = page;
+	}
+	ASSERT_TRUE(runesPage && essencesPage);
+	EXPECT_TRUE(StashTabItems(currencyPage).empty()) << "The Currency tab's old places are empty";
+	for (size_t i = 0; i < Stash.stashList.size(); i++) {
+		const Item &item = Stash.stashList[i];
+		EXPECT_EQ(CurrentAugmentId(GetAugmentId(item)), GetAugmentId(item));
+		EXPECT_EQ(CurrentEssenceKind(GetEssenceKind(item)), GetEssenceKind(item));
+		if (const std::optional<unsigned> slot = RuneTabSlot(item))
+			EXPECT_EQ(StashTabSlotItem(*runesPage, *slot), i) << item._iIName;
+		else if (const std::optional<unsigned> essenceSlot = EssenceTabSlot(item))
+			EXPECT_EQ(StashTabSlotItem(*essencesPage, *essenceSlot), i) << item._iIName;
+		if (item._iClass == ICLASS_ARMOR) {
+			expectSockets(item, { AugmentId::TheDefiler });
+			EXPECT_EQ(StashTabItems(0).size(), 1u) << "The vest stays on its blank tab";
+		}
+	}
+	EXPECT_EQ(GetAugmentId(Stash.stashList[1]), AugmentId::LesserOrt);
+	EXPECT_EQ(GetEssenceKind(Stash.stashList[2]), EssenceKind::Enhancement);
+	ASSERT_EQ(ActiveItemCount, 2);
+	EXPECT_EQ(GetAugmentId(Items[ActiveItems[0]]), AugmentId::LesserThul);
+	expectSockets(Items[ActiveItems[1]], { AugmentId::LesserOhm });
+
+	// Saved in the wide layout, it loads the same again.
+	SaveAgain();
+	Load();
+	EXPECT_EQ(Snapshot(), loaded);
+
+	// The crafting extension rides in the item save's anim widths.
+	const std::array<uint8_t, CraftExtensionSize> extension { 9, 0, 0x80, 0, 0xFF, 1 };
+	MyPlayer->InvBody[INVLOC_CHEST]._iPoe2Craft.extension = extension;
+	SaveAgain();
+	Load();
+	EXPECT_EQ(MyPlayer->InvBody[INVLOC_CHEST]._iPoe2Craft.extension, extension);
+	EXPECT_EQ(Snapshot(), loaded);
+}
+
+TEST_F(Poe2SaveFixtureTest, ChaosResistanceSourcesSurviveASave)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	// Chaos damage plan step 5: the Amethyst Ring, a Venom Rune in armour, an essence of Ruin and its crafted modifier.
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Sorcerer;
+	CopyUtf8(info.name, "Amethyst", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(60);
+	// Strong enough to wear the plate after the load too.
+	player._pBaseStr = player._pStrength = 200;
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseMag = player._pMagic = 200;
+	player._pgfxnum = 0;
+	InitCursor();
+
+	player.InvBody[INVLOC_RING_LEFT] = Make("Amethyst Ring", 301, ITEM_QUALITY_NORMAL, 40);
+	player.InvBody[INVLOC_CHEST] = Socketed(Make("Full Plate", 102, ITEM_QUALITY_RARE, 70), { AugmentId::VenomRune });
+	Item helmet = Make("Iron Cap", 101, ITEM_QUALITY_MAGIC, 60);
+	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Essence, player, helmet, EssenceVariant(EssenceKind::Ruin, EssenceTier::Greater)));
+	player.InvBody[INVLOC_HEAD] = helmet;
+	for (const Item &item : { MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Ruin, EssenceTier::Perfect)), MakeCraftingItem(IMISC_AUGMENT, static_cast<uint8_t>(AugmentId::VenomRune)) })
+		ASSERT_TRUE(AutoPlaceItemInInventory(player, item)) << item._iIName;
+	for (Item &item : player.InvBody)
+		item._iStatFlag = !item.isEmpty();
+	CalcPlrItemVals(player, false);
+	const int chaos = player.poe2.chaosResistance;
+	EXPECT_GE(chaos, 7 + 10 + 1);
+	Stash = {};
+	StashTabs.reset();
+	Stash.dirty = true;
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	FreeCursor();
+	const std::string saved = Snapshot();
+	SaveAgain();
+
+	Load();
+	EXPECT_EQ(Snapshot(), saved);
+	CalcPlrItemVals(*MyPlayer, false);
+	EXPECT_EQ(MyPlayer->poe2.chaosResistance, chaos);
+	std::vector<uint8_t> variants;
+	for (int i = 0; i < MyPlayer->_pNumInv; i++)
+		variants.push_back(CraftingItemVariant(MyPlayer->InvList[i]));
+	EXPECT_NE(std::find(variants.begin(), variants.end(), EssenceVariant(EssenceKind::Ruin, EssenceTier::Perfect)), variants.end());
+	EXPECT_NE(std::find(variants.begin(), variants.end(), static_cast<uint8_t>(AugmentId::VenomRune)), variants.end());
+}
+
+/**
+ * Build spec step 7: the Evil essences' marks (Hatred's in the enchant byte, the others in the crafting extension), a
+ * Lies essence's hidden modifier and the new essence lines come back from a save, and the hero's stats with them.
+ */
+TEST_F(Poe2SaveFixtureTest, EssenceMarksSurviveASave)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Warrior;
+	CopyUtf8(info.name, "Essences", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(60);
+	player._pBaseStr = player._pStrength = 200;
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseMag = player._pMagic = 200;
+	player._pgfxnum = 0;
+	InitCursor();
+	const auto essence = [&player](Item &item, EssenceKind kind, EssenceTier tier = EssenceTier::Normal) {
+		EXPECT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Essence, player, item, EssenceVariant(kind, tier))) << static_cast<int>(kind);
+	};
+
+	// Body armour: Sin's notable, Hatred's mark and a rune it strengthens.
+	Item plate = Make("Full Plate", 102, ITEM_QUALITY_RARE, 70);
+	essence(plate, EssenceKind::Sin);
+	essence(plate, EssenceKind::Hatred);
+	player.InvBody[INVLOC_CHEST] = Socketed(plate, { AugmentId::LesserShael });
+	// A ring with Pain's mark, past 20% quality.
+	Item ring = Make("Ruby Ring", 301, ITEM_QUALITY_RARE, 70);
+	essence(ring, EssenceKind::Pain);
+	for (int i = 0; i < 15; i++)
+		ApplyCurrencyOrb(CurrencyOrb::Catalyst, player, ring, static_cast<uint8_t>(Catalyst::Vital));
+	EXPECT_GT(ItemQuality(ring), 20);
+	player.InvBody[INVLOC_RING_LEFT] = ring;
+	// A helmet Destruction gave two enchantments.
+	Item helmet = Make("Iron Cap", 101, ITEM_QUALITY_RARE, 70);
+	essence(helmet, EssenceKind::Destruction);
+	ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Vaal, player, helmet));
+	EXPECT_NE(SecondEnchantId(helmet._iPoe2Craft), 0);
+	player.InvBody[INVLOC_HEAD] = helmet;
+	// An amulet with a Perfect essence's line.
+	Item amulet = Make("Gold Amulet", 401, ITEM_QUALITY_RARE, 75);
+	essence(amulet, EssenceKind::Enhancement, EssenceTier::Perfect);
+	player.InvBody[INVLOC_AMULET] = amulet;
+	// In the bag: a shield whose next corruption gives two enchantments, body armour with a hidden modifier, essences.
+	Item shield = Make("Wooden Tower Shield", 501, ITEM_QUALITY_RARE, 70);
+	essence(shield, EssenceKind::Destruction);
+	Item lies = Make("Full Plate", 601, ITEM_QUALITY_RARE, 70);
+	essence(lies, EssenceKind::Lies);
+	EXPECT_TRUE(HasUnrevealedMod(lies));
+	for (const Item &item : { shield, lies, MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Terror, EssenceTier::Normal)), MakeCraftingItem(IMISC_ESSENCE, EssenceVariant(EssenceKind::Body, EssenceTier::Perfect)) })
+		ASSERT_TRUE(AutoPlaceItemInInventory(player, item)) << item._iIName;
+	for (Item &item : player.InvBody)
+		item._iStatFlag = !item.isEmpty();
+	CalcPlrItemVals(player, false);
+	const std::optional<PassiveNodeId> notable = WornItemNotable(player);
+	ASSERT_TRUE(notable);
+	const PassiveTotals totals = GetPassiveTotals(player);
+	const int dexterity = player._pDexterity;
+	const int armourPercent = player.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::ArmourPercent)];
+	Stash = {};
+	StashTabs.reset();
+	Stash.dirty = true;
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	FreeCursor();
+	const std::string saved = Snapshot();
+	SaveAgain();
+
+	Load();
+	EXPECT_EQ(Snapshot(), saved);
+	Player &loaded = *MyPlayer;
+	for (Item &item : loaded.InvBody)
+		item._iStatFlag = !item.isEmpty();
+	CalcPlrItemVals(loaded, false);
+	EXPECT_EQ(WornItemNotable(loaded), notable);
+	EXPECT_EQ(GetPassiveTotals(loaded), totals);
+	EXPECT_EQ(loaded._pDexterity, dexterity);
+	EXPECT_EQ(loaded.poe2.itemStats[static_cast<size_t>(Poe2ItemStat::ArmourPercent)], armourPercent);
+	EXPECT_TRUE(HasHatredMark(loaded.InvBody[INVLOC_CHEST]._iPoe2Craft));
+	EXPECT_TRUE(HasPainMark(loaded.InvBody[INVLOC_RING_LEFT]._iPoe2Craft));
+	EXPECT_EQ(ItemQuality(loaded.InvBody[INVLOC_RING_LEFT]), ItemQuality(ring));
+	EXPECT_EQ(SecondEnchantId(loaded.InvBody[INVLOC_HEAD]._iPoe2Craft), SecondEnchantId(helmet._iPoe2Craft));
+	EXPECT_EQ(SecondEnchantRoll(loaded.InvBody[INVLOC_HEAD]._iPoe2Craft), SecondEnchantRoll(helmet._iPoe2Craft));
+	EXPECT_EQ(SecondCorruptionEnchantText(loaded.InvBody[INVLOC_HEAD]), SecondCorruptionEnchantText(helmet));
+	bool shieldMarked = false;
+	bool hidden = false;
+	std::vector<std::string> names;
+	for (int i = 0; i < loaded._pNumInv; i++) {
+		const Item &item = loaded.InvList[i];
+		shieldMarked = shieldMarked || HasDestructionMark(item._iPoe2Craft);
+		hidden = hidden || HasUnrevealedMod(item);
+		names.emplace_back(item._iIName);
+	}
+	EXPECT_TRUE(shieldMarked);
+	EXPECT_TRUE(hidden);
+	EXPECT_NE(std::find(names.begin(), names.end(), "Essence of Terror"), names.end());
+	EXPECT_NE(std::find(names.begin(), names.end(), "Perfect Essence of the Body"), names.end());
+
+	// Saved again with today's code, it loads the same.
+	SaveAgain();
+	Load();
+	EXPECT_EQ(Snapshot(), saved);
+}
+
+/**
+ * Build spec step 6: a hero saved in step 5 has its soulstones' and relics' values from before they took their own
+ * numbers (Lord of the Pit's +30 life, Stareye's accuracy), while its runes have theirs of today. Loading moves only the
+ * soulstones' share; saved again, the items take the step 6 marker and load the same.
+ */
+TEST_F(Poe2SaveFixtureTest, SoulstonesSavedBeforeTheirNumbersMoveOnLoad)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Warrior;
+	CopyUtf8(info.name, "Soulstones", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(60);
+	player._pgfxnum = 0;
+	InitCursor();
+
+	// As step 5 had them: a soulstone or relic with the numbers of the old row it came from (socketed as that row,
+	// then given the id of today, as loading in step 5 did), next to a rune with its numbers of today.
+	const auto asStepFive = [](Item item, std::initializer_list<AugmentId> augments) {
+		item = Socketed(item, augments);
+		for (size_t i = 0; i < augments.size(); i++)
+			item._iPoe2Craft.augments[i] = static_cast<uint8_t>(CurrentAugmentId(static_cast<AugmentId>(item._iPoe2Craft.augments[i])));
+		return item;
+	};
+	player.InvBody[INVLOC_CHEST] = asStepFive(Make("Full Plate", 102, ITEM_QUALITY_RARE, 70), { AugmentId::LesserRal, AugmentId::HeartCore });
+	player.InvBody[INVLOC_HEAD] = asStepFive(Make("Iron Cap", 101, ITEM_QUALITY_RARE, 60), { AugmentId::KeenCore });
+	player.InvBody[INVLOC_HAND_LEFT] = asStepFive(Make("Gelid Staff", 201, ITEM_QUALITY_RARE, 80), { AugmentId::HunterTalisman });
+	ASSERT_TRUE(AutoPlaceItemInInventory(player, asStepFive(Make("Iron Cap", 103, ITEM_QUALITY_RARE, 60), { AugmentId::MindCore })));
+	const Item stepFivePlate = player.InvBody[INVLOC_CHEST];
+	const Item stepFiveCap = player.InvBody[INVLOC_HEAD];
+	Stash = {};
+	StashTabs.reset();
+	Stash.dirty = true;
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	FreeCursor();
+
+	// What loading should make of them: today's numbers for the soulstones, and the runes as they were.
+	std::vector<Item *> socketed = { &player.InvBody[INVLOC_CHEST], &player.InvBody[INVLOC_HEAD], &player.InvBody[INVLOC_HAND_LEFT] };
+	for (int i = 0; i < player._pNumInv; i++) {
+		if (player.InvList[i]._iPoe2Craft.sockets > 0)
+			socketed.push_back(&player.InvList[i]);
+	}
+	ASSERT_EQ(socketed.size(), 4u);
+	std::vector<std::pair<Item *, Item>> originals;
+	for (Item *item : socketed) {
+		originals.emplace_back(item, *item);
+		RestoreRareItemPowers(*item);
+		MigrateRuneNumbers(*item, item->_iPoe2Craft, /*soulstonesOnly=*/true);
+	}
+	const std::string expected = Snapshot();
+	for (auto &[item, original] : originals)
+		*item = original;
+
+	// Saved with step 5's marker.
+	PackAsBeforeSoulstoneNumbers = true;
+	ASSERT_EQ(PackCraftState(stepFivePlate._iPoe2Craft)[0], 0xC5);
+	SaveAgain();
+	PackAsBeforeSoulstoneNumbers = false;
+
+	Load();
+	const std::string loaded = Snapshot();
+	EXPECT_EQ(WithoutCraftBytes(loaded), WithoutCraftBytes(expected));
+	const Item &plate = MyPlayer->InvBody[INVLOC_CHEST];
+	const Item &cap = MyPlayer->InvBody[INVLOC_HEAD];
+	// Lord of the Pit's +30 life is gone (in body armour it gives 5% increased life now); the Lesser Ral Rune's fire
+	// resistance stays.
+	EXPECT_EQ(plate._iPLHP.raw(), stepFivePlate._iPLHP.raw() - Fixed10_6::fromInt(30).raw());
+	EXPECT_EQ(plate._iPLFR, stepFivePlate._iPLFR);
+	EXPECT_EQ(plate._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::LifePercent)], 5);
+	// Stareye's +8 in armour became +15 (+150 accuracy).
+	EXPECT_EQ(cap._iPLToHit, stepFiveCap._iPLToHit - 8 + 15);
+	for (const Item *item : std::initializer_list<const Item *> { &plate, &cap, &MyPlayer->InvBody[INVLOC_HAND_LEFT] })
+		EXPECT_EQ(PackCraftState(item->_iPoe2Craft)[0], 0xC6) << item->_iIName;
+	// The Relic of Rakkis keeps its rule in a staff.
+	UniqueRuleTotals rules {};
+	AddCraftRules(MyPlayer->InvBody[INVLOC_HAND_LEFT], rules);
+	EXPECT_EQ(rules[static_cast<size_t>(UniqueRule::DamageVsRareUnique)], 15);
+
+	// Saved again with today's marker, nothing moves again.
+	SaveAgain();
+	Load();
+	EXPECT_EQ(Snapshot(), loaded);
+}
+
+/**
+ * A white item of an old Diablo base (no POE2 base, so no implicits) keeps the lines its runes give through a save: the
+ * save holds only the crafting, and loading rebuilds the POE2 stats from it.
+ */
+TEST_F(Poe2SaveFixtureTest, RunesInAWhiteOldBaseSurviveASave)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Warrior;
+	CopyUtf8(info.name, "WhiteRunes", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player.setCharacterLevel(20);
+	player._pBaseStr = player._pStrength = 200;
+	player._pBaseDex = player._pDexterity = 200;
+	player._pBaseMag = player._pMagic = 200;
+	player._pgfxnum = 0;
+	InitCursor();
+
+	constexpr size_t Leech = static_cast<size_t>(Poe2ItemStat::LifeLeech);
+	// A white Short Sword as a drop makes it, worn, and another in the bag.
+	const Item worn = Socketed(Make("Short Sword", 202, ITEM_QUALITY_NORMAL, 10), { AugmentId::LesserAmn });
+	const Item bagged = Socketed(Make("Short Sword", 203, ITEM_QUALITY_NORMAL, 10), { AugmentId::LesserAmn });
+	for (const Item *item : { &worn, &bagged }) {
+		ASSERT_EQ(item->_iMagical, ITEM_QUALITY_NORMAL);
+		ASSERT_EQ(ItemBaseMeta(*item), nullptr);
+		ASSERT_EQ(item->_iPoe2Craft.sockets, 1);
+		ASSERT_EQ(item->_iPoe2Stats[Leech], 2);
+	}
+	player.InvBody[INVLOC_HAND_LEFT] = worn;
+	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	ASSERT_TRUE(AutoPlaceItemInInventory(player, bagged));
+	CalcPlrItemVals(player, false);
+	const int heroLeech = player.poe2.itemStats[Leech];
+	EXPECT_GE(heroLeech, 2);
+	Stash = {};
+	StashTabs.reset();
+	Stash.dirty = true;
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	FreeCursor();
+	const std::string saved = Snapshot();
+	SaveAgain();
+
+	Load();
+	EXPECT_EQ(Snapshot(), saved);
+	EXPECT_EQ(MyPlayer->InvBody[INVLOC_HAND_LEFT]._iPoe2Stats[Leech], 2);
+	MyPlayer->InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
+	CalcPlrItemVals(*MyPlayer, false);
+	EXPECT_EQ(MyPlayer->poe2.itemStats[Leech], heroLeech);
+	bool found = false;
+	for (int i = 0; i < MyPlayer->_pNumInv; i++) {
+		const Item &item = MyPlayer->InvList[i];
+		if (item.IDidx != bagged.IDidx)
+			continue;
+		found = true;
+		EXPECT_EQ(item._iPoe2Stats[Leech], 2);
+	}
+	EXPECT_TRUE(found);
+}
+
+
+/** Starting gear (made without a seed) keeps the socket and rune an Artificer's Orb and a rune gave it through a save. */
+TEST_F(Poe2SaveFixtureTest, StartingGearKeepsItsRunesThroughASave)
+{
+	if (!haveMainData_)
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Warrior;
+	CopyUtf8(info.name, "StartRunes", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+	Player &player = *MyPlayer;
+	player._pgfxnum = 0;
+	InitCursor();
+
+	constexpr size_t Leech = static_cast<size_t>(Poe2ItemStat::LifeLeech);
+	Item &sword = player.InvBody[INVLOC_HAND_LEFT];
+	ASSERT_FALSE(sword.isEmpty());
+	ASSERT_EQ(sword._iCreateInfo, 0);
+	sword = Socketed(sword, { AugmentId::LesserAmn });
+	ASSERT_EQ(sword._iPoe2Craft.sockets, 1);
+	ASSERT_EQ(sword._iPoe2Stats[Leech], 2);
+	Stash = {};
+	StashTabs.reset();
+	Stash.dirty = true;
+	leveltype = DTYPE_TOWN;
+	currlevel = 0;
+	setlevel = false;
+	player.setLevel(0);
+	memset(dItem, 0, sizeof(dItem));
+	ActiveItemCount = 0;
+	FreeCursor();
+	SaveAgain();
+
+	Load();
+	const Item &loaded = MyPlayer->InvBody[INVLOC_HAND_LEFT];
+	EXPECT_EQ(loaded._iCreateInfo, 0);
+	EXPECT_EQ(loaded._iPoe2Craft.sockets, 1);
+	EXPECT_EQ(loaded._iPoe2Stats[Leech], 2);
+}
+
+} // namespace
+} // namespace devilution

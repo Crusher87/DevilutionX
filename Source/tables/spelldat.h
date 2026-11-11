@@ -13,6 +13,7 @@
 #include <vector>
 
 #include "sound_effect_enums.h"
+#include "utils/attributes.h"
 #include "utils/enum_traits.h"
 
 namespace devilution {
@@ -206,8 +207,11 @@ enum class MissileID : int8_t {
 	BlueExplosion,
 	BlueExplosion2,
 	OrangeExplosion,
+	LastHellfire = OrangeExplosion,
+	/** POE2 Mashup: a missile graphic played once as a skill's visual effect. */
+	VisualEffect,
 
-	LAST = OrangeExplosion,
+	LAST = VisualEffect,
 	Null = -1,
 	// clang-format on
 };
@@ -264,7 +268,7 @@ struct SpellData {
 	}
 };
 
-extern std::vector<SpellData> SpellsData;
+extern DVL_API_FOR_TEST std::vector<SpellData> SpellsData;
 
 inline const SpellData &GetSpellData(SpellID spellId)
 {

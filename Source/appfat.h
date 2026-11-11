@@ -28,6 +28,9 @@ namespace devilution {
  */
 [[noreturn]] void DisplayFatalErrorAndExit(std::string_view title, std::string_view body);
 
+/** @brief Called with the error before the game closes, e.g. to write it to the POE2 Mashup play log. */
+extern void (*FatalErrorHook)(std::string_view message);
+
 /**
  * @brief Terminates the game and displays an error message box.
  * @param str Error message.

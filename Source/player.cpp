@@ -4,6 +4,7 @@
  * Implementation of player functionality, leveling, actions, creation, loading, etc.
  */
 #include <algorithm>
+#include <limits>
 #include <cmath>
 #include <cstdint>
 
@@ -47,6 +48,42 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/aim.hpp"
+#include "poe2/autosave.hpp"
+#include "poe2/bases.hpp"
+#include "poe2/belt_uniques.hpp"
+#include "poe2/bound_demons.hpp"
+#include "poe2/camera_shake.hpp"
+#include "poe2/charms.hpp"
+#include "poe2/default_attack.hpp"
+#include "poe2/defenses.hpp"
+#include "poe2/dodge_roll.hpp"
+#include "poe2/effect_primitives.hpp"
+#include "poe2/attack_speed.hpp"
+#include "poe2/experience.hpp"
+#include "poe2/gem_levels.hpp"
+#include "poe2/hardcore.hpp"
+#include "poe2/map_play.hpp"
+#include "poe2/minion_gems.hpp"
+#include "poe2/minion_travel.hpp"
+#include "poe2/monster_mods.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/regen.hpp"
+#include "poe2/shrines.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/skill_looks.hpp"
+#include "poe2/skill_resources.hpp"
+#include "poe2/spirit.hpp"
+#include "poe2/spirit_auras.hpp"
+#include "poe2/spirit_uses.hpp"
+#include "poe2/support_gems.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
+#include "poe2/waystones.hpp"
+#include "poe2/weapon_skills.hpp"
 #include "qol/autopickup.h"
 #include "qol/stash.h"
 #include "spells.h"
@@ -68,6 +105,14 @@ Player *InspectPlayer;
 bool MyPlayerIsDead;
 
 namespace {
+
+/** @brief POE2 Mashup: attack animation frames skipped for the passive tree's attack speed, the uniques' changing attack speed, War Banner and Charge Regulation. */
+int8_t AttackSpeedFrames(const Player &player)
+{
+	const int frames = player.poe2.passiveAttackFrames + (UniqueAttackSpeedPercent(player) + BannerAttackSpeedPercent(player) + SpiritAuraSpeedPercent(player)) / 10;
+	// Negative adds frames: a Heavy base attacks slower (the animation starts before its first frame, see setNewAnimation).
+	return static_cast<int8_t>(std::clamp(frames, gbIsPoe2 ? -MaxPassiveSpeedFrames : 0, MaxPassiveSpeedFrames + 1));
+}
 
 struct DirectionSettings {
 	Direction dir;
@@ -133,6 +178,7 @@ void HandleWalkMode(Player &player, Direction dir)
 
 	// The player's tile position after finishing this movement action
 	player.position.future = player.position.tile + dirModeParams.dir;
+	MakeWayForOwner(player, player.position.future, dir);
 
 	WalkInDirection(player, dirModeParams);
 
@@ -145,6 +191,9 @@ void StartWalkAnimation(Player &player, Direction dir, bool pmWillBeCalled)
 	int8_t skippedFrames = -2;
 	if (leveltype == DTYPE_TOWN && sgGameInitInfo.bRunInTown != 0)
 		skippedFrames = 2;
+	// POE2 Mashup: always run, in the dungeon as well as in town, and dash while dodge rolling. Defiance Banner runs faster.
+	if (gbIsPoe2)
+		skippedFrames = player.poe2.isDodging() ? DodgeRollSkippedWalkFrames : static_cast<int8_t>(2 + BannerWalkSkippedFrames(player, player._pWFrames));
 	if (pmWillBeCalled)
 		skippedFrames += 1;
 	NewPlrAnim(player, player_graphic::Walk, dir, AnimationDistributionFlags::ProcessAnimationPending, skippedFrames);
@@ -171,6 +220,25 @@ void ClearStateVariables(Player &player)
 	player.queuedSpell.spellLevel = 0;
 }
 
+/** @brief The attack animation frames the weapon's attack speed skips. */
+int8_t ItemAttackSkippedFrames(const Player &player, bool includesFirstFrame)
+{
+	const auto flags = player._pIFlags;
+	// If the first frame is not included in vanilla, the skip logic for the first frame will not be executed.
+	// This will result in a different and slower attack speed.
+	if (HasAnyOf(flags, ItemSpecialEffect::FastestAttack)) {
+		// If the fastest attack logic is trigger frames in vanilla two frames are skipped, so missing the first frame reduces the skip logic by two frames.
+		return includesFirstFrame ? 4 : 2;
+	}
+	if (HasAnyOf(flags, ItemSpecialEffect::FasterAttack))
+		return includesFirstFrame ? 3 : 2;
+	if (HasAnyOf(flags, ItemSpecialEffect::FastAttack))
+		return includesFirstFrame ? 2 : 1;
+	if (HasAnyOf(flags, ItemSpecialEffect::QuickAttack))
+		return includesFirstFrame ? 1 : 0;
+	return 0;
+}
+
 void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 {
 	if (player._pInvincible && player.hasNoLife() && &player == MyPlayer) {
@@ -178,29 +246,33 @@ void StartAttack(Player &player, Direction d, bool includesFirstFrame)
 		return;
 	}
 
-	int8_t skippedAnimationFrames = 0;
-	const auto flags = player._pIFlags;
-
-	// If the first frame is not included in vanilla, the skip logic for the first frame will not be executed.
-	// This will result in a different and slower attack speed.
-	if (HasAnyOf(flags, ItemSpecialEffect::FastestAttack)) {
-		// If the fastest attack logic is trigger frames in vanilla two frames are skipped, so missing the first frame reduces the skip logic by two frames.
-		skippedAnimationFrames = includesFirstFrame ? 4 : 2;
-	} else if (HasAnyOf(flags, ItemSpecialEffect::FasterAttack)) {
-		skippedAnimationFrames = includesFirstFrame ? 3 : 2;
-	} else if (HasAnyOf(flags, ItemSpecialEffect::FastAttack)) {
-		skippedAnimationFrames = includesFirstFrame ? 2 : 1;
-	} else if (HasAnyOf(flags, ItemSpecialEffect::QuickAttack)) {
-		skippedAnimationFrames = includesFirstFrame ? 1 : 0;
+	// POE2 Mashup: what the swing pays is noted, so a dodge roll before it lands gives it back (Curtis 2026-10-29).
+	player.poe2.forgetActionPaid();
+	{
+		const ActionPaymentScope price(player);
+		ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+		PayMeleeAttackLife(player);
 	}
+	player.poe2.flurryStrike = 0;
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_ATTACK)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
-	NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	if (gbIsPoe2) {
+		// POE2 Mashup: the swing takes the skill's attack time; Fists of Thunder's bursting strike takes its finisher's.
+		const SkillStep step = player.poe2.activeSkill == WeaponSkill::FistsOfThunder && FistsOfThunderNextHitBursts(player) ? SkillStep::Finisher : SkillStep::Main;
+		const uint32_t time = SkillUseTime(player, AttackSkillSlot(player, player.poe2.activeSkill), /*castAnimation=*/false, step);
+		NewPlrTimedAnim(player, player_graphic::Attack, d, animationFlags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
+	} else {
+		const int8_t skippedAnimationFrames = MeleeAttackSkippedFrames(player, player.poe2.activeSkill, includesFirstFrame);
+		NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	}
 	player._pmode = PM_ATTACK;
 	FixPlayerLocation(player, d);
 	SetPlayerOld(player);
+	// POE2 Mashup: Whirling Staff spins the hero round in a funnel of wind, as Whirlwind does.
+	if (SpinsWhileSwinging(player.poe2.activeSkill))
+		BeginSpinningSwing(player);
 }
 
 void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord cy, bool includesFirstFrame)
@@ -210,22 +282,23 @@ void StartRangeAttack(Player &player, Direction d, WorldTileCoord cx, WorldTileC
 		return;
 	}
 
-	int8_t skippedAnimationFrames = 0;
-	const auto flags = player._pIFlags;
-
-	if (!gbIsHellfire) {
-		if (includesFirstFrame && HasAnyOf(flags, ItemSpecialEffect::QuickAttack | ItemSpecialEffect::FastAttack)) {
-			skippedAnimationFrames += 1;
-		}
-		if (HasAnyOf(flags, ItemSpecialEffect::FastAttack)) {
-			skippedAnimationFrames += 1;
-		}
+	player.poe2.forgetActionPaid();
+	{
+		const ActionPaymentScope price(player);
+		ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
 	}
 
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_RATTACK)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
-	NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	if (gbIsPoe2) {
+		// POE2 Mashup: the shot takes the skill's attack time; the staff bolt is a cast, timed as one.
+		const uint32_t time = SkillUseTime(player, AttackSkillSlot(player, player.poe2.activeSkill), /*castAnimation=*/false);
+		NewPlrTimedAnim(player, player_graphic::Attack, d, animationFlags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
+	} else {
+		const int8_t skippedAnimationFrames = RangedAttackSkippedFrames(player, includesFirstFrame);
+		NewPlrAnim(player, player_graphic::Attack, d, animationFlags, skippedAnimationFrames, player._pAFNum);
+	}
 
 	player._pmode = PM_RATTACK;
 	FixPlayerLocation(player, d);
@@ -271,20 +344,34 @@ void StartSpell(Player &player, Direction d, WorldTileCoord cx, WorldTileCoord c
 	if (!isValid)
 		return;
 
+	// A Diablo spell pays as it goes off (ConsumeSpell), so a roll before then costs nothing.
+	player.poe2.forgetActionPaid();
 	auto animationFlags = AnimationDistributionFlags::ProcessAnimationPending;
 	if (player._pmode == PM_SPELL)
 		animationFlags = static_cast<AnimationDistributionFlags>(animationFlags | AnimationDistributionFlags::RepeatedAction);
-	NewPlrAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, 0, player._pSFNum);
+	const bool isLearnedSpell = player.queuedSpell.spellType == SpellType::Spell;
+	if (gbIsPoe2) {
+		// POE2 Mashup: the cast takes the spell's cast time.
+		const uint32_t time = CastTime(player, SkillSlot::ForSpell(player.queuedSpell.spellId), isLearnedSpell);
+		NewPlrTimedAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, player._pSFNum, TakeActionTicks(player, time));
+	} else {
+		// Charge Regulation's cast speed: a frame for every 10%.
+		const int8_t skippedFrames = (isLearnedSpell ? SupportCastSkippedFrames(player, player.queuedSpell.spellId) : 0) + player.poe2.passiveCastFrames + (SpiritAuraSpeedPercent(player) / 10);
+		NewPlrAnim(player, GetPlayerGraphicForSpell(player.queuedSpell.spellId), d, animationFlags, skippedFrames, player._pSFNum);
+	}
 
 	PlaySfxLoc(GetSpellData(player.queuedSpell.spellId).sSFX, player.position.tile);
 
 	player._pmode = PM_SPELL;
+	player.poe2.castSkill = WeaponSkill::None;
 
 	FixPlayerLocation(player, d);
 	SetPlayerOld(player);
 
 	player.position.temp = WorldTilePosition { cx, cy };
 	player.queuedSpell.spellLevel = player.GetSpellLevel(player.queuedSpell.spellId);
+	if (isLearnedSpell)
+		player.queuedSpell.spellLevel += SupportSpellLevelBonus(player, player.queuedSpell.spellId);
 	player.executedSpell = player.queuedSpell;
 }
 
@@ -366,6 +453,8 @@ void InitLevelChange(Player &player)
 	const Player &myPlayer = *MyPlayer;
 
 	RemoveEnemyReferences(player);
+	// POE2 Mashup: the hero's minions go along instead of dying where they stand (Curtis 2026-10-29).
+	TakeMinionsAlong(player);
 	RemovePlrMissiles(player);
 	player.pManaShield = false;
 	player.wReflections = 0;
@@ -526,12 +615,17 @@ bool DamageWeapon(Player &player, unsigned damageFrequency)
 	return false;
 }
 
-bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
+bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, int damagePercent = 100)
 {
 	int hper = 0;
 
 	if (!monster.isPossibleToHit())
 		return false;
+	// POE2 Mashup: your attacks pass through minions.
+	if (gbIsPoe2 && monster.isPlayerMinion())
+		return false;
+	// POE2 Mashup: the hit is the current skill's, for its supports.
+	const SupportHitScope supportScope(player, CurrentAttackSkill(player));
 
 	if (adjacentDamage) {
 		if (player.getCharacterLevel() > 20)
@@ -545,12 +639,24 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 		hit = 0;
 	}
 
-	hper += player.GetMeleePiercingToHit() - player.CalculateArmorPierce(monster.armorClass, true);
-	hper = std::clamp(hper, 5, 95);
+	if (gbIsPoe2) {
+		// POE2 Mashup: POE2's accuracy against the monster's evasion, and the chance to hit gear adds on top. Melee keeps
+		// all its accuracy up close, so it rarely misses (Curtis 2026-10-21).
+		hper += Poe2HitChance(AccuracyRating(player), MonsterEvasionRating(monster, player.CalculateArmorPierce(monster.armorClass, true))) + player._pIBonusToHit;
+		hper = std::clamp(hper, 5, 100);
+	} else {
+		hper += player.GetMeleePiercingToHit() - player.CalculateArmorPierce(monster.armorClass, true);
+		hper = std::clamp(hper, 5, 95);
+	}
+	// POE2 Mashup: some uniques make attacks unevadable.
+	if (AttacksCannotBeEvaded(player))
+		hper = 100;
 
 	if (monster.tryLiftGargoyle())
 		return true;
 
+	if (!adjacentDamage)
+		TelemetryHeroAttackRoll(player, hper, hit < hper);
 	if (hit >= hper) {
 #ifdef _DEBUG
 		if (!DebugGodMode)
@@ -558,24 +664,49 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 			return false;
 	}
 
-	if (gbIsHellfire && HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage)) {
+	if (gbIsHellfire && HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage) && !SupportMeleeIsPhysicalOnly(player)) {
 		// Fixed off by 1 error from Hellfire
 		const int midam = RandomIntBetween(player._pIFMinDam, player._pIFMaxDam);
 		AddMissile(player.position.tile, player.position.temp, player._pdir, MissileID::SpectralArrow, TARGET_MONSTERS, player, midam, 0);
 	}
-	const int mind = player._pIMinDam;
-	const int maxd = player._pIMaxDam;
+	// POE2 Mashup: a Monk's bare fists hit like a plain quarterstaff of the skill's gem level.
+	const auto [mind, maxd] = AttackWeaponDamage(player, CurrentAttackSkill(player));
 	int dam = RandomIntBetween(mind, maxd);
+	// POE2 Mashup: deep damage logging follows the hit step by step.
+	if (&player == MyPlayer) {
+		TelemetryHitStart(false, adjacentDamage ? "melee, beside the target" : "melee");
+		TelemetryHitStep(false, "weapon roll", static_cast<int64_t>(dam) << 6);
+	}
 	dam += dam * player._pIBonusDam / 100;
 	dam += player._pIBonusDamMod;
 	int dam2 = dam << 6;
 	dam += player._pDamageMod;
+	// POE2 Mashup: from here the hit is worked out in 1/64 points, so the percentages below don't round a small hit
+	// away (Curtis 2026-10-22: the default attack's 85% turned a Monk's 1 damage punches into 0).
+	const int shiftStillToDo = gbIsPoe2 ? 0 : 6;
+	dam <<= 6 - shiftStillToDo;
+	TelemetryHitStep(false, "after increased, added and attribute damage", static_cast<int64_t>(dam) << shiftStillToDo);
+	// POE2 Mashup: Battle Cry empowers melee hits, and so does a Brutality support on the skill.
+	if (player.poe2.warcryTicks > 0)
+		dam += dam * BattleCryDamagePercent(player.poe2.skillLevel(WeaponSkill::BattleCry)) / 100;
+	const int supportPercent = SupportMeleeDamagePercent(player);
+	dam = dam * supportPercent / 100;
+	TelemetryHitStep(false, "melee supports", supportPercent, true);
+	// POE2 Mashup: Rage and Frenzy charges.
+	if (gbIsPoe2) {
+		const int chargePercent = ResourceAttackDamagePercent(player);
+		dam = dam * chargePercent / 100;
+		TelemetryHitStep(false, "rage and frenzy charges", chargePercent, true);
+	}
+	// POE2 Mashup: area skills deal less to the tiles beside the target.
+	dam = dam * damagePercent / 100;
 
-	const ClassAttributes &classAttributes = GetClassAttributes(player._pClass);
-	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike)) {
-		if (GenerateRnd(100) < player.getCharacterLevel()) {
-			dam *= 2;
-		}
+	// POE2 Mashup: every attack can crit in POE2 mode, not just the Warrior's.
+	const bool crit = RollAttackCrit(player);
+	if (crit) {
+		const int critPercent = CritDamagePercent(player);
+		dam = dam * critPercent / 100;
+		TelemetryHitStep(false, "critical strike", critPercent, true);
 	}
 
 	ItemType phanditype = ItemType::None;
@@ -588,18 +719,8 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 
 	switch (monster.data().monsterClass) {
 	case MonsterClass::Undead:
-		if (phanditype == ItemType::Sword) {
-			dam -= dam / 2;
-		} else if (phanditype == ItemType::Mace) {
-			dam += dam / 2;
-		}
-		break;
 	case MonsterClass::Animal:
-		if (phanditype == ItemType::Mace) {
-			dam -= dam / 2;
-		} else if (phanditype == ItemType::Sword) {
-			dam += dam / 2;
-		}
+		dam = WeaponVsMonsterClassDamage(phanditype, monster.data().monsterClass, dam);
 		break;
 	case MonsterClass::Demon:
 		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::TripleDemonDamage)) {
@@ -616,7 +737,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 		AddDoppelganger(monster);
 	}
 
-	dam <<= 6;
+	dam <<= shiftStillToDo;
 	if (HasAnyOf(player.pDamAcFlags, ItemSpecialEffectHf::Jesters)) {
 		int r = GenerateRnd(201);
 		if (r >= 100)
@@ -626,6 +747,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 
 	if (adjacentDamage)
 		dam >>= 2;
+	TelemetryHitStep(false, "after weapon against monster type and item specials", dam);
 
 	if (&player == MyPlayer) {
 		if (HasAnyOf(player.pDamAcFlags, ItemSpecialEffectHf::Peril)) {
@@ -640,12 +762,12 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 			dam = monster.hitPoints.raw(); /* ensure monster is killed with one hit */
 		}
 #endif
-		ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(dam));
+		dam = ApplyPlayerAttackDamage(player, monster, Fixed26_6::fromRaw(dam), crit).raw();
 	}
 
 	int skdam = 0;
 	if (HasAnyOf(player._pIFlags, ItemSpecialEffect::RandomStealLife)) {
-		skdam = GenerateRnd(dam / 8);
+		skdam = GenerateRnd(dam / 8) * MapLeechPercent() / 100;
 		player._pHitPoints += Fixed26_6::fromRaw(skdam);
 		if (player._pHitPoints > player._pMaxHP) {
 			player._pHitPoints = player._pMaxHP;
@@ -663,6 +785,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::StealMana5)) {
 			skdam = 5 * dam / 100;
 		}
+		skdam = skdam * MapLeechPercent() / 100;
 		player._pMana += Fixed26_6::fromRaw(skdam);
 		if (player._pMana > player._pMaxMana) {
 			player._pMana = player._pMaxMana;
@@ -680,6 +803,7 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::StealLife5)) {
 			skdam = 5 * dam / 100;
 		}
+		skdam = skdam * MapLeechPercent() / 100;
 		player._pHitPoints += Fixed26_6::fromRaw(skdam);
 		if (player._pHitPoints > player._pMaxHP) {
 			player._pHitPoints = player._pMaxHP;
@@ -690,14 +814,29 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false)
 		}
 		RedrawComponent(PanelDrawComponent::Health);
 	}
+	if (gbIsPoe2) {
+		OnSkillMeleeHit(player);
+		// POE2 Mashup: the war cries waiting on the hero's next melee hits.
+		OnEmpoweredMeleeHit(player, CurrentAttackSkill(player), monster, Fixed26_6::fromRaw(dam));
+	}
 	if (monster.hasNoLife()) {
 		M_StartKill(monster, player);
 	} else {
-		if (monster.mode != MonsterMode::Petrified && HasAnyOf(player._pIFlags, ItemSpecialEffect::Knockback))
+		if (monster.mode != MonsterMode::Petrified && (HasAnyOf(player._pIFlags, ItemSpecialEffect::Knockback) || SupportMeleeKnocksBack(player)))
 			M_GetKnockback(monster, player.position.tile);
 		M_StartHit(monster, player, dam);
 	}
 	return true;
+}
+
+/** @brief POE2 Mashup: Fists of Thunder's lightning burst around the target, from the weapon's damage. */
+void FistsOfThunderBurst(Player &player, Point center)
+{
+	const SkillSlot skill = SkillSlot::ForAttack(WeaponSkill::FistsOfThunder);
+	const auto [minDamage, maxDamage] = AttackWeaponDamage(player, skill);
+	const int damage = (minDamage + maxDamage) / 2 * GemDamagePercent(skill, player.poe2.skillLevel(WeaponSkill::FistsOfThunder)) / 100;
+	SkillBurst(player, center, 1, DamageType::Lightning, Fixed26_6::fromInt(std::max(damage * 6 / 10, 1)), MissileGraphicID::BlueFlareExplosion2);
+	PlaySfxLoc(SfxID::SpellLightningHit, center);
 }
 
 bool PlrHitPlr(Player &attacker, Player &target)
@@ -720,7 +859,8 @@ bool PlrHitPlr(Player &attacker, Player &target)
 		blk = GenerateRnd(100);
 	}
 
-	int blkper = target.GetBlockChance() - (attacker.getCharacterLevel() * 2);
+	// POE2 Mashup: GetBlockChance has no level term, so the attacker's level doesn't count against it either.
+	int blkper = target.GetBlockChance() - (gbIsPoe2 ? 0 : attacker.getCharacterLevel() * 2);
 	blkper = std::clamp(blkper, 0, 100);
 
 	if (hit >= hper) {
@@ -741,7 +881,8 @@ bool PlrHitPlr(Player &attacker, Player &target)
 
 	const ClassAttributes &classAttributes = GetClassAttributes(attacker._pClass);
 	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::CriticalStrike)) {
-		if (GenerateRnd(100) < attacker.getCharacterLevel()) {
+		// POE2 Mashup: no +clvl crit chance (decision 10A); the flat base chance instead.
+		if (GenerateRnd(100) < (gbIsPoe2 ? BaseAttackCritPercent : attacker.getCharacterLevel())) {
 			dam *= 2;
 		}
 	}
@@ -776,8 +917,40 @@ bool PlrHitObj(const Player &player, Object &targetObject)
 	return false;
 }
 
+/**
+ * @brief POE2 Mashup dash skills: Leap Slam hits everything around the landing spot,
+ * Shield Charge everything in front; both knock it back.
+ */
+void DashSkillLanding(Player &player, WeaponSkill skill)
+{
+	const SkillLookScope skillLook(skill);
+	PlaySfxLoc(skill == WeaponSkill::ShieldCharge ? SfxID::ItemShield : SfxID::Swing, player.position.tile);
+	PlaySkillEffects(player, skill, player.position.tile + player._pdir);
+	OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
+	// Leap Slam and Shield Charge shatter the hero's Shield Wall where they land (Curtis 2026-11-07, Q37).
+	ShatterShieldWall(player, player.position.tile + player._pdir);
+	for (int i = 0; i < 8; i++) {
+		const auto dir = static_cast<Direction>(i);
+		if (skill == WeaponSkill::ShieldCharge && IsNoneOf(dir, player._pdir, Left(player._pdir), Right(player._pdir)))
+			continue;
+		const Point position = player.position.tile + dir;
+		BreakObjectAt(player, position);
+		Monster *monster = FindMonsterAtPosition(position);
+		if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
+			continue;
+		PlrHitMonst(player, *monster, false, skill == WeaponSkill::LeapSlam ? LeapSlamDamagePercent : ShieldChargeDamagePercent);
+		if (!monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
+			M_GetKnockback(*monster, player.position.tile);
+	}
+	EndSwing(player);
+}
+
 bool DoAttack(Player &player)
 {
+	// POE2 Mashup: Whirling Staff turns the hero through every facing as he spins.
+	if (SpinsWhileSwinging(player.poe2.activeSkill))
+		TurnSpriteWithSpin(player);
+
 	if (player.AnimInfo.currentFrame == player._pAFNum - 2) {
 		PlaySfxLoc(SfxID::Swing, player.position.tile);
 	}
@@ -785,6 +958,11 @@ bool DoAttack(Player &player)
 	bool didhit = false;
 
 	if (player.AnimInfo.currentFrame == player._pAFNum - 1) {
+		// POE2 Mashup: it has landed, so a dodge roll no longer gives back its price.
+		player.poe2.forgetActionPaid();
+		// POE2 Mashup: the swing and its sparks take the attack skill's look.
+		const SkillLookScope skillLook(CurrentAttackSkill(player));
+		PlaySkillLookSound(CurrentAttackSkill(player), player.position.tile);
 		Point position = player.position.tile + player._pdir;
 		Monster *monster = FindMonsterAtPosition(position);
 
@@ -796,7 +974,27 @@ bool DoAttack(Player &player)
 		}
 
 		if (monster != nullptr) {
-			didhit = PlrHitMonst(player, *monster);
+			// POE2 Mashup: Flurry's second strike, a backhand, hits harder; Smite and Frenzy hit for their own percent.
+			const bool backhand = player.poe2.activeSkill == WeaponSkill::Flurry && player.poe2.flurryStrike > 0;
+			didhit = PlrHitMonst(player, *monster, false, backhand ? FlurryBackhandDamagePercent : SwingSkillDamagePercent(player.poe2.activeSkill));
+			// POE2 Mashup: Frenzy builds charges, Smite breaks armour and Fists of Thunder builds Combo.
+			if (didhit) {
+				switch (player.poe2.activeSkill) {
+				case WeaponSkill::Frenzy:
+					GainFrenzyCharge(player);
+					break;
+				case WeaponSkill::Smite:
+					if (!monster->hasNoLife())
+						BreakMonsterArmour(*monster, &player);
+					break;
+				case WeaponSkill::FistsOfThunder:
+					if (AddCombo(player) % FistsOfThunderBurstEvery == 0)
+						FistsOfThunderBurst(player, monster->position.tile);
+					break;
+				default:
+					break;
+				}
+			}
 		} else if (PlayerAtPosition(position) != nullptr && !player.friendlyMode) {
 			didhit = PlrHitPlr(player, *PlayerAtPosition(position));
 		} else {
@@ -806,36 +1004,126 @@ bool DoAttack(Player &player)
 			}
 		}
 
-		if (!gbIsHellfire || !HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage)) {
+		// POE2 Mashup: Wave of Light's bell tolls when a swing lands on it (Curtis 2026-11-07, Q38).
+		StrikeWaveBell(player, position);
+
+		// POE2 Mashup: the weapon's swing and sparks where it lands. It follows the hero's animation: an axe or mace
+		// comes down from overhead. The weapon's strongest added element only flickers faintly along the swing and on
+		// the cut (Curtis 2026-10-22: lightning on his staff was "far too in-your-face"). Skills with their own swing draw
+		// it with their effects.
+		const vfx::Element look = WeaponElementLook(player);
+		if (IsNoneOf(player.poe2.activeSkill, WeaponSkill::Cleave, WeaponSkill::Flurry, WeaponSkill::Frenzy, WeaponSkill::FistsOfThunder, WeaponSkill::WhirlingStaff)) {
+			const vfx::SwingStyle style = WeaponSwingStyle(player);
+			if (player.CanCleave() && style == vfx::SwingStyle::Chop)
+				vfx::Cleave(player.position.tile, player.position.tile + player._pdir, vfx::Element::Physical, true, look);
+			else if (player.CanCleave())
+				vfx::Swing(player.position.tile, player.position.tile + player._pdir, vfx::Element::Physical, true, HoldsHeavyWeapon(player), look);
+			else
+				vfx::SwingAs(player.position.tile, player.position.tile + player._pdir, vfx::Element::Physical, style, HoldsHeavyWeapon(player), look);
+		}
+		if (didhit)
+			vfx::Cut(player.position.tile + player._pdir, look);
+
+		// POE2 Mashup: Brutality's price is the weapon's fire and lightning damage.
+		if (!SupportMeleeIsPhysicalOnly(player) && (!gbIsHellfire || !HasAllOf(player._pIFlags, ItemSpecialEffect::FireDamage | ItemSpecialEffect::LightningDamage))) {
 			if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireDamage)) {
-				int elementalDamage = didhit ? RandomIntBetween(player._pIFMinDam, player._pIFMaxDam) : 0;
+				const auto [minFire, maxFire] = SwingElementDamage(player, false);
+				int elementalDamage = didhit ? RandomIntBetween(minFire, maxFire) : 0;
 				AddMissile(position, { 1, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, elementalDamage, 0);
 			}
 			if (HasAnyOf(player._pIFlags, ItemSpecialEffect::LightningDamage)) {
-				int elementalDamage = didhit ? RandomIntBetween(player._pILMinDam, player._pILMaxDam) : 0;
+				const auto [minLightning, maxLightning] = SwingElementDamage(player, true);
+				int elementalDamage = didhit ? RandomIntBetween(minLightning, maxLightning) : 0;
 				AddMissile(position, { 2, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, elementalDamage, 0);
 			}
 		}
+		// POE2 Mashup: the gear's added cold (runes), which meets magic resistance.
+		if (gbIsPoe2 && !SupportMeleeIsPhysicalOnly(player)) {
+			if (const auto [minCold, maxCold] = AddedColdDamage(player); maxCold > 0) {
+				const int coldDamage = didhit ? RandomIntBetween(minCold, maxCold) : 0;
+				AddMissile(position, { WeaponExplosionCold, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, coldDamage, 0);
+			}
+		}
 
-		if (player.CanCleave()) {
-			// playing as a class/weapon with cleave
+		const WeaponSkill skill = player.poe2.activeSkill;
+		if (player.CanCleave() || skill == WeaponSkill::Cleave) {
+			// playing as a class/weapon with cleave; the Cleave skill hits the sides at full damage
+			const bool adjacentDamage = skill != WeaponSkill::Cleave;
 			position = player.position.tile + Right(player._pdir);
+			// POE2 Mashup: the sweep smashes the barrels and urns at its sides too (Curtis 2026-10-22).
+			BreakObjectAt(player, position);
+			BreakObjectAt(player, player.position.tile + Left(player._pdir));
 			monster = FindMonsterAtPosition(position);
 			if (monster != nullptr) {
 				if (!CanTalkToMonst(*monster) && monster->position.old == position) {
-					if (PlrHitMonst(player, *monster, true))
+					if (PlrHitMonst(player, *monster, adjacentDamage)) {
 						didhit = true;
+						vfx::Cut(position, look);
+					}
 				}
 			}
 			position = player.position.tile + Left(player._pdir);
 			monster = FindMonsterAtPosition(position);
 			if (monster != nullptr) {
 				if (!CanTalkToMonst(*monster) && monster->position.old == position) {
-					if (PlrHitMonst(player, *monster, true))
+					if (PlrHitMonst(player, *monster, adjacentDamage)) {
 						didhit = true;
+						vfx::Cut(position, look);
+					}
 				}
 			}
 		}
+
+		// POE2 Mashup: Ground Slam sends a shockwave out in a cone in front; Whirling Staff spins, hitting two rings around the player.
+		if (IsAnyOf(skill, WeaponSkill::GroundSlam, WeaponSkill::WhirlingStaff)) {
+			const Point origin = player.position.tile;
+			const Point primary = origin + player._pdir;
+			const int reach = skill == WeaponSkill::GroundSlam ? GroundSlamReach : WhirlingStaffReach;
+			// Ground Slam shatters the hero's Shield Wall in front (Curtis 2026-11-07, Q37).
+			if (skill == WeaponSkill::GroundSlam)
+				ShatterShieldWall(player, primary);
+			for (int dy = -reach; dy <= reach; dy++) {
+				for (int dx = -reach; dx <= reach; dx++) {
+					position = origin + Displacement { dx, dy };
+					if (position == origin || position == primary || !InDungeonBounds(position))
+						continue;
+					const int distance = std::max(std::abs(dx), std::abs(dy));
+					if (skill == WeaponSkill::GroundSlam && !InGroundSlamCone(player._pdir, { dx, dy }))
+						continue;
+					if (distance > 1 && !LineClearMissile(origin, position))
+						continue;
+					// The shockwave and the spin smash the barrels and urns they reach too (Curtis 2026-10-22).
+					BreakObjectAt(player, position);
+					monster = FindMonsterAtPosition(position);
+					if (monster == nullptr || CanTalkToMonst(*monster) || monster->position.old != position)
+						continue;
+					int damagePercent = GroundSlamConeDamagePercent;
+					if (skill == WeaponSkill::WhirlingStaff)
+						damagePercent = distance > 1 ? WhirlingStaffOuterDamagePercent : WhirlingStaffInnerDamagePercent;
+					if (PlrHitMonst(player, *monster, false, damagePercent)) {
+						didhit = true;
+						// The spinning staff bites into each enemy it hits, as Whirlwind's blades do.
+						if (skill == WeaponSkill::WhirlingStaff)
+							vfx::Cut(position, look);
+					}
+					if (skill == WeaponSkill::GroundSlam && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
+						M_GetKnockback(*monster, origin);
+				}
+			}
+			// The main target is knocked back by the slam too.
+			monster = FindMonsterAtPosition(primary);
+			if (skill == WeaponSkill::GroundSlam && monster != nullptr && !CanTalkToMonst(*monster) && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
+				M_GetKnockback(*monster, origin);
+		}
+
+		if (skill != WeaponSkill::None) {
+			PlaySkillEffects(player, skill, player.position.tile + player._pdir);
+			// Flurry's backhand is part of the same use.
+			if (skill != WeaponSkill::Flurry || player.poe2.flurryStrike == 0)
+				OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
+		}
+		// POE2 Mashup: with two weapons, the next swing (Double Swing's backhand too) is the other hand's.
+		EndSwing(player);
 
 		if (didhit && DamageWeapon(player, 30)) {
 			StartStand(player, player._pdir);
@@ -845,6 +1133,20 @@ bool DoAttack(Player &player)
 	}
 
 	if (player.AnimInfo.isLastFrame()) {
+		// POE2 Mashup: Flurry swings a second time, a backhand, while its target still stands (Curtis 2026-10-21: "the
+		// hero should actually swing twice").
+		if (player.poe2.activeSkill == WeaponSkill::Flurry && player.poe2.flurryStrike == 0) {
+			const Point front = player.position.tile + player._pdir;
+			const Monster *target = FindMonsterAtPosition(front);
+			if (target != nullptr && !CanTalkToMonst(*target) && target->position.old == front && !target->hasNoLife()) {
+				player.poe2.flurryStrike = 1;
+				const auto flags = static_cast<AnimationDistributionFlags>(AnimationDistributionFlags::ProcessAnimationPending | AnimationDistributionFlags::RepeatedAction);
+				// The backhand's own attack time.
+				const uint32_t time = SkillUseTime(player, SkillSlot::ForAttack(WeaponSkill::Flurry), /*castAnimation=*/false, SkillStep::Backhand);
+				NewPlrTimedAnim(player, player_graphic::Attack, player._pdir, flags, static_cast<int8_t>(player._pAFNum - 1), TakeActionTicks(player, time));
+				return false;
+			}
+		}
 		StartStand(player, player._pdir);
 		ClearStateVariables(player);
 		return true;
@@ -858,17 +1160,64 @@ bool DoRangeAttack(Player &player)
 	int arrows = 0;
 	if (player.AnimInfo.currentFrame == player._pAFNum - 1) {
 		arrows = 1;
+		player.poe2.forgetActionPaid();
 	}
 
 	if (HasAnyOf(player._pIFlags, ItemSpecialEffect::MultipleArrows) && player.AnimInfo.currentFrame == player._pAFNum + 1) {
 		arrows = 2;
 	}
 
+	// POE2 Mashup: Barrage looses a rapid stream of arrows at one target, Rain of Arrows a volley over the target's area.
+	const bool barrage = player.poe2.activeSkill == WeaponSkill::Barrage && arrows == 1;
+	if (barrage) {
+		PlaySkillEffects(player, WeaponSkill::Barrage, player.position.temp);
+		OnSkillUsed(player, SkillSlot::ForAttack(WeaponSkill::Barrage), player.position.temp);
+		StartSkillVolley(player, WeaponSkill::Barrage, player.position.temp, BarrageArrows);
+		arrows = 0;
+	}
+	const bool rain = player.poe2.activeSkill == WeaponSkill::RainOfArrows && arrows == 1;
+	if (rain)
+		arrows = 9;
+	// POE2 Mashup: the weapon's free default attack takes supports, like a skill: extra projectiles fan out.
+	const SkillSlot defaultSkill = player.poe2.activeSkill == WeaponSkill::None ? DefaultSkillSlot(player) : SkillSlot {};
+	const int defaultExtra = !defaultSkill.isEmpty() && arrows == 1 ? SupportExtraProjectileCount(player, defaultSkill) : 0;
+	// POE2 Mashup: a staff's ranged attack is its free Staff Bolt, a fire bolt rolled from the staff's damage; a new
+	// staff's or wand's is a spell rolled from Magic and the weapon's grant level.
+	if (FiresStaffBolt(player)) {
+		const bool granted = FiresGrantedBolt(player);
+		if (arrows == 1) {
+			const Direction dir = GetDirection(player.position.tile, player.position.temp);
+			for (int i = 0; i <= defaultExtra; i++) {
+				// 0, -1, 1, -2, 2, ... tiles to the side at the target.
+				const int side = ((i + 1) / 2) * (i % 2 == 0 ? 1 : -1);
+				Missile *bolt = AddMissile(player.position.tile, player.position.temp + Displacement { Left(Left(dir)) } * side, player._pdir, MissileID::Firebolt, TARGET_MONSTERS, player, granted ? RollGrantedBoltDamage(player) : RollStaffBoltDamage(player), 0);
+				if (bolt == nullptr)
+					continue;
+				// Drawn as the staff's own small ember, not a Firebolt.
+				bolt->poe2.look = 1;
+				if (!defaultSkill.isEmpty())
+					SetMissileSkill(*bolt, player, defaultSkill);
+			}
+		}
+		arrows = 0;
+	}
+	if (defaultExtra > 0 && arrows == 1)
+		arrows += defaultExtra;
+	const bool lightningArrow = player.poe2.activeSkill == WeaponSkill::LightningArrow && arrows == 1;
+	if (rain || lightningArrow) {
+		PlaySkillEffects(player, player.poe2.activeSkill, player.position.temp);
+		OnSkillUsed(player, SkillSlot::ForAttack(player.poe2.activeSkill), player.position.temp);
+	}
+
 	for (int arrow = 0; arrow < arrows; arrow++) {
 		int xoff = 0;
 		int yoff = 0;
-		if (arrows != 1) {
-			const int angle = arrow == 0 ? -1 : 1;
+		if (rain) {
+			xoff = RainOfArrowsVolley[arrow].deltaX;
+			yoff = RainOfArrowsVolley[arrow].deltaY;
+		} else if (arrows != 1) {
+			// Two arrows go either side; a supported default shot fans out 0, -1, 1, -2, 2, ...
+			const int angle = defaultExtra > 0 ? ((arrow + 1) / 2) * (arrow % 2 == 0 ? 1 : -1) : (arrow == 0 ? -1 : 1);
 			const int x = player.position.temp.x - player.position.tile.x;
 			if (x != 0)
 				yoff = x < 0 ? angle : -angle;
@@ -877,7 +1226,7 @@ bool DoRangeAttack(Player &player)
 				xoff = y < 0 ? -angle : angle;
 		}
 
-		int dmg = 4;
+		int dmg = ElementalArrowBaseDamage;
 		MissileID mistype = MissileID::Arrow;
 		if (HasAnyOf(player._pIFlags, ItemSpecialEffect::FireArrows)) {
 			mistype = MissileID::FireArrow;
@@ -890,8 +1239,13 @@ bool DoRangeAttack(Player &player)
 			dmg = RandomIntBetween(player._pIFMinDam, player._pIFMaxDam);
 			mistype = MissileID::SpectralArrow;
 		}
+		if (lightningArrow) {
+			// The arrow carries the skill's lightning damage on top of the base value.
+			dmg = ElementalArrowBaseDamage + LightningArrowDamage(player);
+			mistype = MissileID::LightningArrow;
+		}
 
-		AddMissile(
+		Missile *missile = AddMissile(
 		    player.position.tile,
 		    player.position.temp + Displacement { xoff, yoff },
 		    player._pdir,
@@ -900,6 +1254,14 @@ bool DoRangeAttack(Player &player)
 		    player,
 		    dmg,
 		    0);
+		// POE2 Mashup: a bow skill's arrows hit harder as its gem levels up.
+		if (missile != nullptr && (rain || lightningArrow))
+			missile->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(SkillSlot::ForAttack(player.poe2.activeSkill), player.poe2.skillLevel(player.poe2.activeSkill)));
+		// The free Bow Shot hits softer than a gem's skill, and carries its own supports.
+		if (missile != nullptr && !defaultSkill.isEmpty()) {
+			missile->poe2.damagePercent = static_cast<int16_t>(DefaultAttackDamagePercent);
+			SetMissileSkill(*missile, player, defaultSkill);
+		}
 
 		if (arrow == 0 && mistype != MissileID::SpectralArrow) {
 			PlaySfxLoc(arrows != 1 ? SfxID::ShootBow2 : SfxID::ShootBow, player.position.tile);
@@ -1005,9 +1367,46 @@ void DamageArmor(Player &player)
 	CalcPlrInv(player, true);
 }
 
+/** @brief The skill's animation is over: the hero stands again, facing where a spin started. */
+void EndSkillCast(Player &player)
+{
+	const WeaponSkill skill = player.poe2.castSkill;
+	player.poe2.castSkill = WeaponSkill::None;
+	if (SpinsWhileStriking(skill))
+		player._pdir = static_cast<Direction>(player.poe2.spinFrom);
+	StartStand(player, player._pdir);
+	ClearStateVariables(player);
+}
+
+/** @brief POE2 Mashup: a skill's own animation, which plays as PM_SPELL (see BeginSkillAnimation). */
+bool DoSkillCast(Player &player)
+{
+	const WeaponSkill skill = player.poe2.castSkill;
+	// Whirlwind turns the hero through every facing as it spins.
+	if (SpinsWhileStriking(skill))
+		TurnWithSpin(player);
+	if (player.AnimInfo.currentFrame == player.poe2.castFrame) {
+		player.poe2.forgetActionPaid();
+		if (IsAnyOf(skill, WeaponSkill::LeapSlam, WeaponSkill::ShieldCharge))
+			DashSkillLanding(player, skill);
+		else if (ExecuteSkillCast(player, skill, player.position.temp))
+			return true;
+	}
+
+	if (player.AnimInfo.isLastFrame()) {
+		EndSkillCast(player);
+		return true;
+	}
+	return false;
+}
+
 bool DoSpell(Player &player)
 {
+	if (player.poe2.castSkill != WeaponSkill::None)
+		return DoSkillCast(player);
+
 	if (player.AnimInfo.currentFrame == player._pSFNum) {
+		player.poe2.forgetActionPaid();
 		CastSpell(
 		    player,
 		    player.executedSpell.spellId,
@@ -1021,6 +1420,9 @@ bool DoSpell(Player &player)
 	}
 
 	if (player.AnimInfo.isLastFrame()) {
+		// POE2 Mashup: supports and uniques that slow the cast hold the character still a little longer.
+		if (player.executedSpell.spellType == SpellType::Spell)
+			player.poe2.recoveryTicks = static_cast<uint8_t>(std::min(SupportCastRecoveryTicks(player, player.executedSpell.spellId, player._pSFrames), 255));
 		StartStand(player, player._pdir);
 		ClearStateVariables(player);
 		return true;
@@ -1079,6 +1481,17 @@ void TryDisarm(const Player &player, Object &object)
 	if (object.IsTrappedChest()) {
 		object._oTrapFlag = false;
 	}
+}
+
+/**
+ * @brief Whether a queued attack may cut the attack in progress short. Diablo starts it right after the hit;
+ * POE2 Mashup waits for the whole swing, follow-through and all, as POE2's attack time does.
+ */
+bool AttackFollowThroughDone(const Player &player)
+{
+	if (gbIsPoe2)
+		return player.AnimInfo.isLastFrame();
+	return player.AnimInfo.currentFrame >= player._pAFNum;
 }
 
 void CheckNewPath(Player &player, bool pmWillBeCalled)
@@ -1146,7 +1559,10 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 
 					if (x < 2 && y < 2) {
 						ClrPlrPath(player);
-						if (player.destAction == ACTION_ATTACKMON && monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
+						// POE2 Mashup: walking up to a bound demon breaks its crystal.
+						if (player.destAction == ACTION_ATTACKMON && IsBoundDemon(*monster)) {
+							RequestBreakBoundCrystal(player, *monster);
+						} else if (player.destAction == ACTION_ATTACKMON && monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
 							TalktoMonster(player, *monster);
 						} else {
 							StartAttack(player, d, pmWillBeCalled);
@@ -1212,7 +1628,9 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 			y = std::abs(player.position.tile.y - monster->position.future.y);
 			if (x <= 1 && y <= 1) {
 				d = GetDirection(player.position.future, monster->position.future);
-				if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
+				if (IsBoundDemon(*monster)) {
+					RequestBreakBoundCrystal(player, *monster);
+				} else if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
 					TalktoMonster(player, *monster);
 				} else {
 					StartAttack(player, d, pmWillBeCalled);
@@ -1233,7 +1651,9 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 			break;
 		case ACTION_RATTACKMON:
 			d = GetDirection(player.position.future, monster->position.future);
-			if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
+			if (IsBoundDemon(*monster)) {
+				RequestBreakBoundCrystal(player, *monster);
+			} else if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
 				TalktoMonster(player, *monster);
 			} else {
 				StartRangeAttack(player, d, monster->position.future.x, monster->position.future.y, pmWillBeCalled);
@@ -1320,7 +1740,7 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 		return;
 	}
 
-	if (player._pmode == PM_ATTACK && player.AnimInfo.currentFrame >= player._pAFNum) {
+	if (player._pmode == PM_ATTACK && AttackFollowThroughDone(player)) {
 		if (player.destAction == ACTION_ATTACK) {
 			d = GetDirection(player.position.future, { player.destParam1, player.destParam2 });
 			StartAttack(player, d, pmWillBeCalled);
@@ -1351,7 +1771,7 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 		}
 	}
 
-	if (player._pmode == PM_RATTACK && player.AnimInfo.currentFrame >= player._pAFNum) {
+	if (player._pmode == PM_RATTACK && AttackFollowThroughDone(player)) {
 		if (player.destAction == ACTION_RATTACK) {
 			d = GetDirection(player.position.tile, { player.destParam1, player.destParam2 });
 			StartRangeAttack(player, d, player.destParam1, player.destParam2, pmWillBeCalled);
@@ -1367,7 +1787,8 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 		}
 	}
 
-	if (player._pmode == PM_SPELL && player.AnimInfo.currentFrame >= player._pSFNum) {
+	// POE2 Mashup: a held cast waits for the whole cast time too.
+	if (player._pmode == PM_SPELL && (gbIsPoe2 ? player.AnimInfo.isLastFrame() : player.AnimInfo.currentFrame >= player._pSFNum) && player.poe2.castSkill == WeaponSkill::None) {
 		if (player.destAction == ACTION_SPELL) {
 			d = GetDirection(player.position.tile, { player.destParam1, player.destParam2 });
 			StartSpell(player, d, player.destParam1, player.destParam2);
@@ -1409,6 +1830,10 @@ void ValidatePlayer()
 
 	// Player::setCharacterLevel ensures that the player level is within the expected range in case someone has edited their character level in memory
 	myPlayer.setCharacterLevel(myPlayer.getCharacterLevel());
+	// POE2 Mashup: experience saved on the old 50-level table moves onto the levels-100 table, keeping the level and
+	// its fraction. Runs on load, on every level change and after, and does nothing once inside the band.
+	if (CorrectPoe2Experience(myPlayer) && *GetOptions().Gameplay.experienceBar)
+		RedrawEverything();
 	// This lets us catch cases where someone is editing experience directly through memory modification and reset their experience back to the expected cap.
 	if (myPlayer._pExperience > myPlayer.getNextExperienceThreshold()) {
 		myPlayer._pExperience = myPlayer.getNextExperienceThreshold();
@@ -1522,6 +1947,36 @@ void GetPlayerGraphicsPath(std::string_view path, std::string_view prefix, std::
 
 } // namespace
 
+bool FinishSkillCast(Player &player)
+{
+	if (player._pmode != PM_SPELL || player.poe2.castSkill == WeaponSkill::None || !player.AnimInfo.isLastFrame())
+		return false;
+	EndSkillCast(player);
+	return true;
+}
+
+int8_t MeleeAttackSkippedFrames(const Player &player, WeaponSkill skill, bool includesFirstFrame)
+{
+	return static_cast<int8_t>(ItemAttackSkippedFrames(player, includesFirstFrame) + WeaponSkillSkippedFrames(player, skill) + AttackSpeedFrames(player));
+}
+
+int8_t RangedAttackSkippedFrames(const Player &player, bool includesFirstFrame)
+{
+	int8_t skippedAnimationFrames = 0;
+	const auto flags = player._pIFlags;
+
+	if (!gbIsHellfire) {
+		if (includesFirstFrame && HasAnyOf(flags, ItemSpecialEffect::QuickAttack | ItemSpecialEffect::FastAttack)) {
+			skippedAnimationFrames += 1;
+		}
+		if (HasAnyOf(flags, ItemSpecialEffect::FastAttack)) {
+			skippedAnimationFrames += 1;
+		}
+	}
+
+	return static_cast<int8_t>(skippedAnimationFrames + AttackSpeedFrames(player));
+}
+
 void Player::CalcScrolls()
 {
 	_pScrlSpells = 0;
@@ -1537,8 +1992,13 @@ bool Player::CanUseItem(const Item &item) const
 {
 	if (!IsItemValid(*this, item))
 		return false;
+	if (gbIsPoe2 && IsSkillGem(item))
+		return MeetsGemAttributeNeeds(*this, SkillGemAttributeNeeds(SkillForGem(item), SkillGemItemLevel(item)));
+	// POE2 Mashup: gear needs a character level too, like POE2's.
+	if (!MeetsItemLevelRequirement(*this, item))
+		return false;
 
-	return _pStrength >= item._iMinStr
+	return RequirementStrength(*this) >= item._iMinStr
 	    && _pMagic >= item._iMinMag
 	    && _pDexterity >= item._iMinDex;
 }
@@ -1639,6 +2099,9 @@ int Player::GetCurrentAttributeValue(CharacterAttribute attribute) const
 
 int Player::GetMaximumAttributeValue(CharacterAttribute attribute) const
 {
+	// POE2 Mashup: no class ceilings (Curtis 2026-10-23). The hero file keeps each base stat in one byte.
+	if (gbIsPoe2)
+		return std::numeric_limits<uint8_t>::max();
 	const ClassAttributes &attr = getClassAttributes();
 	switch (attribute) {
 	case CharacterAttribute::Strength:
@@ -1782,6 +2245,8 @@ player_graphic Player::getGraphic() const
 	case PM_BLOCK:
 		return player_graphic::Block;
 	case PM_SPELL:
+		if (poe2.castSkill != WeaponSkill::None)
+			return static_cast<player_graphic>(poe2.castGraphic);
 		return GetPlayerGraphicForSpell(executedSpell.spellId);
 	case PM_GOTHIT:
 		return player_graphic::Hit;
@@ -2224,6 +2689,26 @@ void NewPlrAnim(Player &player, player_graphic graphic, Direction dir, Animation
 	player.AnimInfo.setNewAnimation(sprites, numberOfFrames, ticksPerFrame, flags, numSkippedFrames, distributeFramesBeforeFrame, static_cast<uint8_t>(previewShownGameTickFragments));
 }
 
+void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags, int8_t actionFrame, int ticks, int ticksToAction)
+{
+	LoadPlrGFX(player, graphic);
+
+	OptionalClxSpriteList sprites;
+	int previewShownGameTickFragments = 0;
+	if (!HeadlessMode) {
+		sprites = player.AnimationData[static_cast<size_t>(graphic)].spritesForDirection(dir);
+		if (player.previewCelSprite && (*sprites)[0] == *player.previewCelSprite && !player.isWalking()) {
+			previewShownGameTickFragments = std::clamp<int>(AnimationInfo::baseValueFraction - player.progressToNextGameTickWhenPreviewWasSet, 0, AnimationInfo::baseValueFraction);
+		}
+	}
+
+	int8_t numberOfFrames;
+	int8_t ticksPerFrame;
+	player.getAnimationFramesAndTicksPerFrame(graphic, numberOfFrames, ticksPerFrame);
+	const int toAction = ticksToAction > 0 ? std::clamp(ticksToAction, 2, std::max(ticks - 1, 2)) : ActionTicksToActionFrame(ticks, actionFrame, numberOfFrames);
+	player.AnimInfo.setTimedAnimation(sprites, numberOfFrames, actionFrame, static_cast<int8_t>(toAction), static_cast<int8_t>(std::max(ticks - toAction, 1)), flags, static_cast<uint8_t>(previewShownGameTickFragments));
+}
+
 void SetPlrAnims(Player &player)
 {
 	const HeroClass pc = player._pClass;
@@ -2377,13 +2862,18 @@ int CalcStatDiff(Player &player)
 void NextPlrLevel(Player &player)
 {
 	player.setCharacterLevel(player.getCharacterLevel() + 1);
+	if (&player == MyPlayer)
+		RequestAutosave("level up");
 
 	CalcPlrInv(player, true);
 
-	if (CalcStatDiff(player) < 5) {
-		player._pStatPts = CalcStatDiff(player);
-	} else {
-		player._pStatPts += 5;
+	// POE2 Mashup: attributes come from the passive tree and items, not from points each level.
+	if (!gbIsPoe2 || gbIsMultiplayer) {
+		if (CalcStatDiff(player) < 5) {
+			player._pStatPts = CalcStatDiff(player);
+		} else {
+			player._pStatPts += 5;
+		}
 	}
 	const Fixed26_6 hp { player.getClassAttributes().lvlLife };
 
@@ -2416,6 +2906,9 @@ void NextPlrLevel(Player &player)
 	CalcPlrInv(player, true);
 	PlaySFX(SfxID::ItemArmor);
 	PlaySFX(SfxID::ItemSign);
+	if (gbIsPoe2)
+		vfx::LevelUp(player.position.tile);
+	TelemetryLevelUp(player);
 }
 
 void Player::_addExperience(uint32_t experience, int levelDelta)
@@ -2427,14 +2920,24 @@ void Player::_addExperience(uint32_t experience, int levelDelta)
 		return;
 	}
 
-	// Adjust xp based on difference between the players current level and the target level (usually a monster level)
-	uint32_t clampedExp = static_cast<uint32_t>(std::clamp<int64_t>(static_cast<int64_t>(experience * (1 + levelDelta / 10.0)), 0, std::numeric_limits<uint32_t>::max()));
+	uint32_t clampedExp;
+	if (gbIsPoe2) {
+		// POE2 Mashup: POE2's level-gap rule (full within a safe zone, then falling fast); multiplayer keeps only the
+		// cap at a twentieth of the level's threshold.
+		clampedExp = Poe2ExperienceGain(getCharacterLevel(), experience, getCharacterLevel() + levelDelta, gbIsMultiplayer);
+		// The Glowing shrine (Enlightening): more experience.
+		if (const int more = GetShrineBonuses(*this).experiencePercent; more != 0)
+			clampedExp = static_cast<uint32_t>(std::min<int64_t>(static_cast<int64_t>(clampedExp) * (100 + more) / 100, UINT32_MAX));
+	} else {
+		// Adjust xp based on difference between the players current level and the target level (usually a monster level)
+		clampedExp = static_cast<uint32_t>(std::clamp<int64_t>(static_cast<int64_t>(experience * (1 + levelDelta / 10.0)), 0, std::numeric_limits<uint32_t>::max()));
 
-	// Prevent power leveling
-	if (gbIsMultiplayer) {
-		// for low level characters experience gain is capped to 1/20 of current levels xp
-		// for high level characters experience gain is capped to 200 * current level - this is a smaller value than 1/20 of the exp needed for the next level after level 5.
-		clampedExp = std::min<uint32_t>({ clampedExp, /* level 1-5: */ getNextExperienceThreshold() / 20U, /* level 6-50: */ 200U * getCharacterLevel() });
+		// Prevent power leveling
+		if (gbIsMultiplayer) {
+			// for low level characters experience gain is capped to 1/20 of current levels xp
+			// for high level characters experience gain is capped to 200 * current level - this is a smaller value than 1/20 of the exp needed for the next level after level 5.
+			clampedExp = std::min<uint32_t>({ clampedExp, /* level 1-5: */ getNextExperienceThreshold() / 20U, /* level 6-50: */ 200U * getCharacterLevel() });
+		}
 	}
 
 	lua::OnPlayerGainExperience(this, clampedExp);
@@ -2442,7 +2945,10 @@ void Player::_addExperience(uint32_t experience, int levelDelta)
 	const uint32_t maxExperience = GetNextExperienceThresholdForLevel(getMaxCharacterLevel());
 
 	// ensure we only add enough experience to reach the max experience cap so we don't overflow
-	_pExperience += std::min(clampedExp, maxExperience - _pExperience);
+	if (gbIsPoe2)
+		_pExperience = static_cast<uint32_t>(std::min<int64_t>(static_cast<int64_t>(_pExperience) + clampedExp, maxExperience));
+	else
+		_pExperience += std::min(clampedExp, maxExperience - _pExperience);
 
 	if (*GetOptions().Gameplay.experienceBar) {
 		RedrawEverything();
@@ -2478,8 +2984,10 @@ void InitPlayer(Player &player, bool firstTime)
 	if (firstTime) {
 		player._pRSplType = SpellType::Invalid;
 		player._pRSpell = SpellID::Invalid;
-		if (&player == MyPlayer)
+		if (&player == MyPlayer) {
 			LoadHotkeys();
+			LoadPoe2HeroData(player);
+		}
 		player._pSBkSpell = SpellID::Invalid;
 		player.queuedSpell.spellId = player._pRSpell;
 		player.queuedSpell.spellType = player._pRSplType;
@@ -2589,6 +3097,8 @@ void StartStand(Player &player, Direction dir)
 
 	NewPlrAnim(player, player_graphic::Stand, dir);
 	player._pmode = PM_STAND;
+	// POE2 Mashup: no action is under way to give back a price for.
+	player.poe2.forgetActionPaid();
 	FixPlayerLocation(player, dir);
 	FixPlrWalkTags(player);
 	player.occupyTile(player.position.tile, false);
@@ -2601,6 +3111,10 @@ void StartPlrBlock(Player &player, Direction dir)
 		SyncPlrKill(player, DeathReason::Unknown);
 		return;
 	}
+
+	// POE2 Mashup: a block readies Riposte, and Lachdanan's Guard.
+	player.poe2.riposteTicks = RiposteTicks;
+	OnPlayerBlocked(player);
 
 	PlaySfxLoc(SfxID::ItemSword, player.position.tile);
 
@@ -2640,13 +3154,28 @@ void StartPlrHit(Player &player, Fixed26_6 dam, bool forcehit)
 	player.Say(HeroSpeech::ArghClang);
 
 	RedrawComponent(PanelDrawComponent::Health);
-	if (player._pClass == HeroClass::Barbarian) {
+	if (gbIsPoe2) {
+		// POE2 Mashup: POE2's light stun, a chance from the hit's share of the hero's life, so walking through a pack
+		// doesn't lock the hero in place but a big hit usually does (Curtis 2026-10-21).
+		if (!forcehit) {
+			// The gear's stun threshold (soulstones, runes) adds to the hero's life for this.
+			const int64_t stunDamage = StunDamageAgainstLife(player, dam.raw(), UniqueStunThresholdPercent(player));
+			const int chance = LightStunChance(stunDamage, player._pMaxHP.raw());
+			if (chance == 0 || GenerateRnd(100) >= chance)
+				return;
+		}
+	} else if (player._pClass == HeroClass::Barbarian) {
 		if (dam.whole() < player.getCharacterLevel() + player.getCharacterLevel() / 4 && !forcehit) {
 			return;
 		}
 	} else if (dam.whole() < player.getCharacterLevel() && !forcehit) {
 		return;
 	}
+	// POE2 Mashup: a Stone Charm breaks the stun.
+	if (CharmPreventsStun(player))
+		return;
+	if (&player == MyPlayer)
+		TelemetryLog("stunned", std::format("by a {:d} damage hit, life {:d}/{:d}", dam.whole(), player._pHitPoints.whole(), player._pMaxHP.whole()));
 
 	const Direction pd = player._pdir;
 
@@ -2681,11 +3210,16 @@ StartPlayerKill(Player &player, DeathReason deathReason)
 	}
 
 	if (&player == MyPlayer) {
+		// POE2 Mashup: dying in a map costs experience (a revive costs the same, in TryMapRevive).
+		LoseMapDeathExperience(player);
+		TelemetryPlayerDied(player);
 		NetSendCmdParam1(true, CMD_PLRDEAD, static_cast<uint16_t>(deathReason));
 		gamemenu_off();
 	}
 
-	const bool dropGold = !gbIsMultiplayer || !(player.isOnLevel(16) || player.isOnArenaLevel());
+	// POE2 Mashup: a hardcore hero keeps everything they wear and carry when they fall to Softcore.
+	const bool fallsFromHardcore = &player == MyPlayer && IsHardcoreHero(player);
+	const bool dropGold = (!gbIsMultiplayer || !(player.isOnLevel(16) || player.isOnArenaLevel())) && !fallsFromHardcore;
 	const bool dropItems = dropGold && deathReason == DeathReason::MonsterOrTrap;
 	const bool dropEar = dropGold && deathReason == DeathReason::Player;
 
@@ -2731,7 +3265,7 @@ StartPlayerKill(Player &player, DeathReason deathReason)
 		if (&player == MyPlayer) {
 			RedrawComponent(PanelDrawComponent::Health);
 
-			if (!player.HoldItem.isEmpty()) {
+			if (!player.HoldItem.isEmpty() && !fallsFromHardcore) {
 				DeadItem(player, std::move(player.HoldItem), { 0, 0 });
 				NewCursor(CURSOR_HAND);
 			}
@@ -2780,6 +3314,8 @@ StartPlayerKill(Player &player, DeathReason deathReason)
 		}
 	}
 	SetPlayerHitPoints(player, Fixed26_6::fromInt(0));
+	if (fallsFromHardcore)
+		FallFromHardcore(player);
 }
 
 void StripTopGold(Player &player)
@@ -2845,8 +3381,13 @@ void ApplyPlrDamage(DamageType damageType, Player &player, Fixed26_6 dam, int mi
 		}
 	}
 
-	if (totalDamage == 0)
+	// POE2 Mashup: the Divine shrine's hero can't be damaged.
+	if (totalDamage > 0 && GetShrineBonuses(player).invulnerable)
+		totalDamage = Fixed26_6::fromInt(0);
+	if (totalDamage == 0) {
+		TelemetryPlayerDamaged(player, damageType, totalDamage);
 		return;
+	}
 
 	RedrawComponent(PanelDrawComponent::Health);
 	player._pHitPoints -= totalDamage;
@@ -2858,6 +3399,18 @@ void ApplyPlrDamage(DamageType damageType, Player &player, Fixed26_6 dam, int mi
 	const Fixed26_6 minHitPoints = Fixed26_6::fromInt(minHP);
 	if (player._pHitPoints < minHitPoints) {
 		SetPlayerHitPoints(player, minHitPoints);
+	}
+	TelemetryPlayerDamaged(player, damageType, totalDamage);
+	// POE2 Mashup: a full Heartglass flask saves the hero from a lethal hit.
+	if (player.hasNoLife() && &player == MyPlayer && TryHeartglassSave(player)) {
+		AddVisualEffect(player.position.tile, MissileGraphicID::RedFlareExplosion);
+		RedrawComponent(PanelDrawComponent::Health);
+	}
+	// And a map's revives bring the hero back at the map's start.
+	if (player.hasNoLife() && &player == MyPlayer && TryMapRevive(player)) {
+		AddVisualEffect(player.position.tile, MissileGraphicID::RedFlareExplosion);
+		RedrawComponent(PanelDrawComponent::Health);
+		RedrawComponent(PanelDrawComponent::Mana);
 	}
 	if (player.hasNoLife()) {
 		SyncPlrKill(player, deathReason);
@@ -2877,6 +3430,7 @@ void RemovePlrMissiles(const Player &player)
 		while ((golem = FindGolemForPlayer(player)) != nullptr) {
 			KillGolem(*golem);
 		}
+		KillGemMinions(player);
 	}
 
 	for (auto &missile : Missiles) {
@@ -2976,10 +3530,61 @@ void StartWarpLvl(Player &player, size_t pidx)
 	}
 }
 
+namespace {
+
+/** @brief Runs the player's action for a game tick, starting the queued one when it ends, and moves the animation on. */
+void ProcessPlayerAction(Player &player)
+{
+	bool tplayer = false;
+	do {
+		switch (player._pmode) {
+		case PM_STAND:
+		case PM_NEWLVL:
+		case PM_QUIT:
+			tplayer = false;
+			break;
+		case PM_WALK_NORTHWARDS:
+		case PM_WALK_SOUTHWARDS:
+		case PM_WALK_SIDEWAYS:
+			// POE2 Mashup: uniques that slow movement skip some walking ticks.
+			tplayer = UniqueSlowSkipsWalkTick(player) ? false : DoWalk(player);
+			break;
+		case PM_ATTACK:
+			tplayer = DoAttack(player);
+			break;
+		case PM_RATTACK:
+			tplayer = DoRangeAttack(player);
+			break;
+		case PM_BLOCK:
+			tplayer = DoBlock(player);
+			break;
+		case PM_SPELL:
+			tplayer = DoSpell(player);
+			break;
+		case PM_GOTHIT:
+			tplayer = DoGotHit(player);
+			break;
+		case PM_DEATH:
+			tplayer = DoDeath(player);
+			break;
+		}
+		// POE2 Mashup: a slowed skill holds the character still before the next action.
+		if (player._pmode != PM_STAND || player.poe2.recoveryTicks == 0)
+			CheckNewPath(player, tplayer);
+	} while (tplayer);
+
+	player.previewCelSprite = std::nullopt;
+	if (player._pmode != PM_DEATH || player.AnimInfo.tickCounterOfCurrentFrame != 40)
+		player.AnimInfo.processAnimation();
+}
+
+} // namespace
+
 void ProcessPlayers()
 {
 	assert(MyPlayer != nullptr);
 	Player &myPlayer = *MyPlayer;
+	TickCameraShake();
 
 	if (myPlayer.pLvlLoad > 0) {
 		myPlayer.pLvlLoad--;
@@ -3016,6 +3621,39 @@ void ProcessPlayers()
 				SyncPlrKill(player, DeathReason::Unknown);
 			}
 
+			player.poe2.tick();
+			ProcessUniqueRules(player);
+			ProcessSkillVolley(player);
+			if (&player == MyPlayer) {
+				ProcessSkillZones(player);
+				ProcessSupportEffects(player);
+			}
+			ProcessDashLooks(player);
+			// A Leap Slam or Shield Charge lands once the dash is over.
+			if (player.poe2.dashSkillTicks > 0) {
+				// It lands the moment the hero stands at the dash's end, not after the dodge's last ticks run out
+				// (Curtis 2026-10-22: Dashing Strike stood about a second before it struck).
+				const bool arrived = player.position.tile == player.poe2.dashEnd && player.walkpath[0] == WALK_NONE;
+				if (player._pmode == PM_STAND && (arrived || !player.poe2.isDodging())) {
+					// Land with a swing; the skill hits on the swing's hit frame, which comes quickly, as the hero arrives
+					// (a spinning skill still plays its whole spin).
+					LandDashSkill(player);
+				} else if (--player.poe2.dashSkillTicks == 0) {
+					player.poe2.dashSkill = WeaponSkill::None;
+				}
+			}
+			// Flasks refill in town, like in POE2.
+			if (gbIsPoe2 && player.isOnLevel(0)) {
+				RefillFlasks(player);
+				RefillCharmsAtWell(player);
+			}
+			ApplyRegen(player);
+			ProcessMapPlayer(player);
+			RechargeEnergyShield(player);
+			ProcessPersistentSkills(player);
+			ProcessCharms(player);
+			ProcessShrineBuffs(player);
+
 			if (&player == MyPlayer) {
 				if (HasAnyOf(player._pIFlags, ItemSpecialEffect::DrainLife) && leveltype != DTYPE_TOWN) {
 					ApplyPlrDamage(DamageType::Physical, player, Fixed26_6::fromRaw(4));
@@ -3025,44 +3663,13 @@ void ProcessPlayers()
 				}
 			}
 
-			bool tplayer = false;
-			do {
-				switch (player._pmode) {
-				case PM_STAND:
-				case PM_NEWLVL:
-				case PM_QUIT:
-					tplayer = false;
-					break;
-				case PM_WALK_NORTHWARDS:
-				case PM_WALK_SOUTHWARDS:
-				case PM_WALK_SIDEWAYS:
-					tplayer = DoWalk(player);
-					break;
-				case PM_ATTACK:
-					tplayer = DoAttack(player);
-					break;
-				case PM_RATTACK:
-					tplayer = DoRangeAttack(player);
-					break;
-				case PM_BLOCK:
-					tplayer = DoBlock(player);
-					break;
-				case PM_SPELL:
-					tplayer = DoSpell(player);
-					break;
-				case PM_GOTHIT:
-					tplayer = DoGotHit(player);
-					break;
-				case PM_DEATH:
-					tplayer = DoDeath(player);
-					break;
-				}
-				CheckNewPath(player, tplayer);
-			} while (tplayer);
+			// POE2 Mashup: once a ranged attack or spell has fired, walking cuts its follow-through short, so the
+			// hero keeps moving between shots. Skills with their own animation still play out.
+			if (gbIsPoe2 && IsAnyOf(player._pmode, PM_RATTACK, PM_SPELL) && player.poe2.castSkill == WeaponSkill::None
+			    && player.walkpath[0] != WALK_NONE && player.destAction == ACTION_NONE && player.CanChangeAction())
+				StartStand(player, player._pdir);
 
-			player.previewCelSprite = std::nullopt;
-			if (player._pmode != PM_DEATH || player.AnimInfo.tickCounterOfCurrentFrame != 40)
-				player.AnimInfo.processAnimation();
+			ProcessPlayerAction(player);
 		}
 	}
 }
@@ -3105,6 +3712,10 @@ bool PosOkPlayer(const Player &player, Point position)
 	if (dMonster[position.x][position.y] != 0) {
 		if (leveltype == DTYPE_TOWN) {
 			return false;
+		}
+		// POE2 Mashup: you walk through your own minions, like in POE2.
+		if (IsMinionOf(Monsters[std::abs(dMonster[position.x][position.y]) - 1], player)) {
+			return true;
 		}
 		if (dMonster[position.x][position.y] <= 0) {
 			return false;
@@ -3193,6 +3804,7 @@ void CheckPlrSpell(bool isShiftHeld, SpellID spellID, SpellType spellType)
 		if (spellType == SpellType::Spell) {
 			switch (spellcheck) {
 			case SpellCheckResult::Fail_NoMana:
+				TelemetrySkillFailed(myPlayer, GetSpellData(spellID).sNameText, "not enough mana");
 				myPlayer.Say(HeroSpeech::NotEnoughMana);
 				break;
 			case SpellCheckResult::Fail_Level0:
@@ -3229,6 +3841,9 @@ void CheckPlrSpell(bool isShiftHeld, SpellID spellID, SpellType spellType)
 				targetedTile = myPlayer.position.temp + relativeMove;
 			}
 		}
+		// POE2 Mashup: bolts fly exactly where the cursor points, at any angle, not toward the nearest tile's centre.
+		if (gbIsPoe2 && IsAnyOf(spellID, SpellID::Firebolt, SpellID::Fireball, SpellID::ChargedBolt, SpellID::HolyBolt, SpellID::Lightning, SpellID::BloodStar, SpellID::Elemental))
+			targetedTile = AimAlongCursor(myPlayer, AimTiles);
 		LastPlayerAction = PlayerActionType::Spell;
 		NetSendCmdLocParam3(true, CMD_SPELLXY, targetedTile, static_cast<int8_t>(spellID), static_cast<uint8_t>(spellType), spellFrom);
 	}
@@ -3494,6 +4109,60 @@ bool TestPlayerDoGotHit(Player &player)
 {
 	return DoGotHit(player);
 }
+
+void TestPlayerProcessAction(Player &player)
+{
+	ProcessPlayerAction(player);
+}
 #endif
+
+int WeaponVsMonsterClassDamage(ItemType handType, MonsterClass monsterClass, int damage)
+{
+	// POE2 Mashup: off unless Poe2WeaponVsMonsterClass (plan step 14): POE2's weapons deal the same to every monster.
+	if (gbIsPoe2 && !Poe2WeaponVsMonsterClass)
+		return damage;
+	switch (monsterClass) {
+	case MonsterClass::Undead:
+		if (handType == ItemType::Sword) {
+			damage -= damage / 2;
+		} else if (handType == ItemType::Mace) {
+			damage += damage / 2;
+		}
+		break;
+	case MonsterClass::Animal:
+		if (handType == ItemType::Mace) {
+			damage -= damage / 2;
+		} else if (handType == ItemType::Sword) {
+			damage += damage / 2;
+		}
+		break;
+	default:
+		break;
+	}
+	return damage;
+}
+
+bool SkillHitMonster(Player &player, Monster &monster, int damagePercent)
+{
+	return PlrHitMonst(player, monster, false, damagePercent);
+}
+
+void MovePlayerTo(Player &player, Point destination)
+{
+	dPlayer[player.position.tile.x][player.position.tile.y] = 0;
+	MarkWalkabilityChanged();
+	PlrClrTrans(player.position.tile);
+	player.position.tile = destination;
+	player.position.future = destination;
+	player.position.old = destination;
+	PlrDoTrans(destination);
+	player.occupyTile(destination, false);
+	if (leveltype != DTYPE_TOWN) {
+		ChangeLightXY(player.lightId, destination);
+		ChangeVisionXY(player.getId(), destination);
+	}
+	if (&player == MyPlayer)
+		ViewPosition = destination;
+}
 
 } // namespace devilution

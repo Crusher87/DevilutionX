@@ -121,6 +121,8 @@ bool pfile_ui_set_hero_infos(bool (*uiAddHeroInfo)(_uiheroinfo *));
 void pfile_ui_set_class_stats(HeroClass playerClass, _uidefaultstats *classStats);
 uint32_t pfile_ui_get_first_unused_save_num();
 bool pfile_ui_save_create(_uiheroinfo *heroinfo);
+/** @brief POE2 Mashup: makes the Skill Lab's stand-in hero in a save slot the hero list doesn't show. */
+bool pfile_create_lab_hero(uint32_t saveNum, HeroClass heroClass, std::string_view name);
 bool pfile_delete_save(_uiheroinfo *heroInfo);
 void pfile_read_player_from_save(uint32_t saveNum, Player &player);
 void pfile_save_level();
@@ -128,5 +130,8 @@ std::expected<void, std::string> pfile_convert_levels();
 void pfile_remove_temp_files();
 std::unique_ptr<std::byte[]> pfile_read(const char *pszName, size_t *pdwLen);
 void pfile_update(bool forceSave);
+/** @brief Where the current hero's save and the stash are kept, for the play log's crash reports. */
+std::string pfile_hero_save_path();
+std::string pfile_stash_save_path();
 
 } // namespace devilution

@@ -5,9 +5,13 @@
  */
 #include "engine/render/scrollrt.h"
 
+#include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <optional>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_keyboard.h>
@@ -30,12 +34,15 @@
 #include "engine/backbuffer_state.hpp"
 #include "engine/displacement.hpp"
 #include "engine/dx.h"
+#include "engine/light_tables.hpp"
 #include "engine/point.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/dun_render.hpp"
 #include "engine/render/light_render.hpp"
+#include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "engine/trn.hpp"
+#include "engine/ui_scale.hpp"
 #include "engine/world_tile.hpp"
 #include "game_mode.hpp"
 #include "gmenu.h"
@@ -53,12 +60,43 @@
 #include "missiles.h"
 #include "nthread.h"
 #include "options.h"
+#include "panels/anvil_panel.hpp"
+#include "panels/atlas_panel.hpp"
 #include "panels/charpanel.hpp"
 #include "panels/console.hpp"
+#include "panels/desecration_panel.hpp"
+#include "panels/gemcutting_panel.hpp"
+#include "panels/item_spawner.hpp"
+#include "panels/skill_lab_panel.hpp"
+#include "panels/monster_banner.hpp"
 #include "panels/partypanel.hpp"
+#include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/quest_reward_panel.hpp"
+#include "panels/skill_bar.hpp"
+#include "panels/skills_panel.hpp"
 #include "panels/spell_list.hpp"
+#include "panels/stack_split_panel.hpp"
+#include "panels/stash_tabs_panel.hpp"
 #include "plrmsg.h"
+#include "engine/palette.h"
+#include "poe2/bound_demons.hpp"
+#include "poe2/camera_shake.hpp"
+#include "poe2/floor_chests.hpp"
+#include "poe2/hd.hpp"
+#include "poe2/hud_globes.hpp"
+#include "poe2/hud_minions.hpp"
+#include "poe2/corner_map.hpp"
+#include "poe2/overhead_bars.hpp"
+#include "poe2/quest_tracker.hpp"
+#include "poe2/shrines.hpp"
+#include "poe2/profane_roads.hpp"
+#include "poe2/skill_lab.hpp"
+#include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/loot_filter.hpp"
+#include "poe2/monster_mods.hpp"
+#include "poe2/vfx.hpp"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -110,6 +148,83 @@ bool frameflag;
 namespace {
 
 constexpr auto RightFrameDisplacement = Displacement { DunFrameWidth, 0 };
+
+/** @brief POE2 Mashup: a palette remap that tints every colour, rebuilt when the palette shown changes. */
+struct PaletteTint {
+	std::array<uint8_t, 256> trn;
+	std::array<SDL_Color, 256> builtFor;
+	bool built = false;
+};
+
+/**
+ * @brief Builds the tint (or reuses it while the palette is the same): per channel, its share of the original colour in
+ * percent and what it adds (red, green, blue), matched to the nearest colour of the palette shown now.
+ */
+const uint8_t *TintTRN(PaletteTint &tint, const std::array<int, 6> &mix);
+
+/** @brief POE2 Mashup: the Butcher's Road pact's rage, a deep red on the monster. */
+const uint8_t *EnrageTRN()
+{
+	static PaletteTint tint;
+	return TintTRN(tint, { 100, 60, 40, 0, 40, 0 });
+}
+
+/** @brief POE2 Mashup: a poison arrow (Plague Arrow), its shaft and head stained a venomous green. */
+const uint8_t *VenomTRN()
+{
+	static PaletteTint tint;
+	return TintTRN(tint, { 45, 0, 95, 45, 25, 0 });
+}
+
+/**
+ * @brief POE2 Mashup: magic, rare and unique monsters get a thin outline in their rank's colour.
+ *
+ * It is drawn with the monster's sprite, so walls in front of the monster hide it, and it fades
+ * with the light so it never glows out of the dark.
+ */
+std::optional<uint8_t> RankOutlineColor(const Monster &monster, int lightTableIndex)
+{
+	if (!gbIsPoe2 || lightTableIndex >= LightsMax - 2)
+		return std::nullopt;
+	uint8_t base;
+	if (monster.isPlayerMinion()) {
+		return std::nullopt;
+	} else if (monster.isUnique()) {
+		base = PAL16_ORANGE;
+	} else {
+		switch (GetMonsterAffixes(monster).rarity) {
+		case MonsterRarity::Magic:
+			base = PAL16_BLUE;
+			break;
+		case MonsterRarity::Rare:
+			base = PAL16_YELLOW;
+			break;
+		default:
+			return std::nullopt;
+		}
+	}
+	// Shade 9 is a soft mid tone in full light; darker shades as the light drops.
+	return static_cast<uint8_t>(base + std::min(9 + lightTableIndex / 3, 14));
+}
+
+/**
+ * @brief POE2 Mashup: how a monster's outline shows in HD: fading in under the cursor. Rares and bosses keep the same
+ * thin outline as magic monsters, with no glow (Curtis 2026-11-09: the thick, glowing look was too much).
+ */
+hd::OutlineLook MonsterOutlineLook(int monsterId)
+{
+	return { .hovered = monsterId == pcursmonst, .thing = hd::OutlineThing(hd::ThingKind::Monster, monsterId) };
+}
+
+/** @brief POE2 Mashup: how an item's outline shows in HD: a slow glow round uniques and quest items, fading in under the cursor. */
+hd::OutlineLook ItemOutlineLook(const Item &item, int itemIndex)
+{
+	return {
+		.glow = gbIsPoe2 && (item._iMagical == ITEM_QUALITY_UNIQUE || item._iClass == ICLASS_QUEST),
+		.hovered = itemIndex == pcursitem,
+		.thing = hd::OutlineThing(hd::ThingKind::Item, itemIndex),
+	};
+}
 
 [[nodiscard]] DVL_ALWAYS_INLINE bool IsFloor(Point tilePosition)
 {
@@ -338,11 +453,25 @@ void DrawCursor(const Surface &out)
  */
 void DrawMissilePrivate(const Surface &out, const Missile &missile, Point targetBufferPosition, bool pre, int lightTableIndex)
 {
-	if (missile._miPreFlag != pre || !missile._miDrawFlag)
+	TelemetryDrawStep("drawing a missile");
+	if (missile._miPreFlag != pre || !missile._miDrawFlag || !missile._miAnimData)
+		return;
+	// POE2 Mashup: with Modern Effects the effects draw projectiles themselves; the classic sprite would be a second bolt.
+	if (vfx::ReplacesSprite(missile))
 		return;
 
 	const Point missileRenderPosition { targetBufferPosition + missile.position.offsetForRendering - Displacement { missile._miAnimWidth2, 0 } };
 	const ClxSprite sprite = (*missile._miAnimData)[missile._miAnimFrame - 1];
+	// POE2 Mashup: a poison arrow flies green (Curtis, Rogue run 2: Plague Arrow should look like a poison arrow).
+	if (gbIsPoe2 && missile._miAnimType == MissileGraphicID::Arrow && missile.poe2.vfxElement == static_cast<int8_t>(vfx::Element::Poison)) {
+		std::array<uint8_t, 256> venom;
+		const uint8_t *green = VenomTRN();
+		const size_t light = missile._miLightFlag ? std::min<size_t>(static_cast<size_t>(std::max(lightTableIndex, 0)), LightTables.size() - 1) : 0;
+		for (size_t i = 0; i < venom.size(); i++)
+			venom[i] = LightTables[light][green[i]];
+		ClxDrawTRN(out, missileRenderPosition, sprite, venom.data());
+		return;
+	}
 	if (missile._miUniqTrans != 0) {
 		ClxDrawTRN(out, missileRenderPosition, sprite, Monsters[missile._misource].uniqueMonsterTRN.get());
 	} else if (missile._miLightFlag) {
@@ -383,8 +512,24 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 	}
 
 	const ClxSprite sprite = monster.animInfo.currentSprite();
+	const hd::SubFrameScope subFrame(monster.animInfo.getFrameFraction());
+	// POE2 Mashup: the HD light gives a monster a shadow, and lights it in its colour unless it's drawn in a recolour.
+	const hd::CasterScope caster(hd::Caster::Monster);
+	// POE2 Mashup: a monster in front of a brazier or a portal goes over its effects.
+	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
+		vfx::MarkFront(out, targetBufferPosition, sprite);
 
 	if (!IsTileLit(tilePosition)) {
+		hd::CurrentCaster = hd::Caster::None;
+		// POE2 Mashup: the Maiden's Road, shapes that haven't noticed the hero are drawn dimmer.
+		if (gbIsPoe2 && monster.activeForTicks == 0 && HasInfravision(*MyPlayer)) {
+			std::array<uint8_t, 256> dim;
+			const uint8_t *infravision = GetInfravisionTRN();
+			for (size_t i = 0; i < dim.size(); i++)
+				dim[i] = LightTables[std::min<size_t>(6, LightTables.size() - 1)][infravision[i]];
+			ClxDrawTRN(out, targetBufferPosition, sprite, dim.data());
+			return;
+		}
 		ClxDrawTRN(out, targetBufferPosition, sprite, GetInfravisionTRN());
 		return;
 	}
@@ -393,12 +538,25 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 		trn = monster.uniqueMonsterTRN.get();
 	if (monster.mode == MonsterMode::Petrified)
 		trn = GetStoneTRN();
-	if (MyPlayer->_pInfraFlag && lightTableIndex > 8)
+	if (HasInfravision(*MyPlayer) && lightTableIndex > 8)
 		trn = GetInfravisionTRN();
-	if (trn != nullptr)
+	// POE2 Mashup: the Butcher's Road pact, an enraged monster is drawn red over its own colours, in the light it stands in.
+	if (IsEnraged(monster) && monster.mode != MonsterMode::Petrified && trn != GetInfravisionTRN()) {
+		std::array<uint8_t, 256> enraged;
+		const uint8_t *red = EnrageTRN();
+		const size_t light = std::min<size_t>(static_cast<size_t>(std::max(lightTableIndex, 0)), LightTables.size() - 1);
+		for (size_t i = 0; i < enraged.size(); i++)
+			enraged[i] = trn != nullptr ? red[trn[i]] : LightTables[light][red[i]];
+		hd::CurrentCaster = hd::Caster::MonsterUnlit;
+		ClxDrawTRN(out, targetBufferPosition, sprite, enraged.data());
+		return;
+	}
+	if (trn != nullptr) {
+		hd::CurrentCaster = trn == monster.uniqueMonsterTRN.get() ? hd::Caster::MonsterRecoloured : hd::Caster::MonsterUnlit;
 		ClxDrawTRN(out, targetBufferPosition, sprite, trn);
-	else
+	} else {
 		ClxDrawLight(out, targetBufferPosition, sprite, lightTableIndex);
+	}
 }
 
 /**
@@ -413,6 +571,10 @@ void DrawPlayerIconHelper(const Surface &out, MissileGraphicID missileGraphicId,
 
 	position.x -= GetMissileSpriteData(missileGraphicId).animWidth2;
 
+	if (!GetMissileSpriteData(missileGraphicId).sprites) {
+		TelemetryMissingSprite(StrCat("hero icon ", static_cast<int>(missileGraphicId)));
+		return;
+	}
 	const ClxSprite sprite = (*GetMissileSpriteData(missileGraphicId).sprites).list()[0];
 
 	if (!lighting) {
@@ -459,6 +621,72 @@ uint8_t GetPlayerOutlineColor(int id)
 }
 
 /**
+ * @brief POE2 Mashup: the Vizjerei Road's backlash tints the hero in its element (fire red-orange, cold icy blue,
+ * lightning pale yellow), in the colours of the palette shown now (rebuilt when the palette changes).
+ */
+const uint8_t *BacklashTRN(DamageType element)
+{
+	static std::array<PaletteTint, 3> tints;
+	const size_t index = element == DamageType::Fire ? 0 : element == DamageType::Cold ? 1 : 2;
+	// Per element: each channel's share of the original, in percent, and what it adds.
+	constexpr std::array<std::array<int, 6>, 3> Mix { {
+		{ 95, 40, 55, 30, 30, 0 },
+		{ 45, 0, 75, 20, 95, 50 },
+		{ 90, 30, 90, 30, 40, 0 },
+	} };
+	return TintTRN(tints[index], Mix[index]);
+}
+
+const uint8_t *TintTRN(PaletteTint &tint, const std::array<int, 6> &mix)
+{
+	if (tint.built && std::memcmp(tint.builtFor.data(), logical_palette.data(), sizeof(tint.builtFor)) == 0)
+		return tint.trn.data();
+	tint.builtFor = logical_palette;
+	tint.built = true;
+	for (size_t i = 0; i < tint.trn.size(); i++) {
+		const SDL_Color colour = logical_palette[i];
+		const int r = std::min(colour.r * mix[0] / 100 + mix[1], 255);
+		const int g = std::min(colour.g * mix[2] / 100 + mix[3], 255);
+		const int b = std::min(colour.b * mix[4] / 100 + mix[5], 255);
+		size_t best = i;
+		int bestDistance = 3 * 256 * 256;
+		for (size_t j = 0; j < logical_palette.size(); j++) {
+			const int dr = logical_palette[j].r - r;
+			const int dg = logical_palette[j].g - g;
+			const int db = logical_palette[j].b - b;
+			const int distance = dr * dr + dg * dg + db * db;
+			if (distance < bestDistance) {
+				bestDistance = distance;
+				best = j;
+			}
+		}
+		tint.trn[i] = static_cast<uint8_t>(best);
+	}
+	return tint.trn.data();
+}
+
+/**
+ * @brief POE2 Mashup: fading afterimages trailing a dodge roll or dash, darker the further back they are.
+ */
+void DrawDodgeAfterimages(const Surface &out, const Player &player, ClxSprite sprite, Point spriteBufferPosition)
+{
+	if (!player.poe2.isDodging() || !player.isWalking())
+		return;
+	// Leap Attack trails dust instead (Curtis 2026-11-07, Q39; see ProcessDashLooks).
+	if (player.poe2.dashSkill == WeaponSkill::LeapSlam && player.poe2.dashSkillTicks > 0)
+		return;
+	// One tile's step on screen in the direction of travel.
+	const Displacement step { player._pdir };
+	const Displacement screenStep { (step.deltaX - step.deltaY) * 32, (step.deltaX + step.deltaY) * 16 };
+	constexpr int Ghosts = 3;
+	for (int ghost = Ghosts; ghost >= 1; ghost--) {
+		const Point position = spriteBufferPosition - Displacement { screenStep.deltaX * ghost / 3, screenStep.deltaY * ghost / 3 };
+		const size_t light = std::min<size_t>(LightTables.size() - 1, static_cast<size_t>(3 + (ghost * 3)));
+		ClxDrawBlendedTRN(out, position, sprite, LightTables[light].data());
+	}
+}
+
+/**
  * @brief Render a player sprite
  * @param out Output buffer
  * @param player Player reference
@@ -467,30 +695,60 @@ uint8_t GetPlayerOutlineColor(int id)
  */
 void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
-	if (!IsTileLit(tilePosition) && !MyPlayer->_pInfraFlag && !MyPlayer->isOnArenaLevel() && leveltype != DTYPE_TOWN) {
+	TelemetryDrawStep("drawing a hero");
+	if (!IsTileLit(tilePosition) && !HasInfravision(*MyPlayer) && !MyPlayer->isOnArenaLevel() && leveltype != DTYPE_TOWN) {
 		return;
 	}
 
+	if (!player.previewCelSprite && !player.AnimInfo.sprites) {
+		TelemetryMissingSprite(StrCat("hero ", player._pName, " (mode ", static_cast<int>(player._pmode), ")"));
+		return;
+	}
 	const ClxSprite sprite = player.currentSprite();
+	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
+	// POE2 Mashup: the mini life bar over the hero is drawn later, with the UI.
+	if (gbIsPoe2 && &player == MyPlayer)
+		QueueHeroOverheadBar(player, spriteBufferPosition, sprite);
+	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
+	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
+		vfx::MarkFront(out, spriteBufferPosition, sprite);
 
+	// POE2 Mashup: in HD the outline under the cursor fades in.
+	const hd::OutlineScope outlineLook({ .hovered = &player == PlayerUnderCursor, .thing = hd::OutlineThing(hd::ThingKind::Player, player.getId()) });
 	if (&player == PlayerUnderCursor)
 		ClxDrawOutlineSkipColorZero(out, GetPlayerOutlineColor(player.getId()), spriteBufferPosition, sprite);
+	else if (const std::optional<uint8_t> glow = ShrineGlowColor(player))
+		ClxDrawOutlineSkipColorZero(out, *glow, spriteBufferPosition, sprite);
 
+	const std::optional<DamageType> backlash = &player == MyPlayer ? VizjereiLastBacklash(player) : std::nullopt;
 	if (&player == MyPlayer && IsNoneOf(leveltype, DTYPE_NEST, DTYPE_CRYPT)) {
-		ClxDraw(out, spriteBufferPosition, sprite);
+		{
+			// POE2 Mashup: the HD light colours the hero and gives them a shadow (only the body, not the icons).
+			const hd::CasterScope caster(hd::Caster::MyHero);
+			if (backlash)
+				ClxDrawTRN(out, spriteBufferPosition, sprite, BacklashTRN(*backlash));
+			else
+				ClxDraw(out, spriteBufferPosition, sprite);
+		}
 		DrawPlayerIcons(out, player, targetBufferPosition, /*infraVision=*/false, lightTableIndex);
 		return;
 	}
 
-	if (!IsTileLit(tilePosition) || ((MyPlayer->_pInfraFlag || MyPlayer->isOnArenaLevel()) && lightTableIndex > 8)) {
+	if (!IsTileLit(tilePosition) || ((HasInfravision(*MyPlayer) || MyPlayer->isOnArenaLevel()) && lightTableIndex > 8)) {
 		ClxDrawTRN(out, spriteBufferPosition, sprite, GetInfravisionTRN());
 		DrawPlayerIcons(out, player, targetBufferPosition, /*infraVision=*/true, lightTableIndex);
 		return;
 	}
 
 	lightTableIndex = std::max(lightTableIndex - 5, 0);
-	ClxDrawLight(out, spriteBufferPosition, sprite, lightTableIndex);
+	{
+		const hd::CasterScope caster(&player == MyPlayer ? hd::Caster::MyHero : hd::Caster::Hero);
+		if (backlash)
+			ClxDrawTRN(out, spriteBufferPosition, sprite, BacklashTRN(*backlash));
+		else
+			ClxDrawLight(out, spriteBufferPosition, sprite, lightTableIndex);
+	}
 	DrawPlayerIcons(out, player, targetBufferPosition, /*infraVision=*/false, lightTableIndex);
 }
 
@@ -502,6 +760,7 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
  */
 void DrawDeadPlayer(const Surface &out, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
+	TelemetryDrawStep("drawing a dead hero");
 	dFlags[tilePosition.x][tilePosition.y] &= ~DungeonFlag::DeadPlayer;
 
 	for (const Player &player : Players) {
@@ -523,14 +782,26 @@ void DrawDeadPlayer(const Surface &out, Point tilePosition, Point targetBufferPo
  */
 void DrawObject(const Surface &out, const Object &objectToDraw, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
-	const ClxSprite sprite = objectToDraw.currentSprite();
+	TelemetryDrawStep("drawing an object");
+	if (!objectToDraw._oAnimData) {
+		TelemetryMissingSprite(StrCat("object ", objectToDraw.name().str(), " (type ", static_cast<int>(objectToDraw._otype), ")"));
+		return;
+	}
+	// POE2 Mashup: with Modern Effects, candles hold still and torches flicker out of step (see vfx::ObjectSprite).
+	const ClxSprite sprite = vfx::ObjectSprite(objectToDraw);
 
 	const Point screenPosition = targetBufferPosition + objectToDraw.getRenderingOffset(sprite, tilePosition);
 
+	// POE2 Mashup: a strongbox stands out, drawn bright even in the dark with a gold edge.
+	const bool strongbox = StrongboxStandsOut(objectToDraw);
+	// POE2 Mashup: in HD the outline under the cursor fades in.
+	const hd::OutlineScope outlineLook({ .hovered = &objectToDraw == ObjectUnderCursor, .thing = hd::OutlineThing(hd::ThingKind::Object, static_cast<int>(objectToDraw.GetId())) });
 	if (&objectToDraw == ObjectUnderCursor) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsObject, screenPosition, sprite);
+	} else if (strongbox) {
+		ClxDrawOutlineSkipColorZero(out, PAL16_ORANGE + 2, screenPosition, sprite);
 	}
-	if (objectToDraw.applyLighting) {
+	if (objectToDraw.applyLighting && !strongbox) {
 		ClxDrawLight(out, screenPosition, sprite, lightTableIndex);
 	} else {
 		ClxDraw(out, screenPosition, sprite);
@@ -548,7 +819,7 @@ static void DrawDungeon(const Surface & /*out*/, const Lightmap & /*lightmap*/, 
  */
 void DrawCell(const Surface &out, const Lightmap lightmap, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
-	const uint16_t levelPieceId = dPiece[tilePosition.x][tilePosition.y];
+	const uint16_t levelPieceId = hd::PieceToDraw(tilePosition);
 	const MICROS *pMap = &DPieceMicros[levelPieceId];
 
 	const uint8_t *tbl = LightTables[lightTableIndex].data();
@@ -571,6 +842,13 @@ void DrawCell(const Surface &out, const Lightmap lightmap, Point tilePosition, P
 		transparency = false;
 	}
 #endif
+	// POE2 Mashup: walls and pillars in front of a portal hide it, as heroes and monsters do (Curtis, Rogue run 2: the
+	// town portal was drawn over them). One gone see-through lets it show.
+	const bool marksFront = gbIsPoe2 && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
+	if (marksFront) {
+		const int columnHeight = MicroTileLen / 2 * TILE_HEIGHT;
+		vfx::BeginFrontPiece(out, targetBufferPosition + Displacement { 0, 1 - columnHeight }, Size { TILE_WIDTH, columnHeight });
+	}
 
 	const auto getFirstTileMaskLeft = [=](TileType tile) -> MaskType {
 		if (transparency) {
@@ -658,6 +936,8 @@ void DrawCell(const Surface &out, const Lightmap lightmap, Point tilePosition, P
 		}
 		targetBufferPosition.y -= TILE_HEIGHT;
 	}
+	if (marksFront)
+		vfx::EndFrontPiece(out);
 
 #ifdef _DEBUG
 	if (DebugPath && walkpathIdx != -1) {
@@ -687,7 +967,7 @@ void DrawFloorTile(const Surface &out, const Lightmap &lightmap, Point tilePosit
 		tbl = GetPauseTRN();
 #endif
 
-	const uint16_t levelPieceId = dPiece[tilePosition.x][tilePosition.y];
+	const uint16_t levelPieceId = hd::PieceToDraw(tilePosition);
 	{
 		const LevelCelBlock levelCelBlock { DPieceMicros[levelPieceId].mt[0] };
 		if (levelCelBlock.hasValue()) {
@@ -713,15 +993,49 @@ void DrawFloorTile(const Surface &out, const Lightmap &lightmap, Point tilePosit
  */
 void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, int lightTableIndex)
 {
+	TelemetryDrawStep("drawing an item");
 	const Item &item = Items[itemIndex];
+	if (IsItemHiddenByLootFilter(item))
+		return;
+	if (!item.AnimInfo.sprites) {
+		TelemetryMissingSprite(StrCat("item ", item.getName().str(), " (picture ", item._iCurs, ")"));
+		return;
+	}
 	const ClxSprite sprite = item.AnimInfo.currentSprite();
+	// POE2 Mashup: in HD a unique or quest item's outline glows, and the one under the cursor fades in.
+	const hd::OutlineScope outlineLook(ItemOutlineLook(item, itemIndex));
 	const Point position = targetBufferPosition + item.getRenderingOffset(sprite);
-	if (!IsPlayerInStore() && (itemIndex == pcursitem || AutoMapShowItems)) {
-		ClxDrawOutlineSkipColorZero(out, GetOutlineColor(item, false), position, sprite);
+	if (!IsPlayerInStore()) {
+		if (itemIndex == pcursitem || AutoMapShowItems) {
+			ClxDrawOutlineSkipColorZero(out, GetOutlineColor(item, false), position, sprite);
+		} else if (const std::optional<uint8_t> outline = GroundItemOutlineColor(item); outline) {
+			if (const std::optional<uint8_t> lit = LitGroundOutline(*outline, lightTableIndex); lit)
+				ClxDrawOutlineSkipColorZero(out, *lit, position, sprite);
+		}
 	}
 	ClxDrawLight(out, position, sprite, lightTableIndex);
 	if (item.AnimInfo.isLastFrame() || item._iCurs == ICURS_MAGIC_ROCK)
 		AddItemToLabelQueue(itemIndex, position);
+}
+
+/**
+ * @brief How far a townsperson is towards its next frame, for HD in-betweens. Some play their frames backwards;
+ * a jump to a frame further away has no in-between.
+ */
+float TownerFrameFraction(const Towner &towner, bool &backward)
+{
+	backward = false;
+	if (towner._tAnimDelay <= 0 || towner._tAnimLen < 2)
+		return 0;
+	const int frame = towner._tAnimFrame;
+	const int next = towner.nextFrame();
+	const int last = towner._tAnimLen - 1;
+	const bool forward = next == frame + 1 || (frame == last && next == 0);
+	backward = !forward && (next == frame - 1 || (frame == 0 && next == last));
+	if (!forward && !backward)
+		return 0;
+	const float ticks = towner._tAnimCnt + static_cast<float>(ProgressToNextGameTick) / AnimationInfo::baseValueFraction;
+	return std::clamp(ticks / towner._tAnimDelay, 0.F, 1.F);
 }
 
 /**
@@ -732,6 +1046,7 @@ void DrawItem(const Surface &out, int8_t itemIndex, Point targetBufferPosition, 
  */
 void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBufferPosition, int lightTableIndex)
 {
+	TelemetryDrawStep("drawing a monster");
 	int mi = dMonster[tilePosition.x][tilePosition.y];
 
 	mi = std::abs(mi) - 1;
@@ -740,14 +1055,21 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 		auto &towner = Towners[mi];
 		const Point position = targetBufferPosition + towner.getRenderingOffset();
 		const ClxSprite sprite = towner.currentSprite();
+		bool backward;
+		const float fraction = TownerFrameFraction(towner, backward);
+		const hd::SubFrameScope subFrame(fraction, backward);
+		// POE2 Mashup: in HD the outline under the cursor fades in.
+		const hd::OutlineScope outlineLook({ .hovered = mi == pcursmonst, .thing = hd::OutlineThing(hd::ThingKind::Towner, mi) });
 		if (mi == pcursmonst) {
 			ClxDrawOutlineSkipColorZero(out, OutlineColorsTowner, position, sprite);
 		}
+		// POE2 Mashup: with HD Lighting a townsperson (or a cow) casts shadows in town's evening light, as monsters do.
+		const hd::CasterScope caster(hd::Caster::Monster);
 		ClxDraw(out, position, sprite);
 		return;
 	}
 
-	if (!IsTileLit(tilePosition) && !(MyPlayer->_pInfraFlag && IsFloor(tilePosition))) {
+	if (!IsTileLit(tilePosition) && !(HasInfravision(*MyPlayer) && IsFloor(tilePosition))) {
 		return;
 	}
 
@@ -760,13 +1082,40 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 	if ((monster.flags & MFLAG_HIDDEN) != 0) {
 		return;
 	}
+	// POE2 Mashup: a monster caught without a picture is skipped and logged, not a crash (Curtis 2026-10-19, maps).
+	if (!monster.animInfo.sprites) {
+		std::string missing;
+		for (const MonsterGraphic graphic : { MonsterGraphic::Stand, MonsterGraphic::Walk, MonsterGraphic::Attack, MonsterGraphic::GotHit, MonsterGraphic::Death, MonsterGraphic::Special }) {
+			if (!monster.type().getAnimData(graphic).sprites)
+				StrAppend(missing, " ", static_cast<int>(graphic));
+		}
+		TelemetryMissingSprite(StrCat("monster ", monster.name(), " (type ", static_cast<int>(monster.type().type), ", mode ", static_cast<int>(monster.mode),
+		    monster.isPlayerMinion() ? ", a minion" : "", ", graphics not loaded:", missing.empty() ? " none" : missing, ")"));
+		return;
+	}
 
 	const ClxSprite sprite = monster.animInfo.currentSprite();
-	const Displacement offset = monster.getRenderingOffset(sprite);
+	// POE2 Mashup: the Butcher's Road hook drags a monster smoothly between game ticks.
+	const Displacement offset = monster.getRenderingOffset(sprite) + HookDrawOffset(monster);
 
 	const Point monsterRenderPosition = targetBufferPosition + offset;
+	// POE2 Mashup: a hurt monster's life bar is drawn later, with the UI.
+	if (gbIsPoe2 && !IsBoundDemon(monster))
+		QueueMonsterOverheadBar(monster, monsterRenderPosition, sprite);
+	// POE2 Mashup: in HD the outline fades in under the cursor.
+	const hd::OutlineScope outlineLook(MonsterOutlineLook(mi));
 	if (mi == pcursmonst) {
 		ClxDrawOutlineSkipColorZero(out, OutlineColorsMonster, monsterRenderPosition, sprite);
+	} else if (const std::optional<uint8_t> glow = BoundDemonGlowColor(monster); glow) {
+		// POE2 Mashup: a bound demon out of its crystal glows in its essences' colours.
+		ClxDrawOutlineSkipColorZero(out, *glow, monsterRenderPosition, sprite);
+	} else if (const std::optional<uint8_t> rank = RankOutlineColor(monster, lightTableIndex); rank) {
+		ClxDrawOutlineSkipColorZero(out, *rank, monsterRenderPosition, sprite);
+	}
+	// POE2 Mashup: a bound demon is drawn inside its crystal (drawn in code over its own picture).
+	if (IsBoundDemon(monster)) {
+		DrawBoundDemon(out, monster, targetBufferPosition, monsterRenderPosition, sprite);
+		return;
 	}
 	DrawMonster(out, tilePosition, monsterRenderPosition, monster, lightTableIndex);
 }
@@ -781,6 +1130,8 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePosition, Point targetBufferPosition)
 {
 	assert(InDungeonBounds(tilePosition));
+	// POE2 Mashup: the HD light lights this tile's walls and sprites from where they stand.
+	const hd::TileScope hdTile(tilePosition, targetBufferPosition);
 	const int lightTableIndex = dLight[tilePosition.x][tilePosition.y];
 
 	DrawCell(out, lightmap, tilePosition, targetBufferPosition, lightTableIndex);
@@ -798,7 +1149,8 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 		DrawMissile(out, tilePosition, targetBufferPosition, true, lightTableIndex);
 	}
 
-	if (lightTableIndex < LightsMax && bDead != 0) {
+	// POE2 Mashup: a corpse whose slot holds no picture (a monster spawned in for testing, then the level reloaded) is left out.
+	if (lightTableIndex < LightsMax && (bDead & 0x1F) != 0 && Corpses[(bDead & 0x1F) - 1].sprites) {
 		const Corpse &corpse = Corpses[(bDead & 0x1F) - 1];
 		const Point position { targetBufferPosition.x - CalculateSpriteTileCenterX(corpse.width), targetBufferPosition.y };
 		const ClxSprite sprite = corpse.spritesForDirection(static_cast<Direction>((bDead >> 5) & 7))[corpse.frame];
@@ -916,6 +1268,11 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 			// Turn transparency off here for debugging
 			transparency = transparency && (SDL_GetModState() & SDL_KMOD_ALT) == 0;
 #endif
+			// POE2 Mashup: an arch in front of a portal hides it, as the walls do (see DrawCell).
+			const ClxSprite arch = (*pSpecialCels)[bArch];
+			const bool marksFront = gbIsPoe2 && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
+			if (marksFront)
+				vfx::BeginFrontPiece(out, targetBufferPosition + Displacement { 0, 1 - arch.height() }, Size { arch.width(), arch.height() });
 			if (perPixelLighting) {
 				// Create a special lightmap buffer to bleed light up walls
 				uint8_t lightmapBuffer[TILE_WIDTH * TILE_HEIGHT];
@@ -930,6 +1287,8 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 			} else {
 				ClxDrawLight(out, targetBufferPosition, (*pSpecialCels)[bArch], lightTableIndex);
 			}
+			if (marksFront)
+				vfx::EndFrontPiece(out);
 		}
 	} else {
 		// Tree leaves should always cover player when entering or leaving the tile,
@@ -1046,6 +1405,7 @@ void DrawTileContent(const Surface &out, const Lightmap &lightmap, Point tilePos
 
 void DrawDirtTile(const Surface &out, const Lightmap &lightmap, Point tilePosition, Point targetBufferPosition)
 {
+	const hd::TileScope hdTile(tilePosition, targetBufferPosition);
 	// This should be the *top-left* of the 2×2 dirt pattern in the actual dungeon.
 	// You might need to tweak these to where your dirt patch actually lives.
 	constexpr Point base { 0, 0 };
@@ -1228,6 +1588,8 @@ void CalcFirstTilePosition(Point &position, Displacement &offset)
  */
 void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 {
+	// POE2 Mashup: a crash report names what was being drawn; the steps below narrow it down.
+	TelemetryDrawStep("drawing the dungeon");
 	// Limit rendering to the view area
 	const Surface &out = !*GetOptions().Graphics.zoom
 	    ? fullOut.subregionY(0, gnViewportHeight)
@@ -1278,12 +1640,40 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 	    out.at(0, 0), out.pitch(), LightTables, FullyLitLightTable, FullyDarkLightTable,
 	    dLight, MicroTileLen);
 
+	// POE2 Mashup: the HD renderer replays these draws in full colour at twice the size.
+	if (*GetOptions().Graphics.zoom && hd::Active()) {
+		int viewportWidth = fullOut.w();
+		int viewportOffsetX = 0;
+		if (CanPanelsCoverView()) {
+			if (IsLeftPanelOpen()) {
+				viewportWidth -= SidePanelSize.width;
+				viewportOffsetX = SidePanelSize.width;
+			} else if (IsRightPanelOpen()) {
+				viewportWidth -= SidePanelSize.width;
+			}
+		}
+		hd::BeginWorld(out, Rectangle { Point { viewportOffsetX, 0 }, Size { viewportWidth, gnViewportHeight } });
+		hd::SetViewOrigin(position, Point {} + offset);
+	}
 	DrawFloor(out, lightmap, position, Point {} + offset, rows, columns);
+	hd::EndFloor();
+	// POE2 Mashup: the effects lying on the floor hide behind whatever is drawn over it from here on.
+	const bool floorCopy = IsUiScaled() && vfx::WantsFloorCopy();
+	if (floorCopy)
+		vfx::CopyFloor(fullOut);
+	// POE2 Mashup: and a hero in front of a portal goes over it (not with the HD replay, which draws the world itself).
+	if (IsUiScaled() && !hd::Active())
+		vfx::BeginFront(fullOut);
 	DrawTileContent(out, lightmap, position, Point {} + offset, rows, columns);
 	DrawOOB(out, lightmap, position, Point {} + offset, rows, columns);
+	hd::EndWorld();
 
 	if (*GetOptions().Graphics.zoom) {
 		Zoom(fullOut.subregionY(0, gnViewportHeight));
+		if (floorCopy && vfx::FloorCopy().w() == fullOut.w())
+			Zoom(vfx::FloorCopy().subregionY(0, gnViewportHeight));
+		if (vfx::FrontMask().w() == fullOut.w())
+			Zoom(vfx::FrontMask().subregionY(0, gnViewportHeight));
 	}
 
 #ifdef DUN_RENDER_STATS
@@ -1316,8 +1706,17 @@ void DrawView(const Surface &out, Point startPosition)
 	DebugCoordsMap.clear();
 #endif
 	Displacement offset = {};
-	CalcFirstTilePosition(startPosition, offset);
-	DrawGame(out, startPosition, offset);
+	{
+		// POE2 Mashup: with the UI scaled, the world is drawn at the full size and the UI over a shrunk copy of it.
+		const WorldSpaceScope worldSpace;
+		CalcFirstTilePosition(startPosition, offset);
+		// POE2 Mashup: heavy hits jolt the view.
+		offset += CameraShakeOffset();
+		const FramePartScope part(FramePart::World);
+		DrawGame(IsUiScaled() ? WorldBackBuffer() : out, startPosition, offset);
+	}
+	TelemetryDrawStep("drawing the map, names and banners");
+	PrepareScaledUi();
 	if (AutomapActive) {
 		DrawAutomap(out.subregionY(0, gnViewportHeight));
 	}
@@ -1390,9 +1789,26 @@ void DrawView(const Surface &out, Point startPosition)
 	}
 #endif
 	DrawItemNameLabels(out);
-	DrawMonsterHealthBar(out);
+	if (gbIsPoe2)
+		DrawOverheadBars(out);
+	if (gbIsPoe2)
+		DrawMonsterBanner(out);
+	else
+		DrawMonsterHealthBar(out);
 	DrawFloatingNumbers(out, startPosition, offset);
+	// POE2 Mashup: the corner map, under the open windows.
+	if (gbIsPoe2)
+		DrawPoe2CornerMap(out.subregionY(0, gnViewportHeight));
+	if (gbIsPoe2)
+		DrawPoe2QuestTracker(out.subregionY(0, gnViewportHeight));
+	// POE2 Mashup: the effects layer lines up with this frame's view.
+	TelemetryDrawStep("finding effects to draw");
+	vfx::SetCamera(startPosition, offset, *GetOptions().Graphics.zoom);
+	vfx::ScanMissiles();
+	if (IsUiScaled())
+		vfx::ScanWorld(WorldBackBuffer());
 
+	TelemetryDrawStep("drawing the open windows");
 	if (IsPlayerInStore() && !qtextflag)
 		DrawSText(out);
 	if (invflag) {
@@ -1403,7 +1819,9 @@ void DrawView(const Surface &out, Point startPosition)
 
 	DrawDurIcon(out);
 
-	DrawLevelButton(out);
+	// The lab's stand-in hero has points it never spends.
+	if (!SkillLabActive())
+		DrawLevelButton(out);
 
 	if (CharFlag) {
 		DrawChr(out);
@@ -1413,7 +1831,14 @@ void DrawView(const Surface &out, Point startPosition)
 		DrawStash(out);
 	} else if (IsVisualStoreOpen) {
 		DrawVisualStore(out);
+	} else if (IsSkillsPanelOpen()) {
+		DrawSkillsPanel(out);
 	}
+	// POE2 Mashup: the side panels' art hides the effects under it, also where it's the colour of the world under it.
+	if (IsRightPanelOpen())
+		CoverUi(out, GetRightPanel());
+	if (IsLeftPanelOpen())
+		CoverUi(out, GetLeftPanel());
 
 	if (ShowUniqueItemInfoBox) {
 		DrawUniqueInfo(out);
@@ -1445,6 +1870,7 @@ void DrawView(const Surface &out, Point startPosition)
 	}
 
 	DrawControllerModifierHints(out);
+	DrawSkillBar(out);
 	DrawPlrMsg(out);
 	gmenu_draw(out);
 	doom_draw(out);
@@ -1674,10 +2100,12 @@ void TilesInView(int *rcolumns, int *rrows)
 
 void CalcViewportGeometry()
 {
+	// POE2 Mashup: the world's geometry, at the full size when the UI is scaled.
+	const WorldSpaceScope worldSpace;
 	const int zoomFactor = *GetOptions().Graphics.zoom ? 2 : 1;
 	const int screenWidth = GetScreenWidth() / zoomFactor;
 	const int screenHeight = GetScreenHeight() / zoomFactor;
-	const int panelHeight = GetMainPanel().size.height / zoomFactor;
+	const int panelHeight = UiToWorldHeight(GetMainPanel().size.height) / zoomFactor;
 	const int pixelsToPanel = screenHeight - panelHeight;
 	Point playerPosition { screenWidth / 2, pixelsToPanel / 2 };
 
@@ -1848,7 +2276,8 @@ void DrawAndBlit()
 
 	const Rectangle &mainPanel = GetMainPanel();
 
-	if (gnScreenWidth > mainPanel.size.width || IsRedrawEverything()) {
+	// POE2 Mashup: the globes are animated, so the whole screen is drawn every frame.
+	if (gnScreenWidth > mainPanel.size.width || IsRedrawEverything() || gbIsPoe2) {
 		drawHealth = true;
 		drawMana = true;
 		drawControlButtons = true;
@@ -1868,9 +2297,12 @@ void DrawAndBlit()
 	nthread_UpdateProgressToNextGameTick();
 
 	this_sdl_thread::yield();
+	const uint64_t drawingStart = TelemetryFramePartStart();
 	DrawView(out, ViewPosition);
+	TelemetryDrawStep("drawing the panels");
 	if (drawCtrlPan) {
 		DrawMainPanel(out);
+		CoverUi(out, GetMainPanel());
 	}
 	if (drawHealth) {
 		DrawLifeFlaskLower(out, !drawCtrlPan);
@@ -1890,19 +2322,42 @@ void DrawAndBlit()
 		DrawChatBox(out);
 	}
 	DrawXPBar(out);
-	if (*GetOptions().Gameplay.showHealthValues)
-		DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
-	if (*GetOptions().Gameplay.showManaValues)
-		DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
-		    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
-		    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
-	if (*GetOptions().Gameplay.floatingInfoBox)
+	if (gbIsPoe2) {
+		DrawPoe2RageBar(out);
+		DrawPoe2GlobeValues(out);
+	}
+	// POE2 Mashup: the numbers sit above the globes, like POE2, so nothing is printed over the globes' art.
+	if (ShowingGlobeLevels()) {
+		DrawPoe2GlobeLevels(out);
+	} else {
+		if (*GetOptions().Gameplay.showHealthValues)
+			DrawFlaskValues(out, { mainPanel.position.x + 134, mainPanel.position.y + 28 }, MyPlayer->_pHitPoints.whole(), MyPlayer->_pMaxHP.whole());
+		if (*GetOptions().Gameplay.showManaValues)
+			DrawFlaskValues(out, { mainPanel.position.x + mainPanel.size.width - 138, mainPanel.position.y + 28 },
+			    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
+			    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
+	}
+	if (gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox)
 		DrawFloatingInfoBox(out);
+	DrawStashTabTooltip(out);
+	DrawMinionHud(out);
 
 	if ((*GetOptions().Gameplay.showMultiplayerPartyInfo != PartyPortraits::Disabled) && PartySidePanelOpen)
 		DrawPartyMemberInfoPanel(out);
 
+	DrawSkillLabPanel(out);
+	DrawPassiveTree(out);
+	DrawGemcutting(out);
+	DrawAnvil(out);
+	DrawDesecrationReveal(out);
+	DrawStackSplit(out);
+	DrawQuestReward(out);
+	DrawAtlas(out);
+	DrawItemSpawner(out);
+	TelemetryDrawStep("drawing the cursor");
 	DrawCursor(out);
+	TelemetryFramePartDone(FramePart::Drawing, drawingStart);
+	TelemetryFrameDrawn();
 
 	DrawFPS(out);
 

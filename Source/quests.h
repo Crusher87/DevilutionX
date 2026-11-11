@@ -25,6 +25,10 @@ int GetMapReturnLevel();
 Point GetMapReturnPosition();
 void LoadPWaterPalette();
 void UpdatePWaterPalette();
+/** @brief POE2 Mashup: true on the Poisoned Water Supply's level, foul or cleansed. It holds water, never lava. */
+bool IsPoisonedWaterLevel();
+/** @brief POE2 Mashup: true while that level's water is still foul (shown with l3pfoul.pal). */
+bool IsPoisonedWaterFoul();
 void ResyncMPQuests();
 void ResyncQuests();
 void SetMultiQuest(int q, quest_state s, bool log, int v1, int v2, int16_t qmsg);

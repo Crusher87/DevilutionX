@@ -23,18 +23,29 @@
 #include "engine/render/text_render.hpp"
 #include "engine/trn.hpp"
 #include "game_mode.hpp"
+#include "inv.h"
 #include "lua/lua_event.hpp"
 #include "minitext.h"
 #include "multi.h"
 #include "options.h"
 #include "panels/info_box.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/skills_panel.hpp"
+#include "plrmsg.h"
+#include "poe2/bases.hpp"
+#include "poe2/economy.hpp"
+#include "poe2/loot.hpp"
+#include "poe2/modifiers.hpp"
+#include "poe2/rune_fusing.hpp"
+#include "poe2/telemetry.hpp"
+#include "poe2/tears.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
 #include "tables/townerdat.hpp"
 #include "towners.h"
 #include "utils/format.hpp"
 #include "utils/format_int.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
@@ -48,14 +59,14 @@ int CurrentItemIndex;
 int8_t PlayerItemIndexes[48];
 Item PlayerItems[48];
 
-StaticVector<Item, NumSmithBasicItemsHf> SmithItems;
+StaticVector<Item, NumSmithBasicItemsPoe2> SmithItems;
 int PremiumItemCount;
 int PremiumItemLevel;
 StaticVector<Item, NumSmithItemsHf> PremiumItems;
 
 StaticVector<Item, NumHealerItemsHf> HealerItems;
 
-StaticVector<Item, NumWitchItemsHf> WitchItems;
+StaticVector<Item, NumWitchItemsPoe2> WitchItems;
 
 int BoyItemLevel;
 Item BoyItem;
@@ -355,7 +366,44 @@ void PrintStoreItem(const Item &item, int l, UiFlags flags, bool cursIndent = fa
 {
 	std::string productLine;
 
-	if (item._iIdentified) {
+	if (item._iIdentified && item._iPoe2Mods[0].family != 0) {
+		// Show the first two modifiers and how many more there are.
+		int shown = 0;
+		int hidden = 0;
+		for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+			const std::vector<std::string> lines = ItemModText(mod);
+			if (lines.empty())
+				continue;
+			if (shown == 2) {
+				hidden++;
+				continue;
+			}
+			if (!productLine.empty())
+				productLine.append(_(",  "));
+			productLine.append(lines.front());
+			shown++;
+		}
+		if (hidden > 0)
+			productLine.append(FormatRuntime(" (+{:d})", hidden));
+	} else if (item._iIdentified && item._iMagical == ITEM_QUALITY_RARE) {
+		// Rare items have up to six affixes; show the first two and how many more there are.
+		int shown = 0;
+		int hidden = 0;
+		for (const item_effect_type power : item._iRarePowers) {
+			if (power == IPL_INVALID)
+				continue;
+			if (shown == 2) {
+				hidden++;
+				continue;
+			}
+			if (!productLine.empty())
+				productLine.append(_(",  "));
+			productLine.append(PrintItemPower(power, item));
+			shown++;
+		}
+		if (hidden > 0)
+			productLine.append(FormatRuntime(" (+{:d})", hidden));
+	} else if (item._iIdentified) {
 		if (item._iMagical != ITEM_QUALITY_UNIQUE) {
 			if (item._iPrePower != -1) {
 				productLine.append(PrintItemPower(item._iPrePower, item));
@@ -389,20 +437,11 @@ void PrintStoreItem(const Item &item, int l, UiFlags flags, bool cursIndent = fa
 			productLine.append(_("Indestructible"));
 	}
 
-	int8_t str = item._iMinStr;
-	uint8_t mag = item._iMinMag;
-	int8_t dex = item._iMinDex;
-
-	if (str != 0 || mag != 0 || dex != 0) {
+	// POE2 Mashup: with the character level the item needs, like the tooltip.
+	if (const std::string required = ItemRequirementText(ItemRequiredLevel(item), item._iMinStr, item._iMinMag, item._iMinDex); !required.empty()) {
 		if (!productLine.empty())
 			productLine.append(_(",  "));
-		productLine.append(_("Required:"));
-		if (str != 0)
-			productLine.append(FormatRuntime(_(" {:d} Str"), str));
-		if (mag != 0)
-			productLine.append(FormatRuntime(_(" {:d} Mag"), mag));
-		if (dex != 0)
-			productLine.append(FormatRuntime(_(" {:d} Dex"), dex));
+		productLine.append(required);
 	}
 	AddSText(40, l++, productLine, flags, false, -1, cursIndent);
 }
@@ -429,6 +468,267 @@ void ScrollVendorStore(std::span<Item> itemData, int storeLimit, int idx, int se
 	}
 }
 
+/** @brief The character level the town's vendors last stocked up at; 0 before they have (POE2 Mashup). */
+int VendorStockLevel = 0;
+
+/** @brief The level the town's vendors stock items of. */
+int TownVendorLevel()
+{
+	const Player &myPlayer = *MyPlayer;
+
+	int l = myPlayer.getCharacterLevel() / 2;
+	if (!gbIsMultiplayer) {
+		l = 0;
+		for (int i = 0; i < NUMLEVELS; i++) {
+			if (myPlayer._pLvlVisited[i])
+				l = i;
+		}
+	}
+
+	return std::clamp(l + 2, 6, 16);
+}
+
+/** @brief POE2 Mashup: vendor stock lasts until the hero levels up, and can be replaced for gold. */
+bool VendorsCanReroll()
+{
+	return gbIsPoe2 && !gbIsMultiplayer;
+}
+
+/** @brief The menu line of a vendor's paid reroll. */
+std::string VendorRerollText()
+{
+	return FormatRuntime(_("New stock ({:s} gold)"), FormatInteger(VendorRerollCost(MyPlayer->getCharacterLevel())));
+}
+
+/** @brief Pays for a vendor's new stock; false (showing the "no money" page) if the hero can't afford it. */
+bool PayForVendorReroll(TalkID store, int line)
+{
+	const int cost = VendorRerollCost(MyPlayer->getCharacterLevel());
+	if (!PlayerCanAfford(cost)) {
+		OldActiveStore = store;
+		OldTextLine = line;
+		OldScrollPos = ScrollPos;
+		StartStore(TalkID::NoMoney);
+		return false;
+	}
+	TakePlrsMoney(cost);
+	PlaySFX(SfxID::ItemGold);
+	return true;
+}
+
+/** @brief The hero gained a level: every vendor restocks in full (Curtis 2026-10-17). */
+void RefreshVendorStock(int level)
+{
+	SpawnSmith(level);
+	SpawnWitch(level);
+	SpawnHealer(level);
+}
+
+/** The Fountain of Tears window: pick the stat that gives a point, then the one that gets it. */
+constexpr int TearsFirstLine = 8;
+constexpr int TearsLeaveLine = 18;
+std::optional<CharacterAttribute> TearsGiver;
+
+std::string_view TearsAttributeName(CharacterAttribute attribute)
+{
+	switch (attribute) {
+	case CharacterAttribute::Strength: return _("Strength");
+	case CharacterAttribute::Magic: return _("Magic");
+	case CharacterAttribute::Dexterity: return _("Dexterity");
+	case CharacterAttribute::Vitality: return _("Vitality");
+	}
+	return {};
+}
+
+void StartTears()
+{
+	IsTextFullSize = false;
+	HasScrollbar = false;
+	const Player &player = *MyPlayer;
+	AddSText(0, 2, _("Fountain of Tears"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
+	AddSText(0, 5, TearsGiver ? _("Give it to:") : _("Take one point from:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
+	for (size_t i = 0; i < std::size(TearsAttributes); i++) {
+		const CharacterAttribute attribute = TearsAttributes[i];
+		const bool usable = TearsGiver ? (attribute != *TearsGiver && TearsCanTake(player, attribute)) : TearsCanGive(player, attribute);
+		const std::string line = StrCat(TearsAttributeName(attribute), " (", player.GetBaseAttributeValue(attribute), ")");
+		AddSText(0, TearsFirstLine + 2 * i, line, (usable ? UiFlags::ColorWhite : UiFlags::ColorBlack) | UiFlags::AlignCenter, usable);
+	}
+	AddSText(0, TearsLeaveLine, TearsGiver ? _("Back") : _("Walk away"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	AddSLine(4);
+	CurrentItemIndex = 20;
+}
+
+void TearsEnter()
+{
+	if (CurrentTextLine == TearsLeaveLine) {
+		if (!TearsGiver) {
+			ActiveStore = TalkID::None;
+			return;
+		}
+		TearsGiver = std::nullopt;
+		StartStore(TalkID::Tears);
+		return;
+	}
+	const int index = (CurrentTextLine - TearsFirstLine) / 2;
+	if (index < 0 || index >= static_cast<int>(std::size(TearsAttributes)))
+		return;
+	const CharacterAttribute picked = TearsAttributes[index];
+	if (!TearsGiver) {
+		TearsGiver = picked;
+		StartStore(TalkID::Tears);
+		CurrentTextLine = TearsLeaveLine;
+		return;
+	}
+	if (FinishTearsFountain(*TearsGiver, picked))
+		EventPlrMsg(StrCat(_("Your tears move a point from "), TearsAttributeName(*TearsGiver), _(" to "), TearsAttributeName(picked), "."), UiFlags::ColorWhite);
+	TearsGiver = std::nullopt;
+	ActiveStore = TalkID::None;
+}
+
+constexpr int GambleFirstLine = 5;
+/** @brief Wirt's menu line that opens the gambler. */
+int BoyGambleLine()
+{
+	return BoyItem.isEmpty() ? 16 : 20;
+}
+
+/** @brief The area level the gambler's items come from: the hero's level, more on higher difficulties. */
+int GambleAreaLevel()
+{
+	return std::max<int>(MyPlayer->getCharacterLevel(), 1) + (15 * sgGameInitInfo.nDifficulty);
+}
+
+void StartGamble()
+{
+	IsTextFullSize = true;
+	HasScrollbar = false;
+	RenderGold = true;
+	const Player &player = *MyPlayer;
+	if (GambleUsesCharges(player))
+		AddSText(20, 1, FormatRuntime(_("Gamble: {:d} purchases left"), player.poe2.economy.gambleCharges), UiFlags::ColorWhitegold, false);
+	else
+		AddSText(20, 1, _("Gamble"), UiFlags::ColorWhitegold, false);
+	AddSLine(3);
+	const int itemLevel = Poe2ItemLevel(GambleAreaLevel());
+	for (size_t i = 0; i < GambleFamilyCount; i++) {
+		const auto family = static_cast<GambleFamily>(i);
+		AddSText(20, GambleFirstLine + i, GambleFamilyName(family), UiFlags::ColorWhite, true);
+		AddSTextVal(GambleFirstLine + i, GamblePrice(family, itemLevel));
+	}
+	AddSText(0, GambleFirstLine + GambleFamilyCount + 1, _("Its base, rarity and modifiers stay hidden until it's yours."), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
+	if (GambleUsesCharges(player))
+		AddSText(0, GambleFirstLine + GambleFamilyCount + 2, _("Slaying unique monsters earns more purchases."), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
+	const int line = BackButtonLine();
+	AddSLine(line - 1);
+	AddSText(0, line, _("Back"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	CurrentItemIndex = static_cast<int>(GambleFamilyCount);
+}
+
+void GambleEnter()
+{
+	if (CurrentTextLine == BackButtonLine()) {
+		StartStore(TalkID::Boy);
+		CurrentTextLine = BoyGambleLine();
+		return;
+	}
+	const int index = CurrentTextLine - GambleFirstLine;
+	if (index < 0 || index >= static_cast<int>(GambleFamilyCount))
+		return;
+	Player &player = *MyPlayer;
+	if (!CanGamble(player)) {
+		EventPlrMsg(_("No purchases left: slay unique monsters for more."), UiFlags::ColorRed);
+		return;
+	}
+	const auto family = static_cast<GambleFamily>(index);
+	const int areaLevel = GambleAreaLevel();
+	const int price = GamblePrice(family, Poe2ItemLevel(areaLevel));
+	if (!PlayerCanAfford(price)) {
+		OldActiveStore = TalkID::Gamble;
+		OldTextLine = CurrentTextLine;
+		OldScrollPos = ScrollPos;
+		StartStore(TalkID::NoMoney);
+		return;
+	}
+	Item item;
+	if (!MakeGambleItem(player, item, family, areaLevel))
+		return;
+	if (!CanFitItemInInventory(player, item)) {
+		OldActiveStore = TalkID::Gamble;
+		OldTextLine = CurrentTextLine;
+		OldScrollPos = ScrollPos;
+		StartStore(TalkID::NoRoom);
+		return;
+	}
+	TakePlrsMoney(price);
+	SpendGambleCharge(player);
+	AutoPlaceItemInInventory(player, item);
+	CalcPlrInv(player, true);
+	EventPlrMsg(StrCat(_("Gambled: "), item.getName()), item.getTextColor());
+	const int line = CurrentTextLine;
+	StartStore(TalkID::Gamble);
+	CurrentTextLine = line;
+}
+
+/** The fusings on the lines of Cain's list, from RuneFusingFirstLine. */
+std::vector<RuneFusion> RuneFusingChoices;
+constexpr int RuneFusingFirstLine = 5;
+/** The line of Cain's menu that opens the fusing list. */
+constexpr int StorytellerFuseLine = 16;
+
+void StartRuneFusing()
+{
+	IsTextFullSize = true;
+	HasScrollbar = false;
+	RenderGold = true;
+	AddSText(20, 1, _("Fuse runes"), UiFlags::ColorWhitegold, false);
+	AddSLine(3);
+	RuneFusingChoices = RuneFusionsToOffer(*MyPlayer);
+	const int lastLine = BackButtonLine() - 3;
+	if (static_cast<int>(RuneFusingChoices.size()) > lastLine - RuneFusingFirstLine + 1)
+		RuneFusingChoices.resize(static_cast<size_t>(lastLine - RuneFusingFirstLine + 1));
+	for (size_t i = 0; i < RuneFusingChoices.size(); i++) {
+		const RuneFusion &fusion = RuneFusingChoices[i];
+		const int line = RuneFusingFirstLine + static_cast<int>(i);
+		AddSText(20, line, RuneFusionText(fusion), UiFlags::ColorWhite, true);
+		if (fusion.gold > 0)
+			AddSTextVal(line, fusion.gold);
+	}
+	if (RuneFusingChoices.empty()) {
+		AddSText(0, RuneFusingFirstLine + 1, _("Bring me three runes of a kind."), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
+		AddSText(0, RuneFusingFirstLine + 2, _("Five Greater runes and gold make a Perfect one."), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
+	}
+	const int line = BackButtonLine();
+	AddSLine(line - 1);
+	AddSText(0, line, _("Back"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	CurrentItemIndex = static_cast<int>(RuneFusingChoices.size());
+}
+
+void RuneFusingEnter()
+{
+	if (CurrentTextLine == BackButtonLine()) {
+		StartStore(TalkID::Storyteller);
+		CurrentTextLine = StorytellerFuseLine;
+		return;
+	}
+	const int index = CurrentTextLine - RuneFusingFirstLine;
+	if (index < 0 || index >= static_cast<int>(RuneFusingChoices.size()))
+		return;
+	const RuneFusion fusion = RuneFusingChoices[static_cast<size_t>(index)];
+	if (fusion.gold > 0 && !PlayerCanAfford(fusion.gold) && (!fusion.needsActThreeBoss || PerfectFusingOpen(*MyPlayer))) {
+		OldActiveStore = TalkID::RuneFusing;
+		OldTextLine = CurrentTextLine;
+		OldScrollPos = ScrollPos;
+		StartStore(TalkID::NoMoney);
+		return;
+	}
+	if (const std::string_view refusal = RuneFusionRefusal(*MyPlayer, fusion); !refusal.empty()) {
+		EventPlrMsg(refusal, UiFlags::ColorRed);
+		return;
+	}
+	// The fusing goes through the command system with the new rune's seed (OnFuseRunes), which redraws the list.
+	NetSendCmdFuseRunes(static_cast<uint8_t>(fusion.family), static_cast<uint8_t>(fusion.from), static_cast<uint32_t>(AdvanceRndSeed()));
+}
+
 void StartSmith()
 {
 	IsTextFullSize = false;
@@ -437,9 +737,14 @@ void StartSmith()
 	AddSText(0, 3, _("Blacksmith's shop"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 7, _("Would you like to:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 10, _("Talk to Griswold"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
-	if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+	if (UseVisualStoreUi()) {
 		AddSText(0, 12, _("Trade / Repair"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
-		AddSText(0, 14, _("Leave the shop"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+		if (VendorsCanReroll()) {
+			AddSText(0, 14, VendorRerollText(), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+			AddSText(0, 16, _("Leave the shop"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+		} else {
+			AddSText(0, 14, _("Leave the shop"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+		}
 	} else {
 		AddSText(0, 12, _("Buy basic items"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 		AddSText(0, 14, _("Buy premium items"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
@@ -562,7 +867,7 @@ void StartSmithSell()
 			if (PlayerItems[CurrentItemIndex]._iMagical != ITEM_QUALITY_NORMAL && PlayerItems[CurrentItemIndex]._iIdentified)
 				PlayerItems[CurrentItemIndex]._ivalue = PlayerItems[CurrentItemIndex]._iIvalue;
 
-			PlayerItems[CurrentItemIndex]._ivalue = std::max(PlayerItems[CurrentItemIndex]._ivalue / 4, 1);
+			PlayerItems[CurrentItemIndex]._ivalue = VendorSellValue(PlayerItems[CurrentItemIndex]._ivalue);
 			PlayerItems[CurrentItemIndex]._iIvalue = PlayerItems[CurrentItemIndex]._ivalue;
 			PlayerItemIndexes[CurrentItemIndex] = i;
 			CurrentItemIndex++;
@@ -579,7 +884,7 @@ void StartSmithSell()
 			if (PlayerItems[CurrentItemIndex]._iMagical != ITEM_QUALITY_NORMAL && PlayerItems[CurrentItemIndex]._iIdentified)
 				PlayerItems[CurrentItemIndex]._ivalue = PlayerItems[CurrentItemIndex]._iIvalue;
 
-			PlayerItems[CurrentItemIndex]._ivalue = std::max(PlayerItems[CurrentItemIndex]._ivalue / 4, 1);
+			PlayerItems[CurrentItemIndex]._ivalue = VendorSellValue(PlayerItems[CurrentItemIndex]._ivalue);
 			PlayerItems[CurrentItemIndex]._iIvalue = PlayerItems[CurrentItemIndex]._ivalue;
 			PlayerItemIndexes[CurrentItemIndex] = -(i + 1);
 			CurrentItemIndex++;
@@ -694,10 +999,15 @@ void StartWitch()
 	AddSText(0, 2, _("Witch's shack"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 9, _("Would you like to:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 12, _("Talk to Adria"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
-	if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+	if (UseVisualStoreUi()) {
 		AddSText(0, 14, _("Buy / Sell"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 		AddSText(0, 16, _("Recharge staves"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
-		AddSText(0, 18, _("Leave the shack"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+		if (VendorsCanReroll()) {
+			AddSText(0, 18, VendorRerollText(), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+			AddSText(0, 20, _("Leave the shack"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+		} else {
+			AddSText(0, 18, _("Leave the shack"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+		}
 		AddSLine(4);
 	} else {
 		AddSText(0, 14, _("Buy items"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
@@ -787,7 +1097,7 @@ void StartWitchSell()
 			if (PlayerItems[CurrentItemIndex]._iMagical != ITEM_QUALITY_NORMAL && PlayerItems[CurrentItemIndex]._iIdentified)
 				PlayerItems[CurrentItemIndex]._ivalue = PlayerItems[CurrentItemIndex]._iIvalue;
 
-			PlayerItems[CurrentItemIndex]._ivalue = std::max(PlayerItems[CurrentItemIndex]._ivalue / 4, 1);
+			PlayerItems[CurrentItemIndex]._ivalue = VendorSellValue(PlayerItems[CurrentItemIndex]._ivalue);
 			PlayerItems[CurrentItemIndex]._iIvalue = PlayerItems[CurrentItemIndex]._ivalue;
 			PlayerItemIndexes[CurrentItemIndex] = i;
 			CurrentItemIndex++;
@@ -804,7 +1114,7 @@ void StartWitchSell()
 			if (PlayerItems[CurrentItemIndex]._iMagical != ITEM_QUALITY_NORMAL && PlayerItems[CurrentItemIndex]._iIdentified)
 				PlayerItems[CurrentItemIndex]._ivalue = PlayerItems[CurrentItemIndex]._iIvalue;
 
-			PlayerItems[CurrentItemIndex]._ivalue = std::max(PlayerItems[CurrentItemIndex]._ivalue / 4, 1);
+			PlayerItems[CurrentItemIndex]._ivalue = VendorSellValue(PlayerItems[CurrentItemIndex]._ivalue);
 			PlayerItems[CurrentItemIndex]._iIvalue = PlayerItems[CurrentItemIndex]._ivalue;
 			PlayerItemIndexes[CurrentItemIndex] = -(i + 1);
 			CurrentItemIndex++;
@@ -980,9 +1290,16 @@ void StartBoy()
 		AddSText(0, 14, _("but it will cost 50 gold"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 		AddSText(0, 16, _("just to take a look. "), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 		AddSText(0, 18, _("What have you got?"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
-		AddSText(0, 20, _("Say goodbye"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+		if (gbIsPoe2) {
+			AddSText(0, 20, _("Gamble"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+			AddSText(0, 22, _("Say goodbye"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+		} else {
+			AddSText(0, 20, _("Say goodbye"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+		}
 	} else {
 		AddSText(0, 12, _("Talk to Wirt"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
+		if (gbIsPoe2)
+			AddSText(0, 16, _("Gamble"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 		AddSText(0, 18, _("Say goodbye"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	}
 }
@@ -1076,9 +1393,35 @@ void StartStoryteller()
 	AddSText(0, 2, _("The Town Elder"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 9, _("Would you like to:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 12, _("Talk to Cain"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
-	AddSText(0, 14, _("Identify an item"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	// POE2 Mashup: like POE2's Una, Cain identifies everything for free.
+	AddSText(0, 14, gbIsPoe2 ? _("Identify all items") : _("Identify an item"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	if (gbIsPoe2)
+		AddSText(0, StorytellerFuseLine, _("Fuse runes"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSText(0, 18, _("Say goodbye"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSLine(5);
+}
+
+/** @brief POE2 Mashup: identifies everything the hero wears and carries; returns how many items it was. */
+int IdentifyAllForFree(Player &player, std::string_view how)
+{
+	int count = 0;
+	const auto identify = [&count, &player, how](Item &item) {
+		// Only magic, rare and unique items can be unidentified; normal items just carry the flag.
+		if (!item.isEmpty() && !item._iIdentified && item._iMagical != ITEM_QUALITY_NORMAL) {
+			item._iIdentified = true;
+			TelemetryItemAction(player, "identify", item, how);
+			count++;
+		}
+	};
+	for (Item &item : player.InvBody)
+		identify(item);
+	for (int i = 0; i < player._pNumInv; i++)
+		identify(player.InvList[i]);
+	for (Item &item : player.SpdList)
+		identify(item);
+	if (count > 0)
+		CalcPlrInv(player, true);
+	return count;
 }
 
 bool IdItemOk(Item *i)
@@ -1264,7 +1607,9 @@ void StartBarmaid()
 	AddSText(0, 2, _("Gillian"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 9, _("Would you like to:"), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	AddSText(0, 12, _("Talk to Gillian"), UiFlags::ColorBlue | UiFlags::AlignCenter, true);
-	AddSText(0, 14, _("Access Storage"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
+	// POE2 Mashup: the stash chest in town holds everything, so Gillian doesn't.
+	if (!gbIsPoe2)
+		AddSText(0, 14, _("Access Storage"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSText(0, 18, _("Say goodbye"), UiFlags::ColorWhite | UiFlags::AlignCenter, true);
 	AddSLine(5);
 	CurrentItemIndex = 20;
@@ -1284,7 +1629,7 @@ void StartDrunk()
 
 void SmithEnter()
 {
-	if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+	if (UseVisualStoreUi()) {
 		switch (CurrentTextLine) {
 		case 10:
 			TownerId = TOWN_SMITH;
@@ -1297,6 +1642,19 @@ void SmithEnter()
 			OpenVisualStore(VisualStoreVendor::Smith);
 			break;
 		case 14:
+			if (VendorsCanReroll()) {
+				if (PayForVendorReroll(TalkID::Smith, 14)) {
+					SpawnSmith(TownVendorLevel());
+					PremiumItems.clear();
+					SpawnPremium(*MyPlayer);
+					ActiveStore = TalkID::None;
+					OpenVisualStore(VisualStoreVendor::Smith);
+				}
+				break;
+			}
+			ActiveStore = TalkID::None;
+			break;
+		case 16:
 			ActiveStore = TalkID::None;
 			break;
 		}
@@ -1333,6 +1691,7 @@ void SmithEnter()
  */
 void SmithBuyItem(Item &item)
 {
+	TelemetryItemAction(*MyPlayer, "buy", item, "Griswold", item._iIvalue);
 	TakePlrsMoney(item._iIvalue);
 	if (item._iMagical == ITEM_QUALITY_NORMAL)
 		item._iIdentified = false;
@@ -1374,6 +1733,7 @@ void SmithBuyEnter()
  */
 void SmithBuyPItem(Item &item)
 {
+	TelemetryItemAction(*MyPlayer, "buy", item, "Griswold, premium", item._iIvalue);
 	TakePlrsMoney(item._iIvalue);
 	if (item._iMagical == ITEM_QUALITY_NORMAL)
 		item._iIdentified = false;
@@ -1439,6 +1799,7 @@ void StoreSellItem()
 		myPlayer.RemoveSpdBarItem(-(PlayerItemIndexes[idx] + 1));
 
 	const int cost = PlayerItems[idx]._iIvalue;
+	TelemetryItemAction(myPlayer, "sell", PlayerItems[idx], OldActiveStore == TalkID::WitchSell ? "Adria" : "Griswold", cost);
 	CurrentItemIndex--;
 	if (idx != CurrentItemIndex) {
 		while (idx < CurrentItemIndex) {
@@ -1450,7 +1811,7 @@ void StoreSellItem()
 
 	AddGoldToInventory(myPlayer, cost);
 
-	myPlayer._pGold += cost;
+	myPlayer._pGold = CalculateGold(myPlayer);
 }
 
 void SmithSellEnter()
@@ -1530,7 +1891,7 @@ void SmithRepairEnter()
 
 void WitchEnter()
 {
-	if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+	if (UseVisualStoreUi()) {
 		switch (CurrentTextLine) {
 		case 12:
 			OldTextLine = 12;
@@ -1546,6 +1907,17 @@ void WitchEnter()
 			StartStore(TalkID::WitchRecharge);
 			break;
 		case 18:
+			if (VendorsCanReroll()) {
+				if (PayForVendorReroll(TalkID::Witch, 18)) {
+					SpawnWitch(TownVendorLevel());
+					ActiveStore = TalkID::None;
+					OpenVisualStore(VisualStoreVendor::Witch);
+				}
+				break;
+			}
+			ActiveStore = TalkID::None;
+			break;
+		case 20:
 			ActiveStore = TalkID::None;
 			break;
 		}
@@ -1584,6 +1956,7 @@ void WitchBuyItem(Item &item)
 	if (idx < 3)
 		item._iSeed = AdvanceRndSeed();
 
+	TelemetryItemAction(*MyPlayer, "buy", item, "Adria", item._iIvalue);
 	TakePlrsMoney(item._iIvalue);
 	StoreAutoPlace(item, true);
 
@@ -1672,7 +2045,7 @@ void WitchRechargeEnter()
 {
 	if (CurrentTextLine == BackButtonLine()) {
 		StartStore(TalkID::Witch);
-		CurrentTextLine = *GetOptions().Gameplay.storeUi == StoreUi::VisualGrid ? 16 : 18;
+		CurrentTextLine = UseVisualStoreUi() ? 16 : 18;
 		return;
 	}
 
@@ -1693,6 +2066,11 @@ void WitchRechargeEnter()
 
 void BoyEnter()
 {
+	if (gbIsPoe2 && CurrentTextLine == BoyGambleLine()) {
+		StartStore(TalkID::Gamble);
+		return;
+	}
+
 	if (!BoyItem.isEmpty() && CurrentTextLine == 18) {
 		if (!PlayerCanAfford(50)) {
 			OldActiveStore = TalkID::Boy;
@@ -1701,7 +2079,7 @@ void BoyEnter()
 			StartStore(TalkID::NoMoney);
 		} else {
 			TakePlrsMoney(50);
-			if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+			if (UseVisualStoreUi()) {
 				ActiveStore = TalkID::None;
 				OpenVisualStore(VisualStoreVendor::Boy);
 			} else {
@@ -1724,6 +2102,7 @@ void BoyEnter()
 
 void BoyBuyItem(Item &item, int itemPrice)
 {
+	TelemetryItemAction(*MyPlayer, "buy", item, "Wirt", itemPrice);
 	TakePlrsMoney(itemPrice);
 	StoreAutoPlace(item, true);
 	item.clear();
@@ -1746,6 +2125,7 @@ void HealerBuyItem(Item &item)
 			item._iSeed = AdvanceRndSeed();
 	}
 
+	TelemetryItemAction(*MyPlayer, "buy", item, "Pepin", item._iIvalue);
 	TakePlrsMoney(item._iIvalue);
 	if (item._iMagical == ITEM_QUALITY_NORMAL)
 		item._iIdentified = false;
@@ -1818,6 +2198,7 @@ void StorytellerIdentifyItem(Item &item)
 		myPlayer.InvList[idx]._iIdentified = true;
 	}
 	item._iIdentified = true;
+	TelemetryItemAction(myPlayer, "identify", item, "Cain", item._iIvalue);
 	TakePlrsMoney(item._iIvalue);
 	CalcPlrInv(myPlayer, true);
 }
@@ -1883,7 +2264,7 @@ void HealerEnter()
 		StartStore(TalkID::Gossip);
 		break;
 	case 14:
-		if (*GetOptions().Gameplay.storeUi == StoreUi::VisualGrid) {
+		if (UseVisualStoreUi()) {
 			ActiveStore = TalkID::None;
 			OpenVisualStore(VisualStoreVendor::Healer);
 		} else {
@@ -1934,7 +2315,16 @@ void StorytellerEnter()
 		StartStore(TalkID::Gossip);
 		break;
 	case 14:
+		if (gbIsPoe2) {
+			ActiveStore = TalkID::None;
+			CainIdentifyAll("Cain, identify all");
+			break;
+		}
 		StartStore(TalkID::StorytellerIdentify);
+		break;
+	case StorytellerFuseLine:
+		if (gbIsPoe2)
+			StartStore(TalkID::RuneFusing);
 		break;
 	case 18:
 		ActiveStore = TalkID::None;
@@ -2018,6 +2408,101 @@ void TavernEnter()
 	}
 }
 
+} // namespace
+
+void CainIdentifyAll(std::string_view how)
+{
+	const int count = IdentifyAllForFree(*MyPlayer, how);
+	if (count > 0)
+		PlaySFX(SfxID::CastSkill); // The same sound as reading a Scroll of Identify.
+	EventPlrMsg(count > 0 ? FormatRuntime(ngettext("Cain identified {:d} item.", "Cain identified {:d} items.", count), count) : _("You have nothing to identify."));
+}
+
+namespace {
+
+/** @brief Tiles the hero can walk from a stash or vendor before its panel closes. */
+constexpr int InteractionReach = 3;
+std::optional<Point> InteractionSpot;
+/** Where the hero stood when a towner's talk menu opened: any step from it closes the menu (POE2). */
+std::optional<Point> TalkSpot;
+
+/** @brief POE2: closes a towner's talk menu once the hero moves, by walking, clicking away or dodge rolling. */
+void CloseTalkMenuWhenMoved()
+{
+	if (!gbIsPoe2 || !IsPlayerInStore() || MyPlayer == nullptr) {
+		TalkSpot = std::nullopt;
+		return;
+	}
+	// The tile the hero is heading to: it changes the moment a walk or a roll starts.
+	const Point spot = MyPlayer->position.future;
+	if (!TalkSpot) {
+		TalkSpot = spot;
+		return;
+	}
+	if (spot != *TalkSpot)
+		CloseTalkMenu();
+}
+
+} // namespace
+
+void CloseTalkMenu()
+{
+	TalkSpot = std::nullopt;
+	if (qtextflag) {
+		qtextflag = false;
+		if (leveltype == DTYPE_TOWN)
+			stream_stop();
+	}
+	// Every level of the menu at once, as a click outside it does, but without passing through the towner's first page.
+	ActiveStore = TalkID::None;
+	ReleaseStoreBtn();
+}
+
+void RememberInteractionSpot()
+{
+	if (MyPlayer != nullptr)
+		InteractionSpot = MyPlayer->position.tile;
+}
+
+void CloseInteractionPanelsWhenAway()
+{
+	CloseTalkMenuWhenMoved();
+	if (!InteractionSpot || MyPlayer == nullptr)
+		return;
+	if (!IsStashOpen && !IsVisualStoreOpen) {
+		InteractionSpot = std::nullopt;
+		return;
+	}
+	if (MyPlayer->position.tile.WalkingDistance(*InteractionSpot) <= InteractionReach)
+		return;
+	InteractionSpot = std::nullopt;
+	if (IsStashOpen) {
+		CloseStash();
+		invflag = false;
+	}
+	CloseVisualStore();
+}
+
+void OpenStashPanel()
+{
+	// The stash takes the left side, so the character sheet, quest log, Skills panel and any shop close first.
+	CloseCharPanel();
+	QuestLogIsOpen = false;
+	CloseSkillsPanel();
+	CloseVisualStore();
+	IsStashOpen = true;
+	RememberInteractionSpot();
+	Stash.RefreshItemStatFlags();
+	invflag = true;
+	if (ControlMode != ControlTypes::KeyboardAndMouse) {
+		if (pcurs == CURSOR_DISARM)
+			NewCursor(CURSOR_HAND);
+		FocusOnInventory();
+	}
+}
+
+namespace {
+
 void BarmaidEnter()
 {
 	switch (CurrentTextLine) {
@@ -2029,14 +2514,7 @@ void BarmaidEnter()
 		break;
 	case 14:
 		ActiveStore = TalkID::None;
-		IsStashOpen = true;
-		Stash.RefreshItemStatFlags();
-		invflag = true;
-		if (ControlMode != ControlTypes::KeyboardAndMouse) {
-			if (pcurs == CURSOR_DISARM)
-				NewCursor(CURSOR_HAND);
-			FocusOnInventory();
-		}
+		OpenStashPanel();
 		break;
 	case 18:
 		ActiveStore = TalkID::None;
@@ -2145,6 +2623,9 @@ void InitStores()
 {
 	ClearSText(0, NumStoreLines);
 	ActiveStore = TalkID::None;
+	VendorStockLevel = 0;
+	SmithBuyback.clear();
+	WitchBuyback.clear();
 	IsTextFullSize = false;
 	HasScrollbar = false;
 	PremiumItemCount = 0;
@@ -2163,19 +2644,18 @@ void SetupTownStores()
 {
 	const Player &myPlayer = *MyPlayer;
 
-	int l = myPlayer.getCharacterLevel() / 2;
-	if (!gbIsMultiplayer) {
-		l = 0;
-		for (int i = 0; i < NUMLEVELS; i++) {
-			if (myPlayer._pLvlVisited[i])
-				l = i;
-		}
+	const int l = TownVendorLevel();
+	const int characterLevel = myPlayer.getCharacterLevel();
+	if (VendorsCanReroll() && VendorStockLevel != 0) {
+		// POE2 Mashup: the stock stays between visits; a level-up replaces all of it.
+		if (characterLevel > VendorStockLevel)
+			RefreshVendorStock(l);
+	} else {
+		SpawnSmith(l);
+		SpawnWitch(l);
+		SpawnHealer(l);
 	}
-
-	l = std::clamp(l + 2, 6, 16);
-	SpawnSmith(l);
-	SpawnWitch(l);
-	SpawnHealer(l);
+	VendorStockLevel = characterLevel;
 	SpawnBoy(myPlayer.getCharacterLevel());
 	SpawnPremium(myPlayer);
 }
@@ -2284,6 +2764,15 @@ void ClearSText(int s, int e)
 	}
 }
 
+void RefreshRuneFusing()
+{
+	if (ActiveStore != TalkID::RuneFusing)
+		return;
+	const int line = CurrentTextLine;
+	StartStore(TalkID::RuneFusing);
+	CurrentTextLine = line >= 0 && line < NumStoreLines && TextLine[line].isSelectable() ? line : BackButtonLine();
+}
+
 void StartStore(TalkID s)
 {
 	if (*GetOptions().Gameplay.storeUi == StoreUi::ListWithItemGraphics) {
@@ -2292,6 +2781,7 @@ void StartStore(TalkID s)
 	SpellbookFlag = false;
 	CloseInventory();
 	CloseCharPanel();
+	CloseSkillsPanel();
 	RenderGold = false;
 	QuestLogIsOpen = false;
 	CloseGoldDrop();
@@ -2382,6 +2872,15 @@ void StartStore(TalkID s)
 		break;
 	case TalkID::Barmaid:
 		StartBarmaid();
+		break;
+	case TalkID::Gamble:
+		StartGamble();
+		break;
+	case TalkID::Tears:
+		StartTears();
+		break;
+	case TalkID::RuneFusing:
+		StartRuneFusing();
 		break;
 	case TalkID::None:
 		break;
@@ -2503,6 +3002,22 @@ void StoreESC()
 		StartStore(OldActiveStore);
 		CurrentTextLine = OldTextLine;
 		break;
+	case TalkID::Gamble:
+		StartStore(TalkID::Boy);
+		CurrentTextLine = BoyGambleLine();
+		break;
+	case TalkID::RuneFusing:
+		StartStore(TalkID::Storyteller);
+		CurrentTextLine = StorytellerFuseLine;
+		break;
+	case TalkID::Tears:
+		if (TearsGiver) {
+			TearsGiver = std::nullopt;
+			StartStore(TalkID::Tears);
+		} else {
+			ActiveStore = TalkID::None;
+		}
+		break;
 	case TalkID::SmithBuy:
 		StartStore(TalkID::Smith);
 		CurrentTextLine = 12;
@@ -2529,7 +3044,7 @@ void StoreESC()
 		break;
 	case TalkID::WitchRecharge:
 		StartStore(TalkID::Witch);
-		CurrentTextLine = *GetOptions().Gameplay.storeUi == StoreUi::VisualGrid ? 16 : 18;
+		CurrentTextLine = UseVisualStoreUi() ? 16 : 18;
 		break;
 	case TalkID::HealerBuy:
 		StartStore(TalkID::Healer);
@@ -2767,27 +3282,40 @@ void StoreEnter()
 	case TalkID::Barmaid:
 		BarmaidEnter();
 		break;
+	case TalkID::Gamble:
+		GambleEnter();
+		break;
+	case TalkID::RuneFusing:
+		RuneFusingEnter();
+		break;
+	case TalkID::Tears:
+		TearsEnter();
+		break;
 	case TalkID::None:
 		break;
 	}
 }
 
-void CheckStoreBtn()
+bool StoreWindowContains(Point position)
 {
 	const Point uiPosition = GetUIRectangle().position;
 	const Rectangle windowRect { { uiPosition.x + 344, uiPosition.y + PaddingTop - 7 }, { 271, 303 } };
 	const Rectangle windowRectFull { { uiPosition.x + 24, uiPosition.y + PaddingTop - 7 }, { 591, 303 } };
+	return (IsTextFullSize ? windowRectFull : windowRect).contains(position);
+}
 
-	if (!IsTextFullSize) {
-		if (!windowRect.contains(MousePosition)) {
-			while (IsPlayerInStore())
-				StoreESC();
-		}
-	} else {
-		if (!windowRectFull.contains(MousePosition)) {
-			while (IsPlayerInStore())
-				StoreESC();
-		}
+bool StoreWindowContainsMouse()
+{
+	return StoreWindowContains(MousePosition);
+}
+
+void CheckStoreBtn()
+{
+	const Point uiPosition = GetUIRectangle().position;
+
+	if (!StoreWindowContainsMouse()) {
+		while (IsPlayerInStore())
+			StoreESC();
 	}
 
 	if (qtextflag) {
@@ -2863,10 +3391,29 @@ bool PlayerCanAfford(int price)
 	return TotalPlayerGold() >= static_cast<uint32_t>(price);
 }
 
+namespace {
+
+/**
+ * @brief POE2 Mashup (Curtis 2026-10-22): like POE2's vendors, a shop buys anything with a sell price but quest items.
+ * Quest rewards like the Butcher's Cleaver or the Harlequin Crest are uniques, so they sell (Curtis 2026-10-29).
+ */
+bool Poe2ShopWillBuy(const Item &item)
+{
+	if (item._itype == ItemType::Gold || item._iClass == ICLASS_QUEST || item._iMiscId == IMISC_EAR)
+		return false;
+	if (IsAnyOf(item.IDidx, IDI_LAZSTAFF, IDI_GLDNELIX))
+		return false;
+	return std::max(item._ivalue, item._iIvalue) > 0;
+}
+
+} // namespace
+
 bool SmithWillBuy(const Item &item)
 {
 	if (item.isEmpty())
 		return false;
+	if (gbIsPoe2)
+		return Poe2ShopWillBuy(item);
 
 	if (item._iMiscId > IMISC_OILFIRST && item._iMiscId < IMISC_OILLAST)
 		return true;
@@ -2889,6 +3436,8 @@ bool WitchWillBuy(const Item &item)
 {
 	if (item.isEmpty())
 		return false;
+	if (gbIsPoe2)
+		return Poe2ShopWillBuy(item);
 
 	bool rv = false;
 

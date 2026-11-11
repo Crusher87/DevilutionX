@@ -7,16 +7,20 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <vector>
 
 #include "control/control.hpp"
 #include "engine/load_file.hpp"
 #include "engine/palette.h"
 #include "engine/render/automap_render.hpp"
 #include "engine/render/primitive_render.hpp"
+#include "game_mode.hpp"
 #include "levels/gendung.h"
 #include "levels/setmaps.h"
+#include "levels/tile_properties.hpp"
 #include "options.h"
 #include "player.h"
+#include "poe2/corner_map.hpp"
 #include "utils/attributes.h"
 #include "utils/enum_traits.h"
 #include "utils/format.hpp"
@@ -34,6 +38,10 @@ namespace devilution {
 
 namespace {
 Point Automap;
+/** @brief POE2 Mashup: set while the corner map is drawn. */
+const CornerMapView *CornerView = nullptr;
+/** @brief POE2 Mashup: the floor under the map lines (Landscape Transparency), and its colour. */
+constexpr uint8_t MapLandscapeColor = PAL16_GRAY + 9;
 
 enum MapColors : uint8_t {
 	/** color used to draw the player's arrow */
@@ -1360,7 +1368,8 @@ void DrawAutomapPlr(const Surface &out, const Displacement &myPlayerOffset, cons
 
 	base += GetAutomapScreen();
 
-	if (CanPanelsCoverView()) {
+	// POE2 Mashup: the corner map stays put when a panel opens.
+	if (CornerView == nullptr && CanPanelsCoverView()) {
 		if (IsRightPanelOpen())
 			base.x -= gnScreenWidth / 4;
 		if (IsLeftPanelOpen())
@@ -1418,6 +1427,91 @@ void DrawAutomapPlr(const Surface &out, const Displacement &myPlayerOffset, cons
 	} break;
 	case Direction::NoDirection:
 		break;
+	}
+}
+
+/**
+ * @brief POE2 Mashup: the middle of a dungeon tile on the map, where the player's arrow would be drawn on it.
+ */
+Point TileToAutomapScreen(Point tile, Displacement myPlayerOffset)
+{
+	const int px = tile.x - (2 * AutomapOffset.deltaX) - ViewPosition.x;
+	const int py = tile.y - (2 * AutomapOffset.deltaY) - ViewPosition.y;
+	const int scale = (GetAutomapType() == AutomapType::Minimap) ? MinimapScale : AutoMapScale;
+
+	Point screen = {
+		(myPlayerOffset.deltaX * scale / 100 / 2) + ((px - py) * AmLine(AmLineLength::DoubleTile)),
+		(myPlayerOffset.deltaY * scale / 100 / 2) + ((px + py) * AmLine(AmLineLength::FullTile)) + AmOffset(AmWidthOffset::None, AmHeightOffset::HalfTileUp).deltaY
+	};
+	screen += GetAutomapScreen();
+
+	if (CornerView == nullptr && GetAutomapType() != AutomapType::Minimap && CanPanelsCoverView()) {
+		if (IsRightPanelOpen())
+			screen.x -= gnScreenWidth / 4;
+		if (IsLeftPanelOpen())
+			screen.x += gnScreenWidth / 4;
+	}
+	return screen;
+}
+
+/**
+ * @brief POE2 Mashup: shades the explored floor under the map lines, as POE2's map shows its terrain. Each pixel is
+ * shaded once, so the tiles meet without seams. On the Tab map it is one even tint laid over the world with real alpha
+ * where the screen allows (SetMapTintsUi), not blended into the 8-bit world, so it doesn't shimmer while walking.
+ */
+void DrawMapLandscape(const Surface &out, Displacement myPlayerOffset, int cells, int opacity)
+{
+	if (opacity <= 0)
+		return;
+	const Rectangle clip = GetAutomapType() == AutomapType::Minimap
+	    ? MinimapRect
+	    : Rectangle { { 0, 0 }, { out.w(), out.h() } };
+	const int clipLeft = std::max(clip.position.x, 0);
+	const int clipTop = std::max(clip.position.y, 0);
+	const int clipRight = std::min(clip.position.x + clip.size.width, out.w());
+	const int clipBottom = std::min(clip.position.y + clip.size.height, out.h());
+	if (clipRight <= clipLeft || clipBottom <= clipTop)
+		return;
+	const int width = clipRight - clipLeft;
+	const int height = clipBottom - clipTop;
+	std::vector<bool> floor(static_cast<size_t>(width) * height, false);
+
+	// A dungeon tile is a diamond twice as wide as it is high.
+	const int halfWidth = std::max(1, AmLine(AmLineLength::DoubleTile));
+	const int halfHeight = std::max(1, AmLine(AmLineLength::FullTile));
+	const Point centre = Automap;
+	for (int mx = std::max(centre.x - cells, 0); mx <= std::min(centre.x + cells, DMAXX - 1); mx++) {
+		for (int my = std::max(centre.y - cells, 0); my <= std::min(centre.y + cells, DMAXY - 1); my++) {
+			if (AutomapView[mx][my] == MAP_EXP_NONE)
+				continue;
+			for (const Displacement sub : { Displacement { 0, 0 }, Displacement { 1, 0 }, Displacement { 0, 1 }, Displacement { 1, 1 } }) {
+				const Point tile = Point { 16 + (2 * mx), 16 + (2 * my) } + sub;
+				if (!IsTileNotSolid(tile))
+					continue;
+				const Point middle = TileToAutomapScreen(tile, myPlayerOffset);
+				if (middle.x + halfWidth < clipLeft || middle.x - halfWidth >= clipRight || middle.y + halfHeight < clipTop || middle.y - halfHeight >= clipBottom)
+					continue;
+				for (int row = 0; row < 2 * halfHeight; row++) {
+					const int y = middle.y - halfHeight + row;
+					if (y < clipTop || y >= clipBottom)
+						continue;
+					// Rows are measured at their middles, so the diamonds of neighbouring tiles fit together.
+					const int fromMiddle = std::abs((2 * row) + 1 - (2 * halfHeight));
+					const int span = (halfWidth * ((2 * halfHeight) - fromMiddle)) / (2 * halfHeight);
+					const int xBegin = std::max(middle.x - span, clipLeft);
+					const int xEnd = std::min(middle.x + span, clipRight);
+					for (int x = xBegin; x < xEnd; x++)
+						floor[(static_cast<size_t>(y - clipTop) * width) + (x - clipLeft)] = true;
+				}
+			}
+		}
+	}
+	for (int y = 0; y < height; y++) {
+		for (int x = 0; x < width; x++) {
+			if (!floor[(static_cast<size_t>(y) * width) + x])
+				continue;
+			PutMapPixel(out, { clipLeft + x, clipTop + y }, MapLandscapeColor, opacity);
+		}
 	}
 }
 
@@ -1495,7 +1589,9 @@ void DrawAutomapText(const Surface &out)
 	}
 
 	const std::string description = FormatRuntime(_(/* TRANSLATORS: {:s} means: Game Difficulty. */ "Difficulty: {:s}"), difficulty);
-	drawStringAndAdvanceLine(description);
+	// POE2 Mashup has area levels instead of difficulties.
+	if (!gbIsPoe2)
+		drawStringAndAdvanceLine(description);
 
 #ifdef _DEBUG
 	if (DebugGodMode || DebugInvisible || DisableLighting || DebugVision || DebugPath || DebugGrid || DebugScrollViewEnabled) {
@@ -1774,17 +1870,37 @@ void DrawAutomap(const Surface &out)
 
 	const int scale = (GetAutomapType() == AutomapType::Minimap) ? MinimapScale : AutoMapScale;
 	const int d = (scale * 64) / 100;
-	int cells = (2 * (gnScreenWidth / 2 / d)) + 1;
-	if (((gnScreenWidth / 2) % d) != 0)
+	// POE2 Mashup: the corner map only needs the tiles that cover its own rectangle.
+	const int mapWidth = CornerView != nullptr ? std::max<int>(CornerView->rect.size.width, CornerView->rect.size.height * 2) + (2 * d) : gnScreenWidth;
+	int cells = (2 * (mapWidth / 2 / d)) + 1;
+	if (((mapWidth / 2) % d) != 0)
 		cells++;
-	if (((gnScreenWidth / 2) % d) >= (scale * 32) / 100)
+	if (((mapWidth / 2) % d) >= (scale * 32) / 100)
 		cells++;
 	if ((myPlayerOffset.deltaX + myPlayerOffset.deltaY) != 0)
 		cells++;
 
+	// POE2 Mashup: Map Transparency, and the floor under the lines (Landscape Transparency).
+	const int savedLineOpacity = GetMapLineOpacity();
+	const bool savedTints = GetMapTintsUi();
+	if (gbIsPoe2) {
+		SetMapLineOpacity(MapOpacityPercent());
+		// POE2 Mashup: the Tab map goes over the world with real alpha, so it holds steady while walking; the corner map
+		// keeps its solid backdrop (Curtis 2026-10-29).
+		SetMapTintsUi(CornerView == nullptr && GetAutomapType() != AutomapType::Minimap);
+	}
+
 	if (GetAutomapType() == AutomapType::Minimap) {
 		// Background fill
-		DrawHalfTransparentRectTo(out, MinimapRect.position.x, MinimapRect.position.y, MinimapRect.size.width, MinimapRect.size.height);
+		// POE2 Mashup: the corner map gets a solid backdrop. Seen through, the world scrolling under it kept changing its
+		// shade while walking (Curtis 2026-10-29).
+		if (gbIsPoe2 && CornerView != nullptr) {
+			FillRect(out, MinimapRect.position.x, MinimapRect.position.y, MinimapRect.size.width, MinimapRect.size.height, 0);
+			// The whole corner map is a solid panel: no part of the world or the effects layer shows through where its black
+			// happens to match the world's (Curtis 2026-10-30: it still darkened while walking).
+			CoverUi(out, { MinimapRect.position - Displacement { 2, 2 }, Size { MinimapRect.size.width + 4, MinimapRect.size.height + 4 } });
+		} else
+			DrawHalfTransparentRectTo(out, MinimapRect.position.x, MinimapRect.position.y, MinimapRect.size.width, MinimapRect.size.height);
 
 		const uint8_t frameShadowColor = PAL16_YELLOW + 12;
 
@@ -1805,6 +1921,9 @@ void DrawAutomap(const Surface &out)
 				return dItem[position.x][position.y] != 0;
 			});
 	}
+
+	if (gbIsPoe2)
+		DrawMapLandscape(out, myPlayerOffset, cells, LandscapeOpacityPercent());
 
 	Point screen = {};
 
@@ -1830,7 +1949,7 @@ void DrawAutomap(const Surface &out)
 	screen.x += scale * myPlayerOffset.deltaX / 100 / 2;
 	screen.y += scale * myPlayerOffset.deltaY / 100 / 2;
 
-	if (CanPanelsCoverView()) {
+	if (CornerView == nullptr && CanPanelsCoverView()) {
 		if (IsRightPanelOpen()) {
 			screen.x -= gnScreenWidth / 4;
 		}
@@ -1871,7 +1990,35 @@ void DrawAutomap(const Surface &out)
 		SearchAutomapItem(out, myPlayerOffset, std::max(MAXDUNX, MAXDUNY), ShouldHighlightDebugAutomapTile);
 #endif
 
-	DrawAutomapText(out);
+	// POE2 Mashup: stairs, portals, shrines, strongboxes, rare monsters and bosses; monsters without names.
+	if (gbIsPoe2) {
+		const Rectangle clip = GetAutomapType() == AutomapType::Minimap ? MinimapRect : Rectangle { { 0, 0 }, { out.w(), out.h() } };
+		DrawMapMarkers(out, clip, scale, [&](Point tile) { return TileToAutomapScreen(tile, myPlayerOffset); });
+	}
+	SetMapLineOpacity(savedLineOpacity);
+	SetMapTintsUi(savedTints);
+
+	if (CornerView == nullptr)
+		DrawAutomapText(out);
+}
+
+void DrawCornerMap(const Surface &out, const CornerMapView &view)
+{
+	const AutomapType savedType = CurrentAutomapType;
+	const Rectangle savedRect = MinimapRect;
+	const int savedScale = MinimapScale;
+	const Displacement savedOffset = AutomapOffset;
+	CurrentAutomapType = AutomapType::Minimap;
+	MinimapRect = view.rect;
+	MinimapScale = view.scale;
+	AutomapOffset = view.offset;
+	CornerView = &view;
+	DrawAutomap(out);
+	CornerView = nullptr;
+	CurrentAutomapType = savedType;
+	MinimapRect = savedRect;
+	MinimapScale = savedScale;
+	AutomapOffset = savedOffset;
 }
 
 void UpdateAutomapExplorer(Point map, MapExplorationType explorer)

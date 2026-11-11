@@ -30,11 +30,119 @@ set(tests
   missiles_test
   multi_logging_test
   pack_test
+  poe2_admin_tools_test
+  poe2_area_levels_test
+  poe2_attributes_test
+  poe2_bare_fists_test
+  poe2_breakables_test
+  poe2_chaos_test
+  poe2_chaos_gems_test
+  poe2_cold_test
+  poe2_charms_test
+  poe2_currency_test
+  poe2_defenses_test
+  poe2_flasks_test
+  poe2_floor_chests_test
+  poe2_floor_rooms_test
+  poe2_tears_test
+  poe2_catacombs_floors_test
+  poe2_caves_floors_test
+  poe2_hell_floors_test
+  poe2_hive_floors_test
+  poe2_crypt_floors_test
+  poe2_cathedral_floors_test
+  poe2_cathedral_objects_test
+  poe2_floors_test
+  poe2_gemcutting_test
+  poe2_item_bases_test
+  poe2_item_spawner_test
+  poe2_monster_spawner_test
+  poe2_hud_globes_test
+  poe2_gem_buff_icons_test
+  poe2_overhead_bars_test
+  poe2_corner_map_test
+  poe2_quest_tracker_test
+  poe2_jewels_test
+  poe2_level_census_test
+  poe2_level_exits_test
+  poe2_loot_filter_test
+  poe2_loot_test
+  poe2_vendor_items_test
+  poe2_item_levels_test
+  poe2_modifiers_test
+  poe2_crafting_test
+  poe2_effect_primitives_test
+  poe2_runes_test
+  poe2_essences_test
+  poe2_net_pack_test
+  poe2_bound_demons_test
+  poe2_caster_golden_test
+  poe2_weapon_kinds_test
+  poe2_caster_stats_test
+  poe2_caster_affixes_test
+  poe2_caster_bases_test
+  poe2_quarterstaves_test
+  poe2_granted_bolt_test
+  poe2_granted_skills_test
+  primitive_render_test
+  poe2_economy_test
+  poe2_endgame_test
+  poe2_monster_armour_test
+  poe2_monster_levels_test
+  poe2_monster_mods_test
+  poe2_pace_test
+  poe2_passive_tree_test
+  poe2_physical_spells_test
+  poe2_poison_skills_test
+  poe2_shrines_test
+  poe2_summon_commands_test
+  poe2_weapon_swap_test
+  poe2_rare_items_test
+  poe2_save_fixture_test
+  poe2_skill_effects_test
+  poe2_spirit_test
+  poe2_staff_drafts_test
+  poe2_weapon_drafts_test
+  poe2_bow_drafts_test
+  poe2_dagger_drafts_test
+  poe2_spirit_order_test
+  poe2_regen_test
+  poe2_skill_gems_test
+  poe2_skill_resources_test
+  poe2_skill_details_test
+  poe2_quest_reward_test
+  poe2_spell_damage_test
+  poe2_table_skills_test
+  poe2_support_table_test
+  poe2_spirit_skills_test
+  poe2_spirit_buffs_test
+  poe2_spirit_uses_test
+  poe2_spirit_auras_test
+  poe2_vizjerei_road_test
+  poe2_butchers_road_test
+  poe2_minion_gems_test
+  poe2_minion_travel_test
+  poe2_dodge_cancel_test
+  poe2_stacking_test
+  poe2_support_gems_test
+  poe2_item_search_test
+  poe2_meta_gems_test
+  poe2_telemetry_test
+  poe2_ui_scale_test
+  poe2_vfx_test
+  poe2_vfx_debris_test
+  poe2_weather_test
+  poe2_uniques_test
+  poe2_waystones_test
+  poe2_experience_test
+  poe2_weapon_skills_test
+  poe2_swing_speed_test
   player_test
   quests_test
   reencode_dun_cels_test
   scrollrt_test
   stores_test
+  tileset_mix_test
   tile_properties_test
   timedemo_test
   townerdat_test
@@ -93,7 +201,9 @@ foreach(test_target ${tests} ${standalone_tests} ${benchmarks})
 endforeach()
 
 foreach(test_target ${tests} ${standalone_tests})
-  gtest_discover_tests(${test_target})
+  # PRE_TEST lists the tests when ctest runs instead of right after linking, so parallel links
+  # on Windows do not race with tests that are still holding the copied DLLs open.
+  gtest_discover_tests(${test_target} DISCOVERY_MODE PRE_TEST)
 endforeach()
 
 foreach(test_target ${tests})

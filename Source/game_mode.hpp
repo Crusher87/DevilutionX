@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 
 #include "levels/gendung_defs.hpp"
 #include "utils/attributes.h"
@@ -43,6 +44,10 @@ extern DVL_API_FOR_TEST bool gbIsMultiplayer;
 extern DVL_API_FOR_TEST bool gbIsSpawn;
 /** Indicate if we have loaded the Hellfire expansion data */
 extern DVL_API_FOR_TEST bool gbIsHellfire;
+/** Indicate if the POE2 Mashup mod is active */
+extern DVL_API_FOR_TEST bool gbIsPoe2;
+/** The POE2 Mashup mod's version, set by the mod and shown in the game menu. */
+extern std::string Poe2ModVersion;
 /** Indicate if we want vanilla savefiles */
 extern DVL_API_FOR_TEST bool gbVanilla;
 /** Whether the Hellfire mode is required (forced). */

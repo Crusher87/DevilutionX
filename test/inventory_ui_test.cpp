@@ -355,5 +355,54 @@ TEST_F(InventoryUITest, TransferToStash_InvalidLocation)
 	    << "Inventory should be unchanged after invalid transfer";
 }
 
+// ===========================================================================
+// Hover while holding an item
+// ===========================================================================
+
+TEST_F(InventoryUITest, Poe2ItemsUnderAHeldItemStillShowTheirTooltips)
+{
+	const bool wasPoe2 = gbIsPoe2;
+	const uint16_t oldWidth = gnScreenWidth;
+	const uint16_t oldHeight = gnScreenHeight;
+	gnScreenWidth = 640;
+	gnScreenHeight = 480;
+	CalculatePanelAreas();
+	InspectPlayer = MyPlayer;
+	MyPlayer->_pInvincible = false;
+	ControlDevice = ControlTypes::KeyboardAndMouse;
+	invflag = true;
+
+	const int idx = PlaceItemInInventory(MakePotion());
+	ASSERT_GE(idx, 0);
+
+	// Find a point over the potion.
+	bool found = false;
+	const Rectangle &panel = GetRightPanel();
+	for (int y = panel.position.y; y < panel.position.y + panel.size.height && !found; y++) {
+		for (int x = panel.position.x; x < panel.position.x + panel.size.width && !found; x++) {
+			MousePosition = { x, y };
+			found = CheckInvHLight() == INVITEM_INV_FIRST + idx;
+		}
+	}
+	ASSERT_TRUE(found);
+
+	MyPlayer->HoldItem = MakeSword();
+
+	gbIsPoe2 = false;
+	CheckCursMove();
+	EXPECT_EQ(pcursinvitem, -1) << "Diablo keeps its own behaviour";
+
+	gbIsPoe2 = true;
+	CheckCursMove();
+	EXPECT_EQ(pcursinvitem, INVITEM_INV_FIRST + idx);
+
+	MyPlayer->HoldItem.clear();
+	pcursinvitem = -1;
+	gbIsPoe2 = wasPoe2;
+	gnScreenWidth = oldWidth;
+	gnScreenHeight = oldHeight;
+	CalculatePanelAreas();
+}
+
 } // namespace
 } // namespace devilution

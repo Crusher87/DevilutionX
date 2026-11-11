@@ -99,4 +99,28 @@ void DrawMapFreeLine(const Surface &out, Point from, Point to, uint8_t colorInde
  */
 void SetMapPixel(const Surface &out, Point position, uint8_t color);
 
+/**
+ * @brief POE2 Mashup: how opaque the map's lines are drawn, in percent (the Map Transparency option). 100, the
+ * default, draws them solid as Diablo does; the Transparent map type keeps its own half transparency.
+ */
+void SetMapLineOpacity(int percent);
+[[nodiscard]] int GetMapLineOpacity();
+
+/**
+ * @brief POE2 Mashup: whether the map is laid over the world with real alpha where the UI can be (CanTintUi), so its
+ * see-through lines, markers and floor keep one steady colour whatever the world under them (Curtis 2026-10-29: the
+ * Tab map darkened and flickered while walking). Off, they are blended into the 8-bit world under them.
+ */
+void SetMapTintsUi(bool tints);
+[[nodiscard]] bool GetMapTintsUi();
+
+/** @brief POE2 Mashup: a map pixel drawn at about the given opacity, laid over the world or blended into it (SetMapTintsUi). */
+void PutMapPixel(const Surface &out, Point position, uint8_t color, int opacityPercent);
+
+/**
+ * @brief POE2 Mashup: a palette colour laid over another at about the given opacity, in quarter steps through the
+ * palette's blending table.
+ */
+[[nodiscard]] uint8_t BlendMapColor(uint8_t color, uint8_t under, int opacityPercent);
+
 } // namespace devilution

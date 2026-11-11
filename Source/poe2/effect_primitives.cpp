@@ -1,0 +1,401 @@
+#include "poe2/effect_primitives.hpp"
+
+#include <algorithm>
+
+#include "engine/backbuffer_state.hpp"
+#include "engine/random.hpp"
+#include "game_mode.hpp"
+#include "monster.h"
+#include "player.h"
+#include "poe2/item_stats.hpp"
+#include "poe2/map_play.hpp"
+#include "poe2/shrines.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/telemetry.hpp"
+#include "poe2/unique_effects.hpp"
+#include "poe2/unique_rules.hpp"
+#include "poe2/vfx.hpp"
+
+namespace devilution {
+
+namespace {
+
+constexpr int GameTicksPerSecond = 20;
+constexpr int RecoupTicks = RecoupSeconds * GameTicksPerSecond;
+
+int Gear(const Player &player, Poe2ItemStat stat)
+{
+	return player.poe2.itemStats[static_cast<size_t>(stat)];
+}
+
+int32_t PercentOf(int64_t raw, int percent)
+{
+	return static_cast<int32_t>(std::clamp<int64_t>(raw * percent / 100, 0, INT32_MAX / 2));
+}
+
+void GainLife(Player &player, int32_t raw)
+{
+	if (raw <= 0 || player.hasNoLife())
+		return;
+	player._pHitPoints = std::min(player._pHitPoints + Fixed26_6::fromRaw(raw), player._pMaxHP);
+	player._pHPBase = std::min(player._pHPBase + Fixed26_6::fromRaw(raw), player._pMaxHPBase);
+	OnLifeRecovered(player, raw);
+	if (&player == MyPlayer)
+		RedrawComponent(PanelDrawComponent::Health);
+}
+
+void GainMana(Player &player, int32_t raw)
+{
+	if (raw <= 0 || HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana))
+		return;
+	player._pMana = std::min(player._pMana + Fixed26_6::fromRaw(raw), player._pMaxMana);
+	player._pManaBase = std::min(player._pManaBase + Fixed26_6::fromRaw(raw), player._pMaxManaBase);
+	if (&player == MyPlayer)
+		RedrawComponent(PanelDrawComponent::Mana);
+}
+
+} // namespace
+
+int GainAsExtraPercent(const Player &player, DamageType type)
+{
+	if (!gbIsPoe2)
+		return 0;
+	const ShrineBonuses shrines = GetShrineBonuses(player);
+	switch (type) {
+	case DamageType::Fire:
+		return shrines.extraFirePercent + Gear(player, Poe2ItemStat::FireAsExtra);
+	case DamageType::Lightning:
+		return shrines.extraLightningPercent + Gear(player, Poe2ItemStat::LightningAsExtra);
+	case DamageType::Cold:
+		return shrines.extraColdPercent + Gear(player, Poe2ItemStat::ColdAsExtra);
+	default:
+		return 0;
+	}
+}
+
+int IgniteMagnitudePercent(const Player &player)
+{
+	return gbIsPoe2 ? std::max(100 + Gear(player, Poe2ItemStat::IgniteMagnitude), 0) : 100;
+}
+
+int ShockMagnitudeBonus(const Player &player)
+{
+	return gbIsPoe2 ? std::max(Gear(player, Poe2ItemStat::ShockMagnitude), 0) : 0;
+}
+
+int GearLifeRegenPerTenThousand(const Player &player)
+{
+	return gbIsPoe2 ? std::max(Gear(player, Poe2ItemStat::LifeRegenRate), 0) : 0;
+}
+
+int GearManaCostAsLifePercent(const Player &player)
+{
+	return gbIsPoe2 ? std::clamp(Gear(player, Poe2ItemStat::ManaCostAsLife), 0, 100) : 0;
+}
+
+int GearAttackCritTenths(const Player &player)
+{
+	return gbIsPoe2 ? std::max(Gear(player, Poe2ItemStat::AttackCritChance), 0) : 0;
+}
+
+int GearMovementSpeedPercent(const Player &player)
+{
+	return gbIsPoe2 ? Gear(player, Poe2ItemStat::MovementSpeed) : 0;
+}
+
+int PoisonMagnitudePercent(const Player &player)
+{
+	return gbIsPoe2 ? std::max(100 + Gear(player, Poe2ItemStat::PoisonMagnitude), 0) : 100;
+}
+
+int BleedMagnitudePercent(const Player &player)
+{
+	return gbIsPoe2 ? std::max(100 + Gear(player, Poe2ItemStat::BleedMagnitude), 0) : 100;
+}
+
+int GearElementalAttackDamage(const Player &player)
+{
+	return gbIsPoe2 ? Gear(player, Poe2ItemStat::ElementalAttackDamage) : 0;
+}
+
+int GearAttackPenetration(const Player &player, DamageType type)
+{
+	if (!gbIsPoe2 || (type != DamageType::Fire && type != DamageType::Lightning && type != DamageType::Cold))
+		return 0;
+	return std::clamp(Gear(player, Poe2ItemStat::AttackElementalPenetration), 0, 100);
+}
+
+int GearMaxResistance(const Player &player, DamageType type)
+{
+	if (!gbIsPoe2)
+		return 0;
+	switch (type) {
+	case DamageType::Fire:
+		return Gear(player, Poe2ItemStat::MaxFireResistance);
+	case DamageType::Lightning:
+		return Gear(player, Poe2ItemStat::MaxLightningResistance);
+	case DamageType::Cold:
+		return Gear(player, Poe2ItemStat::MaxColdResistance);
+	default:
+		return 0;
+	}
+}
+
+int SkillDurationPercent(const Player &player)
+{
+	return gbIsPoe2 ? std::max(100 + Gear(player, Poe2ItemStat::SkillDurationAndCooldown), 1) : 100;
+}
+
+int CooldownTicks(const Player &player, int ticks)
+{
+	if (!gbIsPoe2 || ticks <= 0)
+		return ticks;
+	// Faster recovery: the cooldown passes that much faster, as POE2's cooldown recovery rate.
+	return std::max(ticks * 100 / std::max(100 + Gear(player, Poe2ItemStat::SkillDurationAndCooldown), 1), 1);
+}
+
+int ManaFromItemArmour(int manaPerArmour, int armour)
+{
+	return manaPerArmour > 0 && armour > 0 ? armour / manaPerArmour : 0;
+}
+
+void NoteHitLifeLoss(const Player &player, int64_t lifeLostRaw)
+{
+	if (!gbIsPoe2 || lifeLostRaw <= 0)
+		return;
+	int32_t &newest = player.poe2.uniqueState.hitLossSeconds[0];
+	newest = static_cast<int32_t>(std::min<int64_t>(newest + lifeLostRaw, INT32_MAX / 2));
+}
+
+static_assert(std::tuple_size_v<decltype(UniqueRuleState::hitLossSeconds)> == RecentHitLossSeconds, "one bucket a second");
+
+void ProcessRecentHitLoss(Player &player)
+{
+	UniqueRuleState &state = player.poe2.uniqueState;
+	if (++state.hitLossTick < GameTicksPerSecond)
+		return;
+	state.hitLossTick = 0;
+	std::rotate(state.hitLossSeconds.rbegin(), state.hitLossSeconds.rbegin() + 1, state.hitLossSeconds.rend());
+	state.hitLossSeconds[0] = 0;
+}
+
+int RecentHitLossArmour(const Player &player)
+{
+	const int percent = gbIsPoe2 ? Gear(player, Poe2ItemStat::ArmourFromRecentHitLoss) : 0;
+	if (percent <= 0)
+		return 0;
+	int64_t lost = 0;
+	for (const int32_t raw : player.poe2.uniqueState.hitLossSeconds)
+		lost += raw;
+	return static_cast<int>(std::min<int64_t>(lost / 64 * percent / 100, INT32_MAX / 2));
+}
+
+void NotePreventedPhysical(const Player &player, int64_t stoppedRaw)
+{
+	const int percent = gbIsPoe2 ? Gear(player, Poe2ItemStat::PreventedPhysicalRecoup) : 0;
+	if (percent <= 0 || stoppedRaw <= 0 || &player != MyPlayer)
+		return;
+	UniqueRuleState &state = player.poe2.uniqueState;
+	const int32_t recouped = PercentOf(stoppedRaw, percent * LifeRecoveryPercent(player, false) / 100);
+	if (recouped <= 0)
+		return;
+	state.recoupPool = static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(state.recoupPool) + recouped, INT32_MAX / 2));
+	state.recoupTicks = RecoupTicks;
+}
+
+bool AvoidsAilments(const Player &player)
+{
+	return gbIsPoe2 && GetShrineBonuses(player).avoidAilments;
+}
+
+int GearLeechPercent(const Player &player, bool mana)
+{
+	if (!gbIsPoe2)
+		return 0;
+	return std::clamp(Gear(player, mana ? Poe2ItemStat::ManaLeech : Poe2ItemStat::LifeLeech), 0, MaxLeechPercent);
+}
+
+void LeechFromHit(Player &player, SkillSlot skill, int32_t damageRaw)
+{
+	if (!gbIsPoe2 || damageRaw <= 0 || player.hasNoLife() || (SkillTags(skill) & ST_Attack) == 0)
+		return;
+	const int map = MapLeechPercent();
+	if (const int life = GearLeechPercent(player, false); life > 0)
+		GainLife(player, PercentOf(static_cast<int64_t>(damageRaw) * map / 100, life * LifeRecoveryPercent(player, false) / 100));
+	if (const int mana = GearLeechPercent(player, true); mana > 0)
+		GainMana(player, PercentOf(static_cast<int64_t>(damageRaw) * map / 100, mana * ManaRecoveryPercent(player) / 100));
+}
+
+std::pair<int, int> ThornsDamage(const Player &player)
+{
+	if (!gbIsPoe2)
+		return { 0, 0 };
+	const int min = std::max(Gear(player, Poe2ItemStat::ThornsMin), 0);
+	return { min, std::max(Gear(player, Poe2ItemStat::ThornsMax), min) };
+}
+
+void DealThorns(Player &player, Monster &monster)
+{
+	if (&player != MyPlayer || monster.hasNoLife() || monster.mode == MonsterMode::Death)
+		return;
+	const auto [min, max] = ThornsDamage(player);
+	if (max <= 0)
+		return;
+	const Fixed26_6 damage = Fixed26_6::fromInt(RandomIntBetween(min, max));
+	if (damage <= 0)
+		return;
+	TelemetryNoteDamageSource("thorns");
+	ApplyMonsterDamage(DamageType::Physical, monster, damage);
+	vfx::ThornsHit(monster);
+	monster.tag(player);
+	if (monster.hasNoLife())
+		M_StartKill(monster, player);
+}
+
+int PercentOnKill(const Player &player, bool mana)
+{
+	if (!gbIsPoe2)
+		return 0;
+	return std::max(Gear(player, mana ? Poe2ItemStat::ManaPercentOnKill : Poe2ItemStat::LifePercentOnKill), 0);
+}
+
+std::pair<int, int> AddedColdDamage(const Player &player)
+{
+	if (!gbIsPoe2)
+		return { 0, 0 };
+	const int min = std::max(Gear(player, Poe2ItemStat::AddedColdMin), 0);
+	return { min, std::max(Gear(player, Poe2ItemStat::AddedColdMax), min) };
+}
+
+int ArmourAppliesToElementPercent(const Player &player, DamageType type)
+{
+	if (!gbIsPoe2)
+		return 0;
+	int gear = 0;
+	switch (type) {
+	case DamageType::Fire:
+		gear = Gear(player, Poe2ItemStat::ArmourToFire);
+		break;
+	case DamageType::Lightning:
+		gear = Gear(player, Poe2ItemStat::ArmourToLightning);
+		break;
+	case DamageType::Cold:
+		gear = Gear(player, Poe2ItemStat::ArmourToCold);
+		break;
+	default:
+		return 0;
+	}
+	return std::clamp(player.poe2.rule(UniqueRule::ArmourVsElements) + gear, 0, 100);
+}
+
+int32_t StunThresholdBonusRaw(const Player &player)
+{
+	if (!gbIsPoe2)
+		return 0;
+	const int64_t flat = static_cast<int64_t>(std::max(Gear(player, Poe2ItemStat::StunThreshold), 0)) * 64;
+	const int64_t shield = static_cast<int64_t>(std::max(player.poe2.maxEnergyShield, 0)) * 64 * std::max(Gear(player, Poe2ItemStat::EnergyShieldAsStunThreshold), 0) / 100;
+	return static_cast<int32_t>(std::min<int64_t>(flat + shield, INT32_MAX / 2));
+}
+
+int64_t StunDamageAgainstLife(const Player &player, int32_t damageRaw, int thresholdPercent)
+{
+	int64_t stunDamage = static_cast<int64_t>(damageRaw) * 100 / std::max(thresholdPercent, 1);
+	const int64_t life = std::max<int32_t>(player._pMaxHP.raw(), 1);
+	if (const int32_t bonus = StunThresholdBonusRaw(player); bonus > 0)
+		stunDamage = stunDamage * life / (life + bonus);
+	return stunDamage;
+}
+
+int LifeRecoupPercent(const Player &player)
+{
+	if (!gbIsPoe2)
+		return 0;
+	return std::clamp(Gear(player, Poe2ItemStat::LifeRecoup), 0, 100);
+}
+
+int LifeRecoupPercent(const Player &player, DamageType type)
+{
+	if (!gbIsPoe2)
+		return 0;
+	int percent = LifeRecoupPercent(player);
+	switch (type) {
+	case DamageType::Fire:
+		percent += Gear(player, Poe2ItemStat::FireRecoup);
+		break;
+	case DamageType::Cold:
+		percent += Gear(player, Poe2ItemStat::ColdRecoup);
+		break;
+	case DamageType::Lightning:
+		percent += Gear(player, Poe2ItemStat::LightningRecoup);
+		break;
+	default:
+		break;
+	}
+	return std::clamp(percent, 0, 100);
+}
+
+void NoteRecoup(Player &player, int64_t damageTakenRaw, DamageType type)
+{
+	const int percent = LifeRecoupPercent(player, type);
+	if (percent <= 0 || damageTakenRaw <= 0)
+		return;
+	UniqueRuleState &state = player.poe2.uniqueState;
+	const int32_t recouped = PercentOf(damageTakenRaw, percent * LifeRecoveryPercent(player, false) / 100);
+	if (recouped <= 0)
+		return;
+	state.recoupPool = static_cast<int32_t>(std::min<int64_t>(static_cast<int64_t>(state.recoupPool) + recouped, INT32_MAX / 2));
+	state.recoupTicks = RecoupTicks;
+}
+
+void ProcessRecoup(Player &player)
+{
+	UniqueRuleState &state = player.poe2.uniqueState;
+	if (state.recoupTicks == 0)
+		return;
+	if (player.hasNoLife()) {
+		state.recoupPool = 0;
+		state.recoupTicks = 0;
+		return;
+	}
+	// What is left comes back evenly over the ticks left, so the last tick pays the rest.
+	const int32_t heal = state.recoupPool / state.recoupTicks;
+	state.recoupPool -= heal;
+	state.recoupTicks--;
+	GainLife(player, heal);
+	if (state.recoupTicks == 0)
+		state.recoupPool = 0;
+}
+
+int GearGoldFindPercent(const Player &player)
+{
+	return gbIsPoe2 ? std::max(Gear(player, Poe2ItemStat::GoldFind), 0) : 0;
+}
+
+int GearManaCostPercent(const Player &player)
+{
+	if (!gbIsPoe2)
+		return 100;
+	return 100 * 100 / (100 + std::max(Gear(player, Poe2ItemStat::ManaCostEfficiency), 0));
+}
+
+int ShieldBlockAfterIncrease(int baseBlock, int increasedPercent)
+{
+	return std::max(baseBlock, 0) * (100 + std::max(increasedPercent, 0)) / 100;
+}
+
+int GearPoisonOnHitChance(const Player &player)
+{
+	return gbIsPoe2 ? std::clamp(Gear(player, Poe2ItemStat::PoisonChance), 0, 100) : 0;
+}
+
+void PoisonFromGear(Player &player, Monster &monster, SkillSlot skill, int32_t poisonBaseRaw)
+{
+	const int chance = GearPoisonOnHitChance(player);
+	if (chance <= 0 || poisonBaseRaw <= 0 || (SkillTags(skill) & ST_Attack) == 0)
+		return;
+	if (GenerateRnd(100) >= chance)
+		return;
+	InflictPoison(player, monster, static_cast<int32_t>(static_cast<int64_t>(poisonBaseRaw) * PoisonPercentPerSecond * PoisonTicks / 20 / 100), PoisonTicks);
+}
+
+} // namespace devilution

@@ -11,9 +11,12 @@
 #include <string>
 
 #include <algorithm>
+#include <array>
+#include <vector>
 
 #include "DiabloUI/ui_flags.hpp"
 #include "automap.h"
+#include "control/control.hpp"
 #include "cursor.h"
 #include "cursor_defs.hpp"
 #ifdef _DEBUG
@@ -25,6 +28,7 @@
 #include "engine/load_file.hpp"
 #include "engine/points_in_rectangle_range.hpp"
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "inv.h"
 #include "inv_iterators.hpp"
@@ -37,12 +41,26 @@
 #include "minitext.h"
 #include "missiles.h"
 #include "monster.h"
+#include "msg.h"
 #include "options.h"
+#include "plrmsg.h"
+#include "poe2/endgame.hpp"
+#include "poe2/area_levels.hpp"
+#include "poe2/cathedral_floors.hpp"
+#include "poe2/experience.hpp"
+#include "poe2/floor_chests.hpp"
+#include "poe2/floor_packs.hpp"
+#include "poe2/hd.hpp"
+#include "poe2/shrines.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/telemetry.hpp"
+#include "poe2/tears.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/objdat.h"
 #include "towners.h"
 #include "track.h"
+#include "engine/render/text_render.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/endian_swap.hpp"
 #include "utils/format.hpp"
@@ -50,6 +68,7 @@
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
+#include "utils/str_split.hpp"
 
 namespace devilution {
 
@@ -99,6 +118,7 @@ enum shrine_type : uint8_t {
 	ShrineMurphys,
 	NumberOfShrineTypes
 };
+static_assert(static_cast<int>(NumberOfShrineTypes) == static_cast<int>(ShrineKind::Count), "shrines.tsv follows Diablo's shrines");
 
 enum {
 	// clang-format off
@@ -110,8 +130,9 @@ enum {
 
 int trapid;
 int trapdir;
-OptionalOwnedClxSpriteList pObjCels[40];
-object_graphic_id ObjFileList[40];
+// POE2: room for the designed rooms' props on top of a floor's usual objects (Diablo had 40).
+OptionalOwnedClxSpriteList pObjCels[64];
+object_graphic_id ObjFileList[64];
 /** Specifies the number of active objects. */
 int leverid;
 int numobjfiles;
@@ -244,6 +265,9 @@ bool RndLocOk(Point p)
 		return false;
 	if (TileContainsSetPiece(p))
 		return false;
+	// POE2: the designed rooms of the new Cathedral floors bring their own props.
+	if (IsCathedralDesignedTile(p))
+		return false;
 	if (TileHasAny(p, TileProperties::Solid))
 		return false;
 	return IsNoneOf(leveltype, DTYPE_CATHEDRAL, DTYPE_CRYPT) || dPiece[p.x][p.y] <= 125 || dPiece[p.x][p.y] >= 143;
@@ -264,15 +288,37 @@ bool CanPlaceWallTrap(Point pos)
 	return TileHasAny(pos, TileProperties::Trap);
 }
 
+/**
+ * POE2 Mashup: a random chest, barrel or prop must not close a passage (Curtis 2026-11-07: a chest kept him out of a
+ * room in the Caves). Gives up on the check after many tries, so a crowded floor still gets its objects.
+ */
+bool RndLocBlocksPassage(Point tile, bool big, int tries)
+{
+	constexpr int MaxPassageTries = 4000;
+	if (!gbIsPoe2 || tries > MaxPassageTries)
+		return false;
+	return ObjectWouldBlockPassage(tile) || (big && ObjectWouldBlockPassage(tile + Displacement { 0, -1 }));
+}
+
+/**
+ * POE2 Mashup: how many random spots a chest, sarcophagus or barrel tries before the floor goes without it. The original
+ * loops never gave up, which never mattered on its open floors. On a new Cathedral floor the designed rooms bring their
+ * own props, so only the passages and plain rooms take random objects, and once their few open spots were used up the
+ * loading screen hung for good (a new hero's first Cathedral floor, 2026-11-08).
+ */
+constexpr int MaxRandomSpotTries = 20000;
+
 void InitRndLocObj(int min, int max, _object_id objtype)
 {
 	const int numobjs = GenerateRnd(max - min) + min;
 
 	for (int i = 0; i < numobjs; i++) {
-		while (true) {
+		for (int tries = 0;; tries++) {
+			if (tries > MaxRandomSpotTries)
+				return;
 			const int xp = GenerateRnd(80) + 16;
 			const int yp = GenerateRnd(80) + 16;
-			if (IsAreaOk(Rectangle { { xp - 1, yp - 1 }, { 3, 3 } })) {
+			if (IsAreaOk(Rectangle { { xp - 1, yp - 1 }, { 3, 3 } }) && !RndLocBlocksPassage({ xp, yp }, false, tries)) {
 				AddObject(objtype, { xp, yp });
 				break;
 			}
@@ -284,10 +330,12 @@ void InitRndLocBigObj(int min, int max, _object_id objtype)
 {
 	const int numobjs = GenerateRnd(max - min) + min;
 	for (int i = 0; i < numobjs; i++) {
-		while (true) {
+		for (int tries = 0;; tries++) {
+			if (tries > MaxRandomSpotTries)
+				return;
 			const int xp = GenerateRnd(80) + 16;
 			const int yp = GenerateRnd(80) + 16;
-			if (IsAreaOk(Rectangle { { xp - 1, yp - 2 }, { 3, 4 } })) {
+			if (IsAreaOk(Rectangle { { xp - 1, yp - 2 }, { 3, 4 } }) && !RndLocBlocksPassage({ xp, yp }, true, tries)) {
 				AddObject(objtype, { xp, yp });
 				break;
 			}
@@ -305,7 +353,7 @@ std::optional<Point> GetRandomObjectPosition(Displacement standoff)
 {
 	for (int i = 0; i <= 20000; i++) {
 		Point position = Point { GenerateRnd(80), GenerateRnd(80) } + Displacement { 16, 16 };
-		if (CanPlaceRandomObject(position, standoff))
+		if (CanPlaceRandomObject(position, standoff) && !RndLocBlocksPassage(position, false, i))
 			return position;
 	}
 	return {};
@@ -411,7 +459,10 @@ void InitRndBarrels()
 	for (int i = 0; i < numobjs; i++) {
 		int xp;
 		int yp;
+		int tries = 0;
 		do {
+			if (tries++ > MaxRandomSpotTries)
+				return;
 			xp = GenerateRnd(80) + 16;
 			yp = GenerateRnd(80) + 16;
 		} while (!RndLocOk({ xp, yp }));
@@ -447,6 +498,9 @@ void InitRndBarrels()
 	}
 }
 
+/** The tiles a wall torch lights: the room east or south of a wall block, and the room west or north of a lip. */
+constexpr Displacement NearDesigned[] { { 2, 0 }, { 0, 2 }, { -2, 0 }, { 0, -2 }, { 2, 2 } };
+
 void AddL2Torches()
 {
 	for (int j = 0; j < MAXDUNY; j++) {
@@ -456,6 +510,9 @@ void AddL2Torches()
 				continue;
 
 			const int pn = dPiece[i][j];
+			// POE2: the designed rooms of the new Catacombs floors hang their own torches.
+			if (IsAnyOf(pn, 0, 4, 36, 40) && std::any_of(std::begin(NearDesigned), std::end(NearDesigned), [&testPosition](Displacement d) { return IsCathedralDesignedTile(testPosition + d); }))
+				continue;
 			if (pn == 0 && FlipCoin(3)) {
 				AddObject(OBJ_TORCHL2, testPosition);
 			}
@@ -741,6 +798,11 @@ void AddCryptBook(_object_id ot, int v2, Point position)
 
 void AddCryptStoryBook(int s)
 {
+	// POE2: on the new Crypt floors the book goes on the Reading chapel's or the Archive's stand when there is one.
+	if (const std::optional<Point> stand = CathedralStoryBookSpot()) {
+		AddCryptBook(OBJ_L5BOOKS, s, *stand);
+		return;
+	}
 	std::optional<Point> position = GetRandomObjectPosition({ 3, 2 });
 	if (!position)
 		return;
@@ -948,6 +1010,9 @@ void AddChest(Object &chest)
 		break;
 	}
 	chest._oVar2 = GenerateRnd(8);
+	// POE2 Mashup: a normal chest until the floor's planner makes it another kind (poe2/floor_chests.hpp).
+	chest._oVar5 = 0;
+	chest._oVar6 = 0;
 }
 
 void ObjSetMicro(Point position, int pn)
@@ -1320,10 +1385,18 @@ void AddShrine(Object &shrine)
 		slist[i] = isShrineAvailable && (!isEnchantedShrine || isCorrectLevelType);
 	}
 
-	int selectedIndex;
-	do {
-		selectedIndex = GenerateRnd(shrineCount);
-	} while (!slist[selectedIndex]);
+	int selectedIndex = -1;
+	if (gbIsPoe2 && HasShrineData()) {
+		// POE2 Mashup: every shrine is on the table, but Divine stays off early and boss floors.
+		const std::vector<ShrineKind> pool = SpawnableShrines(currlevel, OnShrineBossFloor(), shrineCount);
+		if (!pool.empty())
+			selectedIndex = static_cast<int>(pool[GenerateRnd(static_cast<int>(pool.size()))]);
+	}
+	if (selectedIndex < 0) {
+		do {
+			selectedIndex = GenerateRnd(shrineCount);
+		} while (!slist[selectedIndex]);
+	}
 
 	shrine._oVar1 = selectedIndex;
 
@@ -1882,7 +1955,8 @@ void OperateBook(Player &player, Object &book, bool sendmsg)
 	}
 
 	if (setlvlnum == SL_BONECHAMB) {
-		if (sendmsg) {
+		// POE2 Mashup: the Chamber is rebuilt on later visits; the spell is only taught once.
+		if (sendmsg && Quests[Q_SCHAMB]._qactive != QUEST_DONE) {
 			const uint8_t newSpellLevel = player._pSplLvl[static_cast<int8_t>(SpellID::Guardian)] + 1;
 			if (newSpellLevel <= MaxSpellLevel) {
 				player._pSplLvl[static_cast<int8_t>(SpellID::Guardian)] = newSpellLevel;
@@ -1954,7 +2028,8 @@ void OperateBookLever(Object &questBook, bool sendmsg)
 			if (questBook._otype != OBJ_BLOODBOOK)
 				ObjChangeMap(questBook._oVar1, questBook._oVar2, questBook._oVar3, questBook._oVar4);
 			if (questBook._otype == OBJ_BLINDBOOK) {
-				if (sendmsg)
+				// POE2 Mashup: the reward comes once; a rebuilt floor's book is scenery after that.
+				if (sendmsg && Quests[Q_BLIND]._qactive != QUEST_DONE)
 					SpawnUnique(UITEM_OPTAMULET, SetPiece.position.megaToWorld() + Displacement { 5, 5 }, std::nullopt, true, true);
 				auto tren = TransVal;
 				TransVal = 9;
@@ -2028,7 +2103,11 @@ void OperateChest(const Player &player, Object &chest, bool sendLootMsg)
 	chest.selectionRegion = SelectionRegion::None;
 	chest._oAnimFrame += 2;
 	SetRndSeed(chest._oRndSeed);
-	if (setlevel) {
+	// POE2 Mashup: a map's strongbox or vault drops its reward profile instead.
+	if (OpenMapRewardChest(chest.position, sendLootMsg)) {
+	} else if (OpenFloorChest(player, chest, sendLootMsg)) {
+		// A magic or rare chest or a strongbox.
+	} else if (setlevel) {
 		for (int j = 0; j < chest._oVar1; j++) {
 			CreateRndItem(chest.position, true, sendLootMsg, false);
 		}
@@ -2329,6 +2408,13 @@ void OperateShrineHidden(DiabloGenerator &rng, Player &player)
 	InitDiabloMsg(EMSG_SHRINE_HIDDEN);
 }
 
+/** Raises a weapon's maximum damage by one, short of the 16-bit field's top. */
+void RaiseMaxDamage(Item &item)
+{
+	if (item._iMaxDam < UINT16_MAX)
+		item._iMaxDam++;
+}
+
 void OperateShrineGloomy(Player &player)
 {
 	if (&player != MyPlayer)
@@ -2342,7 +2428,9 @@ void OperateShrineGloomy(Player &player)
 		case ItemType::Bow:
 		case ItemType::Mace:
 		case ItemType::Staff:
-			item._iMaxDam--;
+			// Never wrapping the unsigned field.
+			if (item._iMaxDam > 0)
+				item._iMaxDam--;
 			if (item._iMaxDam < item._iMinDam)
 				item._iMaxDam = item._iMinDam;
 			break;
@@ -2369,9 +2457,9 @@ void OperateShrineWeird(Player &player)
 		return;
 
 	if (!player.InvBody[INVLOC_HAND_LEFT].isEmpty() && player.InvBody[INVLOC_HAND_LEFT]._itype != ItemType::Shield)
-		player.InvBody[INVLOC_HAND_LEFT]._iMaxDam++;
+		RaiseMaxDamage(player.InvBody[INVLOC_HAND_LEFT]);
 	if (!player.InvBody[INVLOC_HAND_RIGHT].isEmpty() && player.InvBody[INVLOC_HAND_RIGHT]._itype != ItemType::Shield)
-		player.InvBody[INVLOC_HAND_RIGHT]._iMaxDam++;
+		RaiseMaxDamage(player.InvBody[INVLOC_HAND_RIGHT]);
 
 	for (Item &item : InventoryPlayerItemsRange { player }) {
 		switch (item._itype) {
@@ -2380,7 +2468,7 @@ void OperateShrineWeird(Player &player)
 		case ItemType::Bow:
 		case ItemType::Mace:
 		case ItemType::Staff:
-			item._iMaxDam++;
+			RaiseMaxDamage(item);
 			break;
 		default:
 			break;
@@ -2751,6 +2839,7 @@ void OperateShrineGlimmering(Player &player)
 	for (Item &item : PlayerItemsRange { player }) {
 		if (item._iMagical != ITEM_QUALITY_NORMAL && !item._iIdentified) {
 			item._iIdentified = true;
+			TelemetryItemAction(player, "identify", item, "Glimmering shrine");
 		}
 	}
 
@@ -2885,7 +2974,8 @@ void OperateShrineSparkling(Player &player, Point spawnPosition)
 	if (&player != MyPlayer)
 		return;
 
-	player.addExperience(1000 * currlevel);
+	// POE2 Mashup: ten white kills of the floor's monster level on the levels-100 table (until the shrine rework).
+	player.addExperience(gbIsPoe2 ? Poe2ShrineExperience(CurrentAreaLevel() > 0 ? CurrentAreaLevel() : CurrentFloorMonsterLevel()) : static_cast<uint32_t>(1000 * currlevel));
 
 	AddMissile(
 	    spawnPosition,
@@ -2989,6 +3079,47 @@ void OperateShrineMurphys(DiabloGenerator &rng, Player &player)
 	InitDiabloMsg(EMSG_SHRINE_MURPHYS);
 }
 
+/** @brief Diablo's line for a shrine, kept in POE2 mode. */
+diablo_message Poe2ShrineMessage(int shrineType, const ShrineGrant &grant)
+{
+	switch (shrineType) {
+	case ShrineMysterious: return EMSG_SHRINE_MYSTERIOUS;
+	case ShrineHidden: return EMSG_SHRINE_HIDDEN;
+	case ShrineGloomy: return EMSG_SHRINE_GLOOMY;
+	case ShrineWeird: return EMSG_SHRINE_WEIRD;
+	case ShrineMagical:
+	case ShrineMagicaL2: return EMSG_SHRINE_MAGICAL;
+	case ShrineStone: return EMSG_SHRINE_STONE;
+	case ShrineReligious: return EMSG_SHRINE_RELIGIOUS;
+	case ShrineEnchanted: return EMSG_SHRINE_ENCHANTED;
+	case ShrineThaumaturgic: return EMSG_SHRINE_THAUMATURGIC;
+	case ShrineFascinating: return EMSG_SHRINE_FASCINATING;
+	case ShrineCryptic: return EMSG_SHRINE_CRYPTIC;
+	case ShrineEldritch: return EMSG_SHRINE_ELDRITCH;
+	case ShrineEerie: return EMSG_SHRINE_EERIE;
+	case ShrineDivine: return EMSG_SHRINE_DIVINE;
+	case ShrineHoly: return EMSG_SHRINE_HOLY;
+	case ShrineSacred: return EMSG_SHRINE_SACRED;
+	case ShrineSpiritual: return EMSG_SHRINE_SPIRITUAL;
+	case ShrineSpooky: return EMSG_SHRINE_SPOOKY1;
+	case ShrineAbandoned: return EMSG_SHRINE_ABANDONED;
+	case ShrineCreepy: return EMSG_SHRINE_CREEPY;
+	case ShrineQuiet: return EMSG_SHRINE_QUIET;
+	case ShrineSecluded: return EMSG_SHRINE_SECLUDED;
+	case ShrineOrnate: return EMSG_SHRINE_ORNATE;
+	case ShrineGlimmering: return EMSG_SHRINE_GLIMMERING;
+	case ShrineTainted: return EMSG_SHRINE_TAINTED1;
+	case ShrineOily: return EMSG_SHRINE_OILY;
+	case ShrineGlowing: return EMSG_SHRINE_GLOWING;
+	case ShrineMendicant: return EMSG_SHRINE_MENDICANT;
+	case ShrineSparkling: return EMSG_SHRINE_SPARKLING;
+	case ShrineTown: return EMSG_SHRINE_TOWN;
+	case ShrineShimmering: return EMSG_SHRINE_SHIMMERING;
+	case ShrineSolar: return grant.variant == SolarNight ? EMSG_SHRINE_SOLAR4 : EMSG_SHRINE_SOLAR2;
+	default: return EMSG_SHRINE_MURPHYS;
+	}
+}
+
 void OperateShrine(Player &player, Object &shrine, SfxID sType)
 {
 	if (!shrine.canInteractWith())
@@ -3002,6 +3133,19 @@ void OperateShrine(Player &player, Object &shrine, SfxID sType)
 	PlaySfxLoc(sType, shrine.position);
 	shrine._oAnimFlag = true;
 	shrine._oAnimDelay = 1;
+
+	if (gbIsPoe2 && HasShrineData() && shrine._oVar1 != ShrineTown) {
+		// POE2 Mashup: a timed buff instead of Diablo's lasting effect. The toucher rolls it and tells the others.
+		if (&player == MyPlayer) {
+			const ShrineGrant grant = ResolveShrine(static_cast<ShrineKind>(shrine._oVar1), rng, ShrineClockSaysNight());
+			ApplyShrineGrant(player, grant);
+			InitDiabloMsg(Poe2ShrineMessage(shrine._oVar1, grant));
+			EventPlrMsg(ShrineGrantLine(grant));
+			NetSendCmdShrineBuff(static_cast<uint8_t>(grant.kind), grant.variant, static_cast<uint8_t>(grant.curse));
+			NetSendCmdLoc(MyPlayerId, false, CMD_OPERATEOBJ, shrine.position);
+		}
+		return;
+	}
 
 	switch (shrine._oVar1) {
 	case ShrineMysterious:
@@ -3236,7 +3380,8 @@ bool OperateFountains(Player &player, Object &fountain)
 			PlaySfxLoc(SfxID::OperateFountain, fountain.position);
 			player._pHitPoints += Fixed26_6::fromInt(1);
 			player._pHPBase += Fixed26_6::fromInt(1);
-			if (player._pHitPoints > player._pMaxHP) {
+			// POE2: one drink fills life to the top.
+			if (gbIsPoe2 || player._pHitPoints > player._pMaxHP) {
 				player._pHitPoints = player._pMaxHP;
 				player._pHPBase = player._pMaxHPBase;
 			}
@@ -3253,7 +3398,8 @@ bool OperateFountains(Player &player, Object &fountain)
 
 			player._pMana += Fixed26_6::fromInt(1);
 			player._pManaBase += Fixed26_6::fromInt(1);
-			if (player._pMana > player._pMaxMana) {
+			// POE2: one drink fills mana to the top.
+			if (gbIsPoe2 || player._pMana > player._pMaxMana) {
 				player._pMana = player._pMaxMana;
 				player._pManaBase = player._pMaxManaBase;
 			}
@@ -3283,6 +3429,13 @@ bool OperateFountains(Player &player, Object &fountain)
 	case OBJ_TEARFTN: {
 		if (!fountain.canInteractWith())
 			break;
+		// POE2: the hero picks the trade in a small window, and the fountain is used up only
+		// when they make one (FinishTearsFountain). Other clients wait for that message.
+		if (gbIsPoe2) {
+			if (&player == MyPlayer)
+				OpenTearsFountain(fountain);
+			return false;
+		}
 		PlaySfxLoc(SfxID::OperateFountain, fountain.position);
 		fountain.selectionRegion = SelectionRegion::None;
 		if (&player != MyPlayer)
@@ -3659,6 +3812,37 @@ Object *FindObjectAtPosition(Point position, bool considerLargeObjects)
 	return nullptr;
 }
 
+bool ObjectWouldBlockPassage(Point tile)
+{
+	constexpr int Reach = 3;
+	constexpr int Size = (2 * Reach) + 1;
+	const auto walkable = [tile](Point p) {
+		return p != tile && InDungeonBounds(p) && !IsTileSolid(p) && !IsObjectAtPosition(p);
+	};
+	std::vector<Point> around;
+	for (const Direction d : { Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest }) {
+		if (walkable(tile + d))
+			around.push_back(tile + d);
+	}
+	if (around.size() < 2)
+		return false;
+	// A walk from the first floor tile beside it, staying near it, must reach the others.
+	std::array<bool, Size * Size> seen {};
+	const auto cell = [tile](Point p) { return ((p.y - tile.y + Reach) * Size) + (p.x - tile.x + Reach); };
+	std::vector<Point> queue { around.front() };
+	seen[cell(around.front())] = true;
+	for (size_t i = 0; i < queue.size(); i++) {
+		for (const Direction d : { Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest }) {
+			const Point next = queue[i] + d;
+			if (std::abs(next.x - tile.x) > Reach || std::abs(next.y - tile.y) > Reach || seen[cell(next)] || !walkable(next))
+				continue;
+			seen[cell(next)] = true;
+			queue.push_back(next);
+		}
+	}
+	return std::any_of(around.begin(), around.end(), [&](Point p) { return !seen[cell(p)]; });
+}
+
 bool IsItemBlockingObjectAtPosition(Point position)
 {
 	Object *object = FindObjectAtPosition(position);
@@ -3700,11 +3884,16 @@ std::expected<void, std::string> LoadLevelObjects(uint16_t filesWidths[65])
 		if (filesWidths[i] == 0) {
 			continue;
 		}
+		if (numobjfiles >= static_cast<int>(std::size(ObjFileList))) {
+			LogError("Too many object graphics for one floor; {} is left out", ObjMasterLoadList[i]);
+			continue;
+		}
 
 		ObjFileList[numobjfiles] = static_cast<object_graphic_id>(i);
 		char filestr[32];
 		*BufCopy(filestr, "objects\\", ObjMasterLoadList[i]) = '\0';
 		ASSIGN_OR_RETURN(pObjCels[numobjfiles], LoadCelWithStatus(filestr, filesWidths[i]));
+		hd::RegisterSprites(filestr, ClxSpriteListOrSheet { ClxSpriteList { *pObjCels[numobjfiles] }.data(), 0 });
 		numobjfiles++;
 	}
 	return {};
@@ -3720,6 +3909,14 @@ std::expected<void, std::string> InitObjectGFX()
 			filesWidths[obj.ofindex] = obj.animWidth;
 		}
 	}
+	// POE2 Mashup: a rest room after a big fight has a shrine with candles, as the shrine theme room does.
+	if (UseFloorPacks()) {
+		for (const auto id : { OBJ_SHRINEL, OBJ_SHRINER, OBJ_CANDLE2 }) {
+			const ObjectData &obj = AllObjects[id];
+			filesWidths[obj.ofindex] = obj.animWidth;
+		}
+	}
+	MarkCathedralObjectGraphics(filesWidths);
 
 	for (size_t id = 0, n = AllObjects.size(); id < n; ++id) {
 		const ObjectData &objectData = AllObjects[id];
@@ -3752,6 +3949,13 @@ void FreeObjectGFX()
 		pObjCels[i] = std::nullopt;
 	}
 	numobjfiles = 0;
+}
+
+void ClearObjectsForTown()
+{
+	// Town has no objects. The last dungeon's stay in the list with their graphics already freed, so anything that
+	// walks the list in town (flame effects, HD lights, map marks) would read a freed sprite: drop them.
+	ClrAllObjects();
 }
 
 void AddL1Objs(int x1, int y1, int x2, int y2)
@@ -3842,17 +4046,23 @@ void InitObjects()
 			AddNakrulGate();
 		}
 		if (leveltype == DTYPE_CATHEDRAL) {
+			// POE2: the designed rooms' props go first, so nothing random lands on them.
+			AddCathedralRoomObjects();
 			if (Quests[Q_BUTCHER].IsAvailable())
 				AddTortures();
 			if (Quests[Q_PWATER].IsAvailable())
 				AddCandles();
 			if (Quests[Q_LTBANNER].IsAvailable())
 				AddObject(OBJ_SIGNCHEST, SetPiece.position.megaToWorld() + Displacement { 10, 3 });
-			InitRndLocBigObj(10, 15, OBJ_SARC);
+			// The designed rooms' sarcophagi come out of the floor's usual 10 to 15.
+			const int designedSarcophagi = CathedralDesignedSarcophagi();
+			InitRndLocBigObj(std::max(0, 10 - designedSarcophagi), std::max(1, 15 - designedSarcophagi), OBJ_SARC);
 			AddL1Objs(0, 0, MAXDUNX, MAXDUNY);
 			InitRndBarrels();
 		}
 		if (leveltype == DTYPE_CATACOMBS) {
+			// POE2: the designed rooms' props go first here too.
+			AddCathedralRoomObjects();
 			if (Quests[Q_ROCK].IsAvailable())
 				InitRndLocObj5x5(1, 1, OBJ_STAND);
 			if (Quests[Q_SCHAMB].IsAvailable())
@@ -3918,10 +4128,14 @@ void InitObjects()
 			InitRndBarrels();
 		}
 		if (leveltype == DTYPE_CAVES) {
+			// POE2: the designed rooms' props go first here too.
+			AddCathedralRoomObjects();
 			AddL3Objs(0, 0, MAXDUNX, MAXDUNY);
 			InitRndBarrels();
 		}
 		if (leveltype == DTYPE_HELL) {
+			// POE2: the designed rooms' props go first here too.
+			AddCathedralRoomObjects();
 			if (Quests[Q_WARLORD].IsAvailable()) {
 				_speech_id spId;
 				switch (MyPlayer->_pClass) {
@@ -3956,10 +4170,15 @@ void InitObjects()
 			AddL4Goodies();
 		}
 		if (leveltype == DTYPE_NEST) {
+			// POE2: the designed rooms' props go first here too.
+			AddCathedralRoomObjects();
 			InitRndBarrels();
 		}
 		if (leveltype == DTYPE_CRYPT) {
-			InitRndLocBigObj(10, 15, OBJ_L5SARC);
+			// POE2: the designed rooms' props go first here too, and their sarcophagi come out of the usual 10 to 15.
+			AddCathedralRoomObjects();
+			const int designedSarcophagi = CathedralDesignedSarcophagi();
+			InitRndLocBigObj(std::max(0, 10 - designedSarcophagi), std::max(1, 15 - designedSarcophagi), OBJ_L5SARC);
 			AddCryptObjects(0, 0, MAXDUNX, MAXDUNY);
 			InitRndBarrels();
 		}
@@ -4015,6 +4234,16 @@ Object *AddObject(_object_id objType, Point objPos)
 {
 	if (ActiveObjectCount >= MAXOBJECTS)
 		return nullptr;
+	if (gbIsPoe2 && IsAnyOf(objType, OBJ_SHRINEL, OBJ_SHRINER) && leveltype != DTYPE_TOWN) {
+		// POE2 Mashup: one shrine on floors 1 to 4, two deeper.
+		int shrines = 0;
+		for (int i = 0; i < ActiveObjectCount; i++) {
+			if (Objects[ActiveObjects[i]].IsShrine())
+				shrines++;
+		}
+		if (shrines >= ShrineCapForLevel(currlevel))
+			return nullptr;
+	}
 
 	const int oi = AvailableObjects[0];
 	AvailableObjects[0] = AvailableObjects[MAXOBJECTS - 1 - ActiveObjectCount];
@@ -4269,6 +4498,9 @@ void ProcessObjects()
 		default:
 			break;
 		}
+		// POE2 Mashup: an open strongbox's guards step out one at a time.
+		if (object.IsChest())
+			UpdateFloorChest(object);
 		if (!object._oAnimFlag)
 			continue;
 
@@ -4663,8 +4895,14 @@ void SyncOpObject(Player &player, int cmd, Object &object)
 		OperateCauldron(player, object, SfxID::OperateCaldron);
 		break;
 	case OBJ_MURKYFTN:
-	case OBJ_TEARFTN:
 		OperateFountains(player, object);
+		break;
+	case OBJ_TEARFTN:
+		// POE2: this message means a trade was made, so the fountain is used up.
+		if (gbIsPoe2)
+			object.selectionRegion = SelectionRegion::None;
+		else
+			OperateFountains(player, object);
 		break;
 	case OBJ_STORYBOOK:
 	case OBJ_L5BOOKS:
@@ -4704,6 +4942,28 @@ void BreakObject(const Player &player, Object &object)
 		BreakBarrel(player, object, false, true);
 	} else if (object.IsCrux()) {
 		BreakCrux(object, true);
+	}
+}
+
+void BreakObjectAt(const Player &player, Point tile)
+{
+	if (!gbIsPoe2 || &player != MyPlayer)
+		return;
+	Object *object = FindObjectAtPosition(tile);
+	if (object != nullptr && object->IsBreakable())
+		BreakObject(player, *object);
+}
+
+void BreakObjectsInArea(const Player &player, Point center, int radius)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || radius < 0)
+		return;
+	for (int dy = -radius; dy <= radius; dy++) {
+		for (int dx = -radius; dx <= radius; dx++) {
+			const Point tile = center + Displacement { dx, dy };
+			if (center.ExactDistance(tile) <= radius)
+				BreakObjectAt(player, tile);
+		}
 	}
 }
 
@@ -4911,6 +5171,7 @@ StringOrView Object::name() const
 void GetObjectStr(const Object &object)
 {
 	InfoString = object.name();
+	DescribeFloorChest(object);
 	const ClassAttributes &classAttributes = GetClassAttributes(MyPlayer->_pClass);
 	if (HasAnyOf(classAttributes.classFlags, PlayerClassFlag::TrapSense)) {
 		if (object._oTrapFlag) {
@@ -4921,6 +5182,17 @@ void GetObjectStr(const Object &object)
 	if (object.IsDisabled()) {
 		InfoString = FormatRuntime(_(/* TRANSLATORS: If user enabled diablo.ini setting "Disable Crippling Shrines" is set to 1; also used for Na-Kruls lever */ "{:s} (disabled)"), InfoString.str());
 		InfoColor = UiFlags::ColorRed;
+	}
+	if (gbIsPoe2 && object.IsShrine() && object.canInteractWith() && object._oVar1 != ShrineTown) {
+		auto [power, text] = ShrineHoverLines(static_cast<ShrineKind>(object._oVar1));
+		if (!power.empty())
+			AddInfoBoxString(std::move(power));
+		// Wrapped to the info box's width: it squeezes a line that doesn't fit until the letters overlap.
+		if (!text.empty()) {
+			const std::string wrapped = WordWrapString(text, InfoBoxRect.size.width - 8, GameFont12, 2);
+			for (const std::string_view line : SplitByChar(wrapped, '\n'))
+				AddInfoBoxString(line);
+		}
 	}
 }
 

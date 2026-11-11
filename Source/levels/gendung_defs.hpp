@@ -56,8 +56,11 @@ enum _setlevels : int8_t {
 	SL_ARENA_HELL,
 	SL_ARENA_CIRCLE_OF_LIFE,
 
+	SL_MIXTEST, // POE2 Mashup: tile-set mixing test map (Cathedral arena with a Tristram yard)
+
 	SL_FIRST_ARENA = SL_ARENA_CHURCH,
-	SL_LAST = SL_ARENA_CIRCLE_OF_LIFE,
+	SL_LAST_ARENA = SL_ARENA_CIRCLE_OF_LIFE,
+	SL_LAST = SL_MIXTEST,
 };
 
 inline bool IsArenaLevel(_setlevels setLevel)

@@ -20,9 +20,11 @@
 #include "data/iterators.hpp"
 #include "data/record_reader.hpp"
 #include "engine/clx_sprite.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "missiles.h"
 #include "mpq/mpq_common.hpp"
+#include "poe2/hd.hpp"
 #include "sound_effect_enums.h"
 #include "tables/spelldat.h"
 #include "utils/file_name_generator.hpp"
@@ -165,17 +167,23 @@ void LoadMissileSpriteData()
 	MissileAnimLengths.shrink_to_fit();
 }
 
+} // namespace
+
 std::expected<MissileDataFlags, std::string> ParseMissileDataFlag(std::string_view value)
 {
 	if (value == "Physical") return MissileDataFlags::Physical;
 	if (value == "Fire") return MissileDataFlags::Fire;
 	if (value == "Lightning") return MissileDataFlags::Lightning;
-	if (value == "Magic") return MissileDataFlags::Magic;
-	if (value == "Acid") return MissileDataFlags::Acid;
+	// The missile tables call it Magic, Diablo's name; Cold reads the same.
+	if (value == "Magic" || value == "Cold") return MissileDataFlags::Cold;
+	// The missile tables call it Acid, Diablo's name; Chaos reads the same.
+	if (value == "Acid" || value == "Chaos") return MissileDataFlags::Chaos;
 	if (value == "Arrow") return MissileDataFlags::Arrow;
 	if (value == "Invisible") return MissileDataFlags::Invisible;
 	return std::unexpected("Unknown enum value");
 }
+
+namespace {
 
 // NOLINTNEXTLINE(readability-function-cognitive-complexity)
 std::expected<MissileData::AddFn, std::string> ParseMissileAddFn(std::string_view value)
@@ -216,6 +224,7 @@ std::expected<MissileData::AddFn, std::string> ParseMissileAddFn(std::string_vie
 	if (value == "AddLightningControl") return AddLightningControl;
 	if (value == "AddLightning") return AddLightning;
 	if (value == "AddMissileExplosion") return AddMissileExplosion;
+	if (value == "AddVisualEffect") return AddVisualEffect;
 	if (value == "AddWeaponExplosion") return AddWeaponExplosion;
 	if (value == "AddTownPortal") return AddTownPortal;
 	if (value == "AddFlashBottom") return AddFlashBottom;
@@ -287,6 +296,7 @@ std::expected<MissileData::ProcessFn, std::string> ParseMissileProcessFn(std::st
 	if (value == "ProcessChainLightning") return ProcessChainLightning;
 	if (value == "ProcessWeaponExplosion") return ProcessWeaponExplosion;
 	if (value == "ProcessMissileExplosion") return ProcessMissileExplosion;
+	if (value == "ProcessVisualEffect") return ProcessVisualEffect;
 	if (value == "ProcessAcidSplate") return ProcessAcidSplate;
 	if (value == "ProcessTeleport") return ProcessTeleport;
 	if (value == "ProcessStoneCurse") return ProcessStoneCurse;
@@ -390,7 +400,7 @@ void LoadMisdat()
 	}
 
 	// Sanity check because we do not actually parse the IDs yet.
-	assert(static_cast<size_t>(MissileID::LastDiablo) + 1 == MissilesData.size() || static_cast<size_t>(MissileID::LAST) + 1 == MissilesData.size());
+	assert(static_cast<size_t>(MissileID::LastDiablo) + 1 == MissilesData.size() || static_cast<size_t>(MissileID::LastHellfire) + 1 == MissilesData.size() || static_cast<size_t>(MissileID::LAST) + 1 == MissilesData.size());
 
 	MissilesData.shrink_to_fit();
 }
@@ -429,6 +439,8 @@ std::expected<void, std::string> MissileFileData::LoadGFX()
 		FileNameGenerator pathGenerator({ "missiles\\", name }, DEVILUTIONX_CL2_EXT);
 		ASSIGN_OR_RETURN(OwnedClxSpriteSheet spriteSheet, LoadMultipleCl2Sheet<16>(pathGenerator, animFAmt, animWidth));
 		sprites.emplace(OwnedClxSpriteListOrSheet { std::move(spriteSheet) });
+		// One file per direction: HD art is named like a sheet, missiles/<name>/d<direction>_f<frame>.
+		hd::RegisterSprites(StrCat("missiles\\", name), ClxSpriteListOrSheet { *sprites });
 	}
 #endif
 	return {};
@@ -437,6 +449,11 @@ std::expected<void, std::string> MissileFileData::LoadGFX()
 MissileFileData &GetMissileSpriteData(MissileGraphicID graphicId)
 {
 	return MissileSpriteData[static_cast<std::underlying_type_t<MissileGraphicID>>(graphicId)];
+}
+
+bool HasMissileSpriteData(MissileGraphicID graphicId)
+{
+	return static_cast<size_t>(graphicId) < MissileSpriteData.size();
 }
 
 void LoadMissileData()
@@ -450,6 +467,12 @@ const MissileData &GetMissileData(MissileID missileId)
 	return MissilesData[static_cast<std::underlying_type_t<MissileID>>(missileId)];
 }
 
+bool HasMissileData(MissileID missileId)
+{
+	const auto index = static_cast<std::underlying_type_t<MissileID>>(missileId);
+	return index >= 0 && static_cast<size_t>(index) < MissilesData.size();
+}
+
 std::expected<void, std::string> InitMissileGFX()
 {
 	if (HeadlessMode)
@@ -459,6 +482,17 @@ std::expected<void, std::string> InitMissileGFX()
 		if (missileSprite.flags == MissileGraphicsFlags::MonsterOwned)
 			continue;
 		RETURN_IF_ERROR(missileSprite.LoadGFX());
+	}
+	// POE2 Mashup: skills and their effects also use some monster missiles, so those are always loaded.
+	if (gbIsPoe2) {
+		for (const MissileGraphicID graphic : { MissileGraphicID::MagmaBall, MissileGraphicID::ThinLightning, MissileGraphicID::BloodStarRed, MissileGraphicID::BloodStarRedExplosion,
+		         MissileGraphicID::BloodStarBlue, MissileGraphicID::BloodStarBlueExplosion, MissileGraphicID::DiabloApocalypseBoom,
+		         MissileGraphicID::BlueFlare2, MissileGraphicID::BlueFlareExplosion, MissileGraphicID::BlueFlareExplosion2,
+		         MissileGraphicID::AcidSplat, MissileGraphicID::RedFlareExplosion }) {
+			// The red flare only comes with the Hellfire mod.
+			if (HasMissileSpriteData(graphic))
+				RETURN_IF_ERROR(GetMissileSpriteData(graphic).LoadGFX());
+		}
 	}
 	return {};
 }

@@ -1,0 +1,39 @@
+id	name	family	becomes	drops	lines	perfect	special	dropAct	dropWeight	text	perfectText
+Vigor	Vigor	maximum_life	Body	0							
+Clarity	Clarity	maximum_mana	Mind	0							
+Ember	Ember	fire_resistance	Insulation	0							
+Frost	Frost	cold_resistance	Thawing	0							
+Storm	Storm	lightning_resistance	Grounding	0							
+Might	Might	local_increased_physical	Abrasion	0							
+Celerity	Celerity	attack_speed	Haste	0							
+Sorcery	Sorcery	cast_speed	Alacrity	0							
+Precision	Precision	accuracy_rating	Battle	0							
+Warding	Warding	all_elemental_resistance	Enhancement	0							
+Spirit	Spirit	spirit_flat	Infinite	0							
+Summoning	Summoning	minion_damage	Command	0							
+Body	the Body	maximum_life		1	maximum_life	essence_life_percent		0	100	Maximum Life	8-10% increased maximum Life (body armour)
+Mind	the Mind	maximum_mana		1	maximum_mana	essence_mana_percent		0	100	Maximum Mana	4-6% increased maximum Mana (ring)
+Insulation	Insulation	fire_resistance		1	fire_resistance	essence_fire_recoup		0	100	Fire Resistance	26-30% of Fire Damage taken recouped as Life (shield)
+Thawing	Thawing	cold_resistance		1	cold_resistance	essence_cold_recoup		0	100	Cold Resistance	26-30% of Cold Damage taken recouped as Life (helmet)
+Grounding	Grounding	lightning_resistance		1	lightning_resistance	essence_lightning_recoup		0	100	Lightning Resistance	26-30% of Lightning Damage taken recouped as Life (ring)
+Abrasion	Abrasion	local_added_physical		1	local_added_physical	local_increased_physical		0	100	Added Physical Damage (martial weapon)	high Increased Physical Damage (martial weapon)
+Haste	Haste	attack_speed		1	attack_speed	attack_speed		0	100	Attack Speed (martial weapon)	high Attack Speed (martial weapon)
+Alacrity	Alacrity	cast_speed		1	cast_speed	essence_mana_cost,essence_mana_cost_staff		0	100	Cast Speed	18-32% increased Mana Cost Efficiency (wand, focus or staff)
+Battle	Battle	accuracy_rating		1	accuracy_rating	melee_skill_levels,projectile_skill_levels		0	100	Accuracy	+1-3 to melee or projectile skill levels (martial weapon)
+Enhancement	Enhancement	increased_armour		1	increased_armour,increased_evasion,increased_energy_shield,hybrid_armour_evasion,hybrid_armour_es,hybrid_evasion_es	essence_global_defences		0	100	Increased Armour, Evasion or Energy Shield (armour)	20-30% increased Armour, Evasion and Energy Shield (amulet)
+Infinite	the Infinite	strength		1	strength,dexterity,intelligence	all_attributes		0	100	Strength, Dexterity or Intelligence	high All Attributes (amulet or body armour)
+Command	Command	minion_damage		1	minion_damage	sceptre_minion_skill_levels,minion_skill_levels		0	100	Minion Damage	+1-2 to minion skill levels
+Ruin	Ruin	chaos_resistance		1	chaos_resistance	essence_max_chaos_resistance		0	100	Chaos Resistance	+2-3% to Maximum Chaos Resistance (body armour)
+Flames	Flames	local_added_fire		1	local_added_fire	essence_gain_as_fire,essence_gain_as_fire_2h		0	100	Added Fire Damage (martial weapon)	15-33% of Damage as Extra Fire (martial weapon)
+Ice	Ice	local_added_cold		1	local_added_cold	essence_gain_as_cold,essence_gain_as_cold_2h		0	100	Added Cold Damage (melee weapon)	15-33% of Damage as Extra Cold (martial weapon)
+Electricity	Electricity	local_added_lightning		1	local_added_lightning	essence_gain_as_lightning,essence_gain_as_lightning_2h		0	100	Added Lightning Damage (martial weapon)	15-33% of Damage as Extra Lightning (martial weapon)
+SpellSorcery	Sorcery	spell_damage		1	spell_damage	spell_skill_levels		0	100	Spell Damage (staff or wand)	+1-6 to spell skill levels
+Seeking	Seeking	essence_attack_crit		1	essence_attack_crit	essence_attack_crit		0	100	Attack Critical Hit Chance (martial weapon)	+4-5% to Attack Critical Hit Chance (martial weapon)
+Opulence	Opulence	item_rarity		1	item_rarity,item_rarity_prefix	essence_gold_find		0	100	Item Rarity	10-15% increased Gold from slain enemies (ring)
+Terror	Terror	terror_minion_levels		1	terror_minion_levels,terror_thorns,terror_block,terror_mana_regen,terror_life_recoup			3	8	adds a line for its slot: helmet, body armour, shield, ring or amulet	
+Hatred	Hatred			1			Hatred	3	8	makes the augments in it 50% stronger, but not resistances	
+Destruction	Destruction			1			Destruction	3	8	its next corruption gives two enchantments	
+Lies	Lies			1			Lies	3	8	adds a hidden desecrated modifier	
+Sin	Sin			1			Sin	3	8	body armour: allocates a random notable passive	
+Pain	Pain			1			Pain	3	8	ring or amulet: its quality can reach 30%	
+Anguish	Anguish	anguish_poison		1	anguish_poison			3	8	adds a strong poison line (martial weapon)	

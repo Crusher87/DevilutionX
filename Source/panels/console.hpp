@@ -16,6 +16,8 @@ namespace devilution {
 void InitConsole();
 bool IsConsoleOpen();
 void OpenConsole();
+/** @brief Hides the console, e.g. so the effects it covers can be seen. */
+void CloseConsole();
 bool ConsoleHandleEvent(const SDL_Event &event);
 void DrawConsole(const Surface &out);
 void RunInConsole(std::string_view code);

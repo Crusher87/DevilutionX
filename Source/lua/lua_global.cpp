@@ -34,11 +34,14 @@
 #include "lua/modules/log.hpp"
 #include "lua/modules/monsters.hpp"
 #include "lua/modules/player.hpp"
+#include "lua/modules/poe2.hpp"
 #include "lua/modules/render.hpp"
 #include "lua/modules/system.hpp"
 #include "lua/modules/towners.hpp"
 #include "options.h"
 #include "plrmsg.h"
+#include "poe2/modifiers.hpp"
+#include "poe2/passive_tree.hpp"
 #include "stores.h"
 #include "utils/console.h"
 #include "utils/log.hpp"
@@ -246,6 +249,7 @@ void LuaReloadActiveMods()
 	ClearTownerDialogOptions();
 
 	gbIsHellfire = false;
+	gbIsPoe2 = false;
 	UnloadModArchives();
 
 	std::vector<std::string_view> modnames = GetOptions().Mods.GetActiveModList();
@@ -274,11 +278,24 @@ void LuaReloadActiveMods()
 	LoadMissileData();
 	LoadMonsterData();
 	LoadItemData();
+	LoadPassiveTreeData();
+	LoadModifierData();
 	LoadObjectData();
 	LoadQuestData();
 
 	lua::LoadModsComplete();
 }
+
+namespace {
+
+/** @brief A mod was switched on or off. POE2 mode always plays on Hellfire, so Hellfire is switched back on first, and that change reloads the mods. */
+void OnModToggled()
+{
+	if (!GetOptions().Mods.SwitchOnHellfireForPoe2())
+		LuaReloadActiveMods();
+}
+
+} // namespace
 
 void LuaInitialize()
 {
@@ -313,6 +330,7 @@ void LuaInitialize()
 	    "devilutionx.render", LuaRenderModule(lua),
 	    "devilutionx.towners", LuaTownersModule(lua),
 	    "devilutionx.hellfire", LuaHellfireModule(lua),
+	    "devilutionx.poe2", LuaPoe2Module(lua),
 	    "devilutionx.system", LuaSystemModule(lua),
 	    "devilutionx.floatingnumbers", LuaFloatingNumbersModule(lua),
 	    "devilutionx.message", [](std::string_view text) { EventPlrMsg(text, UiFlags::ColorRed); },
@@ -323,10 +341,10 @@ void LuaInitialize()
 	lua["setEnvironment"] = [](const sol::environment &env, const sol::function &fn) { sol::set_environment(env, fn); };
 
 	for (OptionEntryBase *mod : GetOptions().Mods.GetEntries()) {
-		mod->SetValueChangedCallback(LuaReloadActiveMods);
+		mod->SetValueChangedCallback(OnModToggled);
 	}
 
-	LuaReloadActiveMods();
+	OnModToggled();
 }
 
 void LuaShutdown()

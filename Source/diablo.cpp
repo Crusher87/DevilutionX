@@ -36,6 +36,7 @@
 #include "controls/keymapper.hpp"
 #include "controls/plrctrls.h"
 #include "controls/remap_keyboard.h"
+#include "controls/wasd_movement.hpp"
 #include "diablo.h"
 #include "diablo_msg.hpp"
 #include "discord/discord.h"
@@ -66,6 +67,7 @@
 #include "levels/gendung.h"
 #include "levels/setmaps.h"
 #include "levels/themes.h"
+#include "levels/tileset_mix.hpp"
 #include "levels/town.h"
 #include "levels/trigs.h"
 #include "lighting.h"
@@ -81,14 +83,50 @@
 #include "nthread.h"
 #include "objects.h"
 #include "options.h"
+#include "panels/anvil_panel.hpp"
+#include "panels/atlas_panel.hpp"
 #include "panels/console.hpp"
+#include "panels/desecration_panel.hpp"
+#include "panels/gemcutting_panel.hpp"
 #include "panels/info_box.hpp"
+#include "panels/item_spawner.hpp"
+#include "panels/skill_lab_panel.hpp"
 #include "panels/partypanel.hpp"
+#include "panels/passive_tree_panel.hpp"
 #include "panels/quest_log.hpp"
+#include "panels/quest_reward_panel.hpp"
+#include "panels/skill_bar.hpp"
+#include "panels/skills_panel.hpp"
 #include "panels/spell_book.hpp"
 #include "panels/spell_list.hpp"
+#include "panels/stack_split_panel.hpp"
+#include "panels/stash_tabs_panel.hpp"
 #include "pfile.h"
 #include "plrmsg.h"
+#include "poe2/aim.hpp"
+#include "poe2/autosave.hpp"
+#include "poe2/charms.hpp"
+#include "poe2/corner_map.hpp"
+#include "poe2/currency.hpp"
+#include "poe2/default_attack.hpp"
+#include "poe2/defenses.hpp"
+#include "poe2/dodge_roll.hpp"
+#include "poe2/cathedral_floors.hpp"
+#include "poe2/floors.hpp"
+#include "poe2/hardcore.hpp"
+#include "poe2/hd.hpp"
+#include "poe2/economy.hpp"
+#include "poe2/level_census.hpp"
+#include "poe2/minion_travel.hpp"
+#include "poe2/modifiers.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/skill_lab.hpp"
+#include "poe2/shrines.hpp"
+#include "poe2/telemetry.hpp"
+#include "poe2/waystones.hpp"
+#include "poe2/weapon_skills.hpp"
+#include "poe2/weapon_swap.hpp"
+#include "portal.h"
 #include "qol/chatlog.h"
 #include "qol/floatingnumbers.h"
 #include "qol/itemlabels.h"
@@ -163,6 +201,9 @@ extern void plrctrls_after_game_logic();
 
 namespace {
 
+/** @brief Where `--hd-export` writes the dungeon frames for the HD pack maker. */
+std::string HdExportDir;
+
 char gszVersionNumber[64] = "internal version unknown";
 
 bool gbGameLoopStartup;
@@ -227,7 +268,10 @@ bool ProcessInput()
 
 	plrctrls_every_frame();
 
-	if (!gbIsMultiplayer && gmenu_is_active()) {
+	if (!gbIsMultiplayer && (gmenu_is_active() || IsItemSpawnerOpen() || IsPassiveTreeOpen() || IsGemcuttingOpen() || IsDesecrationRevealOpen() || IsAtlasOpen() || IsAnvilOpen())) {
+		// POE2 Mashup: the item or monster hovered when the panel opened isn't hovered under it.
+		if (gbIsPoe2 && !gmenu_is_active())
+			CheckCursMove();
 		RedrawViewport();
 		return false;
 	}
@@ -238,7 +282,9 @@ bool ProcessInput()
 #endif
 		CheckCursMove();
 		plrctrls_after_check_curs_move();
+		SkillLabAfterCursorMove();
 		RepeatPlayerAction();
+		RepeatHeldTraySlot();
 	}
 
 	return true;
@@ -250,15 +296,42 @@ void LeftMouseCmd(bool bShift)
 
 	assert(!GetMainPanel().contains(MousePosition));
 
+	// POE2 Mashup: with WASD movement, clicking the ground doesn't walk and attacks don't chase.
+	const bool wasdMovement = IsWasdMovementEnabled();
+	// POE2 Mashup: a town portal, stairs or a quest entrance takes the hero through only when it's clicked.
+	if (trigflag && pcursitem == -1 && pcursmonst == -1) {
+		ChoosePortalAt(cursPosition);
+		ChooseLevelExitAt(cursPosition);
+	} else {
+		ForgetChosenPortal();
+		ForgetChosenLevelExit();
+	}
+	// POE2 Mashup: Ctrl+click on stairs asks for a fresh floor on the other side.
+	Poe2ForceFreshFloor = trigflag && pcursitem == -1 && pcursmonst == -1 && (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
+
+	// POE2 Mashup: clicking a portal or stairs walks into it, even with WASD movement.
+	if (wasdMovement && trigflag && pcursitem == -1 && pcursmonst == -1) {
+		LastPlayerAction = PlayerActionType::Walk;
+		NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
+		return;
+	}
+
 	if (leveltype == DTYPE_TOWN) {
 		CloseGoldWithdraw();
 		CloseStash();
 		CloseVisualStore();
 		if (pcursitem != -1 && pcurs == CURSOR_HAND)
 			NetSendCmdLocParam1(true, invflag ? CMD_GOTOGETITEM : CMD_GOTOAGETITEM, cursPosition, pcursitem);
-		if (pcursmonst != -1)
+		if (pcursmonst != -1) {
+			QuickTradeTowner = (SDL_GetModState() & SDL_KMOD_CTRL) != 0 ? pcursmonst : -1;
 			NetSendCmdLocParam1(true, CMD_TALKXY, cursPosition, pcursmonst);
-		if (pcursitem == -1 && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
+		}
+		// POE2 Mashup: clicking the well walks to it and refills the charms.
+		if (gbIsPoe2 && pcursitem == -1 && pcursmonst == -1 && IsTownWellTile(cursPosition)) {
+			ClickTownWell(*MyPlayer);
+			return;
+		}
+		if (!wasdMovement && pcursitem == -1 && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
 			LastPlayerAction = PlayerActionType::Walk;
 			NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
 		}
@@ -267,12 +340,26 @@ void LeftMouseCmd(bool bShift)
 
 	const Player &myPlayer = *MyPlayer;
 	bNear = myPlayer.position.tile.WalkingDistance(cursPosition) < 2;
+	// POE2 Mashup: a bow shoots where it's clicked: a barrel from where the hero stands, and with WASD movement the ground
+	// or the space beside a monster too, instead of doing nothing (Curtis 2026-10-20). A caster's staff or a sceptre fires
+	// its staff bolt the same way: POE2's caster weapons don't melee.
+	const bool rangedAttack = AttacksAtRange(myPlayer);
+	const bool shootsWhereClicked = gbIsPoe2 && rangedAttack;
+	// POE2 Mashup: a caster weapon's granted skill is its left click (caster-weapons-plan-v2.md 6.6); doors, chests and
+	// people to talk to still work as before, and barrels are blasted like monsters.
+	const bool grantedSkill = UsesGrantedSkill(myPlayer) && (ObjectUnderCursor == nullptr || ObjectUnderCursor->IsDisabled() || ObjectUnderCursor->_oBreak == 1)
+	    && (pcursmonst == -1 || !CanTalkToMonst(Monsters[pcursmonst]));
 	if (pcursitem != -1 && pcurs == CURSOR_HAND && !bShift) {
 		NetSendCmdLocParam1(true, invflag ? CMD_GOTOGETITEM : CMD_GOTOAGETITEM, cursPosition, pcursitem);
+	} else if (grantedSkill) {
+		TryUseGrantedSkill(*MyPlayer);
+	} else if (shootsWhereClicked && pcursmonst == -1 && ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled() && ObjectUnderCursor->_oBreak == 1) {
+		LastPlayerAction = PlayerActionType::Attack;
+		NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, AimAlongCursor(myPlayer, AimTiles));
 	} else if (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled() && (!bShift || (bNear && ObjectUnderCursor->_oBreak == 1))) {
 		LastPlayerAction = PlayerActionType::OperateObject;
 		NetSendCmdLoc(MyPlayerId, true, pcurs == CURSOR_DISARM ? CMD_DISARMXY : CMD_OPOBJXY, cursPosition);
-	} else if (myPlayer.UsesRangedWeapon()) {
+	} else if (rangedAttack) {
 		if (bShift) {
 			LastPlayerAction = PlayerActionType::Attack;
 			NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, cursPosition);
@@ -286,8 +373,12 @@ void LeftMouseCmd(bool bShift)
 		} else if (PlayerUnderCursor != nullptr && !PlayerUnderCursor->hasNoLife() && !myPlayer.friendlyMode) {
 			LastPlayerAction = PlayerActionType::AttackPlayerTarget;
 			NetSendCmdParam1(true, CMD_RATTACKPID, PlayerUnderCursor->getId());
+		} else if (shootsWhereClicked && wasdMovement && InDungeonBounds(cursPosition)) {
+			LastPlayerAction = PlayerActionType::Attack;
+			NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, AimAlongCursor(myPlayer, AimTiles));
 		}
 	} else {
+		// POE2 Mashup: clicking a monster walks up to it and attacks, with WASD movement too; Shift attacks in place.
 		if (bShift) {
 			if (pcursmonst != -1) {
 				if (CanTalkToMonst(Monsters[pcursmonst])) {
@@ -308,9 +399,44 @@ void LeftMouseCmd(bool bShift)
 			NetSendCmdParam1(true, CMD_ATTACKPID, PlayerUnderCursor->getId());
 		}
 	}
-	if (!bShift && pcursitem == -1 && ObjectUnderCursor == nullptr && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
+	if (!bShift && !wasdMovement && pcursitem == -1 && ObjectUnderCursor == nullptr && pcursmonst == -1 && PlayerUnderCursor == nullptr) {
 		LastPlayerAction = PlayerActionType::Walk;
 		NetSendCmdLoc(MyPlayerId, true, CMD_WALKXY, cursPosition);
+	}
+}
+
+/**
+ * @brief POE2 Mashup: uses what the skill tray puts on a mouse button in the dungeon.
+ * @return false if the button does its usual job instead.
+ */
+bool UseTrayMouseButton(TraySlot slot, bool isShiftHeld)
+{
+	if (!IsSkillBarShown() || leveltype == DTYPE_TOWN)
+		return false;
+	const TrayBinding binding = MyPlayer->poe2.tray[static_cast<size_t>(slot)];
+	if (binding == DefaultTrayBinding(slot) && binding.action != TrayAction::WeaponAttack)
+		return false;
+	// The left button still picks up items, opens chests and doors, takes stairs and portals, and talks.
+	if (slot == TraySlot::LeftMouse
+	    && (pcursitem != -1 || trigflag || (ObjectUnderCursor != nullptr && !ObjectUnderCursor->IsDisabled())
+	        || (pcursmonst != -1 && CanTalkToMonst(Monsters[pcursmonst]))))
+		return false;
+	switch (binding.action) {
+	case TrayAction::WeaponAttack:
+		// With click-to-move, the left button's weapon attack also walks where it's clicked, like Diablo's left click.
+		if (slot == TraySlot::LeftMouse && !IsWasdMovementEnabled()) {
+			if (ReadyWeaponSet(*MyPlayer, binding.socket))
+				LeftMouseCmd(isShiftHeld);
+			return true;
+		}
+		PressTraySlot(slot);
+		return true;
+	case TrayAction::Gem:
+	case TrayAction::Command:
+		PressTraySlot(slot);
+		return true;
+	default:
+		return false;
 	}
 }
 
@@ -363,12 +489,20 @@ void LeftMouseDown(uint16_t modState)
 	}
 
 	if (IsPlayerInStore()) {
-		CheckStoreBtn();
-		return;
+		// POE2 Mashup: a click outside a towner's talk menu closes it and goes on, so the hero walks off at once.
+		if (gbIsPoe2 && !StoreWindowContainsMouse()) {
+			CloseTalkMenu();
+		} else {
+			CheckStoreBtn();
+			return;
+		}
 	}
 
 	const bool isShiftHeld = (modState & SDL_KMOD_SHIFT) != 0;
 	const bool isCtrlHeld = (modState & SDL_KMOD_CTRL) != 0;
+
+	if (!gmenu_is_active() && HandleSkillBarClick(MousePosition))
+		return;
 
 	if (!GetMainPanel().contains(MousePosition)) {
 		if (!gmenu_is_active() && !TryIconCurs()) {
@@ -393,8 +527,13 @@ void LeftMouseDown(uint16_t modState)
 					CheckVisualStoreItem(MousePosition, isCtrlHeld, isShiftHeld);
 				}
 				CheckVisualStoreButtonPress(MousePosition);
+			} else if (SkillsPanelContains(MousePosition)) {
+				HandleSkillsPanelClick(MousePosition);
 			} else if (SpellbookFlag && GetRightPanel().contains(MousePosition)) {
 				CheckSBook();
+			} else if (HasPendingPurchase()) {
+				// A ware that isn't paid for can't be dropped on the ground.
+				CancelPendingPurchase();
 			} else if (!MyPlayer->HoldItem.isEmpty()) {
 				if (!TryOpenDungeonWithMouse()) {
 					const Point currentPosition = MyPlayer->position.tile;
@@ -406,11 +545,16 @@ void LeftMouseDown(uint16_t modState)
 				}
 			} else {
 				CheckLevelButton();
-				if (!LevelButtonDown)
+				if (!LevelButtonDown && !UseTrayMouseButton(TraySlot::LeftMouse, isShiftHeld))
 					LeftMouseCmd(isShiftHeld);
 			}
 		}
 	} else {
+		// POE2 Mashup: currency on the cursor goes on the flask under it in the belt, as it does in the bag.
+		if (gbIsPoe2 && pcurs == CURSOR_OIL && !gmenu_is_active() && pcursinvitem >= INVITEM_BELT_FIRST && pcursinvitem <= INVITEM_BELT_LAST) {
+			TryIconCurs();
+			return;
+		}
 		if (!ChatFlag && !DropGoldFlag && !IsWithdrawGoldOpen && !gmenu_is_active())
 			CheckInvScrn(isShiftHeld, isCtrlHeld);
 		CheckMainPanelButton();
@@ -464,8 +608,21 @@ void RightMouseDown(bool isShiftHeld)
 	}
 	if (SpellbookFlag && GetRightPanel().contains(MousePosition))
 		return;
+	if (HandleSkillBarRightClick(MousePosition))
+		return;
 	if (TryIconCurs())
 		return;
+	// POE2 Mashup: Shift+right-click at Adria disenchants an item. Salvaging is at the anvil beside the smithy.
+	if (gbIsPoe2 && isShiftHeld && IsVisualStoreOpen && MyPlayer->HoldItem.isEmpty() && pcursinvitem >= INVITEM_INV_FIRST && pcursinvitem <= INVITEM_INV_LAST
+	    && VisualStore.vendor == VisualStoreVendor::Witch) {
+		if (DisenchantInvItem(*MyPlayer, pcursinvitem - INVITEM_INV_FIRST))
+			PlaySFX(SfxID::ItemGold);
+		return;
+	}
+	// POE2 Mashup: right-clicking equipment in the inventory puts it on, swapping out what was worn.
+	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
+		return;
+	SetStickyItemUse(isShiftHeld);
 	if (pcursinvitem != -1 && UseInvItem(pcursinvitem))
 		return;
 	if (pcursstashitem != StashStruct::EmptyCell && UseStashItem(pcursstashitem))
@@ -473,7 +630,8 @@ void RightMouseDown(bool isShiftHeld)
 	if (DidRightClickPartyPortrait())
 		return;
 	if (pcurs == CURSOR_HAND) {
-		CheckPlrSpell(isShiftHeld);
+		if (!UseTrayMouseButton(TraySlot::RightMouse, isShiftHeld))
+			CheckPlrSpell(isShiftHeld);
 	} else if (pcurs > CURSOR_HAND && pcurs < CURSOR_FIRSTITEM) {
 		NewCursor(CURSOR_HAND);
 	}
@@ -482,7 +640,15 @@ void RightMouseDown(bool isShiftHeld)
 void ReleaseKey(SDL_Keycode vkey)
 {
 	remap_keyboard_key(&vkey);
+	// POE2 Mashup: letting go of Shift ends Shift+click currency use straight away, so the normal cursor comes back
+	// (Curtis 2026-10-29). Currency is only spent on use, so nothing is lost.
+	if (gbIsPoe2 && IsAnyOf(vkey, SDLK_LSHIFT, SDLK_RSHIFT) && IsAnyOf(pcurs, CURSOR_IDENTIFY, CURSOR_OIL) && StickyItemUseActive()) {
+		SetStickyItemUse(false);
+		NewCursor(CURSOR_HAND);
+	}
 	if (sgnTimeoutCurs != CURSOR_NONE)
+		return;
+	if (WasdMovementKeyReleased(vkey))
 		return;
 	KeymapperRelease(vkey);
 }
@@ -498,6 +664,7 @@ void ClosePanels()
 	}
 	CloseInventory();
 	CloseCharPanel();
+	CloseSkillsPanel();
 	SpellbookFlag = false;
 	QuestLogIsOpen = false;
 }
@@ -516,7 +683,9 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 
 	if (MyPlayerIsDead) {
 		if (vkey == SDLK_ESCAPE) {
-			if (!gbIsMultiplayer) {
+			if (HardcoreHeroFell()) {
+				ContinueInSoftcore(*MyPlayer);
+			} else if (!gbIsMultiplayer) {
 				if (gbValidSaveFile)
 					gamemenu_load_game(false);
 				else
@@ -564,6 +733,13 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 		return;
 	}
 
+	if (!ChatFlag && WasdMovementKeyPressed(vkey)) {
+		// POE2 Mashup: walking off closes a towner's talk menu, like the stash, and the walk goes on.
+		if (gbIsPoe2 && IsPlayerInStore())
+			CloseTalkMenu();
+		return;
+	}
+
 	KeymapperPress(vkey);
 
 	if (PauseMode == 2) {
@@ -586,6 +762,8 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	case SDLK_KP_EQUALS:
 		if (AutomapActive) {
 			AutomapZoomIn();
+		} else if (gbIsPoe2) {
+			CornerMapZoomKey(1);
 		}
 		return;
 	case SDLK_MINUS:
@@ -593,6 +771,8 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	case SDLK_UNDERSCORE:
 		if (AutomapActive) {
 			AutomapZoomOut();
+		} else if (gbIsPoe2) {
+			CornerMapZoomKey(-1);
 		}
 		return;
 #ifdef _DEBUG
@@ -705,6 +885,10 @@ void HandleMouseButtonDown(Uint8 button, uint16_t modState)
 
 void HandleMouseButtonUp(Uint8 button, uint16_t modState)
 {
+	if (button == SDL_BUTTON_LEFT)
+		ReleaseTraySlot(TraySlot::LeftMouse);
+	else if (button == SDL_BUTTON_RIGHT)
+		ReleaseTraySlot(TraySlot::RightMouse);
 	if (sgbMouseDown == CLICK_LEFT && button == SDL_BUTTON_LEFT) {
 		LastPlayerAction = PlayerActionType::None;
 		sgbMouseDown = CLICK_NONE;
@@ -760,6 +944,47 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 		return;
 	}
 
+	if (StackSplitHandleEvent(event)) {
+		return;
+	}
+
+	if (QuestRewardHandleEvent(event)) {
+		return;
+	}
+
+	if (SkillLabPanelHandleEvent(event)) {
+		return;
+	}
+
+	if (ItemSpawnerHandleEvent(event)) {
+		return;
+	}
+
+	if (StashTabsHandleEvent(event)) {
+		return;
+	}
+
+	if (ShopSearchHandleEvent(event)) {
+		return;
+	}
+
+	if (PassiveTreeHandleEvent(event)) {
+		return;
+	}
+
+	if (DesecrationRevealHandleEvent(event)) {
+		return;
+	}
+	if (AtlasHandleEvent(event)) {
+		return;
+	}
+	if (GemcuttingHandleEvent(event)) {
+		return;
+	}
+	if (AnvilHandleEvent(event)) {
+		return;
+	}
+
 #ifdef _DEBUG
 	if (ConsoleHandleEvent(event)) {
 		return;
@@ -810,6 +1035,8 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				ChatLogScrollUp();
 			} else if (IsStashOpen) {
 				Stash.PreviousPage();
+			} else if (gbIsPoe2 && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
+				VisualStorePreviousPage();
 			} else if (SDL_GetModState() & SDL_KMOD_CTRL) {
 				if (AutomapActive) {
 					AutomapZoomIn();
@@ -828,6 +1055,8 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				ChatLogScrollDown();
 			} else if (IsStashOpen) {
 				Stash.NextPage();
+			} else if (gbIsPoe2 && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
+				VisualStoreNextPage();
 			} else if (SDL_GetModState() & SDL_KMOD_CTRL) {
 				if (AutomapActive) {
 					AutomapZoomOut();
@@ -847,14 +1076,19 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 			if (gbIsMultiplayer)
 				pfile_write_hero();
 			nthread_ignore_mutex(true);
-			PaletteFadeOut(8);
+			TelemetryLoadingStarted("level change");
+			// POE2 Mashup: quick fades between levels, and no loading screen when the level loads quickly.
+			PaletteFadeOut(LevelChangeFadeSpeed());
+			TelemetryLoadingFadedOut();
 			sound_stop();
 			ShowProgress(GetCustomEvent(event));
 
 			PrepareForFadeIn();
 			LoadPWaterPalette();
+			TelemetryLoadingFadingIn();
 			if (gbRunGame)
-				PaletteFadeIn(8);
+				PaletteFadeIn(LevelChangeFadeSpeed());
+			TelemetryLoadingDone();
 			nthread_ignore_mutex(false);
 			gbGameLoopStartup = true;
 			return;
@@ -870,6 +1104,8 @@ void RunGameLoop(interface_mode uMsg)
 
 	nthread_ignore_mutex(true);
 	StartGame(uMsg);
+	TelemetryGameStarted(*MyPlayer, uMsg == WM_DIABLOADGAME);
+	TelemetryLoadingStarted("game start");
 	assert(HeadlessMode || ghMainWnd);
 	EventHandler previousHandler = SetEventHandler(GameEventHandler);
 	run_delta_info();
@@ -879,7 +1115,9 @@ void RunGameLoop(interface_mode uMsg)
 
 	PrepareForFadeIn();
 	LoadPWaterPalette();
+	TelemetryLoadingFadingIn();
 	PaletteFadeIn(8);
+	TelemetryLoadingDone();
 	InitBackbufferState();
 	RedrawEverything();
 	gbGameLoopStartup = true;
@@ -911,6 +1149,8 @@ void RunGameLoop(interface_mode uMsg)
 		uint16_t modState;
 		while (FetchMessage(&event, &modState)) {
 			if (event.type == SDL_EVENT_QUIT) {
+				// POE2 Mashup: closing the window saves, as there is no Save Game.
+				AutosaveNow();
 				gbRunGameResult = false;
 				gbRunGame = false;
 				break;
@@ -966,6 +1206,7 @@ void RunGameLoop(interface_mode uMsg)
 	scrollrt_draw_game_screen();
 	previousHandler = SetEventHandler(previousHandler);
 	assert(HeadlessMode || previousHandler == GameEventHandler);
+	TelemetryGameEnded();
 	FreeGame();
 
 	if (cineflag) {
@@ -1151,6 +1392,12 @@ void DiabloParseFlags(int argc, char **argv)
 			EnableFrameCount();
 		} else if (arg == "--spawn") {
 			forceSpawn = true;
+		} else if (arg == "--hd-export") {
+			if (i + 1 == argc) {
+				PrintFlagRequiresArgument("--hd-export");
+				diablo_quit(64);
+			}
+			HdExportDir = argv[++i];
 		} else if (arg == "--diablo") {
 			forceDiablo = true;
 		} else if (arg == "--hellfire") {
@@ -1360,6 +1607,8 @@ void DiabloDeinit()
 std::expected<void, std::string> LoadLvlGFX()
 {
 	assert(pDungeonCels == nullptr);
+	if (tilesetmix::Active())
+		return tilesetmix::LoadMixedLvlGFX();
 	constexpr int SpecialCelWidth = 64;
 
 	const auto loadAll = [](const char *cel, const char *til, const char *special) -> std::expected<void, std::string> {
@@ -1419,6 +1668,33 @@ std::expected<void, std::string> LoadLvlGFX()
 	default:
 		return std::unexpected("LoadLvlGFX");
 	}
+}
+
+/** @brief Writes every dungeon type's frames for the HD pack maker (POE2 Mashup `--hd-export`). */
+void HdExportAll()
+{
+	tilesetmix::Clear();
+	constexpr dungeon_type Levels[] = { DTYPE_TOWN, DTYPE_CATHEDRAL, DTYPE_CATACOMBS, DTYPE_CAVES, DTYPE_HELL, DTYPE_NEST, DTYPE_CRYPT };
+	for (const dungeon_type level : Levels) {
+		leveltype = level;
+		pDungeonCels = nullptr;
+		pMegaTiles = nullptr;
+		pSpecialCels = std::nullopt;
+		std::memset(DPieceMicros, 0, sizeof(DPieceMicros));
+		if (!LoadLevelSOLData().has_value() || !LoadLvlGFX().has_value()) {
+			LogInfo("HD export: skipping level type {}", static_cast<int>(level));
+			pDungeonCels = nullptr;
+			continue;
+		}
+		SetDungeonMicros(pDungeonCels, MicroTileLen);
+		MakeLightTable();
+		LoadPaletteAndInitBlending(hd::PackPalette(static_cast<uint8_t>(level)));
+		hd::ExportLevelTiles(HdExportDir);
+		LogInfo("HD export: wrote level type {}", static_cast<int>(level));
+	}
+	pDungeonCels = nullptr;
+	pMegaTiles = nullptr;
+	pSpecialCels = std::nullopt;
 }
 
 std::expected<void, std::string> LoadAllGFX()
@@ -1522,6 +1798,10 @@ void UpdateMonsterLights()
 
 void GameLogic()
 {
+	// POE2 Mashup: the Skill Lab's pause holds the game still, one tick at a time when stepping.
+	if (SkillLabHoldsTick()) {
+		return;
+	}
 	if (!ProcessInput()) {
 		return;
 	}
@@ -1529,6 +1809,9 @@ void GameLogic()
 		gGameLogicStep = GameLogicStep::ProcessPlayers;
 		ProcessPlayers();
 	}
+	TelemetryTick();
+	Poe2FloorsTick();
+	SettlePendingPurchase();
 	if (leveltype != DTYPE_TOWN) {
 		gGameLogicStep = GameLogicStep::ProcessMonsters;
 #ifdef _DEBUG
@@ -1552,6 +1835,7 @@ void GameLogic()
 		ProcessMissiles();
 	}
 	gGameLogicStep = GameLogicStep::None;
+	SkillLabTick();
 
 #ifdef _DEBUG
 	if (DebugScrollViewEnabled && (SDL_GetModState() & SDL_KMOD_SHIFT) != 0) {
@@ -1564,6 +1848,19 @@ void GameLogic()
 	CheckQuests();
 	RedrawViewport();
 	pfile_update(false);
+	// POE2 Mashup: the act's quest hands over its Book of Specialisation at the hero's feet, like POE2's quest
+	// rewards; a hero whose tree was redrawn on load sees it open with a line saying what changed.
+	if (MyPlayer != nullptr) {
+		const uint32_t handedBefore = MyPlayer->poe2.questsRewarded;
+		HandOutQuestBooks(*MyPlayer);
+		if ((MyPlayer->poe2.questsRewarded & ~handedBefore & ~BooksOnlyFlag) != 0)
+			RequestAutosave("quest reward");
+		ShowPendingTreeNotice();
+	}
+	ProcessAutosave();
+	CloseInteractionPanelsWhenAway();
+	// POE2 Mashup: a towner's quest reward offers itself once the talk text is gone.
+	UpdateQuestRewardOffer();
 
 	plrctrls_after_game_logic();
 }
@@ -1659,7 +1956,7 @@ void InventoryKeyPressed()
 	}
 	SpellbookFlag = false;
 	CloseGoldWithdraw();
-	CloseStash();
+	CloseStashForPanel();
 	CloseVisualStore();
 }
 
@@ -1707,8 +2004,9 @@ void QuestLogKeyPressed()
 		}
 	}
 	CloseCharPanel();
+	CloseSkillsPanel();
 	CloseGoldWithdraw();
-	CloseStash();
+	CloseStashForPanel();
 	CloseVisualStore();
 }
 
@@ -1953,8 +2251,20 @@ void InitKeymapActions()
 	    N_("Item highlighting"),
 	    N_("Show/hide items on ground."),
 	    SDLK_LALT,
-	    [] { HighlightKeyPressed(true); },
-	    [] { HighlightKeyPressed(false); });
+	    // POE2 Mashup: Alt toggles the labels, which stay up until it's pressed again; the loot filter decides which show.
+	    // Over an item it only shows the item's modifier details, so checking an item doesn't flip the labels.
+	    [] {
+		    if (gbIsPoe2) {
+			    if (pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursitem == -1)
+				    ToggleItemLabelHighlight();
+		    } else {
+			    HighlightKeyPressed(true);
+		    }
+	    },
+	    [] {
+		    if (!gbIsPoe2)
+			    HighlightKeyPressed(false);
+	    });
 	options.Keymapper.AddAction(
 	    "ToggleItemHighlighting",
 	    N_("Toggle item highlighting"),
@@ -2007,7 +2317,8 @@ void InitKeymapActions()
 	    "QuestLog",
 	    N_("Quest log"),
 	    N_("Open Quest log."),
-	    'Q',
+	    // POE2 Mashup: Q is the first skill tray key.
+	    'L',
 	    QuestLogKeyPressed,
 	    nullptr,
 	    CanPlayerTakeAction);
@@ -2036,6 +2347,18 @@ void InitKeymapActions()
 	    N_("Hide all info screens."),
 	    SDLK_SPACE,
 	    [] {
+		    // POE2 Mashup: Space dodge rolls, as in POE2, and leaves the map and panels open; it only dismisses
+		    // menus and messages that stop play.
+		    if (gbIsPoe2) {
+			    const bool modalShown = SpellSelectFlag || qtextflag || IsDiabloMsgAvailable() || gmenu_is_active() || DoomFlag;
+			    if (!modalShown) {
+				    // Rolling away from a towner closes the talk menu, like walking off does.
+				    if (TryDodgeRoll(*MyPlayer) && IsPlayerInStore())
+					    CloseTalkMenu();
+				    return;
+			    }
+		    }
+
 		    if (CanAutomapBeToggledOff())
 			    AutomapActive = false;
 
@@ -2065,6 +2388,20 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    CanPlayerTakeAction);
+	// POE2 Mashup: H turns the whole HD look (the upscaled art, its in-betweens, HD Lighting and the moods, which all
+	// ride on it) on or off at once (Curtis 2026-11-07). In the passive tree H is still the heat map.
+	options.Keymapper.AddAction(
+	    "ToggleHD",
+	    N_("HD on/off"),
+	    N_("Turns the HD art, smoothing and lighting on or off."),
+	    'H',
+	    [] {
+		    OptionEntryBoolean &hd = GetOptions().Graphics.hdGraphics;
+		    hd.SetValue(!*hd);
+		    EventPlrMsg(*hd ? _("HD on") : _("HD off"));
+	    },
+	    nullptr,
+	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
 	options.Keymapper.AddAction(
 	    "PauseGame",
 	    N_("Pause Game"),
@@ -2081,7 +2418,7 @@ void InitKeymapActions()
 	    "DecreaseBrightness",
 	    N_("Decrease Brightness"),
 	    N_("Reduce screen brightness."),
-	    'F',
+	    SDLK_UNKNOWN,
 	    DecreaseBrightness,
 	    nullptr,
 	    CanPlayerTakeAction);
@@ -2089,7 +2426,7 @@ void InitKeymapActions()
 	    "IncreaseBrightness",
 	    N_("Increase Brightness"),
 	    N_("Increase screen brightness."),
-	    'G',
+	    SDLK_UNKNOWN,
 	    IncreaseBrightness,
 	    nullptr,
 	    CanPlayerTakeAction);
@@ -2112,7 +2449,7 @@ void InitKeymapActions()
 	    "GameInfo",
 	    N_("Game info"),
 	    N_("Displays game infos."),
-	    'V',
+	    SDLK_UNKNOWN,
 	    [] {
 		    EventPlrMsg(FormatRuntime(
 		                    _(/* TRANSLATORS: {:s} means: Project Name, Game Version. */ "{:s} {:s}"),
@@ -2126,7 +2463,7 @@ void InitKeymapActions()
 	    "ChatLog",
 	    N_("Chat Log"),
 	    N_("Displays chat log."),
-	    'L',
+	    SDLK_UNKNOWN,
 	    [] {
 		    ToggleChatLog();
 	    });
@@ -2134,7 +2471,7 @@ void InitKeymapActions()
 	    "SortInv",
 	    N_("Sort Inventory"),
 	    N_("Sorts the inventory."),
-	    'R',
+	    SDLK_UNKNOWN,
 	    [] {
 		    ReorganizeInventory(*MyPlayer);
 	    });
@@ -2154,6 +2491,81 @@ void InitKeymapActions()
 		    DebugToggle = !DebugToggle;
 	    });
 #endif
+	options.Keymapper.AddAction(
+	    "ItemSpawner",
+	    N_("Item Spawner"),
+	    N_("Opens the searchable item spawner for testing (POE2 Mashup, single player)."),
+	    SDLK_INSERT,
+	    ToggleItemSpawner,
+	    nullptr,
+	    [] { return !gbIsMultiplayer && !gmenu_is_active(); });
+	options.Keymapper.AddAction(
+	    "SkillsPanel",
+	    N_("Skills"),
+	    N_("Opens the skills panel: your skill gems and their support sockets (POE2 Mashup)."),
+	    'K',
+	    [] {
+		    if (!gbIsPoe2 || IsPlayerInStore())
+			    return;
+		    ToggleSkillsPanel();
+	    },
+	    nullptr,
+	    [] { return gbIsPoe2 && !gmenu_is_active(); });
+	options.Keymapper.AddAction(
+	    "AtlasPassives",
+	    N_("Atlas"),
+	    N_("Opens the Atlas passives, where completed maps give points (POE2 Mashup)."),
+	    'U',
+	    [] {
+		    if (!gbIsPoe2 || IsPlayerInStore())
+			    return;
+		    ToggleAtlas();
+	    },
+	    nullptr,
+	    [] { return gbIsPoe2 && !gmenu_is_active(); });
+	// POE2 opens the passive tree with P. Outside the mod (or in multiplayer) P still pauses.
+	options.Keymapper.AddAction(
+	    "PassiveTree",
+	    N_("Passive Tree"),
+	    N_("Opens the passive skill tree (POE2 Mashup, single player). Pauses the game otherwise."),
+	    'P',
+	    [] {
+		    if (gbIsPoe2 && !gbIsMultiplayer)
+			    TogglePassiveTree();
+		    else
+			    diablo_pause_game();
+	    },
+	    nullptr,
+	    [] { return !gmenu_is_active(); });
+	// POE2 Mashup skill tray. Added last so its keys win over older saved bindings.
+	constexpr std::array<uint32_t, NumTrayKeys> TrayKeys { 'Q', 'E', 'R', 'T', 'F', 'G' };
+	for (uint32_t i = 0; i < NumTrayKeys; ++i) {
+		options.Keymapper.AddAction(
+		    "TraySlot{}",
+		    N_("Skill tray key {}"),
+		    N_("Use the skill on this skill tray slot (POE2 Mashup)."),
+		    TrayKeys[i],
+		    [i] { PressTraySlot(TrayKeySlot(i)); },
+		    [i] { ReleaseTraySlot(TrayKeySlot(i)); },
+		    CanPlayerTakeAction,
+		    i + 1);
+	}
+	options.Keymapper.AddAction(
+	    "TraySlotMiddle",
+	    N_("Skill tray middle button"),
+	    N_("Use the skill on the middle mouse button's skill tray slot (POE2 Mashup)."),
+	    SDL_BUTTON_MIDDLE | KeymapperMouseButtonMask,
+	    [] { PressTraySlot(TraySlot::MiddleMouse); },
+	    [] { ReleaseTraySlot(TraySlot::MiddleMouse); },
+	    CanPlayerTakeAction);
+	options.Keymapper.AddAction(
+	    "SwapWeapons",
+	    N_("Swap weapons"),
+	    N_("Swaps between weapon sets I and II (POE2 Mashup)."),
+	    'X',
+	    [] { SwapWeapons(*MyPlayer); },
+	    nullptr,
+	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
 	options.Keymapper.CommitActions();
 }
 
@@ -2708,6 +3120,7 @@ bool StartGame(bool bNewGame, bool bSinglePlayer)
 			InitPortals();
 			InitDungMsgs(*MyPlayer);
 			DeltaSyncJunk();
+			SkillLabPrepareNewGame();
 		}
 		giNumberOfLevels = gbIsHellfire ? 25 : 17;
 		interface_mode uMsg = WM_DIABNEWGAME;
@@ -2769,6 +3182,7 @@ int DiabloMain(int argc, char **argv)
 	// Read settings including translation next. This will use the presence of fonts.mpq and look for assets in devilutionx.mpq
 	LoadOptions();
 	if (demo::IsRunning()) demo::OverrideOptions();
+	if (!demo::IsRunning()) TelemetryInit();
 
 	// Then look for a voice pack file based on the selected translation
 	LoadLanguageArchive();
@@ -2796,10 +3210,16 @@ int DiabloMain(int argc, char **argv)
 	LoadMissileData();
 	LoadMonsterData();
 	LoadItemData();
+	LoadPassiveTreeData();
+	LoadModifierData();
 	LoadObjectData();
 	LoadQuestData();
 
 	DiabloInit();
+	if (!HdExportDir.empty()) {
+		HdExportAll();
+		diablo_quit(0);
+	}
 #ifdef __UWP__
 	onInitialized();
 #endif
@@ -2841,6 +3261,15 @@ bool TryIconCurs()
 
 	Player &myPlayer = *MyPlayer;
 
+	if (pcurs == CURSOR_IDENTIFY && gbIsPoe2) {
+		IdentifyWithScroll(myPlayer);
+		// With Shift, the next scroll stays on the cursor.
+		if (!WantsStickyItemUse() || !HasIdentifyScroll(myPlayer)) {
+			SetStickyItemUse(false);
+			NewCursor(CURSOR_HAND);
+		}
+		return true;
+	}
 	if (pcurs == CURSOR_IDENTIFY) {
 		if (pcursinvitem != -1 && !IsInspectingPlayer())
 			CheckIdentify(myPlayer, pcursinvitem);
@@ -2848,6 +3277,7 @@ bool TryIconCurs()
 			Item &item = Stash.stashList[pcursstashitem];
 			item._iIdentified = true;
 			Stash.dirty = true;
+			TelemetryItemAction(myPlayer, "identify", item, "scroll or spell, in the stash");
 		}
 		NewCursor(CURSOR_HAND);
 		return true;
@@ -2881,16 +3311,30 @@ bool TryIconCurs()
 	}
 
 	if (pcurs == CURSOR_OIL) {
+		// POE2 Mashup: with the last one used up, nothing is left to craft with (Shift kept the cursor going for free).
+		if (gbIsPoe2 && !HeldCurrencyAvailable(myPlayer)) {
+			SetStickyItemUse(false);
+			NewCursor(CURSOR_HAND);
+			return true;
+		}
 		bool changeCursor = true;
 		if (pcursinvitem != -1 && !IsInspectingPlayer())
 			changeCursor = DoOil(myPlayer, pcursinvitem);
-		else if (pcursstashitem != StashStruct::EmptyCell) {
-			Item &item = Stash.stashList[pcursstashitem];
-			changeCursor = ApplyOilToItem(item, myPlayer);
-			Stash.dirty = true;
+		else if (gbIsPoe2 && JewellerSocket(CurrencyOrbForMiscId(myPlayer._pOilType)) && SkillsPanelContains(MousePosition)) {
+			// Jeweller's Orbs go on a skill in the Skills panel.
+			changeCursor = UseJewellerOnSkillsPanel(myPlayer, MousePosition);
+			if (changeCursor) {
+				SpendHeldCurrency(myPlayer);
+				PlaySFX(SfxID::ItemRing);
+				PlaySFX(SfxID::SpellHolyBolt);
+			}
+		} else if (pcursstashitem != StashStruct::EmptyCell) {
+			changeCursor = DoOilOnStashItem(myPlayer, pcursstashitem);
 		}
-		if (changeCursor)
+		if (changeCursor && !(gbIsPoe2 && KeepCurrencyOnCursor(myPlayer))) {
+			SetStickyItemUse(false);
 			NewCursor(CURSOR_HAND);
+		}
 		return true;
 	}
 
@@ -2931,6 +3375,7 @@ void diablo_pause_game()
 			qtextflag = false;
 			LastPlayerAction = PlayerActionType::None;
 		}
+		TelemetryPauseChanged("pause key");
 
 		RedrawEverything();
 	}
@@ -2951,6 +3396,7 @@ bool diablo_is_focused()
 
 void diablo_focus_pause()
 {
+	ReleaseAllTraySlots();
 	if (!movie_playing && (gbIsMultiplayer || MinimizePaused)) {
 		return;
 	}
@@ -2961,6 +3407,7 @@ void diablo_focus_pause()
 		PauseMode = 2;
 		sound_stop();
 		LastPlayerAction = PlayerActionType::None;
+		TelemetryPauseChanged("window lost focus");
 	}
 
 	SVidMute();
@@ -2973,6 +3420,7 @@ void diablo_focus_unpause()
 {
 	if (!GameWasAlreadyPaused) {
 		PauseMode = 0;
+		TelemetryPauseChanged("window got focus");
 	}
 
 	SVidUnmute();
@@ -2984,6 +3432,13 @@ void diablo_focus_unpause()
 bool PressEscKey()
 {
 	bool rv = false;
+
+	// POE2 Mashup: Escape puts down a tool cursor, like a Scroll of Identify's or an orb's.
+	if (gbIsPoe2 && pcurs > CURSOR_HAND && pcurs < CURSOR_FIRSTITEM) {
+		SetStickyItemUse(false);
+		NewCursor(CURSOR_HAND);
+		return true;
+	}
 
 	if (DoomFlag) {
 		doom_close();
@@ -3031,9 +3486,24 @@ bool PressEscKey()
 		rv = true;
 	}
 
+	if (IsStackSplitOpen()) {
+		CloseStackSplit();
+		rv = true;
+	}
+
+	if (IsQuestRewardOpen()) {
+		CloseQuestReward();
+		rv = true;
+	}
+
 	if (SpellSelectFlag) {
 		SpellSelectFlag = false;
 		rv = true;
+	}
+
+	if (IsSkillTrayPopupOpen()) {
+		CloseSkillTrayPopup();
+		return true;
 	}
 
 	if (IsLeftPanelOpen() || IsRightPanelOpen()) {
@@ -3118,6 +3588,7 @@ void LoadGameLevelFirstFlagEntry()
 		InitHelp();
 	}
 	InitStores();
+	ClearQuestRewards();
 	InitAutomapOnce();
 }
 
@@ -3137,26 +3608,34 @@ void LoadGameLevelStash()
 	gbIsHellfireSaveGame = gbIsHellfire;
 	LoadStash();
 	gbIsHellfireSaveGame = isHellfireSaveGame;
+	TelemetryStashLoaded();
 }
 
 std::expected<void, std::string> LoadGameLevelDungeon(bool firstflag, lvl_entry lvldir, const Player &myPlayer)
 {
-	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pLvlVisited[currlevel] || gbIsMultiplayer) {
+	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pLvlVisited[currlevel] || gbIsMultiplayer || Poe2FloorFresh) {
+		LevelCensusNoteBuilt();
+		TelemetryStep("theme rooms");
 		HoldThemeRooms();
 		[[maybe_unused]] const uint32_t mid1Seed = GetLCGEngineState();
 		InitGolems();
+		TelemetryStep("objects");
 		InitObjects();
 		[[maybe_unused]] const uint32_t mid2Seed = GetLCGEngineState();
 
 		IncProgress();
 
+		TelemetryStep("monsters");
 		RETURN_IF_ERROR(InitMonsters());
+		TelemetryStep("items");
 		InitItems();
+		TelemetryStep("theme room contents");
 		CreateThemeRooms();
 
 		IncProgress();
 
 		[[maybe_unused]] const uint32_t mid3Seed = GetLCGEngineState();
+		TelemetryStep("missiles");
 		InitMissiles();
 		InitCorpses();
 #ifdef _DEBUG
@@ -3243,6 +3722,7 @@ std::expected<void, std::string> LoadGameLevelTown(bool firstflag, lvl_entry lvl
 		}
 	}
 
+	ClearObjectsForTown();
 	InitTowners();
 	InitStash();
 	InitVisualStore();
@@ -3298,7 +3778,7 @@ std::expected<void, std::string> LoadGameLevelSetLevel(bool firstflag, lvl_entry
 	InitMultiView();
 	IncProgress();
 
-	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pSLvlVisited[setlvlnum] || gbIsMultiplayer) {
+	if (firstflag || lvldir == ENTRY_LOAD || !myPlayer._pSLvlVisited[setlvlnum] || gbIsMultiplayer || Poe2FloorFresh) {
 		InitItems();
 		SavePreLighting();
 	} else {
@@ -3318,6 +3798,7 @@ std::expected<void, std::string> LoadGameLevelSetLevel(bool firstflag, lvl_entry
 
 std::expected<void, std::string> LoadGameLevelStandardLevel(bool firstflag, lvl_entry lvldir, const Player &myPlayer)
 {
+	TelemetryStep("generating the level");
 	CreateLevel(lvldir);
 
 	IncProgress();
@@ -3325,8 +3806,10 @@ std::expected<void, std::string> LoadGameLevelStandardLevel(bool firstflag, lvl_
 	SetRndSeedForDungeonLevel();
 
 	if (leveltype != DTYPE_TOWN) {
+		TelemetryStep("monster types");
 		RETURN_IF_ERROR(GetLevelMTypes());
 		InitThemes();
+		TelemetryStep("graphics");
 		if (!HeadlessMode)
 			RETURN_IF_ERROR(LoadAllGFX());
 	} else if (!HeadlessMode) {
@@ -3355,6 +3838,7 @@ std::expected<void, std::string> LoadGameLevelStandardLevel(bool firstflag, lvl_
 
 	IncProgress();
 
+	TelemetryStep("players");
 	LoadGameLevelInitPlayers(firstflag, lvldir);
 	InitMultiView();
 
@@ -3389,6 +3873,21 @@ void LoadGameLevelCrypt()
 	}
 }
 
+/** @brief Recalculates resistances when the player reaches a deeper area, and tells them about the new penalty. */
+void UpdateResistancePenalty(Player &player)
+{
+	if (!gbIsPoe2)
+		return;
+	const int penalty = ResistancePenalty(player);
+	const int previous = player.poe2.resistancePenalty;
+	if (penalty == previous)
+		return;
+	player.poe2.resistancePenalty = penalty;
+	CalcPlrInv(player, true);
+	if (previous >= 0 && penalty > previous && &player == MyPlayer)
+		EventPlrMsg(StrCat("Your resistances are now reduced by ", penalty, "%"), UiFlags::ColorRed);
+}
+
 void LoadGameLevelCalculateCursor()
 {
 	// Recalculate mouse selection of entities after level change/load
@@ -3411,14 +3910,20 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	IncProgress();
 
+	TelemetryStep(StrCat("start, level ", currlevel, ", type ", static_cast<int>(leveltype)));
+	tilesetmix::SelectForCurrentLevel();
 	RETURN_IF_ERROR(LoadTrns());
 	MakeLightTable();
-	RETURN_IF_ERROR(LoadLevelSOLData());
+	RETURN_IF_ERROR(tilesetmix::Active() ? tilesetmix::LoadMixedSOLData() : LoadLevelSOLData());
 
 	IncProgress();
 
+	TelemetryStep("tile graphics");
 	RETURN_IF_ERROR(LoadLvlGFX());
-	SetDungeonMicros(pDungeonCels, MicroTileLen);
+	if (tilesetmix::Active())
+		tilesetmix::SetMixedDungeonMicros(pDungeonCels, MicroTileLen);
+	else
+		SetDungeonMicros(pDungeonCels, MicroTileLen);
 	ClearClxDrawCache();
 
 	IncProgress();
@@ -3433,6 +3938,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	if (firstflag || lvldir == ENTRY_LOAD) {
 		LoadGameLevelStash();
+		MoveInventoryGoldToLeague(*MyPlayer);
 	}
 
 	IncProgress();
@@ -3443,11 +3949,16 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 		InitLighting();
 	}
 
+	TelemetryStep("automap and light");
 	InitLevelMonsters();
 
 	IncProgress();
 
 	const Player &myPlayer = *MyPlayer;
+
+	// POE2 Mashup: a floor left alone long enough is built fresh instead of loaded from the save.
+	Poe2BeginFloorVisit(firstflag, lvldir);
+	SetCathedralFunnelFloor(false);
 
 	if (setlevel) {
 		RETURN_IF_ERROR(LoadGameLevelSetLevel(firstflag, lvldir, myPlayer));
@@ -3455,8 +3966,11 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 		RETURN_IF_ERROR(LoadGameLevelStandardLevel(firstflag, lvldir, myPlayer));
 	}
 
+	TelemetryStep("portals");
 	SyncPortals();
 	LoadGameLevelSyncPlayerEntry(lvldir);
+	// POE2 Mashup: the hero's minions arrive beside them; in town they wait for the next dungeon level (Curtis 2026-10-29).
+	BringMinionsAlong(*MyPlayer);
 
 	IncProgress();
 	IncProgress();
@@ -3467,6 +3981,7 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 
 	IncProgress();
 
+	TelemetryStep("monster lights");
 	UpdateMonsterLights();
 	UnstuckChargers();
 
@@ -3481,10 +3996,16 @@ std::expected<void, std::string> LoadGameLevel(bool firstflag, lvl_entry lvldir)
 #endif
 	LoadGameLevelStartMusic(neededTrack);
 
+	TelemetryStep("finishing");
 	CompleteProgress();
 
 	MarkWalkabilityChanged();
 	LoadGameLevelCalculateCursor();
+	UpdateResistancePenalty(*MyPlayer);
+	UpdateActiveMap(*MyPlayer);
+	OnShrineLevelEntered(*MyPlayer);
+	TelemetryLevelEntered();
+	SkillLabLevelLoaded();
 	return {};
 }
 

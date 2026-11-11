@@ -161,6 +161,7 @@ std::expected<MissileID, std::string> ParseMissileId(std::string_view value)
 	if (value == "BlueExplosion") return MissileID::BlueExplosion;
 	if (value == "BlueExplosion2") return MissileID::BlueExplosion2;
 	if (value == "OrangeExplosion") return MissileID::OrangeExplosion;
+	if (value == "VisualEffect") return MissileID::VisualEffect;
 	return std::unexpected("Unknown enum value");
 }
 

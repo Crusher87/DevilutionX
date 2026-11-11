@@ -1,0 +1,429 @@
+#include <algorithm>
+#include <string>
+#include <utility>
+
+#include <gtest/gtest.h>
+
+#include "engine/assets.hpp"
+#include "engine/random.hpp"
+#include "game_mode.hpp"
+#include "items.h"
+#include "player.h"
+#include "poe2/bases.hpp"
+#include "poe2/default_attack.hpp"
+#include "poe2/gem_levels.hpp"
+#include "poe2/gemcutting.hpp"
+#include "poe2/skill_details.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/support_table.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/weapon_skills.hpp"
+#include "spells.h"
+#include "tables/playerdat.hpp"
+
+namespace devilution {
+namespace {
+
+class Poe2WeaponSkillsTest : public ::testing::Test {
+public:
+	void SetUp() override
+	{
+		Players.resize(1);
+		MyPlayer = &Players[0];
+		gbIsSpawn = false;
+		gbIsMultiplayer = false;
+		gbIsHellfire = true;
+		gbIsPoe2 = true;
+		UnloadModArchives();
+		LoadModArchives({ { "hf", "poe2" } });
+		LoadItemData();
+		LoadSpellData();
+	}
+
+	void TearDown() override
+	{
+		gbIsPoe2 = false;
+		UnloadModArchives();
+	}
+
+	static Item MakeBase(std::string_view name)
+	{
+		// The row that drops, else the one of that name (the Focused and Quick staves and sceptres no longer drop; saved
+		// ones still exist).
+		for (const bool dropping : { true, false }) {
+			for (size_t i = 0; i < AllItemsList.size(); i++) {
+				if (AllItemsList[i].iName == name && (!dropping || AllItemsList[i].dropRate > 0)) {
+					Item item;
+					InitializeItem(item, static_cast<_item_indexes>(i));
+					return item;
+				}
+			}
+		}
+		return {};
+	}
+};
+
+TEST_F(Poe2WeaponSkillsTest, WeaponTypesGrantSkills)
+{
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Glass Shank")), WeaponSkill::Flurry);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Shortsword")), WeaponSkill::Cleave);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Splitting Greataxe")), WeaponSkill::Cleave);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Felled Greatclub")), WeaponSkill::GroundSlam);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Recurve Bow")), WeaponSkill::Barrage);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Quick Pilgrim Staff")), WeaponSkill::WhirlingStaff);
+	EXPECT_EQ(WeaponSkillForItem(MakeBase("Hide Buckler")), WeaponSkill::None);
+	EXPECT_EQ(WeaponSkillForItem(Item {}), WeaponSkill::None);
+
+	Player &player = *MyPlayer;
+	player = {};
+	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Recurve Bow");
+	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::Barrage);
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Felled Greatclub");
+	EXPECT_EQ(WeaponSkillFor(player), WeaponSkill::GroundSlam);
+}
+
+// Q40 (Curtis 2026-11-07): Frenzy, Whirlwind and Leap Attack are sword skills, not dagger ones; Double Swing and
+// Cleave still work with a dagger (the 10-22 plan).
+TEST_F(Poe2WeaponSkillsTest, FrenzyWhirlwindAndLeapAttackTakeNoDagger)
+{
+	const Item dagger = MakeBase("Glass Shank");
+	const Item sword = MakeBase("Shortsword");
+	for (const WeaponSkill skill : { WeaponSkill::Frenzy, WeaponSkill::Whirlwind, WeaponSkill::LeapSlam }) {
+		EXPECT_FALSE(ItemAllowsWeaponSkill(dagger, skill)) << WeaponSkillName(skill);
+		EXPECT_TRUE(ItemAllowsWeaponSkill(sword, skill)) << WeaponSkillName(skill);
+	}
+	for (const WeaponSkill skill : { WeaponSkill::Flurry, WeaponSkill::Cleave })
+		EXPECT_TRUE(ItemAllowsWeaponSkill(dagger, skill)) << WeaponSkillName(skill);
+}
+
+// Q41 (Curtis 2026-11-07): Condemn pays a spell's mana (13 -> 17), Blessed Shield a melee attack's (9 -> 6), and
+// Haunt's and Locust Swarm's grow x5 by gem 20 like the other damaging spells (32 -> 53, 51 -> 85).
+TEST_F(Poe2WeaponSkillsTest, PassFourManaFixes)
+{
+	const auto at = [](WeaponSkill skill, int gemLevel) { return GemBaseManaCost(SkillSlot::ForAttack(skill), gemLevel); };
+	EXPECT_NE(SkillTags(SkillSlot::ForAttack(WeaponSkill::Condemn)) & ST_Spell, 0U);
+	EXPECT_EQ(SkillTags(SkillSlot::ForAttack(WeaponSkill::Condemn)) & ST_Attack, 0U);
+	EXPECT_EQ(at(WeaponSkill::Condemn, 1), 17);
+	EXPECT_TRUE(HasMeleeManaCut(WeaponSkill::BlessedShield));
+	EXPECT_EQ(at(WeaponSkill::BlessedShield, 1), 6);
+	EXPECT_EQ(at(WeaponSkill::Haunt, 20), 53);
+	EXPECT_EQ(at(WeaponSkill::LocustSwarm, 20), 85);
+}
+
+// Q41: Frozen Armor, Holy Shield and Shield Wall show as Buff, not Attack, Frozen Armor as Cold; the poison skills and
+// Witch's Bog show Poison; Counterstrike is in the Shield tab too.
+TEST_F(Poe2WeaponSkillsTest, PassFourTags)
+{
+	for (const WeaponSkill skill : { WeaponSkill::FrozenArmor, WeaponSkill::HolyShield, WeaponSkill::ShieldWall }) {
+		const uint32_t tags = SkillTags(SkillSlot::ForAttack(skill));
+		EXPECT_NE(tags & ST_Buff, 0U) << WeaponSkillName(skill);
+		EXPECT_EQ(tags & (ST_Attack | ST_Spell), 0U) << WeaponSkillName(skill);
+		EXPECT_EQ(SkillTagText(SkillSlot::ForAttack(skill)).find("Attack"), std::string::npos) << WeaponSkillName(skill);
+	}
+	EXPECT_NE(SkillTags(SkillSlot::ForAttack(WeaponSkill::FrozenArmor)) & ST_Frost, 0U);
+	EXPECT_EQ(SkillTagText(SkillSlot::ForAttack(WeaponSkill::FrozenArmor)), "Buff, Duration, Cold");
+	EXPECT_NE(SkillTagText(SkillSlot::ForAttack(WeaponSkill::WitchsBog)).find("Poison"), std::string::npos);
+	EXPECT_NE(SkillTagText(SkillSlot::ForAttack(WeaponSkill::ViperStrike)).find("Poison"), std::string::npos);
+	EXPECT_EQ(SkillTagText(SkillSlot::ForAttack(WeaponSkill::Cleave)).find("Poison"), std::string::npos);
+	const auto riposte = std::find_if(GemCatalog().begin(), GemCatalog().end(), [](const GemEntry &gem) { return gem.skill == SkillSlot::ForAttack(WeaponSkill::Riposte); });
+	ASSERT_NE(riposte, GemCatalog().end());
+	EXPECT_TRUE(GemInCategory(*riposte, GemCategory::Shield));
+	EXPECT_TRUE(GemInCategory(*riposte, GemCategory::Sword));
+	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::GroundSlam), "Hits in front of you, knocks back");
+	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::Barrage), "Five arrows in quick succession at one target");
+}
+
+TEST_F(Poe2WeaponSkillsTest, EveryWeaponHasAFreeDefaultAttack)
+{
+	Player &player = *MyPlayer;
+	player = {};
+	player._pClass = HeroClass::Rogue;
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::Punch);
+	player.InvBody[INVLOC_HAND_RIGHT] = MakeBase("Hide Buckler");
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::ShieldBash);
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Shortsword");
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::SwordStrike);
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Glass Shank");
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::DaggerStab);
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Splitting Greataxe");
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::AxeChop);
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Felled Greatclub");
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::MaceSmash);
+	// A sceptre is a caster's focus, not a club: it channels the staff bolt.
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Quick Bone Sceptre");
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::StaffBolt);
+	EXPECT_TRUE(FiresStaffBolt(player));
+	player.InvBody[INVLOC_HAND_RIGHT] = {};
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Recurve Bow");
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::BowShot);
+	EXPECT_TRUE(IsRangedDefaultAttack(DefaultAttack::BowShot));
+	EXPECT_FALSE(FiresStaffBolt(player));
+
+	// A staff channels a bolt, except for a Monk, who fights with it.
+	player.InvBody[INVLOC_HAND_LEFT] = MakeBase("Quick Pilgrim Staff");
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::StaffBolt);
+	EXPECT_TRUE(FiresStaffBolt(player));
+	player._pClass = HeroClass::Monk;
+	EXPECT_EQ(DefaultAttackFor(player), DefaultAttack::StaffStrike);
+	EXPECT_FALSE(FiresStaffBolt(player));
+}
+
+TEST_F(Poe2WeaponSkillsTest, StaffBoltScalesWithTheStaff)
+{
+	Player &player = *MyPlayer;
+	player = {};
+	player._pIMinDam = 4;
+	player._pIMaxDam = 12;
+	player._pIBonusDam = 50;
+	player._pMagic = 50;
+	SetRndSeed(3);
+	for (int i = 0; i < 200; i++) {
+		const int damage = RollStaffBoltDamage(player);
+		// The staff's damage with its bonus, cut to StaffBoltDamagePercent, plus 10% of Magic.
+		EXPECT_GE(damage, ((4 + 2) * StaffBoltDamagePercent / 100) + 5);
+		EXPECT_LE(damage, ((12 + 6) * StaffBoltDamagePercent / 100) + 5);
+	}
+}
+
+TEST_F(Poe2WeaponSkillsTest, QueuedSkillPaysManaWhenTheAttackStarts)
+{
+	Player &player = *MyPlayer;
+	player = {};
+	player._pMana = Fixed26_6::fromInt(20);
+	player._pManaBase = Fixed26_6::fromInt(20);
+
+	// A melee skill isn't spent on a ranged attack.
+	player.poe2.pendingSkill = WeaponSkill::Cleave;
+	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/true);
+	EXPECT_EQ(player.poe2.activeSkill, WeaponSkill::None);
+	EXPECT_EQ(player.poe2.pendingSkill, WeaponSkill::Cleave);
+
+	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+	EXPECT_EQ(player.poe2.activeSkill, WeaponSkill::Cleave);
+	EXPECT_EQ(player.poe2.pendingSkill, WeaponSkill::None);
+	// The listed cost, x117% for Cleave's speed (half of its damage_pct 134): 3 -> 3.51, to 4.
+	EXPECT_EQ(player._pMana.whole(), 20 - GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 1));
+	EXPECT_EQ(player._pMana.whole(), 16);
+
+	// The next plain attack is normal again.
+	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+	EXPECT_EQ(player.poe2.activeSkill, WeaponSkill::None);
+
+	// Without enough mana the attack happens without the skill.
+	player._pMana = Fixed26_6::fromInt(1);
+	player.poe2.pendingSkill = WeaponSkill::GroundSlam;
+	ActivateQueuedWeaponSkill(player, /*isRangedAttack=*/false);
+	EXPECT_EQ(player.poe2.activeSkill, WeaponSkill::None);
+	EXPECT_EQ(player._pMana.whole(), 1);
+}
+
+TEST_F(Poe2WeaponSkillsTest, QueuedSkillExpires)
+{
+	Poe2PlayerData data;
+	data.pendingSkill = WeaponSkill::Flurry;
+	data.pendingSkillTicks = 2;
+	data.tick();
+	EXPECT_EQ(data.pendingSkill, WeaponSkill::Flurry);
+	data.tick();
+	EXPECT_EQ(data.pendingSkill, WeaponSkill::None);
+}
+
+TEST_F(Poe2WeaponSkillsTest, BattleCryWearsOff)
+{
+	Poe2PlayerData data;
+	data.warcryTicks = 2;
+	data.tick();
+	EXPECT_EQ(data.warcryTicks, 1);
+	data.tick();
+	data.tick();
+	EXPECT_EQ(data.warcryTicks, 0);
+	data.warcryTicks = 5;
+	data.clear();
+	EXPECT_EQ(data.warcryTicks, 0);
+}
+
+TEST_F(Poe2WeaponSkillsTest, DashSkillStrikesAsItLands)
+{
+	// Curtis 2026-10-22: Dashing Strike stood about a second after the dash before it struck. A Monk's staff swing:
+	// 13 frames, hitting on the eighth.
+	Player &player = *MyPlayer;
+	player._pAFrames = 13;
+	player._pAFNum = 8;
+	player._pdir = Direction::South;
+	player.position.tile = { 20, 20 };
+	player.position.future = player.position.tile;
+
+	const auto ticksToHit = [&player](bool quickStrike) {
+		BeginSkillAnimation(player, WeaponSkill::DashingStrike, player_graphic::Attack, player.position.tile + Direction::South, quickStrike);
+		EXPECT_EQ(player._pmode, PM_SPELL);
+		int ticks = 0;
+		while (player.AnimInfo.currentFrame != player.poe2.castFrame && ticks < 30) {
+			player.AnimInfo.processAnimation();
+			ticks++;
+		}
+		player.poe2.castSkill = WeaponSkill::None;
+		player._pmode = PM_STAND;
+		return ticks;
+	};
+	// Without the dash, the swing takes its attack time: bare-handed 1.65 a second at Dashing Strike's 75% (POE2's
+	// research row; it was 100% before), 16 ticks, hitting 7/12 of the way in.
+	EXPECT_EQ(ticksToHit(/*quickStrike=*/false), 9);
+	EXPECT_EQ(ticksToHit(/*quickStrike=*/true), DashStrikeWindupTicks);
+}
+
+TEST_F(Poe2WeaponSkillsTest, AreaSkillsHitEachMonsterForFiftyToEightyPercent)
+{
+	EXPECT_EQ(LeapSlamDamagePercent, 80);
+	// About two of Frost Nova's shards reach a monster: 2 x 50 = 100 (Curtis 2026-10-28: 25 -> 100 a shard, then 50
+	// with Firebolt, Q27). Ice Bolt's shards 100 -> 160 -> 85.
+	EXPECT_EQ(FrostNovaShardDamagePercent, 50);
+	EXPECT_EQ(IceBoltShardDamagePercent, 85);
+	// Curtis 2026-10-28: Seismic Slam's cone 75 to 50, Sweeping Wind's rings 75 and 50 to 55 and 25.
+	EXPECT_EQ(GroundSlamConeDamagePercent, 50);
+	EXPECT_EQ(WhirlingStaffInnerDamagePercent, 55);
+	EXPECT_EQ(WhirlingStaffOuterDamagePercent, 25);
+	// Lightning Arrow's burst is Diablo's 2 x character level + Dexterity / 4 again (plan step 14, Curtis 2026-10-27):
+	// with 60% of the arrow the Rogue could not clear packs.
+	EXPECT_TRUE(LightningArrowBurstFromLevel);
+	EXPECT_EQ(LightningArrowBurstPerLevel, 2);
+	EXPECT_EQ(LightningArrowBurstDexterityDivisor, 4);
+	EXPECT_EQ(LightningArrowBurstPercent, 60);
+	Player &player = *MyPlayer;
+	player = {};
+	LoadPlayerDataFiles(); // the level cap comes from the experience table
+	player._pClass = HeroClass::Rogue;
+	player.setCharacterLevel(10);
+	player._pDexterity = 40;
+	player._pIMinDam = 10;
+	player._pIMaxDam = 20;
+	// 2 x 10 + 40 / 4.
+	EXPECT_EQ(LightningArrowDamage(player), 30);
+	player.setCharacterLevel(40);
+	player._pDexterity = 200;
+	EXPECT_EQ(LightningArrowDamage(player), 130);
+	// The weapon's damage doesn't add to it: the gem curve scales the arrow and the burst alike when they hit.
+	player._pIMinDam = 100;
+	player._pIMaxDam = 200;
+	player._pIBonusDam = 50;
+	EXPECT_EQ(LightningArrowDamage(player), 130);
+}
+
+TEST_F(Poe2WeaponSkillsTest, AttackSkillsCostLessMana)
+{
+	// The mana audit's cuts for weapon attacks, at gem level 1; melee attacks then cost a third less (two thirds of
+	// GroundSlam 6, Whirlwind 8, LeapSlam 8, Smite 4, Frenzy 3, ShieldBash 4, ShadowStep 5, Vengeance 5, ViperStrike 11,
+	// Zeal 5 and SevenSidedStrike 11, rounded). Zeal and Seven-Sided Strike now strike once a use (PerHitBurst), for a
+	// quarter and a seventh of that: 3 / 4 and 7 / 7, rounded.
+	const std::pair<WeaponSkill, int> Costs[] = {
+		{ WeaponSkill::GroundSlam, 4 },
+		{ WeaponSkill::Whirlwind, 5 },
+		{ WeaponSkill::LeapSlam, 5 },
+		{ WeaponSkill::Smite, 3 },
+		{ WeaponSkill::Frenzy, 2 },
+		// Q42 (Curtis 2026-11-07): moved gems take their new tier's mana: Shield Bash 4 -> 3, Zeal 5 -> 10, Double Throw 5 -> 3.
+		{ WeaponSkill::ShieldBash, 2 },
+		{ WeaponSkill::ShadowStep, 3 },
+		{ WeaponSkill::Vengeance, 3 },
+		{ WeaponSkill::ViperStrike, 7 },
+		{ WeaponSkill::Zeal, 2 },
+		{ WeaponSkill::FanOfBlades, 5 },
+		{ WeaponSkill::DoubleThrow, 3 },
+		{ WeaponSkill::EscapeShot, 6 },
+		{ WeaponSkill::Multishot, 6 },
+		{ WeaponSkill::GuidedArrow, 5 },
+		{ WeaponSkill::RainOfArrows, 10 },
+		{ WeaponSkill::SevenSidedStrike, 1 },
+	};
+	for (const auto &[skill, cost] : Costs)
+		EXPECT_EQ(WeaponSkillManaCost(skill), cost) << WeaponSkillName(skill);
+}
+
+TEST_F(Poe2WeaponSkillsTest, MeleeSkillsCostAThirdLessMana)
+{
+	// Casters are the mana classes: Cleave 4, Double Swing 4 and Seismic Slam 6 cost 3, 3 and 4 at gem level 1.
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::Cleave), 3);
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::Flurry), 3);
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::GroundSlam), 4);
+	// Since 2026-10-27 a skill costs more by half of what its speed adds to its damage: Cleave x117%, 3.51, so 4.
+	EXPECT_EQ(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 1), 4);
+	Player &player = *MyPlayer;
+	player = {};
+	player.poe2.skillSlots[0] = SkillSlot::ForAttack(WeaponSkill::Cleave);
+	player.poe2.slotLevels[0] = 1;
+	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), 4);
+	EXPECT_EQ(SkillManaCost(player, SkillSlot::ForAttack(WeaponSkill::Cleave)), 4);
+	// The gem's level still raises it along its curve.
+	EXPECT_GT(GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 20), 3 * 3);
+
+	// Bow, spell and warcry skills keep their cost.
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::Barrage));
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::IceBolt));
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::BattleCry));
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::Multishot));
+	EXPECT_FALSE(HasMeleeManaCut(WeaponSkill::Meteor));
+	EXPECT_TRUE(HasMeleeManaCut(WeaponSkill::Fissure));
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::Barrage), 7);
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::IceBolt), 4);
+
+	// Outside POE2 mode the listed cost stands.
+	gbIsPoe2 = false;
+	EXPECT_EQ(WeaponSkillManaCost(WeaponSkill::Cleave), 4);
+	gbIsPoe2 = true;
+}
+
+TEST(Poe2WeaponSkills, GroundSlamHitsAForwardCone)
+{
+	// Facing south (down the screen), the cone covers the tiles ahead and not the ones behind or beside.
+	EXPECT_TRUE(InGroundSlamCone(Direction::South, Displacement { 1, 1 }));
+	EXPECT_TRUE(InGroundSlamCone(Direction::South, Displacement { 3, 3 }));
+	EXPECT_TRUE(InGroundSlamCone(Direction::South, Displacement { 3, 2 }));
+	EXPECT_FALSE(InGroundSlamCone(Direction::South, Displacement { -1, -1 }));
+	EXPECT_FALSE(InGroundSlamCone(Direction::South, Displacement { 1, -1 }));
+	EXPECT_FALSE(InGroundSlamCone(Direction::South, Displacement { 3, 0 }));
+}
+
+TEST(Poe2WeaponSkills, SingleTargetMeleeSkillsHitHarder)
+{
+	// Curtis 2026-10-28: Smite 100 to 300, Frenzy 100 to 200, Shield Bash 120 to 200 (audit-damage-v2.md section 7).
+	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::Smite), 300);
+	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::Frenzy), 200);
+	// Curtis 2026-11-07: Shield Bash tier III to I, x0.70.
+	EXPECT_EQ(ShieldBashDamagePercent, 140);
+	// A plain swing (and every swing outside POE2 Mashup, which has no active skill) keeps its weapon hit.
+	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::None), 100);
+	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::Flurry), 100);
+	EXPECT_EQ(SwingSkillDamagePercent(WeaponSkill::GroundSlam), 100);
+	// Double Throw and Vengeance are table rows.
+	// Double Throw tier V to I, x0.55 (Curtis 2026-11-07).
+	EXPECT_EQ(FindTableSkill(WeaponSkill::DoubleThrow)->damagePercent, 127);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Vengeance)->damagePercent, 260);
+	// Q28 (Curtis 2026-10-28, audit-damage-v3.md): the 7 weak skills raised.
+	// Then tier V to III, x0.80 (Curtis 2026-11-07).
+	EXPECT_EQ(ShieldChargeDamagePercent, 120);
+	// Hail of Arrows: each arrow 80% of a shot (Q32).
+	EXPECT_EQ(BarrageArrowDamagePercent, 80);
+	EXPECT_EQ(ShadowStepDamagePercent, 220);
+	EXPECT_EQ(VaultShotArrowDamagePercent, 140);
+	// Cobra Strike, under the 1-stack rule (Curtis 2026-11-03): 380%, and its poison is 60% of the hit a second for 2
+	// seconds, one stack (was 200% and 40%).
+	EXPECT_EQ(FindTableSkill(WeaponSkill::ViperStrike)->damagePercent, 380);
+	EXPECT_EQ(TablePoisonPercentPerSecond(*FindTableSkill(WeaponSkill::ViperStrike)), 60);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Sacrifice)->damagePercent, 330);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->damagePercent, 95);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::Multishot)->count, 7);
+	// Locust Swarm: 120% over 5 s -> 130% over 2 s (40 game ticks); a poison at 165% since the poison skills plan.
+	EXPECT_EQ(FindTableSkill(WeaponSkill::LocustSwarm)->damagePercent, 165);
+	EXPECT_EQ(FindTableSkill(WeaponSkill::LocustSwarm)->duration, 40);
+	EXPECT_EQ(WeaponSkillDescription(WeaponSkill::BattleCry), "Knock back foes, +30% melee damage");
+}
+
+TEST(Poe2WeaponSkills, FireballIsSlowAndFireboltIsFast)
+{
+	EXPECT_LT(FireballSpeedPercent, 100);
+	EXPECT_GT(FireboltSpeedPercent, 100);
+	EXPECT_GE(BarrageArrows, 5);
+	EXPECT_GE(EmberFusilladeEmbers, 5);
+}
+
+} // namespace
+} // namespace devilution

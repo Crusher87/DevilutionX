@@ -15,6 +15,8 @@
 #include "engine/render/primitive_render.hpp"
 #include "game_mode.hpp"
 #include "options.h"
+#include "poe2/monster_resistance.hpp"
+#include "tables/misdat.h"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
 
@@ -108,7 +110,8 @@ void DrawMonsterHealthBar(const Surface &out)
 
 	RenderClxSprite(out, (*healthBox)[0], position);
 	DrawHalfTransparentRectTo(out, position.x + border, position.y + border, width - (border * 2), height - (border * 2));
-	const int barProgress = (barWidth * currLife.raw()) / monster.maxHitPoints.raw();
+	// 64 bits: POE2 map bosses carry millions of life.
+	const int barProgress = static_cast<int>((static_cast<int64_t>(barWidth) * currLife.raw()) / monster.maxHitPoints.raw());
 	if (barProgress != 0) {
 		RenderClxSprite(
 		    out.subregion(position.x + border + 1, position.y + border + 1, barProgress, height - (border * 2) - 2),
@@ -162,10 +165,20 @@ void DrawMonsterHealthBar(const Surface &out)
 
 		int resOffset = 5;
 		for (size_t i = 0; i < 3; i++) {
-			if ((monster.resistance & immunes[i]) != 0) {
+			if (gbIsPoe2) {
+				// POE2 Mashup: the big icon for 50% or more, the small one below; the numbers are on the banner.
+				constexpr DamageType Types[] = { DamageType::Cold, DamageType::Fire, DamageType::Lightning };
+				const int percent = MonsterResistance(monster, Types[i]);
+				if (percent > 0) {
+					RenderClxSprite(out, (*resistance)[(i * 2) + (percent >= 50 ? 1 : 0)], position + Displacement { resOffset, height - 6 });
+					resOffset += (*resistance)[0].width() + 2;
+				}
+				continue;
+			}
+			if ((monster.shownResistance() & immunes[i]) != 0) {
 				RenderClxSprite(out, (*resistance)[(i * 2) + 1], position + Displacement { resOffset, height - 6 });
 				resOffset += (*resistance)[0].width() + 2;
-			} else if ((monster.resistance & resists[i]) != 0) {
+			} else if ((monster.shownResistance() & resists[i]) != 0) {
 				RenderClxSprite(out, (*resistance)[i * 2], position + Displacement { resOffset, height - 6 });
 				resOffset += (*resistance)[0].width() + 2;
 			}

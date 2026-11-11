@@ -86,6 +86,15 @@ void DrawLargeSpellIcon(const Surface &out, Point position, SpellID spell);
 void DrawSmallSpellIcon(const Surface &out, Point position, SpellID spell);
 
 /**
+ * Draw a small (37x38) icon by its frame, for skills that aren't spells.
+ *
+ * @param out Output buffer.
+ * @param position Buffer coordinates (bottom-left).
+ * @param icon Icon to draw.
+ */
+void DrawSmallSpellIcon(const Surface &out, Point position, SpellIcon icon);
+
+/**
  * Draw an inset 2px border for a large (56x56) spell icon.
  *
  * @param out Output buffer.

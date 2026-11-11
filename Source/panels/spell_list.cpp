@@ -13,6 +13,7 @@
 #include "options.h"
 #include "panels/spell_icons.hpp"
 #include "player.h"
+#include "poe2/support_gems.hpp"
 #include "spells.h"
 #include "utils/algorithm/container.hpp"
 #include "utils/format.hpp"
@@ -164,6 +165,10 @@ void DrawSpellList(const Surface &out)
 				AddInfoBoxString(_("Spell Level 0 - Unusable"));
 			else
 				AddInfoBoxString(FormatRuntime(_("Spell Level {:d}"), spellLevel));
+			for (const SupportGem gem : myPlayer.poe2.supportsFor(spellId)) {
+				if (gem != SupportGem::None)
+					AddInfoBoxString(FormatRuntime(_("Support: {:s}"), SupportGemName(gem)));
+			}
 			break;
 		case SpellType::Scroll: {
 			if (!myPlayer.isOnLevel(0)) {

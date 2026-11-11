@@ -423,6 +423,7 @@ void UiOnBackgroundChange()
 	//
 	// Black out the screen immediately to make it appear more smooth.
 	SDL_FillSurfaceRect(DiabloUiSurface(), nullptr, 0);
+	ClearScaledWorld();
 	if (DiabloUiSurface() == PalSurface)
 		BltFast(nullptr, nullptr);
 	RenderPresent();
@@ -798,6 +799,7 @@ void UiFadeIn()
 {
 	if (HeadlessMode) return;
 	UiUpdateFadePalette();
+	ClearScaledWorld();
 	if (DiabloUiSurface() == PalSurface) {
 		BltFast(nullptr, nullptr);
 	}

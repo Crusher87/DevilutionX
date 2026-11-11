@@ -31,6 +31,9 @@ ankerl::unordered_dense::map<int32_t, int16_t> ItemMappingIdsToIndices;
 /** Contains the mapping between unique base item ID strings and indices, used for parsing additional item data. */
 ankerl::unordered_dense::map<std::string, int8_t> AdditionalUniqueBaseItemStringsToIndices;
 
+/** POE2 Mashup: the rows of the item data named by a 'poe2:' id, which have no IDI_ name. */
+ankerl::unordered_dense::map<std::string, int16_t> Poe2ItemIdsToIndices;
+
 /** Contains the data related to each unique item ID. */
 std::vector<UniqueItem> UniqueItems;
 
@@ -50,6 +53,14 @@ std::expected<_item_indexes, std::string> ParseItemId(std::string_view value)
 		return enumValueOpt.value();
 	}
 	return std::unexpected("Unknown enum value");
+}
+
+std::optional<_item_indexes> FindPoe2ItemId(std::string_view id)
+{
+	const auto it = Poe2ItemIdsToIndices.find(std::string(id));
+	if (it == Poe2ItemIdsToIndices.end())
+		return std::nullopt;
+	return static_cast<_item_indexes>(it->second);
 }
 
 namespace {
@@ -251,12 +262,21 @@ std::expected<item_cursor_graphic, std::string> ParseItemCursorGraphic(std::stri
 	if (value == "BLITZEN") return ICURS_BLITZEN;
 	if (value == "DEMON_PLATE_ARMOR") return ICURS_DEMON_PLATE_ARMOR;
 	if (value == "BOVINE") return ICURS_BOVINE;
+	if (value == "MAGIC_ROCK_SMALL") return ICURS_MAGIC_ROCK_SMALL;
+	if (value == "MAP_OF_THE_STARS_SMALL") return ICURS_MAP_OF_THE_STARS_SMALL;
+	if (value == "BOOK_RED_SMALL") return ICURS_BOOK_RED_SMALL;
+	if (value == "TORN_NOTE_1_SMALL") return ICURS_TORN_NOTE_1_SMALL;
+	if (value == "RECONSTRUCTED_NOTE_SMALL") return ICURS_RECONSTRUCTED_NOTE_SMALL;
 	if (value == "") return ICURS_DEFAULT;
 
 	// also support providing the item cursor icon frame number directly
-	return ParseInt<uint8_t>(value)
-	    .transform([](auto numericalValue) { return static_cast<item_cursor_graphic>(numericalValue); })
-	    .transform_error([](auto) { return std::string("Unknown enum value"); });
+	const auto numericalValue = ParseInt<uint8_t>(value);
+	if (!numericalValue.has_value())
+		return std::unexpected("Unknown enum value");
+	// POE2 Mashup: only frames that have a picture (and a drop sound in ItemCAnimTbl).
+	if (*numericalValue > ICURS_RECONSTRUCTED_NOTE_SMALL && *numericalValue != ICURS_DEFAULT)
+		return std::unexpected("Item picture number out of range");
+	return static_cast<item_cursor_graphic>(*numericalValue);
 }
 
 std::expected<ItemType, std::string> ParseItemType(std::string_view value)
@@ -456,6 +476,104 @@ std::expected<item_misc_id, std::string> ParseItemMiscId(std::string_view value)
 	if (value == "AURIC") return IMISC_AURIC;
 	if (value == "NOTE") return IMISC_NOTE;
 	if (value == "ARENAPOT") return IMISC_ARENAPOT;
+	if (value == "SUPPORT_MULTIPROJ") return IMISC_SUPPORT_MULTIPROJ;
+	if (value == "SUPPORT_EMPOWER") return IMISC_SUPPORT_EMPOWER;
+	if (value == "SUPPORT_FASTCAST") return IMISC_SUPPORT_FASTCAST;
+	if (value == "SUPPORT_EFFICIENCY") return IMISC_SUPPORT_EFFICIENCY;
+	if (value == "SUPPORT_PIERCE") return IMISC_SUPPORT_PIERCE;
+	if (value == "SUPPORT_FORK") return IMISC_SUPPORT_FORK;
+	if (value == "SUPPORT_CHAIN") return IMISC_SUPPORT_CHAIN;
+	if (value == "SUPPORT_CONCENTRATED") return IMISC_SUPPORT_CONCENTRATED;
+	if (value == "SUPPORT_FASTERPROJ") return IMISC_SUPPORT_FASTERPROJ;
+	if (value == "SUPPORT_BRUTALITY") return IMISC_SUPPORT_BRUTALITY;
+	if (value == "SUPPORT_MARTIALTEMPO") return IMISC_SUPPORT_MARTIALTEMPO;
+	if (value == "SUPPORT_KNOCKBACK") return IMISC_SUPPORT_KNOCKBACK;
+	if (value == "ORB_TRANSMUTE") return IMISC_ORB_TRANSMUTE;
+	if (value == "ORB_ALCHEMY") return IMISC_ORB_ALCHEMY;
+	if (value == "ORB_CHAOS") return IMISC_ORB_CHAOS;
+	if (value == "ORB_SCOURING") return IMISC_ORB_SCOURING;
+	if (value == "ORB_AUGMENT") return IMISC_ORB_AUGMENT;
+	if (value == "ORB_REGAL") return IMISC_ORB_REGAL;
+	if (value == "ORB_EXALTED") return IMISC_ORB_EXALTED;
+	if (value == "ORB_DIVINE") return IMISC_ORB_DIVINE;
+	if (value == "ORB_VAAL") return IMISC_ORB_VAAL;
+	if (value == "SKILLGEM_SPELL") return IMISC_SKILLGEM_SPELL;
+	if (value == "SKILLGEM_CLEAVE") return IMISC_SKILLGEM_CLEAVE;
+	if (value == "SKILLGEM_GROUNDSLAM") return IMISC_SKILLGEM_GROUNDSLAM;
+	if (value == "SKILLGEM_BARRAGE") return IMISC_SKILLGEM_BARRAGE;
+	if (value == "SKILLGEM_WHIRL") return IMISC_SKILLGEM_WHIRL;
+	if (value == "SKILLGEM_FLURRY") return IMISC_SKILLGEM_FLURRY;
+	if (value == "SKILLGEM_LEAPSLAM") return IMISC_SKILLGEM_LEAPSLAM;
+	if (value == "SKILLGEM_RAINOFARROWS") return IMISC_SKILLGEM_RAINOFARROWS;
+	if (value == "SKILLGEM_SHIELDCHARGE") return IMISC_SKILLGEM_SHIELDCHARGE;
+	if (value == "SKILLGEM_BATTLECRY") return IMISC_SKILLGEM_BATTLECRY;
+	if (value == "SKILLGEM_LIGHTNINGARROW") return IMISC_SKILLGEM_LIGHTNINGARROW;
+	if (value == "SKILLGEM_ESCAPESHOT") return IMISC_SKILLGEM_ESCAPESHOT;
+	if (value == "SKILLGEM_EMBERFUSILLADE") return IMISC_SKILLGEM_EMBERFUSILLADE;
+	if (value == "SKILLGEM_SPARK") return IMISC_SKILLGEM_SPARK;
+	if (value == "SPIRITGEM_HERALDASH") return IMISC_SPIRITGEM_HERALDASH;
+	if (value == "SPIRITGEM_HERALDTHUNDER") return IMISC_SPIRITGEM_HERALDTHUNDER;
+	if (value == "SPIRITGEM_PURITY") return IMISC_SPIRITGEM_PURITY;
+	if (value == "SPIRITGEM_GOLEM") return IMISC_SPIRITGEM_GOLEM;
+	if (value == "SPIRITGEM_SKELETONS") return IMISC_SPIRITGEM_SKELETONS;
+	if (value == "UNCUT_SKILL") return IMISC_UNCUT_SKILL;
+	if (value == "UNCUT_SUPPORT") return IMISC_UNCUT_SUPPORT;
+	if (value == "UNCUT_SPIRIT") return IMISC_UNCUT_SPIRIT;
+	if (value == "SPIRIT_SKULL") return IMISC_SPIRIT_SKULL;
+	if (value == "SPEC_BOOK") return IMISC_SPEC_BOOK;
+	if (value == "ORB_LESSER_JEWELLER") return IMISC_ORB_LESSER_JEWELLER;
+	if (value == "ORB_GREATER_JEWELLER") return IMISC_ORB_GREATER_JEWELLER;
+	if (value == "ORB_PERFECT_JEWELLER") return IMISC_ORB_PERFECT_JEWELLER;
+	if (value == "JEWEL") return IMISC_JEWEL;
+	if (value == "CHARM_LIFE") return IMISC_CHARM_LIFE;
+	if (value == "CHARM_MANA") return IMISC_CHARM_MANA;
+	if (value == "CHARM_GUARD") return IMISC_CHARM_GUARD;
+	if (value == "WAYSTONE") return IMISC_WAYSTONE;
+	if (value == "CHARM_FIRE") return IMISC_CHARM_FIRE;
+	if (value == "CHARM_LIGHTNING") return IMISC_CHARM_LIGHTNING;
+	if (value == "CHARM_MAGIC") return IMISC_CHARM_MAGIC;
+	if (value == "CHARM_STUN") return IMISC_CHARM_STUN;
+	if (value == "CHARM_GOLDEN") return IMISC_CHARM_GOLDEN;
+	if (value == "CHARM_COLD") return IMISC_CHARM_COLD;
+	if (value == "ORB_BAUBLE") return IMISC_ORB_BAUBLE;
+	if (value == "ORB_CHANCE") return IMISC_ORB_CHANCE;
+	if (value == "ORB_ANNUL") return IMISC_ORB_ANNUL;
+	if (value == "ORB_WHETSTONE") return IMISC_ORB_WHETSTONE;
+	if (value == "ORB_ETCHER") return IMISC_ORB_ETCHER;
+	if (value == "ORB_SCRAP") return IMISC_ORB_SCRAP;
+	if (value == "ORB_GREATER_EXALTED") return IMISC_ORB_GREATER_EXALTED;
+	if (value == "ORB_PERFECT_EXALTED") return IMISC_ORB_PERFECT_EXALTED;
+	if (value == "ORB_GREATER_CHAOS") return IMISC_ORB_GREATER_CHAOS;
+	if (value == "ORB_PERFECT_CHAOS") return IMISC_ORB_PERFECT_CHAOS;
+	if (value == "ORB_ARTIFICER") return IMISC_ORB_ARTIFICER;
+	if (value == "ORB_DESECRATE") return IMISC_ORB_DESECRATE;
+	if (value == "ORB_CATALYST") return IMISC_ORB_CATALYST;
+	if (value == "ESSENCE") return IMISC_ESSENCE;
+	if (value == "TABLET") return IMISC_TABLET;
+	if (value == "MAP_FRAGMENT") return IMISC_MAP_FRAGMENT;
+	if (value == "MAP_KEY") return IMISC_MAP_KEY;
+	if (value == "SKILLGEM_ICEBOLT") return IMISC_SKILLGEM_ICEBOLT;
+	if (value == "SKILLGEM_FROSTNOVA") return IMISC_SKILLGEM_FROSTNOVA;
+	if (value == "SKILLGEM_RIPOSTE") return IMISC_SKILLGEM_RIPOSTE;
+	if (value == "SKILLGEM_SHADOWSTEP") return IMISC_SKILLGEM_SHADOWSTEP;
+	if (value == "SKILLGEM_FRENZY") return IMISC_SKILLGEM_FRENZY;
+	if (value == "SKILLGEM_SMITE") return IMISC_SKILLGEM_SMITE;
+	if (value == "SKILLGEM_FISTSOFTHUNDER") return IMISC_SKILLGEM_FISTSOFTHUNDER;
+	if (value == "SKILLGEM_RAPIDFIRE") return IMISC_SKILLGEM_RAPIDFIRE;
+	if (value == "SKILLGEM_SHIELDBASH") return IMISC_SKILLGEM_SHIELDBASH;
+	if (value == "SKILLGEM_AMPLIFYDAMAGE") return IMISC_SKILLGEM_AMPLIFYDAMAGE;
+	if (value == "SKILLGEM_TABLE") return IMISC_SKILLGEM_TABLE;
+	if (value == "SUPPORT_TABLE") return IMISC_SUPPORT_TABLE;
+	if (value == "SPIRITGEM_TABLE") return IMISC_SPIRITGEM_TABLE;
+	if (value == "SPIRITGEM_HERALDFROST") return IMISC_SPIRITGEM_HERALDFROST;
+	if (value == "SPIRITGEM_SKELETALMAGES") return IMISC_SPIRITGEM_SKELETALMAGES;
+	if (value == "SUPPORT_BATTLERAGE") return IMISC_SUPPORT_BATTLERAGE;
+	if (value == "OMEN") return IMISC_OMEN;
+	if (value == "AUGMENT") return IMISC_AUGMENT;
+	if (value == "SHARD_TRANSMUTE") return IMISC_SHARD_TRANSMUTE;
+	if (value == "SHARD_REGAL") return IMISC_SHARD_REGAL;
+	if (value == "SHARD_CHANCE") return IMISC_SHARD_CHANCE;
+	if (value == "SHARD_ARTIFICER") return IMISC_SHARD_ARTIFICER;
 	return std::unexpected("Unknown enum value");
 }
 
@@ -532,6 +650,8 @@ std::expected<item_effect_type, std::string> ParseItemEffectType(std::string_vie
 	if (value == "LIGHTRES_CURSE") return IPL_LIGHTRES_CURSE;
 	if (value == "MAGICRES_CURSE") return IPL_MAGICRES_CURSE;
 	if (value == "DEVASTATION") return IPL_DEVASTATION;
+	if (value == "LIFEREGEN") return IPL_LIFEREGEN;
+	if (value == "MANAREGEN") return IPL_MANAREGEN;
 	if (value == "DECAY") return IPL_DECAY;
 	if (value == "PERIL") return IPL_PERIL;
 	if (value == "JESTERS") return IPL_JESTERS;
@@ -565,6 +685,24 @@ std::expected<goodorevil, std::string> ParseAffixAlignment(std::string_view valu
 
 } // namespace
 
+item_cursor_graphic FullSizeItemCursor(item_cursor_graphic cursor)
+{
+	switch (cursor) {
+	case ICURS_MAGIC_ROCK_SMALL:
+		return ICURS_MAGIC_ROCK;
+	case ICURS_MAP_OF_THE_STARS_SMALL:
+		return ICURS_MAP_OF_THE_STARS;
+	case ICURS_BOOK_RED_SMALL:
+		return ICURS_BOOK_RED;
+	case ICURS_TORN_NOTE_1_SMALL:
+		return ICURS_TORN_NOTE_1;
+	case ICURS_RECONSTRUCTED_NOTE_SMALL:
+		return ICURS_RECONSTRUCTED_NOTE;
+	default:
+		return cursor;
+	}
+}
+
 void LoadItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t baseMappingId)
 {
 	dataFile.skipHeaderOrDie(filename);
@@ -574,7 +712,10 @@ void LoadItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t 
 	for (DataFileRecord record : dataFile) {
 		RecordReader reader { record, filename };
 		ItemData &item = AllItemsList.emplace_back();
-		reader.advance(); // Skip the first column (item ID).
+		std::string id;
+		reader.readString("id", id);
+		if (id.starts_with("poe2:"))
+			Poe2ItemIdsToIndices.emplace(std::move(id), static_cast<int16_t>(AllItemsList.size() - 1));
 		reader.readInt("dropRate", item.dropRate);
 		reader.read("class", item.iClass, ParseItemClass);
 		reader.read("equipType", item.iLoc, ParseItemEquipType);
@@ -583,6 +724,9 @@ void LoadItemDatFromFile(DataFile &dataFile, std::string_view filename, int32_t 
 		reader.read("uniqueBaseItem", item.iItemId, ParseOrAddUniqueBaseItem);
 		reader.readString("name", item.iName);
 		reader.readString("shortName", item.iSName);
+		// Starting items have no short name; crafting one magic would leave a gap in its name.
+		if (item.iSName.empty())
+			item.iSName = item.iName;
 		reader.readInt("minMonsterLevel", item.iMinMLvl);
 		reader.readInt("durability", item.iDurability);
 		reader.readInt("minDamage", item.iMinDam);
@@ -618,6 +762,7 @@ void LoadItemDat()
 
 	AllItemsList.clear();
 	AdditionalUniqueBaseItemStringsToIndices.clear();
+	Poe2ItemIdsToIndices.clear();
 	ItemMappingIdsToIndices.clear();
 	LoadItemDatFromFile(dataFile, filename, 0);
 

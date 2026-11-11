@@ -1,0 +1,197 @@
+#include <string>
+
+#include <gtest/gtest.h>
+
+#include "DiabloUI/diabloui.h"
+#include "engine/assets.hpp"
+#include "game_mode.hpp"
+#include "init.hpp"
+#include "items.h"
+#include "loadsave.h"
+#include "menu.h"
+#include "pfile.h"
+#include "player.h"
+#include "poe2/economy.hpp"
+#include "poe2/hardcore.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/skill_gems.hpp"
+#include "poe2/spirit.hpp"
+#include "poe2/weapon_swap.hpp"
+#include "spells.h"
+#include "tables/monstdat.h"
+#include "tables/playerdat.hpp"
+#include "utils/file_util.h"
+#include "utils/paths.h"
+
+namespace devilution {
+
+namespace {
+
+bool HardcoreListed;
+
+class Poe2WeaponSwapTest : public ::testing::Test {
+public:
+	void SetUp() override
+	{
+		Players.resize(1);
+		MyPlayerId = 0;
+		MyPlayer = &Players[0];
+		*MyPlayer = {};
+		gbVanilla = false;
+		gbIsSpawn = false;
+		gbIsMultiplayer = false;
+		gbIsHellfire = true;
+		gbIsHellfireSaveGame = true;
+		gbIsPoe2 = true;
+		UnloadModArchives();
+		LoadModArchives({ { "hf", "poe2" } });
+		LoadItemData();
+		LoadSpellData();
+		LoadPlayerDataFiles();
+		LoadMonsterData();
+		LoadPassiveTreeData();
+		paths::SetPrefPath(paths::BasePath());
+	}
+
+	void TearDown() override
+	{
+		gbIsPoe2 = false;
+		gbIsHellfire = false;
+		gbIsHellfireSaveGame = false;
+		LoadPassiveTreeData();
+		UnloadModArchives();
+	}
+
+	static Item Sword()
+	{
+		Item item;
+		InitializeItem(item, IDI_WARRIOR);
+		return item;
+	}
+};
+
+TEST_F(Poe2WeaponSwapTest, SwapExchangesTheHandsAndTheSet)
+{
+	// Another player, so the swap isn't sent over the network, which the tests don't start.
+	Players.resize(2);
+	MyPlayer = &Players[0];
+	Player &player = Players[1];
+	player = {};
+	player._pClass = HeroClass::Warrior;
+	player._pmode = PM_STAND;
+	player._pHitPoints = player._pMaxHP = Fixed26_6::fromInt(100);
+	player.swapHands[0] = Sword();
+	ASSERT_TRUE(player.InvBody[INVLOC_HAND_LEFT].isEmpty());
+
+	ASSERT_TRUE(SwapWeapons(player));
+	EXPECT_EQ(player.poe2.weaponSet, 1);
+	EXPECT_EQ(player.InvBody[INVLOC_HAND_LEFT].IDidx, IDI_WARRIOR);
+	EXPECT_TRUE(InactiveHand(player, INVLOC_HAND_LEFT).isEmpty());
+
+	ASSERT_TRUE(SwapWeapons(player));
+	EXPECT_EQ(player.poe2.weaponSet, 0);
+	EXPECT_TRUE(player.InvBody[INVLOC_HAND_LEFT].isEmpty());
+	EXPECT_EQ(InactiveHand(player, INVLOC_HAND_LEFT).IDidx, IDI_WARRIOR);
+}
+
+TEST_F(Poe2WeaponSwapTest, WeaponSetsAndLeagueSurviveASave)
+{
+	LoadCoreArchives();
+	LoadGameArchives();
+	if (!HaveMainData())
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+	UnloadModArchives();
+	LoadModArchives({ { "hf", "poe2" } });
+	LoadItemData();
+	LoadPassiveTreeData();
+	const std::string savePath = paths::BasePath() + "single_0.sv";
+	RemoveFile(savePath.c_str());
+	_uiheroinfo info {};
+	info.heroclass = HeroClass::Warrior;
+	info.hardcore = true;
+	CopyUtf8(info.name, "Swapper", sizeof(info.name));
+	ASSERT_TRUE(pfile_ui_save_create(&info));
+	gSaveNumber = 0;
+	pfile_read_player_from_save(0, *MyPlayer);
+	LoadPoe2HeroData(*MyPlayer);
+
+	Player &player = *MyPlayer;
+	EXPECT_TRUE(player.poe2.hardcore);
+	EXPECT_TRUE(IsHardcoreHero(player));
+	// A new hero's belt has a healing flask and a mana flask (Curtis 2026-10-28).
+	EXPECT_EQ(player.SpdList[0].IDidx, IDI_HEAL);
+	EXPECT_EQ(player.SpdList[1].IDidx, IDI_MANA);
+	// The middle mouse button starts with the weapon attack, and stays empty once emptied.
+	EXPECT_EQ(player.poe2.tray[static_cast<size_t>(TraySlot::MiddleMouse)].action, TrayAction::WeaponAttack);
+	BindTraySlot(player, TraySlot::MiddleMouse, {});
+	player.setCharacterLevel(10);
+	player.poe2.specBooks = 0b101;
+	player.poe2.weaponSet = 1;
+	const PassiveNodeId start = *PassiveStartNode(HeroClass::Warrior);
+	const PassiveNodeId first = PassiveTree()[start].links.front();
+	ASSERT_TRUE(AllocatePassive(player, first, PassiveAttribute::Dexterity, PassivePool::SetII));
+	player.swapHands[1] = Sword();
+	// The bigger tree's last jewel socket is saved too.
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		if (AllItemsList[i].iMiscId == IMISC_JEWEL) {
+			InitializeItem(player.jewels[MaxJewelSockets - 1], static_cast<_item_indexes>(i));
+			break;
+		}
+	}
+	const int jewelIndex = player.jewels[MaxJewelSockets - 1].IDidx;
+	ASSERT_GE(jewelIndex, 0);
+	SetChosenMinionCount(player, PersistentSkill::SkeletalWarriors, 5);
+	// A meta gem keeps the spells inside it, at their levels.
+	player.poe2.skillSlots[5] = SkillSlot::ForPersistent(PersistentSkill::CastOnDodge);
+	player.poe2.metaSkills[5][1] = SkillSlot::ForSpell(SpellID::Fireball);
+	player.poe2.metaSkillLevels[5][1] = 4;
+	// The first support gem's flag and drought (version 26), and shards counted the old way, which become items.
+	player.poe2.economy.supportGemDropped = true;
+	player.poe2.economy.supportDroughtKills = 7;
+	// The first uncut skill gem's flag and drought (version 28).
+	player.poe2.economy.skillGemDropped = false;
+	player.poe2.economy.skillDroughtKills = 9;
+	player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)] = 4;
+	const int chanceShardsBefore = ShardsInBag(player, ShardKind::Chance);
+	pfile_write_hero(/*writeGameData=*/false);
+
+	player.poe2.clear();
+	player.swapHands[1].clear();
+	player.jewels[MaxJewelSockets - 1].clear();
+	LoadPoe2HeroData(player);
+	EXPECT_EQ(MaxJewelSockets, 12U);
+	EXPECT_EQ(player.jewels[MaxJewelSockets - 1].IDidx, jewelIndex);
+	EXPECT_TRUE(player.poe2.hardcore);
+	EXPECT_EQ(player.poe2.specBooks, 0b101);
+	EXPECT_EQ(player.poe2.weaponSet, 1);
+	EXPECT_TRUE(IsPassiveInPool(player, first, PassivePool::SetII));
+	EXPECT_FALSE(IsPassiveInPool(player, first, PassivePool::Main));
+	EXPECT_EQ(player.swapHands[1].IDidx, IDI_WARRIOR);
+	EXPECT_TRUE(player.swapHands[0].isEmpty());
+	EXPECT_EQ(ChosenMinionCount(player, PersistentSkill::SkeletalWarriors), 5);
+	EXPECT_EQ(player.poe2.metaSkills[5][1], SkillSlot::ForSpell(SpellID::Fireball));
+	EXPECT_EQ(player.poe2.metaSkillLevels[5][1], 4);
+	EXPECT_TRUE(player.poe2.metaSkills[5][0].isEmpty());
+	EXPECT_EQ(player.poe2.tray[static_cast<size_t>(TraySlot::MiddleMouse)], TrayBinding {});
+	EXPECT_EQ(player.poe2.tray[static_cast<size_t>(TraySlot::LeftMouse)].action, TrayAction::WeaponAttack);
+	EXPECT_EQ(ChosenMinionCount(player, PersistentSkill::SkeletalMages), StartingMinionCount(PersistentSkill::SkeletalMages));
+	EXPECT_TRUE(player.poe2.economy.supportGemDropped);
+	EXPECT_EQ(player.poe2.economy.supportDroughtKills, 7);
+	EXPECT_FALSE(player.poe2.economy.skillGemDropped);
+	EXPECT_EQ(player.poe2.economy.skillDroughtKills, 9);
+	EXPECT_EQ(player.poe2.economy.shards[static_cast<size_t>(ShardKind::Chance)], 0);
+	EXPECT_EQ(ShardsInBag(player, ShardKind::Chance), chanceShardsBefore + 4) << "counted shards are items in the bag now";
+
+	// The hero list reads the league on its own.
+	HardcoreListed = false;
+	pfile_ui_set_hero_infos([](_uiheroinfo *hero) {
+		if (std::string_view(hero->name) == "Swapper")
+			HardcoreListed = hero->hardcore;
+		return true;
+	});
+	EXPECT_TRUE(HardcoreListed);
+	RemoveFile(savePath.c_str());
+}
+
+} // namespace
+} // namespace devilution

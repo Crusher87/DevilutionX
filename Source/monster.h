@@ -11,6 +11,7 @@
 
 #include <array>
 #include <functional>
+#include <optional>
 #include <string>
 
 #include <function_ref.hpp>
@@ -24,10 +25,12 @@
 #include "engine/world_tile.hpp"
 #include "game_mode.hpp"
 #include "levels/dun_tile.hpp"
+#include "poe2/monster_state.hpp"
 #include "tables/misdat.h"
 #include "tables/monstdat.h"
 #include "tables/spelldat.h"
 #include "tables/textdat.h"
+#include "utils/attributes.h"
 #include "utils/fixed_point.hpp"
 #include "utils/language.h"
 
@@ -37,13 +40,29 @@ struct Missile;
 struct Player;
 
 constexpr size_t MaxMonsters = 200;
-constexpr size_t MaxLvlMTypes = 24;
+constexpr size_t MaxLvlMTypes = 40;
+/** @brief POE2 Mashup: monster slots kept free for the players' minions, so a crowded level can't stop them rising. */
+constexpr size_t MinionMonsterSlots = 40;
+/** @brief Armour class Nightmare and Hell add to every monster (Diablo's rules; not on the POE2 tables). */
+constexpr int NightmareAcBonus = 50;
+constexpr int HellAcBonus = 80;
+/** @brief To-hit Nightmare and Hell add to every monster's attacks (Diablo's rules; POE2's accuracy leaves it out). */
+constexpr int NightmareToHitBonus = 85;
+constexpr int HellToHitBonus = 120;
+
+/** @brief The to-hit a difficulty adds to Monster::toHit and toHitSpecial. */
+constexpr int MonsterDifficultyToHitBonus(_difficulty difficulty)
+{
+	return difficulty == DIFF_NIGHTMARE ? NightmareToHitBonus : difficulty == DIFF_HELL ? HellToHitBonus : 0;
+}
 
 enum monster_flag : uint16_t {
 	// clang-format off
 	MFLAG_HIDDEN          = 1 << 0,
 	MFLAG_LOCK_ANIMATION  = 1 << 1,
 	MFLAG_ALLOW_SPECIAL   = 1 << 2,
+	/** @brief POE2 Mashup: came out of a strongbox; its loot waits until every guard is dead. */
+	MFLAG_STRONGBOX_GUARD = 1 << 3,
 	MFLAG_TARGETS_MONSTER = 1 << 4,
 	MFLAG_GOLEM           = 1 << 5,
 	MFLAG_QUEST_COMPLETE  = 1 << 6,
@@ -53,6 +72,18 @@ enum monster_flag : uint16_t {
 	MFLAG_NO_ENEMY        = 1 << 10,
 	MFLAG_BERSERK         = 1 << 11,
 	MFLAG_NOLIFESTEAL     = 1 << 12,
+	/**
+	 * @brief POE2 Mashup, retired with Leoric's Road (2026-10-30): a monster that rose hostile. Nothing sets it now, and
+	 * a saved monster that has it loses it on load. The bit stays reserved: old saves may still carry it.
+	 */
+	MFLAG_RISEN           = 1 << 13,
+	/**
+	 * @brief POE2 Mashup, retired with Leoric's Road: one of the King's dead, a minion for a while. Nothing sets it now,
+	 * and a saved minion that has it leaves the level quietly on load. Reserved, as MFLAG_RISEN.
+	 */
+	MFLAG_KINGS_DEAD      = 1 << 14,
+	/** @brief POE2 Mashup: life and damage come from the monster level tables (set when made or loaded on them). */
+	MFLAG_POE2_TABLES     = 1 << 15,
 	// clang-format on
 };
 
@@ -209,7 +240,7 @@ struct CMonster {
 	}
 };
 
-extern CMonster LevelMonsterTypes[MaxLvlMTypes];
+extern DVL_API_FOR_TEST CMonster LevelMonsterTypes[MaxLvlMTypes];
 
 struct Monster { // note: missing field _mAFNum
 	std::unique_ptr<uint8_t[]> uniqueMonsterTRN;
@@ -275,6 +306,8 @@ struct Monster { // note: missing field _mAFNum
 	uint8_t uniqTrans;
 	int8_t corpseId;
 	int8_t whoHit;
+	/** @brief POE2 Mashup ailments and regeneration (not saved). */
+	Poe2MonsterState poe2;
 	uint8_t minDamage;
 	uint8_t maxDamage;
 	uint8_t minDamageSpecial;
@@ -298,9 +331,21 @@ struct Monster { // note: missing field _mAFNum
 	 * @param graphic Animation sequence of interest
 	 * @param desiredDirection Desired desiredDirection the monster should be visually facing
 	 */
-	void changeAnimationData(MonsterGraphic graphic, Direction desiredDirection)
+	/**
+	 * @brief Returns the animation for the given sequence, or the walk animation if the type has no sprites for it
+	 * (the Golem has no Stand or GotHit frames).
+	 */
+	[[nodiscard]] const AnimStruct &animDataOrWalk(MonsterGraphic graphic) const
 	{
 		const AnimStruct &animationData = type().getAnimData(graphic);
+		if (!animationData.sprites && type().getAnimData(MonsterGraphic::Walk).sprites)
+			return type().getAnimData(MonsterGraphic::Walk);
+		return animationData;
+	}
+
+	void changeAnimationData(MonsterGraphic graphic, Direction desiredDirection)
+	{
+		const AnimStruct &animationData = animDataOrWalk(graphic);
 
 		// Passing the frames and rate properties here is only relevant when initialising a monster, but doesn't cause any harm when switching animations.
 		this->animInfo.changeAnimationData(animationData.spritesForDirection(desiredDirection), animationData.frames, animationData.rate);
@@ -390,11 +435,21 @@ struct Monster { // note: missing field _mAFNum
 
 	/**
 	 * @brief Calculates monster's level.
-	 * Fetches base level value from @p MonstersData array or @p UniqueMonstersData.
+	 * In POE2 mode this is the floor's area level (see poe2/area_levels.hpp), except for the player's golems and
+	 * minions; otherwise it is diabloLevel().
 	 * @param difficulty - difficulty on which calculation is performed
 	 * @return Monster's level, including bonuses from difficulty and monster being unique
 	 */
-	unsigned int level(_difficulty difficulty) const
+	unsigned int level(_difficulty difficulty) const;
+
+	/**
+	 * @brief Calculates monster's level by Diablo's rules.
+	 * Fetches base level value from @p MonstersData array or @p UniqueMonstersData.
+	 * POE2 loot keeps using it until item levels move to area levels.
+	 * @param difficulty - difficulty on which calculation is performed
+	 * @return Monster's level, including bonuses from difficulty and monster being unique
+	 */
+	unsigned int diabloLevel(_difficulty difficulty) const
 	{
 		unsigned int baseLevel = data().level;
 		if (isUnique()) {
@@ -446,6 +501,8 @@ struct Monster { // note: missing field _mAFNum
 	[[nodiscard]] bool isWalking() const;
 	[[nodiscard]] bool isImmune(MissileID mitype, DamageType missileElement) const;
 	[[nodiscard]] bool isResistant(MissileID mitype, DamageType missileElement) const;
+	/** @brief The resistance flags as the player sees them: in POE2 mode an immunity shows as a resistance. */
+	[[nodiscard]] uint16_t shownResistance() const;
 
 	/**
 	 * Is this a player's golem?
@@ -492,7 +549,7 @@ struct Monster { // note: missing field _mAFNum
 };
 
 extern size_t LevelMonsterTypeCount;
-extern Monster Monsters[MaxMonsters];
+extern DVL_API_FOR_TEST Monster Monsters[MaxMonsters];
 extern unsigned ActiveMonsters[MaxMonsters];
 extern size_t ActiveMonsterCount;
 extern int MonsterKillCounts[NUM_MAX_MTYPES];
@@ -513,6 +570,8 @@ void WeakenNaKrul();
 void InitGolems();
 std::expected<void, std::string> InitMonsters();
 std::expected<void, std::string> SetMapMonsters(const uint16_t *dunData, Point startPosition);
+/** @brief Most monsters a level may hold besides the players' minions. */
+size_t MaxEnemyMonsters();
 Monster *AddMonster(Point position, Direction dir, size_t typeIndex, bool inMap);
 /**
  * @brief Spawns a new monsters (dynamically/not on level load).
@@ -534,6 +593,8 @@ void MonsterReducePlayerAttribute(Monster &monster, Player &player);
 bool M_Talker(const Monster &monster);
 void M_StartStand(Monster &monster, Direction md);
 void M_ClearSquares(const Monster &monster);
+/** @brief POE2 Mashup: the monster reels as if hit hard, which stops whatever it was doing (a walk ends where it began). */
+void M_StartFlinch(Monster &monster);
 void M_GetKnockback(Monster &monster, WorldTilePosition attackerStartPos);
 void M_StartHit(Monster &monster, int dam);
 void M_StartHit(Monster &monster, const Player &player, int dam);
@@ -543,9 +604,40 @@ void KillGolem(Monster &golem);
 void M_StartKill(Monster &monster, const Player &player);
 void M_SyncStartKill(Monster &monster, Point position, const Player &player);
 void M_UpdateRelations(const Monster &monster);
+/** @brief POE2 Mashup: picks the monster's enemy again (the hero, a monster, a decoy or an Attract-cursed monster). */
+void M_UpdateEnemy(Monster &monster);
 void DoEnding();
 void PrepDoEnding();
 bool Walk(Monster &monster, Direction md);
+/** @brief POE2 Mashup: whether a walking minion that fell behind its owner takes a second step this tick. */
+bool MinionCatchUpTick(Monster &minion);
+/** @brief POE2 Mashup: whether the monster is one of the player's own minions, which the player walks through. */
+bool IsMinionOf(const Monster &monster, const Player &player);
+/**
+ * @brief POE2 Mashup: a monster's blow (a raw Fixed26_6) as it lands on another monster: scaled to its level's table,
+ * with a minion's gear, uniques, supports, kind and Summon Commands, or an enemy's Grave Howl.
+ */
+int ScaleMonsterBlow(const Monster &attacker, int dam);
+/** @brief POE2 Mashup: the middle of a minion's blow on another monster, as a raw Fixed26_6 (see ScaleMonsterBlow). */
+int32_t MinionBlowRaw(const Monster &minion);
+/** @brief POE2 Mashup: the middle of a skeleton's shot, in whole points, at the percent of its blow. */
+int MinionShotAverage(const Monster &minion, int percent);
+/**
+ * @brief POE2 Mashup Summon Commands: a skeleton fires its shot at the tile for the percent of its usual one; the
+ * Command (a SummonCommand) rides on the shot. @return Whether it started (a flinching one can't).
+ */
+bool StartCommandShot(Monster &minion, Point aim, uint8_t command, int percent);
+/**
+ * @brief POE2 Mashup Summon Commands: the minion plays its attack (a cast with @p cast) towards the tile, and the
+ * Command (a SummonCommand) goes off on its action frame instead of its blow. @return Whether it started.
+ */
+bool StartCommandMove(Monster &minion, Point aim, uint8_t command, bool cast);
+/** @brief POE2 Mashup: puts the minion straight onto the free tile, as a leap lands. */
+void LeapMinionTo(Monster &minion, Point tile);
+/** @brief POE2 Mashup: a stagger breaks off what the monster is doing, as a light stun does. */
+void M_StartStagger(Monster &monster);
+/** @brief POE2 Mashup: an idle minion on the tile the owner steps onto moves aside. */
+void MakeWayForOwner(const Player &owner, Point tile, Direction dir);
 void GolumAi(Monster &golem);
 void DeleteMonsterList();
 void RemoveEnemyReferences(const Player &player);
@@ -583,6 +675,35 @@ void ActivateSkeleton(Monster &monster, Point position);
 Monster *PreSpawnSkeleton();
 void TalktoMonster(Player &player, Monster &monster);
 void SpawnGolem(const Player &player, Point position, uint8_t spellLevel);
+/** @brief POE2 Mashup: the monster raised by the Skeletal Warriors gem. */
+constexpr _monster_id SkeletonMinionType = MT_WSKELAX;
+/** @brief POE2 Mashup: the monster raised by the Skeletal Mages gem; it hurls firebolts at range. */
+constexpr _monster_id SkeletonMageMinionType = MT_RSKELBW;
+size_t CountSkeletonMinions(const Player &player, _monster_id type = SkeletonMinionType);
+void KillSkeletonMinions(const Player &player, _monster_id type = SkeletonMinionType);
+/** @brief Raises a Skeletal Warrior (or Mage) for the player; false if the level has no room for it. */
+bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel, _monster_id type = SkeletonMinionType);
+/** @brief POE2 Mashup Revive: what a raised monster keeps from its life before. */
+struct RevivedStats {
+	Fixed26_6 life;
+	uint8_t minDamage;
+	uint8_t maxDamage;
+	uint8_t armorClass;
+	uint16_t resistance;
+};
+size_t CountRevivedMinions(const Player &player);
+void KillRevivedMinions(const Player &player);
+/** @brief Raises a monster of the type to fight for the player, with the stats it had. */
+Monster *SpawnRevivedMinion(const Player &player, Point position, _monster_id type, const RevivedStats &stats);
+/** @brief No player or monster stands on the tile, and monsters can walk it. */
+bool IsTileFreeForMonster(Point position);
+/** @brief Takes a monster off the level at once, without a death or a body. @param activeIndex its index in ActiveMonsters. */
+void RemoveMonsterQuietly(size_t activeIndex);
+/**
+ * @brief POE2 Mashup: takes one of a hero's minions off the level at once, alive, to go with the hero to the next level
+ * (poe2/minion_travel.hpp). A golem's own slot stays, empty, as one that died leaves it.
+ */
+void TakeMinionOffLevel(Monster &minion);
 bool CanTalkToMonst(const Monster &monster);
 uint8_t encode_enemy(Monster &monster);
 void decode_enemy(Monster &monster, uint8_t enemyId);

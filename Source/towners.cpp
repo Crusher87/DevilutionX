@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <unordered_map>
 
 #include "cursor.h"
@@ -12,7 +13,13 @@
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "inv.h"
+#include "levels/gendung.h"
+#include "levels/tile_properties.hpp"
 #include "minitext.h"
+#include "panels/anvil_panel.hpp"
+#include "panels/quest_reward_panel.hpp"
+#include "player.h"
+#include "qol/visual_store.h"
 #include "stores.h"
 #include "tables/textdat.h"
 #include "tables/townerdat.hpp"
@@ -29,6 +36,9 @@ int CowClicks;
 
 /** Specifies the active sound effect ID for interacting with cows. */
 SfxID CowPlaying = SfxID::None;
+
+/** @brief POE2 Mashup: Ogden has welcomed the hero since the town was loaded, so his marker goes. Not saved: he welcomes again until the hero first leaves town. */
+bool OgdenWelcomed = false;
 
 /** Storage for animation order data loaded from TSV (needs stable addresses for span). */
 std::vector<std::vector<uint8_t>> TownerAnimOrderStorage;
@@ -209,10 +219,34 @@ void TownerTalk(_speech_id message)
 	InitQTextMsg(message);
 }
 
+/**
+ * @brief POE2 Mashup: in single player a quest reward lands at the hero's feet as a normal ground item, and a popup
+ * offers to put it in the bag (panels/quest_reward_panel.hpp). Multiplayer keeps the rewards as they were.
+ */
+bool HandsRewardToHero(const Player &player)
+{
+	return gbIsPoe2 && !gbIsMultiplayer && &player == MyPlayer;
+}
+
+/** @brief Where a quest reward lands: beside the hero when it is handed to them, else beside the towner. */
+Point RewardSpot(const Player &player, Point besideTowner)
+{
+	return HandsRewardToHero(player) ? Point { player.position.tile } : besideTowner;
+}
+
+/** @brief Offers the hero the newest ground item, the reward just made, if one was made. */
+void OfferReward(const Player &player, const Towner &towner, uint8_t itemsBefore)
+{
+	if (HandsRewardToHero(player) && ActiveItemCount > itemsBefore)
+		OfferQuestReward(towner.name, ActiveItems[ActiveItemCount - 1]);
+}
+
 void TalkToBarOwner(Player &player, Towner &barOwner)
 {
 	if (!player._pLvlVisited[0]) {
 		InitQTextMsg(TEXT_INTRO);
+		if (&player == MyPlayer)
+			OgdenWelcomed = true;
 		return;
 	}
 
@@ -259,7 +293,9 @@ void TalkToBarOwner(Player &player, Towner &barOwner)
 				bannerQuest._qactive = QUEST_DONE;
 				bannerQuest._qvar1 = 3;
 				NetSendCmdQuest(true, bannerQuest);
-				SpawnUnique(UITEM_HARCREST, barOwner.position + Direction::SouthWest, bannerQuest._qlevel);
+				const uint8_t itemsBefore = ActiveItemCount;
+				SpawnUnique(UITEM_HARCREST, RewardSpot(player, barOwner.position + Direction::SouthWest), bannerQuest._qlevel);
+				OfferReward(player, barOwner, itemsBefore);
 				InitQTextMsg(TEXT_BANNER3);
 				return;
 			}
@@ -307,7 +343,9 @@ void TalkToBlackSmith(Player &player, Towner &blackSmith)
 			if (Quests[Q_ROCK]._qvar2 == 1 && RemoveInventoryItemById(player, IDI_ROCK)) {
 				Quests[Q_ROCK]._qactive = QUEST_DONE;
 				NetSendCmdQuest(true, Quests[Q_ROCK]);
-				SpawnUnique(UITEM_INFRARING, blackSmith.position + Direction::SouthWest, Quests[Q_ROCK]._qlevel);
+				const uint8_t itemsBefore = ActiveItemCount;
+				SpawnUnique(UITEM_INFRARING, RewardSpot(player, blackSmith.position + Direction::SouthWest), Quests[Q_ROCK]._qlevel);
+				OfferReward(player, blackSmith, itemsBefore);
 				InitQTextMsg(TEXT_INFRA7);
 				return;
 			}
@@ -328,7 +366,9 @@ void TalkToBlackSmith(Player &player, Towner &blackSmith)
 		if (Quests[Q_ANVIL]._qvar2 == 1 && RemoveInventoryItemById(player, IDI_ANVIL)) {
 			Quests[Q_ANVIL]._qactive = QUEST_DONE;
 			NetSendCmdQuest(true, Quests[Q_ANVIL]);
-			SpawnUnique(UITEM_GRISWOLD, blackSmith.position + Direction::SouthWest, Quests[Q_ANVIL]._qlevel);
+			const uint8_t itemsBefore = ActiveItemCount;
+			SpawnUnique(UITEM_GRISWOLD, RewardSpot(player, blackSmith.position + Direction::SouthWest), Quests[Q_ANVIL]._qlevel);
+			OfferReward(player, blackSmith, itemsBefore);
 			InitQTextMsg(TEXT_ANVIL7);
 			return;
 		}
@@ -427,7 +467,24 @@ void TalkToHealer(Player &player, Towner &healer)
 		if (poisonWater._qactive == QUEST_DONE && poisonWater._qvar1 != 2) {
 			poisonWater._qvar1 = 2;
 			InitQTextMsg(TEXT_POISON5);
-			SpawnUnique(UITEM_TRING, healer.position + Direction::SouthWest, poisonWater._qlevel);
+			if (HandsRewardToHero(player)) {
+				// Like every quest reward: at the hero's feet, out from under Pepin, with the popup to bag it.
+				const uint8_t itemsBefore = ActiveItemCount;
+				SpawnUnique(UITEM_TRING, RewardSpot(player, healer.position + Direction::SouthWest), poisonWater._qlevel);
+				OfferReward(player, healer, itemsBefore);
+				NetSendCmdQuest(true, poisonWater);
+				return;
+			}
+			Item *ring = SpawnUnique(UITEM_TRING, healer.position + Direction::SouthWest, poisonWater._qlevel, /*sendmsg=*/!gbIsPoe2);
+			// POE2 Mashup (Curtis 2026-10-21): the ring goes straight into the bag, as Pepin stands over where it lands.
+			if (gbIsPoe2 && ring != nullptr) {
+				if (AutoPlaceItemInInventory(player, *ring, true)) {
+					dItem[ring->position.x][ring->position.y] = 0;
+					DeleteItem(ActiveItemCount - 1);
+				} else {
+					NetSendCmdPItem(false, CMD_SPAWNITEM, ring->position, *ring);
+				}
+			}
 			NetSendCmdQuest(true, poisonWater);
 			return;
 		}
@@ -563,7 +620,12 @@ void TalkToFarmer(Player &player, Towner &farmer)
 		break;
 	case QUEST_DONE:
 		InitQTextMsg(TEXT_FARMER4);
-		SpawnRewardItem(IDI_AURIC, farmer.position + Displacement { 1, 0 }, true);
+		{
+			const uint8_t itemsBefore = ActiveItemCount;
+			// The amulet lands on exactly the tile given, so beside the hero it takes the nearest free one.
+			SpawnRewardItem(IDI_AURIC, HandsRewardToHero(player) ? GetSuperItemLoc(player.position.tile) : farmer.position + Displacement { 1, 0 }, true);
+			OfferReward(player, farmer, itemsBefore);
+		}
 		quest._qactive = QUEST_HIVE_DONE;
 		if (gbIsMultiplayer)
 			NetSendCmdQuest(true, quest);
@@ -576,6 +638,54 @@ void TalkToFarmer(Player &player, Towner &farmer)
 	}
 }
 
+/** @brief Puts the stash on the nearest open tile to its spot, so it never stands in a wall or on another towner. */
+void InitStash(Towner &towner, const TownerDataEntry &entry)
+{
+	InitTownerFromData(towner, entry);
+	const int8_t id = dMonster[entry.position.x][entry.position.y];
+	const auto isFree = [](Point tile) {
+		return InDungeonBounds(tile) && IsTileWalkable(tile) && dMonster[tile.x][tile.y] == 0;
+	};
+	if (id == 0 || IsTileWalkable(entry.position))
+		return;
+	dMonster[entry.position.x][entry.position.y] = 0;
+	for (int radius = 1; radius <= 6; radius++) {
+		for (int dy = -radius; dy <= radius; dy++) {
+			for (int dx = -radius; dx <= radius; dx++) {
+				const Point tile = entry.position + Displacement { dx, dy };
+				if (std::max(std::abs(dx), std::abs(dy)) != radius || !isFree(tile))
+					continue;
+				towner.position = tile;
+				dMonster[tile.x][tile.y] = id;
+				return;
+			}
+		}
+	}
+	dMonster[entry.position.x][entry.position.y] = id;
+}
+
+void TalkToStash(Player &player, Towner & /*stash*/)
+{
+	if (&player != MyPlayer)
+		return;
+	OpenStashPanel();
+}
+
+/** @brief The anvil is the Anvil of Fury's sprite, resting on its last frame. */
+void InitAnvil(Towner &towner, const TownerDataEntry &entry)
+{
+	InitStash(towner, entry);
+	if (!towner.animOrder.empty())
+		towner._tAnimFrame = towner.animOrder.front();
+}
+
+void TalkToAnvil(Player &player, Towner & /*anvil*/)
+{
+	if (&player != MyPlayer)
+		return;
+	OpenAnvil();
+}
+
 void TalkToCowFarmer(Player &player, Towner &cowFarmer)
 {
 	if (RemoveInventoryItemById(player, IDI_GREYSUIT)) {
@@ -586,7 +696,9 @@ void TalkToCowFarmer(Player &player, Towner &cowFarmer)
 	auto &quest = Quests[Q_JERSEY];
 
 	if (RemoveInventoryItemById(player, IDI_BROWNSUIT)) {
-		SpawnUnique(UITEM_BOVINE, cowFarmer.position + Direction::SouthEast, quest._qlevel);
+		const uint8_t itemsBefore = ActiveItemCount;
+		SpawnUnique(UITEM_BOVINE, RewardSpot(player, cowFarmer.position + Direction::SouthEast), quest._qlevel);
+		OfferReward(player, cowFarmer, itemsBefore);
 		InitQTextMsg(TEXT_JERSEY8);
 		quest._qactive = QUEST_DONE;
 		UpdateCowFarmerAnimAfterQuestComplete();
@@ -654,7 +766,9 @@ void TalkToGirl(Player &player, Towner &girl)
 
 	if (quest._qactive != QUEST_DONE && RemoveInventoryItemById(player, IDI_THEODORE)) {
 		InitQTextMsg(TEXT_GIRL4);
-		CreateAmulet(girl.position, 13, false, false, true);
+		const uint8_t itemsBefore = ActiveItemCount;
+		CreateAmulet(RewardSpot(player, girl.position), 13, false, false, true);
+		OfferReward(player, girl, itemsBefore);
 		quest._qactive = QUEST_DONE;
 		UpdateGirlAnimAfterQuestComplete();
 		if (gbIsMultiplayer)
@@ -697,6 +811,8 @@ const TownerData TownersData[] = {
 	{ TOWN_COWFARM, InitCowFarmer, TalkToCowFarmer   },
 	{ TOWN_FARMER,  nullptr,       TalkToFarmer      },
 	{ TOWN_GIRL,    nullptr,       TalkToGirl        },
+	{ TOWN_STASH,   InitStash,     TalkToStash       },
+	{ TOWN_ANVIL,   InitAnvil,     TalkToAnvil       },
 	// clang-format on
 };
 
@@ -720,6 +836,8 @@ const std::unordered_map<_talker_id, const char *> TownerShortNames = {
 	{ TOWN_FARMER, "lester" },
 	{ TOWN_GIRL, "celia" },
 	{ TOWN_COWFARM, "nut" },
+	{ TOWN_STASH, "stash" },
+	{ TOWN_ANVIL, "anvil" },
 };
 
 size_t GetNumTownerTypes()
@@ -741,6 +859,9 @@ bool IsTownerPresent(_talker_id npc)
 		return gbIsHellfire && sgGameInitInfo.bCowQuest == 0 && Quests[Q_FARMER]._qactive != QUEST_HIVE_DONE;
 	case TOWN_COWFARM:
 		return gbIsHellfire && sgGameInitInfo.bCowQuest != 0;
+	case TOWN_STASH:
+	case TOWN_ANVIL:
+		return gbIsPoe2;
 	case TOWN_GIRL:
 		return gbIsHellfire && sgGameInitInfo.bTheoQuest != 0 && MyPlayer->_pLvlVisited[17] && Quests[Q_GIRL]._qactive != QUEST_DONE;
 	default:
@@ -760,6 +881,7 @@ Towner *GetTowner(_talker_id type)
 void InitTowners()
 {
 	assert(!CowSprites);
+	OgdenWelcomed = false;
 
 	// Load towner data from TSV files
 	LoadTownerData();
@@ -838,6 +960,134 @@ void ProcessTowners()
 	}
 }
 
+int QuickTradeTowner = -1;
+
+QuestMarker TownerQuestMarker(const Player &player, const Towner &towner)
+{
+	// Each case mirrors the quest branches of the towner's talk function above, in the same order.
+	const auto visited = [&](int a, int b) { return player._pLvlVisited[a] || player._pLvlVisited[b]; };
+	const auto has = [&](_item_indexes id) { return HasInventoryItemWithId(player, id); };
+	switch (towner._ttype) {
+	case TOWN_TAVERN: {
+		// A new hero gets Ogden's welcome first.
+		if (!player._pLvlVisited[0])
+			return OgdenWelcomed ? QuestMarker::None : QuestMarker::News;
+		const Quest &king = Quests[Q_SKELKING];
+		if (king._qactive != QUEST_NOTAVAIL && visited(2, 4)) {
+			if (king._qvar2 == 0)
+				return QuestMarker::News;
+			if (king._qactive == QUEST_DONE && king._qvar2 == 1)
+				return QuestMarker::Reward;
+		}
+		const Quest &banner = Quests[Q_LTBANNER];
+		if (banner._qactive != QUEST_NOTAVAIL && banner._qactive != QUEST_DONE && visited(3, 4)) {
+			if (banner._qvar2 == 0)
+				return QuestMarker::News;
+			if (banner._qvar2 == 1 && has(IDI_BANNER))
+				return QuestMarker::Reward;
+		}
+		return QuestMarker::None;
+	}
+	case TOWN_DEADGUY: {
+		const Quest &butcher = Quests[Q_BUTCHER];
+		return butcher._qactive != QUEST_DONE && butcher._qvar1 != 1 ? QuestMarker::News : QuestMarker::None;
+	}
+	case TOWN_SMITH: {
+		const Quest &rock = Quests[Q_ROCK];
+		if (rock._qactive != QUEST_NOTAVAIL && rock._qactive != QUEST_DONE && visited(4, 5)) {
+			if (rock._qvar2 == 0)
+				return QuestMarker::News;
+			if (rock._qvar2 == 1 && has(IDI_ROCK))
+				return QuestMarker::Reward;
+		}
+		const Quest &anvil = Quests[Q_ANVIL];
+		if (IsNoneOf(anvil._qactive, QUEST_NOTAVAIL, QUEST_DONE)) {
+			if (visited(9, 10) && anvil._qvar2 == 0)
+				return QuestMarker::News;
+			if (anvil._qvar2 == 1 && has(IDI_ANVIL))
+				return QuestMarker::Reward;
+		}
+		return QuestMarker::None;
+	}
+	case TOWN_WITCH: {
+		const Quest &mushroom = Quests[Q_MUSHROOM];
+		if (mushroom._qactive == QUEST_INIT && has(IDI_FUNGALTM))
+			return QuestMarker::Reward;
+		if (mushroom._qactive != QUEST_ACTIVE)
+			return QuestMarker::None;
+		if (mushroom._qvar1 >= QS_TOMEGIVEN && mushroom._qvar1 < QS_MUSHGIVEN) {
+			if (has(IDI_MUSHROOM))
+				return QuestMarker::Reward;
+			if (mushroom._qmsg != TEXT_MUSH9)
+				return QuestMarker::News;
+		}
+		if (mushroom._qvar1 >= QS_MUSHGIVEN) {
+			if (has(IDI_BRAIN) && mushroom._qvar2 != TEXT_MUSH11)
+				return QuestMarker::News;
+			if (HasInventoryOrBeltItemWithId(player, IDI_SPECELIX))
+				return QuestMarker::Reward;
+		}
+		return QuestMarker::None;
+	}
+	case TOWN_BMAID:
+		return !player._pLvlVisited[21] && has(IDI_MAPOFDOOM) && Quests[Q_GRAVE]._qmsg != TEXT_GRAVE8 ? QuestMarker::News : QuestMarker::None;
+	case TOWN_HEALER: {
+		const Quest &water = Quests[Q_PWATER];
+		if (water._qactive != QUEST_NOTAVAIL) {
+			if ((water._qactive == QUEST_INIT && visited(1, 5)) || (water._qactive == QUEST_ACTIVE && !water._qlog))
+				return QuestMarker::News;
+			if (water._qactive == QUEST_DONE && water._qvar1 != 2)
+				return QuestMarker::Reward;
+		}
+		const Quest &mushroom = Quests[Q_MUSHROOM];
+		if (mushroom._qactive == QUEST_ACTIVE && mushroom._qvar1 >= QS_MUSHGIVEN && mushroom._qvar1 < QS_BRAINGIVEN && has(IDI_BRAIN))
+			return QuestMarker::Reward;
+		return QuestMarker::None;
+	}
+	case TOWN_STORY: {
+		const Quest &betrayer = Quests[Q_BETRAYER];
+		if (!UseMultiplayerQuests() ? betrayer._qactive == QUEST_INIT && has(IDI_LAZSTAFF) : betrayer._qactive == QUEST_ACTIVE && !betrayer._qlog)
+			return QuestMarker::News;
+		return betrayer._qactive == QUEST_DONE && betrayer._qvar1 == 7 ? QuestMarker::News : QuestMarker::None;
+	}
+	case TOWN_FARMER: {
+		const Quest &farmer = Quests[Q_FARMER];
+		if (farmer._qactive == QUEST_DONE)
+			return QuestMarker::Reward;
+		if (farmer._qactive != QUEST_NOTAVAIL && farmer._qactive != QUEST_INIT)
+			return QuestMarker::None;
+		// Before then he only grumbles about the weather.
+		return has(IDI_RUNEBOMB) || player._pLvlVisited[9] || player.getCharacterLevel() >= 15 ? QuestMarker::News : QuestMarker::None;
+	}
+	case TOWN_COWFARM: {
+		const Quest &jersey = Quests[Q_JERSEY];
+		if (has(IDI_BROWNSUIT))
+			return QuestMarker::Reward;
+		if (has(IDI_RUNEBOMB))
+			return jersey._qactive == QUEST_ACTIVE ? QuestMarker::None : QuestMarker::News;
+		switch (jersey._qactive) {
+		case QUEST_NOTAVAIL:
+		case QUEST_INIT:
+		case QUEST_HIVE_TEASE1:
+		case QUEST_HIVE_TEASE2:
+			return QuestMarker::News;
+		case QUEST_HIVE_ACTIVE:
+			return player._pLvlVisited[9] || player.getCharacterLevel() >= 15 ? QuestMarker::News : QuestMarker::None;
+		default:
+			return QuestMarker::None;
+		}
+	}
+	case TOWN_GIRL: {
+		const Quest &girl = Quests[Q_GIRL];
+		if (girl._qactive != QUEST_DONE && has(IDI_THEODORE))
+			return QuestMarker::Reward;
+		return IsAnyOf(girl._qactive, QUEST_NOTAVAIL, QUEST_INIT) ? QuestMarker::News : QuestMarker::None;
+	}
+	default:
+		return QuestMarker::None;
+	}
+}
+
 void TalkToTowner(Player &player, int t)
 {
 	auto &towner = Towners[t];
@@ -847,6 +1097,35 @@ void TalkToTowner(Player &player, int t)
 
 	if (!player.HoldItem.isEmpty()) {
 		return;
+	}
+
+	// POE2 Mashup: Ctrl+click on Cain identifies everything without the talk menu. Like the shops below, he still
+	// greets the hero as a click does (Curtis 2026-10-23).
+	if (&player == MyPlayer && QuickTradeTowner == t && gbIsPoe2 && towner._ttype == TOWN_STORY) {
+		QuickTradeTowner = -1;
+		TownerTalk(TEXT_STORY1);
+		CainIdentifyAll("Cain, Ctrl+click");
+		return;
+	}
+	// POE2 Mashup: Ctrl+click on a trader opens their shop without the talk menu, unless they have quest news.
+	if (&player == MyPlayer && QuickTradeTowner == t && gbIsPoe2 && UseVisualStoreUi() && TownerQuestMarker(player, towner) == QuestMarker::None) {
+		QuickTradeTowner = -1;
+		switch (towner._ttype) {
+		case TOWN_SMITH:
+			TownerTalk(TEXT_GRISWOLD1);
+			OpenVisualStore(VisualStoreVendor::Smith);
+			return;
+		case TOWN_WITCH:
+			TownerTalk(TEXT_ADRIA1);
+			OpenVisualStore(VisualStoreVendor::Witch);
+			return;
+		case TOWN_HEALER:
+			TownerTalk(TEXT_PEPIN1);
+			OpenVisualStore(VisualStoreVendor::Healer);
+			return;
+		default:
+			break;
+		}
 	}
 
 	towner.talk(player, towner);

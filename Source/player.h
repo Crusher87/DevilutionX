@@ -27,6 +27,7 @@
 #include "levels/dun_tile.hpp"
 #include "levels/gendung.h"
 #include "multi.h"
+#include "poe2/player_data.hpp"
 #include "tables/playerdat.hpp"
 #include "tables/spelldat.h"
 #include "utils/attributes.h"
@@ -35,6 +36,9 @@
 #include "utils/is_of.hpp"
 
 namespace devilution {
+
+struct Monster;
+enum class MonsterClass : uint8_t;
 
 constexpr int InventoryGridCells = 40;
 constexpr int MaxBeltItems = 8;
@@ -336,6 +340,12 @@ public:
 	SpellFlag _pSpellFlags;
 	SpellID _pSplHotKey[NumHotkeys];
 	SpellType _pSplTHotKey[NumHotkeys];
+	/** @brief POE2 Mashup state (support gems, ...), saved separately from the hero file. */
+	Poe2PlayerData poe2;
+	/** @brief POE2 Mashup: jewels in the passive tree's jewel sockets, in the order of the sockets' node ids; saved with poe2. */
+	std::array<Item, MaxJewelSockets> jewels;
+	/** @brief POE2 Mashup: the weapon set that isn't out (main hand, off hand); swapped with X, saved with poe2. */
+	std::array<Item, 2> swapHands;
 	bool _pBlockFlag;
 	bool _pInvincible;
 	int8_t _pLightRad;
@@ -614,16 +624,37 @@ public:
 		return _pMagic + getPlayerCombatData().baseMagicToHit;
 	}
 
+	/** @brief POE2 Mashup: block caps at 50%, raised by the passive tree's block up to 75%, as in POE2. */
+	int GetMaxBlockChance(bool isPoe2) const
+	{
+		return isPoe2 ? std::min(50 + poe2.passiveBlockChance, 75) : 100;
+	}
+
 	/**
 	 * @brief Return block chance
 	 * @param useLevel - indicate if player's level should be added to block chance (the only case where it isn't is blocking a trap)
+	 *
+	 * POE2 Mashup: never adds the level: block doesn't grow with character level (pick 7, audit N8). Block is the held
+	 * shield's own chance plus the passive tree's, as in POE2; without a shield it is 0, and Dexterity doesn't count.
 	 */
 	int GetBlockChance(bool useLevel = true) const
 	{
-		int blkper = _pDexterity + getBaseToBlock();
-		if (useLevel)
-			blkper += getCharacterLevel() * 2;
-		return blkper;
+		int blkper;
+		if (gbIsPoe2) {
+			blkper = poe2.shieldBlockChance > 0 ? poe2.shieldBlockChance + poe2.passiveBlockChance : 0;
+			// Holy Shield (Curtis 2026-11-07, Q37): blocks more often while it lasts, with a shield to block with.
+			if (blkper > 0 && poe2.holyShieldTicks > 0)
+				blkper += HolyShieldBlockChance;
+			// Bulwark Roar (Q48): so does its roar.
+			if (blkper > 0 && poe2.cryTicks[BulwarkRoarCry] > 0)
+				blkper += BulwarkBlockChance;
+		} else {
+			blkper = _pDexterity + getBaseToBlock() + poe2.passiveBlockChance;
+			if (useLevel)
+				blkper += getCharacterLevel() * 2;
+		}
+		// POE2 Mashup: Magma Barrier's increased block chance.
+		return blkper * (100 + poe2.spiritState.blockPercent) / 100;
 	}
 
 	/**
@@ -644,7 +675,10 @@ public:
 			return 0;
 		}
 
-		return std::max<int>(_pISplLvlAdd + _pSplLvl[static_cast<std::size_t>(spell)], 0);
+		int level = _pSplLvl[static_cast<std::size_t>(spell)];
+		// POE2 Mashup: a socketed spell gem casts at the gem's level.
+		level = std::max(level, poe2.skillLevel(spell));
+		return std::max<int>(_pISplLvlAdd + level, 0);
 	}
 
 	/**
@@ -766,7 +800,7 @@ public:
 			return true;
 		if (_pmode == PM_RATTACK && AnimInfo.currentFrame >= _pAFNum)
 			return true;
-		if (_pmode == PM_SPELL && AnimInfo.currentFrame >= _pSFNum)
+		if (_pmode == PM_SPELL && AnimInfo.currentFrame >= (poe2.castSkill != WeaponSkill::None ? poe2.castFrame + 1 : _pSFNum))
 			return true;
 		if (isWalking() && AnimInfo.isLastFrame())
 			return true;
@@ -918,7 +952,7 @@ extern DVL_API_FOR_TEST uint8_t MyPlayerId;
 extern DVL_API_FOR_TEST Player *MyPlayer;
 extern DVL_API_FOR_TEST std::vector<Player> Players;
 /** @brief What Player items and stats should be displayed? Normally this is identical to MyPlayer but can differ when /inspect was used. */
-extern Player *InspectPlayer;
+extern DVL_API_FOR_TEST Player *InspectPlayer;
 /** @brief Do we currently inspect a remote player (/inspect was used)? In this case the (remote) players items and stats can't be modified. */
 inline bool IsInspectingPlayer()
 {
@@ -951,12 +985,24 @@ void ResetPlayerGFX(Player &player);
  * @param distributeFramesBeforeFrame Distribute the numSkippedFrames only before this frame
  */
 void NewPlrAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags = AnimationDistributionFlags::None, int8_t numSkippedFrames = 0, int8_t distributeFramesBeforeFrame = 0);
+/**
+ * @brief POE2 Mashup: sets a player animation that takes the given game ticks, its action frame (a hit or a cast)
+ * coming as far through them as it comes through the animation (see AnimationInfo::setTimedAnimation).
+ * @param actionFrame The frame the game logic acts on, like _pAFNum - 1 for an attack or _pSFNum for a spell
+ * @param ticks Game ticks from the start to the last frame, when a held attack starts the next one
+ * @param ticksToAction Game ticks from the start to the action frame instead, for a quick strike; 0 for as far through
+ */
+void NewPlrTimedAnim(Player &player, player_graphic graphic, Direction dir, AnimationDistributionFlags flags, int8_t actionFrame, int ticks, int ticksToAction = 0);
+/**
+ * @brief POE2 Mashup: ends a weapon skill's animation that is on its last frame, as DoSkillCast would this tick, so a
+ * held skill starts its next use now, as a held attack does, rather than a tick late.
+ * @return Whether there was such an animation.
+ */
+bool FinishSkillCast(Player &player);
 void SetPlrAnims(Player &player);
 void CreatePlayer(Player &player, HeroClass c);
 int CalcStatDiff(Player &player);
-#ifdef _DEBUG
 void NextPlrLevel(Player &player);
-#endif
 void AddPlrMonstExper(int lvl, unsigned int exp, char pmask);
 void ApplyPlrDamage(DamageType damageType, Player &player, Fixed26_6 dam, int minHP = 0, DeathReason deathReason = DeathReason::MonsterOrTrap);
 void InitPlayer(Player &player, bool FirstTime);
@@ -982,6 +1028,25 @@ void StartWarpLvl(Player &player, size_t pidx);
 void ProcessPlayers();
 void ClrPlrPath(Player &player);
 bool PosOkPlayer(const Player &player, Point position);
+/** @brief POE2 Mashup: a skill's melee hit on a monster, for the given share of its damage. */
+bool SkillHitMonster(Player &player, Monster &monster, int damagePercent);
+/**
+ * @brief The attack animation frames a melee attack with the skill skips, as StartAttack works them out outside POE2
+ * Mashup: the weapon's attack speed (a negative total adds frames). POE2 Mashup times attacks with AttackTime instead.
+ */
+int8_t MeleeAttackSkippedFrames(const Player &player, WeaponSkill skill, bool includesFirstFrame);
+/** @brief The attack animation frames a ranged attack skips, as StartRangeAttack works them out outside POE2 Mashup. */
+int8_t RangedAttackSkippedFrames(const Player &player, bool includesFirstFrame);
+/**
+ * @brief POE2 Mashup: whether Diablo's rule that a sword deals half to Undead and +50% to Animals, and a mace the
+ * reverse, applies in POE2 mode. Off (plan step 14, Curtis 2026-10-27): it cost a Warrior or Bard about a third more
+ * hits in Act 1 and a Warrior twice as many in the Hive.
+ */
+constexpr bool Poe2WeaponVsMonsterClass = false;
+/** @brief A melee hit's damage after Diablo's sword/mace rule against Undead and Animals (unchanged in POE2 mode). */
+int WeaponVsMonsterClassDamage(ItemType handType, MonsterClass monsterClass, int damage);
+/** @brief POE2 Mashup: moves the player to a tile at once, as Teleport does. */
+void MovePlayerTo(Player &player, Point destination);
 /**
  * @brief Checks if the player is close enough to the object to operate it without walking.
  */
