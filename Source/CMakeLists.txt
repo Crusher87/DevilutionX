@@ -56,6 +56,7 @@ set(libdevilutionx_SRCS
   poe2/weather.cpp
   poe2/hd.cpp
   poe2/hd_light.cpp
+  poe2/hd_outline.cpp
   poe2/hd_ui.cpp
   poe2/loot_filter.cpp
   poe2/rune_icons.cpp

@@ -97,7 +97,10 @@ struct OutlineLook {
 	bool glow = false;
 	/** @brief It marks the thing under the cursor, so it fades in. */
 	bool hovered = false;
-	/** @brief The thing it goes round (OutlineThing), so the cursor's outline fades in from the one it had; 0 for none. */
+	/**
+	 * @brief The thing it goes round (OutlineThing), so the cursor's outline fades in from the one it had; 0 for none.
+	 * In the UI an item picture's outline is told apart by its picture and where it is, so it can be left 0.
+	 */
 	uint32_t thing = 0;
 };
 
@@ -198,6 +201,15 @@ using RecordUiSpriteFn = void (*)(const Surface &out, Point position, ClxSprite 
  * belt, shops, the cursor) are shown with their HD art over the UI (PrepareUiSprites, RenderUiSprites).
  */
 extern RecordUiSpriteFn RecordUiSpriteHook;
+
+using RecordUiOutlineFn = void (*)(const Surface &out, Point position, ClxSprite clx, uint8_t colour);
+
+/**
+ * @brief Notes an outline drawn in the UI (set by the HD renderer; null without it). An outline round an item picture
+ * that shows its HD art shows smooth round that art instead, in its colour, with the look CurrentOutlineLook gives it
+ * (fading in under the cursor, glowing round a unique); the game's own outline is left out under it.
+ */
+extern RecordUiOutlineFn RecordUiOutlineHook;
 
 /** @brief An item picture frame (data/inv/objcurs) and its HD art's name. */
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height);

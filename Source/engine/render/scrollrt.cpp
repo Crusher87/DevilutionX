@@ -220,7 +220,7 @@ hd::OutlineLook MonsterOutlineLook(int monsterId)
 hd::OutlineLook ItemOutlineLook(const Item &item, int itemIndex)
 {
 	return {
-		.glow = gbIsPoe2 && (item._iMagical == ITEM_QUALITY_UNIQUE || item._iClass == ICLASS_QUEST),
+		.glow = ItemOutlineGlows(item),
 		.hovered = itemIndex == pcursitem,
 		.thing = hd::OutlineThing(hd::ThingKind::Item, itemIndex),
 	};

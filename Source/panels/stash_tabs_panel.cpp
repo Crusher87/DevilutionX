@@ -39,6 +39,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/crafting_items.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/item_search.hpp"
 #include "poe2/rune_icons.hpp"
 #include "poe2/stacking.hpp"
@@ -1433,9 +1434,11 @@ void DrawSlot(const Surface &out, const SlotView &slot, bool collection)
 		outline = GetOutlineColor(item, true);
 	if (IsDrawnRuneItem(item)) {
 		if (outline)
-			DrawFrame(out, slot.rect, *outline);
+			DrawRuneOutline(out, slot.rect, GetAugmentId(item), *outline);
 		DrawRuneIcon(out, slot.rect, GetAugmentId(item), /*dim=*/false);
 	} else {
+		// In HD the outline of the item under the cursor shows smooth and fades in, as the world's do.
+		const hd::OutlineScope outlineLook({ .glow = ItemOutlineGlows(item), .hovered = outline.has_value() });
 		DrawPicture(out, item._iCurs, slot.rect, item._iStatFlag ? nullptr : GetInfravisionTRN(), outline);
 	}
 	// The Runes tab shows every count, as its empty slots show none.
