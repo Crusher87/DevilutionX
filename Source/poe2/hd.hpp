@@ -218,6 +218,13 @@ void RenderUiSprites(SDL_Renderer *renderer);
 /** @brief Names every frame of a loaded sprite file, so its HD art can be found. */
 void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);
 
+/**
+ * @brief Names a unique monster's colour table (monsters\\monsters\\<name>.trn), so its sprites drawn in it find their
+ * own HD art: <sprite's art name>+<name>, e.g. monsters/skelaxe/sklaxa@skelaxe/white+br/d3_f05. A table that changes
+ * no colour (Genrl) shows the sprite's own art.
+ */
+void RegisterRecolour(const uint8_t *trn, std::string_view name);
+
 /** @brief Forgets the names of a sprite file's frames, before its pixels are freed (so other pictures don't take its art). */
 void ForgetSprites(ClxSpriteListOrSheet sprites);
 
