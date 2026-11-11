@@ -21,6 +21,7 @@
 #include "pfile.h"
 #include "player.h"
 #include "poe2/area_levels.hpp"
+#include "poe2/bases.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/stash_tabs.hpp"
@@ -250,39 +251,48 @@ TEST_F(Poe2VendorItemsTest, TownItemsPassMpValidation)
 	}
 }
 
-TEST_F(Poe2VendorItemsTest, VendorsStockForTheDeepestAreaVisited)
+TEST_F(Poe2VendorItemsTest, VendorsStockAroundTheHerosLevel)
 {
-	const int first = AreaLevelForFloor(1);
-	ASSERT_GT(first, 0) << "the area level table";
-	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_NORMAL), first + VendorAreaLevelBonus) << "nothing visited yet";
+	// Curtis 2026-11-11: "shops should only sell items around my level or just above".
+	ASSERT_GT(AreaLevelForFloor(1), 0) << "the area level table";
+	MyPlayer->setCharacterLevel(8);
+	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_NORMAL), 8 + VendorAreaLevelBonus);
+	MyPlayer->_pLvlVisited[15] = true;
+	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_NORMAL), 8 + VendorAreaLevelBonus) << "the deepest floor no longer counts";
+	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_NIGHTMARE), 8 + VendorAreaLevelBonus) << "the hero's level already climbs with difficulty";
+	MyPlayer->setCharacterLevel(MaxPoe2ItemLevel);
+	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_HELL), MaxPoe2ItemLevel);
 
-	MyPlayer->_pLvlVisited[1] = true;
-	MyPlayer->_pLvlVisited[8] = true;
-	MyPlayer->_pLvlVisited[5] = true;
-	const int deepest = std::max({ AreaLevelForFloor(1), AreaLevelForFloor(5), AreaLevelForFloor(8) });
-	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_NORMAL), deepest + VendorAreaLevelBonus);
-	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_NIGHTMARE), deepest + AreaLevelsPerDifficulty + VendorAreaLevelBonus);
-
-	int deepestOfAll = 0;
-	for (int floor = 1; floor < NUMLEVELS; floor++) {
-		MyPlayer->_pLvlVisited[floor] = true;
-		deepestOfAll = std::max(deepestOfAll, AreaLevelForFloor(floor));
+	// The wares are from the hero's level to a little above, on bases near it; CF_LEVEL keeps Diablo's vendor level.
+	for (const int heroLevel : { 8, 25, 50 }) {
+		MyPlayer->setCharacterLevel(heroLevel);
+		const int top = VendorAreaLevel(*MyPlayer, DIFF_NORMAL);
+		for (const uint32_t seed : { 11U, 12U, 13U }) {
+			SetRndSeed(seed);
+			SpawnSmith(16);
+			ASSERT_FALSE(SmithItems.empty());
+			for (const Item &ware : SmithItems) {
+				EXPECT_EQ(ware._iCreateInfo & CF_LEVEL, 16) << ware._iIName;
+				if (EquipmentClassWeight(ware._itype) == 0)
+					continue;
+				EXPECT_GE(GetPoe2ItemLevel(ware), heroLevel) << ware._iIName;
+				EXPECT_LE(GetPoe2ItemLevel(ware), top) << ware._iIName;
+				const ItemData &base = AllItemsList[ware.IDidx];
+				EXPECT_LE(base.iMinMLvl, top) << ware._iIName;
+				// No base of its kind at the vendors' level is more than VendorBaseLevelWindow newer.
+				const BaseMeta *meta = BaseMetaFor(ware.IDidx);
+				if (meta == nullptr)
+					continue;
+				for (size_t i = 0; i < AllItemsList.size(); i++) {
+					const BaseMeta *other = BaseMetaFor(static_cast<int>(i));
+					if (other == nullptr || other->itemClass != meta->itemClass || AllItemsList[i].dropRate == 0 || !IsItemAvailable(static_cast<int>(i)) || AllItemsList[i].iMinMLvl > top)
+						continue;
+					EXPECT_LE(AllItemsList[i].iMinMLvl - base.iMinMLvl, VendorBaseLevelWindow) << ware._iIName << " beside " << AllItemsList[i].iName;
+				}
+			}
+		}
 	}
-	EXPECT_EQ(VendorAreaLevel(*MyPlayer, DIFF_HELL), std::min(deepestOfAll + (2 * AreaLevelsPerDifficulty) + VendorAreaLevelBonus, MaxPoe2ItemLevel));
-
-	// The wares take the area's item level; CF_LEVEL keeps Diablo's vendor level.
-	std::fill(std::begin(MyPlayer->_pLvlVisited), std::end(MyPlayer->_pLvlVisited), false);
-	MyPlayer->_pLvlVisited[8] = true;
-	const int areaLevel = VendorAreaLevel(*MyPlayer, DIFF_NORMAL);
-	SetRndSeed(11);
-	SpawnSmith(16);
-	ASSERT_FALSE(SmithItems.empty());
-	for (const Item &ware : SmithItems) {
-		EXPECT_EQ(ware._iCreateInfo & CF_LEVEL, 16) << ware._iIName;
-		if (EquipmentClassWeight(ware._itype) == 0)
-			continue;
-		EXPECT_EQ(GetPoe2ItemLevel(ware), areaLevel) << ware._iIName;
-	}
+	MyPlayer->setCharacterLevel(30);
 
 	// Without the table (a game without POE2 data) the item level follows the vendor level as before.
 	gbIsPoe2 = false;
