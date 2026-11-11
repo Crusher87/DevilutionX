@@ -73,6 +73,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/affix_glow.hpp"
 #include "poe2/area_levels.hpp"
 #include "poe2/attack_speed.hpp"
 #include "poe2/bases.hpp"
@@ -6981,7 +6982,13 @@ void PrintItemCraftState(const Item &item)
 	if (IsWaystone(item) || IsEndgameItem(item))
 		return;
 	const Poe2Craft &craft = item._iPoe2Craft;
-	for (const Poe2CraftMod &mod : craft.mods) {
+	// A line crafting just added glows for a moment (poe2/affix_glow.hpp).
+	const NewAffixLines *glowing = GlowingAffixLines(item);
+	const InfoLineStyle style = CurrentInfoLineStyle;
+	const auto styleFor = [glowing, style](bool fresh) { return fresh && glowing != nullptr && style == InfoLineStyle::Mod ? InfoLineStyle::NewMod : style; };
+	for (size_t i = 0; i < craft.mods.size(); i++) {
+		const Poe2CraftMod &mod = craft.mods[i];
+		CurrentInfoLineStyle = styleFor(glowing != nullptr && glowing->hasCraftMod(i));
 		if (mod.family == UnrevealedModFamily)
 			AddItemInfoBoxString(IsCraftPrefix(mod) ? _("Unrevealed desecrated prefix") : _("Unrevealed desecrated suffix"));
 		if (const DesecratedMod *desecrated = GetDesecratedMod(mod.family); desecrated != nullptr) {
@@ -6989,17 +6996,19 @@ void PrintItemCraftState(const Item &item)
 				AddItemInfoBoxString(StrCat(line, " (", desecrated->name, ")"));
 		}
 	}
+	CurrentInfoLineStyle = style;
 	if (const auto catalyst = static_cast<Catalyst>(craft.catalyst); catalyst != Catalyst::None)
 		AddItemInfoBoxString(FormatRuntime(_("Quality: +{:d}% ({:s} modifiers)"), ItemQuality(item), CatalystName(catalyst)));
 	if (craft.desecrated)
 		AddItemInfoBoxString(_("Desecrated"));
 	// What an Evil essence left on it (build spec step 7).
-	for (std::string &line : EssenceMarkText(item))
+	for (std::string &line : EssenceMarkText(item)) {
+		CurrentInfoLineStyle = styleFor(glowing != nullptr && glowing->hasLine(line));
 		AddItemInfoBoxString(std::move(line));
+	}
 	// A bonded line whose sockets don't match yet is greyed (build spec step 5).
-	const InfoLineStyle style = CurrentInfoLineStyle;
 	for (SocketLine &line : AugmentSocketLines(item)) {
-		CurrentInfoLineStyle = line.inactive ? InfoLineStyle::InactiveMod : style;
+		CurrentInfoLineStyle = line.inactive ? InfoLineStyle::InactiveMod : styleFor(glowing != nullptr && glowing->hasLine(line.text));
 		AddItemInfoBoxString(std::move(line.text));
 	}
 	CurrentInfoLineStyle = style;
@@ -7237,6 +7246,9 @@ void PrintItemDetails(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Mod;
+	// The lines crafting just added glow for a moment (poe2/affix_glow.hpp).
+	const NewAffixLines *glowing = GlowingAffixLines(item);
+	const auto modStyle = [glowing](bool fresh) { return fresh && glowing != nullptr ? InfoLineStyle::NewMod : InfoLineStyle::Mod; };
 	if (item._iPoe2Mods[0].family != 0 || item._iPoe2Craft.explicitMods) {
 		// Holding Alt shows the prefixes, then the suffixes, each stat with the range it can roll and its tier at the
 		// end of the line, as compact as POE2's (Curtis 2026-10-18). Each affix is labelled once, so the labels count
@@ -7245,15 +7257,21 @@ void PrintItemDetails(const Item &item)
 		if (!advanced) {
 			// A stat several modifiers give shows once, added up, as in POE2 (Curtis 2026-10-30: a rare showed
 			// "12% increased Energy Shield" twice and "29% increased Energy Shield" from two hybrids and a plain one).
-			for (const std::string &line : CombinedItemModText(item._iPoe2Mods))
-				AddItemInfoBoxString(line);
+			// A stat line a new modifier adds to glows too.
+			std::vector<bool> fresh;
+			const std::vector<std::string> lines = CombinedItemModText(item._iPoe2Mods, glowing != nullptr ? glowing->poe2Mods : 0, fresh);
+			for (size_t i = 0; i < lines.size(); i++) {
+				CurrentInfoLineStyle = modStyle(fresh[i]);
+				AddItemInfoBoxString(lines[i]);
+			}
 		} else {
-			CurrentInfoLineStyle = InfoLineStyle::Affix;
 			for (const bool prefixes : { true, false }) {
-				for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+				for (size_t i = 0; i < item._iPoe2Mods.size(); i++) {
+					const Poe2ItemMod &mod = item._iPoe2Mods[i];
 					const ModFamily *family = ItemModFamily(mod);
 					if (family == nullptr || family->prefix != prefixes)
 						continue;
+					CurrentInfoLineStyle = glowing != nullptr && glowing->hasPoe2Mod(i) ? InfoLineStyle::NewAffix : InfoLineStyle::Affix;
 					for (const std::string &line : AffixViewLines(prefixes ? _("Prefix") : _("Suffix"), ItemModAdvancedText(mod), mod.tier))
 						AddItemInfoBoxString(line);
 				}
@@ -7262,16 +7280,21 @@ void PrintItemDetails(const Item &item)
 		CurrentInfoLineStyle = InfoLineStyle::Mod;
 	} else if (item._iMagical == ITEM_QUALITY_RARE) {
 		for (size_t i = 0; i < item._iRarePowers.size(); i++) {
+			CurrentInfoLineStyle = modStyle(glowing != nullptr && glowing->hasRarePower(i));
 			if (item._iRarePowers[i] != IPL_INVALID)
 				AddItemInfoBoxString(PrintItemPowerWithTier(item._iRarePowers[i], item, item._iRareTiers[i]));
 		}
+		CurrentInfoLineStyle = InfoLineStyle::Mod;
 	} else {
 		if (item._iPrePower != -1) {
+			CurrentInfoLineStyle = modStyle(glowing != nullptr && glowing->prefixPower);
 			AddItemInfoBoxString(PrintItemPowerWithTier(item._iPrePower, item, item._iPreTier));
 		}
 		if (item._iSufPower != -1) {
+			CurrentInfoLineStyle = modStyle(glowing != nullptr && glowing->suffixPower);
 			AddItemInfoBoxString(PrintItemPowerWithTier(item._iSufPower, item, item._iSufTier));
 		}
+		CurrentInfoLineStyle = InfoLineStyle::Mod;
 	}
 	PrintItemCraftState(item);
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && gbIsPoe2) {

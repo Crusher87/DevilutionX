@@ -28,6 +28,7 @@ set(libdevilutionx_SRCS
   nthread.cpp
   pfile.cpp
   plrmsg.cpp
+  poe2/affix_glow.cpp
   poe2/autosave.cpp
   poe2/craft_state.cpp
   poe2/item_search.cpp

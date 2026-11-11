@@ -71,6 +71,7 @@ set(tests
   poe2_item_levels_test
   poe2_modifiers_test
   poe2_crafting_test
+  poe2_affix_glow_test
   poe2_effect_primitives_test
   poe2_runes_test
   poe2_essences_test
