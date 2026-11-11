@@ -91,6 +91,21 @@ const std::array<uint8_t, 128 * 3> &SharedPalette();
 /** @brief Builds the test map for SL_MIXTEST on top of the loaded Cathedral arena. Seeded. */
 void BuildMixTestLevel();
 
+/**
+ * @brief Console test switch: random Cathedral floors get Tristram field areas.
+ * Not saved and not shared in multiplayer; levels go back to normal once it is off.
+ */
+void SetRandomFloors(bool on);
+bool RandomFloors();
+
+/**
+ * @brief Paints guest field areas into a freshly generated random floor, inside open room floor only.
+ * Uses its own random numbers from the level seed, so the level's own randomness is untouched and
+ * the same seed always gives the same areas.
+ * @return how many areas were placed
+ */
+int PlaceGuestRegions(uint32_t seed);
+
 TileSetFiles FilesFor(dungeon_type type);
 
 /**

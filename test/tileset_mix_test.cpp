@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
 #include <cstdlib>
@@ -66,6 +67,7 @@ protected:
 	void TearDown() override
 	{
 		tilesetmix::Clear();
+		tilesetmix::SetRandomFloors(false);
 		pDungeonCels = nullptr;
 		setlevel = false;
 		setlvlnum = SL_NONE;
@@ -242,6 +244,76 @@ TEST_F(TilesetMixTest, TestLevelHasTownYard)
 	std::fwrite(tilesetmix::SharedPalette().data(), 1, 128 * 3, f);
 	std::fwrite(upper.data() + 128 * 3, 1, 128 * 3, f);
 	std::fclose(f);
+}
+
+TEST_F(TilesetMixTest, RandomCathedralFloorsGetFields)
+{
+	setlevel = false;
+	setlvlnum = SL_NONE;
+	currlevel = 2;
+	leveltype = DTYPE_CATHEDRAL;
+	tilesetmix::SetRandomFloors(true);
+	tilesetmix::SelectForCurrentLevel();
+	ASSERT_TRUE(tilesetmix::Active());
+	LoadTiles();
+	const uint16_t townOffset = tilesetmix::LoadedSets()[1].pieceOffset;
+
+	int levelsWithFields = 0;
+	for (const uint32_t seed : { 12345U, 777U, 2024U, 99U, 4242U, 31337U, 8U, 1000001U }) {
+		LevelSeeds[currlevel] = std::nullopt;
+		CreateDungeon(seed, ENTRY_MAIN);
+		const uint32_t rngAfterLevel = GetLCGEngineState();
+		std::array<std::array<uint8_t, DMAXY>, DMAXX> before {};
+		for (int x = 0; x < DMAXX; ++x)
+			for (int y = 0; y < DMAXY; ++y)
+				before[x][y] = dungeon[x][y];
+		std::vector<uint16_t> plain(&dPiece[0][0], &dPiece[0][0] + MAXDUNX * MAXDUNY);
+
+		const int areas = tilesetmix::PlaceGuestRegions(seed);
+		EXPECT_EQ(GetLCGEngineState(), rngAfterLevel) << "the level's own random numbers must not move";
+		EXPECT_LE(areas, 3);
+		if (areas > 0)
+			++levelsWithFields;
+
+		int townPieces = 0;
+		for (int x = 0; x < MAXDUNX; ++x) {
+			for (int y = 0; y < MAXDUNY; ++y) {
+				if (dPiece[x][y] == plain[x * MAXDUNY + y])
+					continue;
+				++townPieces;
+				EXPECT_GE(dPiece[x][y], townOffset);
+				// Only plain room floor ever turns into field, and the map still calls it floor.
+				const int mx = (x - 16) / 2;
+				const int my = (y - 16) / 2;
+				ASSERT_TRUE(mx >= 0 && my >= 0 && mx < DMAXX && my < DMAXY);
+				EXPECT_TRUE(before[mx][my] == 13 || before[mx][my] == 162 || before[mx][my] == 163) << static_cast<int>(before[mx][my]);
+				EXPECT_EQ(dungeon[mx][my], 13);
+				EXPECT_FALSE(Protected.test(mx, my));
+			}
+		}
+		EXPECT_EQ(townPieces > 0, areas > 0) << "seed " << seed;
+
+		// Same seed, same fields.
+		std::vector<uint16_t> first(&dPiece[0][0], &dPiece[0][0] + MAXDUNX * MAXDUNY);
+		LevelSeeds[currlevel] = std::nullopt;
+		CreateDungeon(seed, ENTRY_MAIN);
+		tilesetmix::PlaceGuestRegions(seed);
+		EXPECT_TRUE(std::equal(first.begin(), first.end(), &dPiece[0][0])) << "seed " << seed;
+
+		if (const char *dump = std::getenv("POE2_MIX_FLOOR_DUMP"); dump != nullptr) {
+			FILE *f = std::fopen((std::string(dump) + "_" + std::to_string(seed) + ".bin").c_str(), "wb");
+			ASSERT_NE(f, nullptr);
+			const int header[4] = { ViewPosition.x, ViewPosition.y, townOffset, areas };
+			std::fwrite(header, sizeof(int), 4, f);
+			std::fwrite(tilesetmix::SharedPalette().data(), 1, 128 * 3, f);
+			for (auto &t : LightTables)
+				std::fwrite(t.data(), 1, t.size(), f);
+			for (int x = 0; x < MAXDUNX; ++x)
+				std::fwrite(dPiece[x], sizeof(dPiece[x][0]), MAXDUNY, f);
+			std::fclose(f);
+		}
+	}
+	EXPECT_GE(levelsWithFields, 6) << "most Cathedral floors have room for a field";
 }
 
 } // namespace

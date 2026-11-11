@@ -3,6 +3,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <expected>
 #include <memory>
 #include <optional>
@@ -180,18 +181,19 @@ void SetDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, uint_fast8_t &m
 	size_t tileCount;
 	const std::unique_ptr<uint16_t[]> levelPieces = LoadMinData(tileCount);
 
+	// A mixed map before this one may have left taller pieces behind.
+	std::memset(DPieceMicros, 0, sizeof(DPieceMicros));
 	for (size_t levelPieceId = 0; levelPieceId < tileCount / blocks; levelPieceId++) {
 		uint16_t *pieces = &levelPieces[blocks * levelPieceId];
 		for (uint32_t block = 0; block < blocks; block++) {
 			DPieceMicros[levelPieceId].mt[block] = LevelCelBlock { Swap16LE(pieces[blocks - 2 + (block & 1) - (block & 0xE)]) };
 		}
 	}
-	FinishDungeonMicros(dungeonCels, tileCount / blocks, microTileLen);
+	FinishDungeonMicros(dungeonCels, tileCount / blocks, static_cast<uint32_t>(blocks));
 }
 
-void FinishDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, size_t pieceCount, uint_fast8_t microTileLen)
+void FinishDungeonMicros(std::unique_ptr<std::byte[]> &dungeonCels, size_t pieceCount, uint32_t blocks)
 {
-	const uint32_t blocks = microTileLen;
 	ankerl::unordered_dense::map<uint16_t, DunFrameInfo> frameToTypeMap;
 	frameToTypeMap.reserve(8192);
 	for (size_t levelPieceId = 0; levelPieceId < pieceCount; levelPieceId++) {
