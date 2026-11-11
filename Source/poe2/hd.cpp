@@ -1475,7 +1475,7 @@ bool IsArchPiece(const Draw &draw)
 
 /**
  * @brief The walls show HD art made in the level type's first palette, evened out to this level's palette by
- * TileGain. Arches have no HD art, so they take the same colours, or they stand out in the walls' old colours.
+ * TileGain. Arches without HD art take the same colours, or they stand out in the walls' old colours.
  */
 bool ArchesTakeTileColours()
 {
@@ -1637,6 +1637,9 @@ DrawTexture TextureFor(SDL_Renderer *renderer, const Draw &draw, bool paintedSha
 	out.texture = art.texture;
 	out.hdArt = art.hdArt;
 	out.tileColours = art.tileArt;
+	// HD arches are made in the HD walls' palette, so they are evened out to this level's palette like the walls.
+	if (art.hdArt && leveltype != DTYPE_TOWN && IsArchPiece(draw))
+		out.tileColours = true;
 	// Recolours other than light (stone curse, infravision, unique monsters) are drawn by the game itself.
 	if (out.texture == nullptr) {
 		Raster &raster = FallbackRaster(draw, draw.light < 0);
