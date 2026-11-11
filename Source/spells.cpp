@@ -273,7 +273,11 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 	const auto spawnMissiles = [&](WorldTilePosition target) {
 		bool fizzled = false;
 		for (size_t i = 0; i < sizeof(spellData.sMissiles) / sizeof(spellData.sMissiles[0]) && spellData.sMissiles[i] != MissileID::Null; i++) {
-			Missile *missile = AddMissile(src, target, dir, spellData.sMissiles[i], TARGET_MONSTERS, player, 0, spllvl);
+			MissileID type = spellData.sMissiles[i];
+			// POE2 Mashup: Fire Wall cast at the hero's feet makes Ring of Fire's ring, same damage (Curtis 2026-11-07, Q34).
+			if (spl == SpellID::FireWall && type == MissileID::FireWallControl)
+				type = FireWallMissile(Point(src), Point(target));
+			Missile *missile = AddMissile(src, target, dir, type, TARGET_MONSTERS, player, 0, spllvl);
 			fizzled |= (missile == nullptr);
 			if (missile != nullptr && gbIsPoe2)
 				SetSpellMissileSpeed(*missile, spl);
@@ -294,6 +298,9 @@ void CastSpell(Player &player, SpellID spl, WorldTilePosition src, WorldTilePosi
 	};
 
 	const bool fizzled = spawnMissiles(dst);
+	// POE2 Mashup: Charged Bolt throws Arcing Sparks' sparks too from gem level 10 (Curtis 2026-11-07, Q34).
+	if (!fizzled && supported && spl == SpellID::ChargedBolt)
+		FireChargedBoltSparks(player, Point(dst), spllvl);
 	if (!fizzled && supported) {
 		// POE2 Mashup: Multiple Projectiles support fans extra projectiles out around the target.
 		const int extra = SupportExtraProjectiles(player, spl);

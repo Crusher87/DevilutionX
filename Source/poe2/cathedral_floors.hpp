@@ -44,6 +44,13 @@
  * Curtis on 2026-11-02): slime pits are Hellfire's own 2 x 2 pit tiles and hive growth its decorated floor tiles,
  * stamped onto the floor once the walls are made. Level 17's stairs up are the stairs to town and level 20 has no
  * stairs down, as in Hellfire. Their setting is Gameplay > New Hive Floors.
+ *
+ * Hellfire's Crypt (levels 21 to 24) is built like the Cathedral, on its grid and with its rules, from crypt_rooms.tsv
+ * (picked by Curtis on 2026-11-10), on the Crypt's own tiles (drlg_l1.cpp and crypt.cpp). Three marks only the Crypt's
+ * tiles can show are stamped once the walls are in: 'Q' a carved demon or succubus in the wall behind, 'B' blood
+ * running down it and '+' a star cut into the floor. Level 21's stairs up lead to town, and the floor holds the
+ * Cornerstone of the World in a hall off the main way; level 24 has no stairs down: Na-Krul's prison ends the main way
+ * in a hall of its own. Their setting is Gameplay > New Crypt Floors.
  */
 #pragma once
 
@@ -137,6 +144,14 @@ void SetHellRooms(std::vector<CathedralRoomDef> rooms);
 const std::vector<CathedralRoomDef> &GetHiveRooms();
 void SetHiveRooms(std::vector<CathedralRoomDef> rooms);
 
+/**
+ * @brief The Crypt room collection, read from crypt_rooms.tsv on first use. On the Cathedral grid, with 'Q' a carved
+ * demon or succubus in the wall behind, 'B' blood running down the wall behind and '+' a star in the floor. 'L' is a
+ * crypt candelabra (not a brazier on a pillar), 'S' a crypt sarcophagus, 'r' burial urns and 'M' an armour stand.
+ */
+const std::vector<CathedralRoomDef> &GetCryptRooms();
+void SetCryptRooms(std::vector<CathedralRoomDef> rooms);
+
 /** @brief A grid turned: turn & 3 quarter turns clockwise, then mirrored left to right when turn & 4. */
 std::vector<std::string> TurnCathedralGrid(const std::vector<std::string> &grid, int turn);
 /**
@@ -208,6 +223,8 @@ struct CathedralPlan {
 	bool hell = false;
 	/** Built from the Hive rooms, on the Caves corner grid with Hive tiles (caves is set too). */
 	bool hive = false;
+	/** Built from the Crypt rooms, on the Cathedral grid with Crypt tiles. */
+	bool crypt = false;
 	std::vector<CathedralArea> areas;
 	std::vector<CathedralDoor> doors;
 	std::vector<CathedralProp> props;
@@ -242,6 +259,8 @@ struct CathedralRequest {
 	bool hell = false;
 	/** The Hive rooms; with caves set, the Caves rules. */
 	bool hive = false;
+	/** The Crypt rooms, with the Cathedral's rules. */
+	bool crypt = false;
 	/** Bit i: room i of the collection may not be used. */
 	uint64_t forbidden = 0;
 	bool questPiece = false;
@@ -268,7 +287,7 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan);
 
 /**
  * @brief Marks a Catacombs floor in the room history, so its rooms are kept apart from the Cathedral's (whose numbers
- * mean other rooms). Rooms 60 to 63 can't be used.
+ * mean other rooms). Rooms 59 to 63 can't be used.
  */
 constexpr uint64_t CatacombsRoomsMark = uint64_t { 1 } << 63;
 /** @brief Marks a Caves floor in the room history. */
@@ -277,12 +296,21 @@ constexpr uint64_t CavesRoomsMark = uint64_t { 1 } << 62;
 constexpr uint64_t HellRoomsMark = uint64_t { 1 } << 61;
 /** @brief Marks a Hive floor in the room history. */
 constexpr uint64_t HiveRoomsMark = uint64_t { 1 } << 60;
+/** @brief Marks a Crypt floor in the room history. */
+constexpr uint64_t CryptRoomsMark = uint64_t { 1 } << 59;
 
 /**
  * @brief Which rooms a new floor may not use, from the rooms the last five floors built used (newest first).
  * Only the floors built from the same collection count.
  */
-uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false, bool caves = false, bool hell = false, bool hive = false);
+uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs = false, bool caves = false, bool hell = false, bool hive = false, bool crypt = false);
+
+/**
+ * @brief A stamp of the room collection a floor of this kind is built from. A saved floor is built again from its seed
+ * when it is loaded, so a floor saved with other rooms (an older game version) would come back with a different layout
+ * under its saved chests and fires. Bump FloorBuilderVersion in the .cpp when a builder change moves things.
+ */
+uint32_t CathedralRoomsStamp(bool catacombs = false, bool caves = false, bool hell = false, bool hive = false, bool crypt = false);
 
 /** @brief Whether the floor being played was made by this builder. */
 bool IsCathedralFunnelFloor();
@@ -317,6 +345,11 @@ int CathedralDesignedSarcophagi();
 void MarkCathedralObjectGraphics(uint16_t filesWidths[65]);
 /** @brief Puts the designed rooms' props on the floor (InitObjects, before any random object). */
 void AddCathedralRoomObjects();
+/**
+ * @brief Crypt: where the next of the floor's story books goes, on a reading stand of the Reading chapel or the Archive
+ * when the floor has one free (that stand then holds only the book); nullopt for a random spot.
+ */
+std::optional<Point> CathedralStoryBookSpot();
 /**
  * @brief The plain side rooms of a new Catacombs floor, in blocks (their floor), for Diablo's theme rooms: on these
  * floors the theme rooms are those rooms rather than walled boxes cut into big halls.

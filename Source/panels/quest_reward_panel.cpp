@@ -116,6 +116,8 @@ UiFlags DetailColor(InfoLineStyle style)
 		return UiFlags::ColorWhitegold;
 	case InfoLineStyle::Flavour:
 		return UiFlags::ColorGold;
+	case InfoLineStyle::InactiveMod:
+		return UiFlags::ColorButtonpushed;
 	default:
 		return UiFlags::ColorWhite;
 	}

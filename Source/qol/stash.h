@@ -128,6 +128,8 @@ bool PremadeTabHasRoom(unsigned page, const Item &item);
  * @return Whether all of it went in.
  */
 bool StoreInPremadeTab(unsigned page, Item &item);
+/** @brief POE2 Mashup: puts gear in the Essences tab's empty craft slot, to use the tab's essences on; false if it can't go there. */
+bool StoreInEssenceCraftSlot(unsigned page, Item &item);
 /** @brief POE2 Mashup: what taking the stash item gives: a currency stack bigger than an inventory stack gives a full inventory stack. */
 Item PeekStashTake(uint16_t index);
 /** @brief POE2 Mashup: takes PeekStashTake's item out of the stash. */
@@ -136,6 +138,8 @@ Item TakeFromStash(uint16_t index);
 Item TakeFromStash(uint16_t index, int count);
 /** @brief POE2 Mashup: puts the item on whichever tab takes it, adding a tab if need be; for when it can go nowhere else. */
 bool AutoPlaceItemInAnyStashTab(const Item &item);
+/** @brief The stash tab an item went to or came from, for the play log. */
+std::string StashTabLogName(unsigned page);
 /** @brief POE2 Mashup: items a premade tab doesn't hold the way it holds them are stored again; for loading older stashes. */
 void RepairStashTabs();
 /** @brief POE2 Mashup: stash items saved when they were bigger let go of the cells they no longer cover. */

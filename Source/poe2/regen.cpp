@@ -7,6 +7,7 @@
 #include "game_mode.hpp"
 #include "items.h"
 #include "player.h"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/unique_effects.hpp"
 
@@ -51,6 +52,33 @@ int ManaFromItemMagic(const Player &player, int magic)
 	return (player.getClassAttributes().itmMana * magic).whole();
 }
 
+namespace {
+
+/** The share of maximum life regenerated a second, in hundredths of a percent: the tree's (per mille) and the gear's (Io runes). */
+int64_t LifeRegenPerTenThousand(const Player &player)
+{
+	return (static_cast<int64_t>(player.poe2.lifeRegenPerMille) * 10) + GearLifeRegenPerTenThousand(player);
+}
+
+} // namespace
+
+int LifeRegenTenthsPerSecond(const Player &player)
+{
+	if (!gbIsPoe2)
+		return 0;
+	const int64_t lifePerSecond = static_cast<int64_t>(player.poe2.lifeRegen) * 64 + static_cast<int64_t>(std::max<int32_t>(player._pMaxHP.raw(), 0)) * LifeRegenPerTenThousand(player) / 10000;
+	return static_cast<int>(std::max<int64_t>(lifePerSecond * LifeRecoveryPercent(player, false) / 100, 0) * 10 / 64);
+}
+
+int ManaRegenTenthsPerSecond(const Player &player)
+{
+	if (!gbIsPoe2 || HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana) || IsRecoveryLocked(player))
+		return 0;
+	const int manaMultiplier = std::max(100 + player.poe2.manaRegenBonus, 0) * ManaRecoveryPercent(player) / 100;
+	const int64_t perSecond = static_cast<int64_t>(std::max<int32_t>(player._pMaxMana.raw(), 0)) * BaseManaRegenPercent * manaMultiplier / (100 * 100);
+	return static_cast<int>(perSecond * 10 / 64);
+}
+
 void ApplyRegen(Player &player)
 {
 	if (!gbIsPoe2 || player.hasNoLife())
@@ -58,8 +86,8 @@ void ApplyRegen(Player &player)
 
 	// POE2 Mashup: uniques can lessen life recovery or lock it for a moment.
 	const int lifeRecovery = LifeRecoveryPercent(player, false);
-	// The passive tree regenerates a share of maximum life (per mille per second) on top of the flat regeneration.
-	const int64_t lifePerSecond = static_cast<int64_t>(player.poe2.lifeRegen) * 64 + static_cast<int64_t>(std::max<int32_t>(player._pMaxHP.raw(), 0)) * player.poe2.lifeRegenPerMille / 1000;
+	// The passive tree and the gear regenerate a share of maximum life on top of the flat regeneration.
+	const int64_t lifePerSecond = static_cast<int64_t>(player.poe2.lifeRegen) * 64 + static_cast<int64_t>(std::max<int32_t>(player._pMaxHP.raw(), 0)) * LifeRegenPerTenThousand(player) / 10000;
 	// With life recovery going to energy shield (the Inner Wellspring keystone), regeneration keeps working at full life.
 	const bool feedsShield = player.poe2.uniqueRules[static_cast<size_t>(UniqueRule::LifeRecoveryToShield)] > 0 && player.poe2.energyShield < player.poe2.maxEnergyShield * 64;
 	if (lifePerSecond > 0 && (player._pHitPoints < player._pMaxHP || feedsShield) && lifeRecovery > 0) {

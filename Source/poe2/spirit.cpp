@@ -163,6 +163,7 @@ void BurstBlood(const HeraldTrigger &trigger)
 			state.bleedDamagePerTick = perTick;
 			state.bleedSource = static_cast<int8_t>(MyPlayerId);
 			state.bleedSkill = WeaponSkill::None;
+			state.bleedFromBloodletting = false;
 		}
 		state.bleedTicks = std::max<uint8_t>(state.bleedTicks, BleedTicks);
 		AddVisualEffect(monster.position.tile, MissileGraphicID::BloodHit);
@@ -629,7 +630,7 @@ bool ItemGrantsSpirit(const Item &item)
 int SceptreSpiritOf(const Item &item)
 {
 	// Its increased Spirit counts once identified, as the gear's other modifiers do; quality doesn't change it.
-	const bool modsCount = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
+	const bool modsCount = ItemModifiersCount(item);
 	const int local = modsCount ? item._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::LocalSpiritPercent)] : 0;
 	return std::max(SceptreSpirit * (100 + local) / 100, 0);
 }
@@ -678,10 +679,10 @@ bool UseSpiritSkull(Player &player, const Item &item)
 	return true;
 }
 
-void GiveUncutSpiritGem(Player &player)
+std::optional<int> GiveUncutSpiritGem(Player &player)
 {
 	if (!gbIsPoe2 || &player != MyPlayer)
-		return;
+		return std::nullopt;
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		if (AllItemsList[i].iMiscId != IMISC_UNCUT_SPIRIT || AllItemsList[i].dropRate == 0)
 			continue;
@@ -691,7 +692,14 @@ void GiveUncutSpiritGem(Player &player)
 		SetUncutGemLevel(gem, MaxGemLevelForCharacter(player.getCharacterLevel()));
 		gem._iIdentified = true;
 		SetupItem(gem);
-		if (!AutoPlaceItemInInventory(player, gem, true) && ActiveItemCount < MAXITEMS) {
+		std::optional<int> inBag;
+		if (AutoPlaceItemInInventory(player, gem, true)) {
+			for (int j = 0; j < player._pNumInv; j++) {
+				const Item &placed = player.InvList[j];
+				if (placed.IDidx == gem.IDidx && placed._iSeed == gem._iSeed && placed._iCreateInfo == gem._iCreateInfo)
+					inBag = j;
+			}
+		} else if (ActiveItemCount < MAXITEMS) {
 			// A full bag: it lands at the hero's feet.
 			const int ii = AllocateItem();
 			Items[ii] = gem;
@@ -700,8 +708,9 @@ void GiveUncutSpiritGem(Player &player)
 		}
 		EventPlrMsg(_("An Uncut Spirit Gem forms from the skull's energies."), UiFlags::ColorWhitegold);
 		TelemetryLog("spirit", "the skull gave an Uncut Spirit Gem");
-		return;
+		return inBag;
 	}
+	return std::nullopt;
 }
 
 namespace {

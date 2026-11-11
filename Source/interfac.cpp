@@ -566,7 +566,7 @@ void ProgressEventHandler(const SDL_Event &event, uint16_t modState)
 		gbSomebodyWonGameKludge = false;
 		ProgressEventHandlerState.done = true;
 		// POE2 Mashup: arriving on a level is a checkpoint; save once the game runs again.
-		RequestAutosave();
+		RequestAutosave("level entered");
 
 #if !defined(USE_SDL1) && !defined(__vita__)
 		if (renderer != nullptr) {

@@ -186,10 +186,10 @@ TEST_F(Poe2ChaosTest, ChaosResistanceAddsUpFromGear)
 	EXPECT_EQ(player._pMagResist, 0);
 	EXPECT_EQ(player._pLghtResist, 0);
 
-	// Unidentified gear doesn't count, as for every other modifier.
+	// Unidentified gear counts too, as in POE2 (Curtis, Monk run 2).
 	player.InvBody[INVLOC_RING_RIGHT]._iIdentified = false;
 	Recalculate(player);
-	EXPECT_EQ(player.poe2.chaosResistance, 13);
+	EXPECT_EQ(player.poe2.chaosResistance, 22);
 }
 
 TEST_F(Poe2ChaosTest, AllResistancesLeaveChaosOut)
@@ -711,7 +711,8 @@ TEST_F(Poe2ChaosTest, DespairIsAGemCurseNotAGrantedSkill)
 	const TableSkillData &despair = *FindTableSkill(WeaponSkill::Despair);
 	EXPECT_FALSE(IsGrantedTableSkill(despair));
 	EXPECT_EQ(despair.curse, TableCurse::Despair);
-	EXPECT_EQ(despair.level, 9);
+	// Tier V to IX (Curtis 2026-11-07, Q31).
+	EXPECT_EQ(despair.level, 15);
 	const std::optional<size_t> gem = SkillGemItemIndex(SkillSlot::ForAttack(WeaponSkill::Despair));
 	ASSERT_TRUE(gem.has_value());
 	EXPECT_EQ(std::string_view(AllItemsList[*gem].iName), "Despair Gem");

@@ -36,9 +36,11 @@
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/stash_tabs.hpp"
+#include "poe2/telemetry.hpp"
 #include "stores.h"
 #include "utils/display.h"
 #include "utils/format_int.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/sdl_compat.h"
@@ -178,6 +180,9 @@ void CheckStashPaste(Point cursorPosition)
 		Item &stack = Stash.stashList[iv];
 		if (CanStackWith(stack, player.HoldItem) && StackRoom(stack) > 0) {
 			PlaySFX(ItemInvSnds[ItemCAnimTbl[player.HoldItem._iCurs]]);
+			Item moved = player.HoldItem;
+			SetStackCount(moved, std::min(StackCount(player.HoldItem), StackRoom(stack)));
+			TelemetryItemAction(player, "stash", moved, StashTabLogName(Stash.GetPage()));
 			MergeStack(stack, player.HoldItem);
 			Stash.dirty = true;
 			NewCursor(player.HoldItem);
@@ -202,6 +207,7 @@ void CheckStashPaste(Point cursorPosition)
 
 	// Need to set the item anchor position to the bottom left so drawing code functions correctly.
 	player.HoldItem.position = firstSlot + Displacement { 0, itemSize.height - 1 };
+	TelemetryItemAction(player, "stash", player.HoldItem, StashTabLogName(Stash.GetPage()));
 
 	if (stashIndex == StashStruct::EmptyCell) {
 		Stash.stashList.emplace_back(player.HoldItem.pop());
@@ -210,6 +216,7 @@ void CheckStashPaste(Point cursorPosition)
 	} else {
 		// swap the held item and whatever was in the stash at this position
 		std::swap(Stash.stashList[stashIndex], player.HoldItem);
+		TelemetryItemAction(player, "unstash", player.HoldItem, StashTabLogName(Stash.GetPage()));
 		// then clear the space occupied by the old item
 		for (auto &row : Stash.GetCurrentGrid()) {
 			for (auto &itemId : row) {
@@ -273,6 +280,7 @@ void CheckStashCut(Point cursorPosition, bool automaticMove)
 		}
 
 		if (!automaticMove || automaticallyMoved) {
+			TelemetryItemAction(player, "unstash", holdItem, StashTabLogName(Stash.GetPage()));
 			Stash.RemoveStashItem(iv);
 		}
 	}
@@ -351,6 +359,7 @@ void TransferItemToInventory(Player &player, uint16_t itemId)
 			return;
 		}
 		PlaySFX(ItemInvSnds[ItemCAnimTbl[taken._iCurs]]);
+		TelemetryItemAction(player, "unstash", taken, StashTabLogName(Stash.GetPage()));
 		TakeFromStash(itemId);
 		return;
 	}
@@ -361,6 +370,7 @@ void TransferItemToInventory(Player &player, uint16_t itemId)
 	}
 
 	PlaySFX(ItemInvSnds[ItemCAnimTbl[item._iCurs]]);
+	TelemetryItemAction(player, "unstash", item, StashTabLogName(Stash.GetPage()));
 
 	Stash.RemoveStashItem(itemId);
 }
@@ -1018,7 +1028,7 @@ std::optional<unsigned> FirstFreeSlot(unsigned page, unsigned first, unsigned co
 	return std::nullopt;
 }
 
-/** Room for more of the item on a currency stack of the Currency tab. */
+/** Room for more of the item on a stack of the Currency, Runes or Essences tab. */
 int StoredStackRoom(const Item &stack, const Item &item)
 {
 	if (!CanStackWith(stack, item))
@@ -1070,6 +1080,10 @@ std::optional<PremadePlacement> GetPremadePlacement(StashTabKind kind, const Ite
 			return std::nullopt;
 		return PremadePlacement { .fixedSlot = slot };
 	}
+	case StashTabKind::Runes:
+		return PremadePlacement { .fixedSlot = RuneTabSlot(item) };
+	case StashTabKind::Essences:
+		return PremadePlacement { .fixedSlot = EssenceTabSlot(item) };
 	default:
 		return PremadePlacement { .fixedSlot = std::nullopt, .first = 0, .count = capacity };
 	}
@@ -1078,6 +1092,9 @@ std::optional<PremadePlacement> GetPremadePlacement(StashTabKind kind, const Ite
 /** The premade tab would keep the item in this slot. */
 bool IsPremadeSlotRight(StashTabKind kind, unsigned slot, const Item &item)
 {
+	// The Essences tab's tall slot holds the gear its essences are used on.
+	if (kind == StashTabKind::Essences && slot == EssenceCraftSlot)
+		return EssenceCraftSlotTakes(item);
 	const std::optional<PremadePlacement> placement = GetPremadePlacement(kind, item);
 	if (!placement)
 		return false;
@@ -1086,20 +1103,26 @@ bool IsPremadeSlotRight(StashTabKind kind, unsigned slot, const Item &item)
 	return slot >= placement->first && slot < placement->first + placement->count;
 }
 
-/** Stores a repaired item: its own premade tab first, then any tab, splitting stacks too big for a blank tab. */
+/**
+ * Stores a repaired item: the premade tab it was on, then any premade tab that takes it (an augment or essence from the
+ * Currency tab of a stash saved before stash tabs version 4 goes to the Runes or Essences tab), then any tab, splitting
+ * stacks too big for a blank tab.
+ */
 void PlaceRepairedItem(Item item, unsigned page)
 {
 	if (StashTabs.kind(page) != StashTabKind::Blank && StoreInPremadeTab(page, item))
 		return;
 	for (unsigned other = 0; other < StashTabs.count() && !item.isEmpty(); other++) {
-		if (StashTabs.kind(other) == StashTabKind::Currency)
+		if (IsAnyOf(StashTabs.kind(other), StashTabKind::Currency, StashTabKind::Runes, StashTabKind::Essences))
 			StoreInPremadeTab(other, item);
 	}
+	// Augments split into cells of 40, which an old stack keeps, not the 10 of a new stack: a stash too full of tabs
+	// for a Runes tab of its own keeps them in fewer cells.
 	while (!item.isEmpty()) {
 		Item part = item;
-		if (IsStackable(item) && StoredStackCount(item) > StackMax(item)) {
-			SetStackCount(part, StackMax(item));
-			SetStoredStackCount(item, StoredStackCount(item) - StackMax(item));
+		if (IsStackable(item) && StoredStackCount(item) > StackHoldMax(item)) {
+			SetStackCount(part, StackHoldMax(item));
+			SetStoredStackCount(item, StoredStackCount(item) - StackHoldMax(item));
 		} else {
 			if (IsStackable(part))
 				SetStackCount(part, StoredStackCount(part));
@@ -1226,6 +1249,15 @@ void CombineStoredShards(unsigned page, unsigned slot)
 
 } // namespace
 
+bool StoreInEssenceCraftSlot(unsigned page, Item &item)
+{
+	if (StashTabs.kind(page) != StashTabKind::Essences || !EssenceCraftSlotTakes(item) || StashTabSlotItem(page, EssenceCraftSlot) != StashStruct::EmptyCell)
+		return false;
+	PutInSlot(page, EssenceCraftSlot, item);
+	item.clear();
+	return true;
+}
+
 bool StoreInPremadeTab(unsigned page, Item &item)
 {
 	const StashTabKind kind = StashTabs.kind(page);
@@ -1301,6 +1333,11 @@ Item TakeFromStash(uint16_t index, int count)
 	SetStoredStackCount(stored, have - count);
 	Stash.dirty = true;
 	return taken;
+}
+
+std::string StashTabLogName(unsigned page)
+{
+	return StrCat("tab ", StashTabs.displayName(page));
 }
 
 bool AutoPlaceItemInAnyStashTab(const Item &item)

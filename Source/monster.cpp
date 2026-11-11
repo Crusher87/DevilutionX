@@ -78,6 +78,7 @@
 #include "options.h"
 #include "player.h"
 #include "poe2/area_levels.hpp"
+#include "poe2/bound_demons.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/economy.hpp"
@@ -102,6 +103,7 @@
 #include "poe2/table_skills.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "poe2/vfx.hpp"
 #include "poe2/waystones.hpp"
 #include "poe2/weapon_swap.hpp"
 #include "quests.h"
@@ -791,7 +793,9 @@ void UpdateEnemy(Monster &monster)
 			continue;
 
 		const int dist = otherMonster.position.tile.WalkingDistance(position);
-		if (!isPlayerMinion && otherMonster.poe2.decoy && dist < decoyDist) {
+		// POE2 Mashup: Attract makes the cursed monster a decoy too, for the monsters near it that obey (Curtis 2026-11-07).
+		const bool attracts = gbIsPoe2 && otherMonster.poe2.attractTicks > 0 && dist <= AttractTiles && MonsterObeysAttract(monster, otherMonster);
+		if (!isPlayerMinion && (otherMonster.poe2.decoy || attracts) && dist < decoyDist) {
 			decoy = static_cast<int>(monsterId);
 			decoyDist = dist;
 		}
@@ -1055,6 +1059,8 @@ void SpawnLoot(Monster &monster, bool sendmsg)
 	// And the bundle's bosses roll a unique from their own tables.
 	if (!monster.isPlayerMinion())
 		DropBossUnique(monster, sendmsg);
+	// And a bound demon drops the essences it held.
+	DropBoundDemonEssences(monster, sendmsg);
 }
 
 std::optional<Point> GetTeleportTile(const Monster &monster)
@@ -1314,6 +1320,7 @@ Fixed26_6 CheckReflect(Monster &monster, Player &player, Fixed26_6 dam)
 	const Fixed26_6 mdam = dam * RandomIntBetween(20, 30, true) / 100;
 	TelemetryNoteDamageSource("reflect");
 	ApplyMonsterDamage(DamageType::Physical, monster, mdam);
+	vfx::ThornsHit(monster);
 	if (monster.hasNoLife())
 		M_StartKill(monster, player);
 	else
@@ -1426,6 +1433,11 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		TelemetryHitStep(true, "after map modifiers", dam.raw());
 		if (extraChaos > 0)
 			TelemetryHitStep(true, "extra chaos after resistance", extraChaos.raw());
+		// A bound demon's essence adds its element to the hit, after the hero's resistance.
+		if (const Fixed26_6 essence = BoundDemonExtraHitDamage(monster, player, dam); essence > 0) {
+			dam += essence;
+			TelemetryHitStep(true, "after the demon's essences", dam.raw());
+		}
 	}
 	if (gbIsPoe2 && &player == MyPlayer) {
 		dam = ApplyTableSkillDefences(monster, player, dam);
@@ -1453,6 +1465,7 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		const int mdam = (GenerateRnd(3) + 1) << 6;
 		TelemetryNoteDamageSource("thorns");
 		ApplyMonsterDamage(DamageType::Physical, monster, Fixed26_6::fromRaw(mdam));
+		vfx::ThornsHit(monster);
 		if (monster.hasNoLife())
 			M_StartKill(monster, player);
 		else
@@ -2094,6 +2107,9 @@ bool IsTileAccessible(const Monster &monster, Point position)
 		return false;
 
 	if (!IsTileWalkable(position, (monster.flags & MFLAG_CAN_OPEN_DOOR) != 0))
+		return false;
+	// POE2 Mashup: a Shield Wall segment stands there; the monster must break it first.
+	if (gbIsPoe2 && !monster.isPlayerMinion() && IsShieldWallTile(position))
 		return false;
 
 	return IsTileSafe(monster, position);
@@ -4012,12 +4028,24 @@ std::expected<void, std::string> InitAllMonsterGFX()
 	}
 	size_t totalUniqueBytes = 0;
 	size_t totalBytes = 0;
+	bool loadedLate = false;
 	for (const LevelMonsterTypeIndices &monsterTypes : monstersBySprite) {
 		if (monsterTypes.empty())
 			continue;
 		CMonster &firstMonster = LevelMonsterTypes[monsterTypes[0]];
-		if (firstMonster.animData != nullptr)
+		if (firstMonster.animData != nullptr) {
+			// POE2 Mashup: a type added after the others of its picture were loaded gets its own copy. A quest level loads
+			// its map's monsters first, then the minion gem types, so Leoric's Skeleton Captains had no picture and the
+			// game crashed drawing their corpses (Curtis 2026-11-06, Monk run).
+			for (size_t i = 1; i < monsterTypes.size(); ++i) {
+				CMonster &monsterType = LevelMonsterTypes[monsterTypes[i]];
+				if (monsterType.animData != nullptr)
+					continue;
+				RETURN_IF_ERROR(InitMonsterGFX(monsterType));
+				loadedLate = true;
+			}
 			continue;
+		}
 		MonsterSpritesData spritesData = LoadMonsterSpritesData(firstMonster.data());
 		const size_t spritesDataSize = spritesData.offsets[GetNumAnimsWithGraphics(firstMonster.data())];
 		for (size_t i = 1; i < monsterTypes.size(); ++i) {
@@ -4032,7 +4060,7 @@ std::expected<void, std::string> InitAllMonsterGFX()
 	}
 	LogVerbose(" Total monster graphics:                 {:>4d} KiB {:>4d} KiB", totalUniqueBytes / 1024, totalBytes / 1024);
 
-	if (totalUniqueBytes > 0) {
+	if (totalUniqueBytes > 0 || loadedLate) {
 		// we loaded new sprites, check if we need to update existing monsters
 		for (size_t i = 0; i < ActiveMonsterCount; i++) {
 			Monster &monster = Monsters[ActiveMonsters[i]];
@@ -4295,6 +4323,9 @@ void AddDoppelganger(Monster &monster)
 
 void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damage)
 {
+	// POE2 Mashup: nothing hurts a bound demon through its crystal.
+	if (IsBoundDemon(monster))
+		return;
 	lua::OnMonsterTakeDamage(&monster, damage.raw(), static_cast<int>(damageType));
 
 	const Fixed26_6 lifeBefore = monster.hitPoints;
@@ -4304,6 +4335,9 @@ void ApplyMonsterDamage(DamageType damageType, Monster &monster, Fixed26_6 damag
 		monster.hitPoints = Fixed26_6::fromInt(1);
 	TelemetryMonsterDamaged(monster, damage, lifeBefore, damageType);
 	NoteSupportedDamage(monster, damageType, damage);
+	// POE2 Mashup: a fire hit sets off Swamp Gas Arrow's cloud round the monster (ProcessSkillZones).
+	if (gbIsPoe2 && damageType == DamageType::Fire && damage > 0)
+		monster.poe2.fireHitTicks = static_cast<uint8_t>(FireHitTicks);
 
 	if (monster.hasNoLife()) {
 		// A monster without life no longer blocks the tile it stands on.
@@ -4372,6 +4406,11 @@ void M_StartStand(Monster &monster, Direction md)
 	monster.mode = MonsterMode::Stand;
 	monster.position.future = monster.position.tile;
 	monster.position.old = monster.position.tile;
+	UpdateEnemy(monster);
+}
+
+void M_UpdateEnemy(Monster &monster)
+{
 	UpdateEnemy(monster);
 }
 
@@ -4773,6 +4812,9 @@ int ScaleMonsterBlow(const Monster &attacker, int dam)
 			dam = static_cast<int>(std::min<int64_t>(static_cast<int64_t>(dam) * CommandMinionDamagePercent(attacker) / 100, INT32_MAX / 4));
 		}
 	}
+	// POE2 Mashup: Confuse's Berserk, Diablo's Berserk spell's 120-129% harder blows (Curtis 2026-11-07, Q36).
+	if (gbIsPoe2 && attacker.poe2.berserkPercent > 0)
+		dam = static_cast<int>(std::min<int64_t>(static_cast<int64_t>(dam) * attacker.poe2.berserkPercent / 100, INT32_MAX / 4));
 	// Grave Howl's weaken is in the monster's damage scale (ScaleMonsterHit), so its missiles and spells meet it too.
 	return dam;
 }
@@ -5027,6 +5069,9 @@ void ProcessMonsters()
 			SetRndSeed(monster.aiSeed);
 			monster.aiSeed = AdvanceRndSeed();
 		}
+		// POE2 Mashup: a bound demon stands in its crystal, and a second after it breaks.
+		if (ProcessBoundDemon(monster))
+			continue;
 		if (monster.hitPoints < monster.maxHitPoints && !monster.hasNoLife()) {
 			// POE2 Mashup: monsters don't heal on their own; only the Regenerating affix (monster_mods.cpp) heals them.
 			if (!gbIsPoe2) {
@@ -5105,7 +5150,8 @@ void ProcessMonsters()
 			// And a minion left behind hurries after its owner.
 			// And the Butcher's Road pact's rage hurries it.
 			// And Bone Frenzy and Last Rites hurry the hero's minions.
-			if (turn > 0 || monster.hasNoLife() || !(MapMonsterExtraTick(monster) || MinionCatchUpTick(monster) || EnragedExtraTick(monster) || CommandExtraTick(monster)))
+			// And a bound demon's speed essences hurry it.
+			if (turn > 0 || monster.hasNoLife() || !(MapMonsterExtraTick(monster) || MinionCatchUpTick(monster) || EnragedExtraTick(monster) || CommandExtraTick(monster) || BoundDemonExtraTick(monster)))
 				break;
 		}
 	}
@@ -5481,6 +5527,9 @@ bool IsTileAvailable(const Monster &monster, Point position)
 {
 	if (!IsTileAvailable(position))
 		return false;
+	// POE2 Mashup: a Shield Wall segment stands there; the monster must break it first.
+	if (gbIsPoe2 && !monster.isPlayerMinion() && IsShieldWallTile(position))
+		return false;
 
 	return IsTileSafe(monster, position);
 }
@@ -5820,7 +5869,8 @@ bool SpawnSkeletonMinion(const Player &player, Point position, uint8_t gemLevel,
 
 bool CanTalkToMonst(const Monster &monster)
 {
-	return IsAnyOf(monster.goal, MonsterGoal::Inquiring, MonsterGoal::Talking);
+	// POE2 Mashup: a bound demon is clicked like a monster to talk to: the hero walks up and breaks its crystal.
+	return IsAnyOf(monster.goal, MonsterGoal::Inquiring, MonsterGoal::Talking) || IsBoundDemon(monster);
 }
 
 uint8_t encode_enemy(Monster &monster)
@@ -5961,6 +6011,7 @@ bool Monster::isPossibleToHit() const
 {
 	return !hasNoLife()
 	    && talkMsg == TEXT_NONE
+	    && !IsBoundDemon(*this)
 	    && (type().type != MT_ILLWEAV || goal != MonsterGoal::Retreat)
 	    && !(IsAnyOf(mode, MonsterMode::Charge, MonsterMode::Death))
 	    && (!IsAnyOf(type().type, MT_COUNSLR, MT_MAGISTR, MT_CABALIST, MT_ADVOCATE) || goal == MonsterGoal::Normal);

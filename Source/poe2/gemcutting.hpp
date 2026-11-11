@@ -24,6 +24,8 @@ enum class GemCategory : uint8_t {
 	Mace,
 	Axe,
 	Sword,
+	/** The dagger skills (settled 2026-10-22, built in pass 4). */
+	Dagger,
 	Bow,
 	Staff,
 	Shield,
@@ -31,6 +33,8 @@ enum class GemCategory : uint8_t {
 	Elemental,
 	/** Magic spells. */
 	Occult,
+	/** Healing, movement and ward spells, and the runes (Curtis 2026-11-06). */
+	Arcane,
 	/** Spirit gems: heralds, auras and minions. */
 	Spirit,
 	Support,
@@ -56,11 +60,18 @@ std::string_view GemCategoryName(GemCategory category);
 const std::vector<GemEntry> &GemCatalog();
 bool GemInCategory(const GemEntry &gem, GemCategory category);
 /**
+ * @brief The one tab a spell gem shows under: Occult for Magic spells, Elemental for the others, with a few moved by
+ * hand, and the healing, movement and ward spells and the runes in Arcane.
+ */
+GemCategory SpellGemCategory(SpellID spell);
+/**
  * @brief Whether the skill's gem is retired: the crossbow skills that didn't move to bows when crossbows left the game
- * (Curtis 2026-10-27). Their gems are never cut or found; one a hero already has still loads, sockets and works with a crossbow.
+ * (Curtis 2026-10-27), and the spells and skills merged or removed in pass 4 (Curtis 2026-11-07: Guardian, Golem,
+ * Reflect, Ring of Fire, Berserk, Arcing Sparks, Hellfire Darts). Their gems are never cut or found; one a hero already
+ * has still loads, sockets and works.
  */
 bool IsRetiredSkill(SkillSlot skill);
-/** @brief Whether an attack is listed under a weapon's tab (Mace, Axe, Sword, Bow, Staff or Shield). */
+/** @brief Whether an attack is listed under a weapon's tab (Mace, Axe, Sword, Dagger, Bow, Staff or Shield). */
 bool AttackOnWeaponTab(WeaponSkill skill);
 std::string GemName(const GemEntry &gem);
 

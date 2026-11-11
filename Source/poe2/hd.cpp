@@ -39,6 +39,7 @@
 #include "utils/file_util.h"
 #include "options.h"
 #include "poe2/hd_light.hpp"
+#include "poe2/telemetry.hpp"
 #include "utils/is_of.hpp"
 #include "utils/png.h"
 #include "utils/sdl_wrap.h"
@@ -267,6 +268,18 @@ std::unordered_map<const uint8_t *, SpriteName> SpriteNames;
 /** @brief Each dungeon frame, by the address of its pixels: its HD art name. */
 std::unordered_map<const uint8_t *, std::string> TileNames;
 std::unordered_map<std::string, HdArt> Art;
+/** @brief Whether the pack has art of each name asked about (HasArt). */
+std::unordered_map<std::string, bool> ArtExists;
+
+/** @brief A sprite to show in HD over the UI this frame (DrawUiSprite). */
+struct PendingUiSprite {
+	std::string name;
+	Rectangle dest;
+	uint8_t inBetween;
+};
+std::optional<PendingUiSprite> UiSprite;
+/** @brief When RenderUi last ran: HD art over the UI is shown only while it does. */
+uint32_t UiRenderedTicks = 0;
 
 struct RasterKey {
 	const uint8_t *data;
@@ -717,6 +730,8 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 	HdArt &art = it->second;
 	if (!inserted)
 		return art;
+	// Read from disk the first time it shows, in the frame: timed for the play log's freezes.
+	const SlowWorkScope timed(SlowWork::HdArt);
 	art.name = name;
 	std::string path = "hd\\" + name + ".png";
 	std::replace(path.begin(), path.end(), '/', '\\');
@@ -1018,6 +1033,7 @@ Raster &FallbackRaster(const Draw &draw, bool keepTable)
 		const RasterKey key { draw.src, tbl, static_cast<uint32_t>(draw.mask) | (static_cast<uint32_t>(draw.tile) << 8) | (static_cast<uint32_t>(draw.height) << 16) };
 		auto [it, inserted] = Rasters.try_emplace(key);
 		if (inserted) {
+			const SlowWorkScope timed(SlowWork::HdRaster);
 			const auto drawTile = [&](const Surface &out, MaskType mask) {
 				RenderTileFrame(out, FullyLitLightmap(out), Point { 0, draw.height - 1 }, draw.tile, draw.src, draw.height, mask, tbl != nullptr ? tbl : FullyLitLightTable);
 			};
@@ -1029,6 +1045,7 @@ Raster &FallbackRaster(const Draw &draw, bool keepTable)
 	const RasterKey key { draw.sprite->pixelData(), tbl, extra };
 	auto [it, inserted] = Rasters.try_emplace(key);
 	if (inserted) {
+		const SlowWorkScope timed(SlowWork::HdRaster);
 		const int pad = IsOutline(draw.style) ? 1 : 0;
 		const Point position { pad, draw.height - 1 - pad };
 		const auto drawSprite = [&](const Surface &out, bool blended) {
@@ -1178,6 +1195,7 @@ HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &dr
 	HdArt &art = it->second;
 	if (!inserted)
 		return art.texture != nullptr ? &art : nullptr;
+	const SlowWorkScope timed(SlowWork::HdArt);
 	art.missing = true;
 	std::string path = "hd\\" + name + ".png";
 	std::replace(path.begin(), path.end(), '/', '\\');
@@ -1326,6 +1344,7 @@ Outline MakeArtOutline(SDL_Renderer *renderer, const HdArt &art, const Draw &spr
 {
 	Outline none;
 	none.tried = true;
+	const SlowWorkScope timed(SlowWork::HdArt);
 	std::string path = "hd\\" + art.name + ".png";
 	std::replace(path.begin(), path.end(), '/', '\\');
 	SDL_Surface *picture = LoadPNG(path.c_str());
@@ -3417,6 +3436,68 @@ void RegisterRecolour(const uint8_t *trn, std::string_view name)
 	Recolours[trn] = std::move(lower);
 }
 
+void ForgetSprites(ClxSpriteListOrSheet sprites)
+{
+	ArtChoices.clear();
+	const auto forgetList = [](ClxSpriteList list) {
+		for (size_t frame = 0; frame < list.numSprites(); frame++)
+			SpriteNames.erase(list[frame].pixelData());
+	};
+	if (sprites.isSheet()) {
+		const ClxSpriteSheet sheet = sprites.sheet();
+		for (size_t direction = 0; direction < sheet.numLists(); direction++)
+			forgetList(sheet[direction]);
+	} else {
+		forgetList(sprites.list());
+	}
+}
+
+bool HasArt(std::string_view name)
+{
+	auto [it, inserted] = ArtExists.try_emplace(std::string(name));
+	if (inserted) {
+		std::string path = "hd\\" + it->first + ".png";
+		std::replace(path.begin(), path.end(), '/', '\\');
+		it->second = FindAsset(path).ok();
+	}
+	return it->second;
+}
+
+bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame)
+{
+	// Only while the frames go up in layers with the HD world under the UI (PresentLayeredFrame calls RenderUi).
+	if (!Active() || UiRenderedTicks == 0 || SDL_GetTicks() - UiRenderedTicks > 1000)
+		return false;
+	const auto it = SpriteNames.find(sprite.pixelData());
+	if (it == SpriteNames.end() || !HasArt(it->second.name))
+		return false;
+	UiSprite = PendingUiSprite { it->second.name, dest, static_cast<uint8_t>(std::clamp(static_cast<int>(subFrame * 3), 0, 2)) };
+	return true;
+}
+
+void RenderUi(SDL_Renderer *renderer)
+{
+	UiRenderedTicks = std::max<uint32_t>(SDL_GetTicks(), 1);
+	if (!UiSprite)
+		return;
+	const PendingUiSprite pending = *UiSprite;
+	UiSprite = std::nullopt;
+	// The art is loaded for the renderer the world was drawn with this frame.
+	if (renderer == nullptr || renderer != CacheRenderer)
+		return;
+	SDL_Texture *texture = nullptr;
+	if (pending.inBetween != 0)
+		texture = LoadArt(renderer, pending.name + "_m" + std::to_string(pending.inBetween), false, nullptr).texture;
+	if (texture == nullptr)
+		texture = LoadArt(renderer, pending.name, false, nullptr).texture;
+	if (texture == nullptr)
+		return;
+	SDL_SetTextureColorMod(texture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(texture, 255);
+	const SDL_Rect dest { pending.dest.position.x, pending.dest.position.y, pending.dest.size.width, pending.dest.size.height };
+	SDL_RenderCopy(renderer, texture, nullptr, &dest);
+}
+
 namespace {
 // The CEL loader names its art through this pointer (hd_hooks.cpp); it is set before main runs.
 [[maybe_unused]] const bool RegisterSpritesHookSet = (RegisterSpritesHook = RegisterSprites, true);
@@ -3522,6 +3603,7 @@ void ClearCaches()
 	DestroyTextures();
 	CacheRenderer = nullptr;
 	PackState = -1;
+	ArtExists.clear();
 }
 
 /** @brief With HD Lift Dark Shades, black becomes this shade (out of 255); lighter shades are lifted less, white not at all. */
@@ -3569,6 +3651,8 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	}
 	CheckPalette();
 	if (Rasters.size() > 20000) {
+		// Every picture on screen is made again in the next frame: a likely freeze, so the play log notes it.
+		TelemetryHdCacheDropped(Rasters.size());
 		for (auto &[key, raster] : Rasters)
 			FreeRasterTextures(raster);
 		Rasters.clear();
@@ -3688,6 +3772,10 @@ void EndFloor() { }
 uint16_t PieceToDraw(Point tile) { return dPiece[tile.x][tile.y]; }
 void RegisterSprites(std::string_view, ClxSpriteListOrSheet) { }
 void RegisterRecolour(const uint8_t *, std::string_view) { }
+void ForgetSprites(ClxSpriteListOrSheet) { }
+bool HasArt(std::string_view) { return false; }
+bool DrawUiSprite(ClxSprite, Rectangle, float) { return false; }
+void RenderUi(SDL_Renderer *) { }
 void ClearCaches() { }
 void Render(SDL_Renderer *, Size, Size) { }
 bool CoversView(Size) { return false; }

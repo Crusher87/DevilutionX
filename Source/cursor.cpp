@@ -58,8 +58,10 @@
 #include "panels/stash_tabs_panel.hpp"
 #include "poe2/aim.hpp"
 #include "poe2/default_attack.hpp"
+#include "poe2/crafting_items.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/loot_filter.hpp"
+#include "poe2/rune_icons.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/stacking.hpp"
 #include "qol/itemlabels.h"
@@ -685,7 +687,11 @@ void FreeHalfSizeItemSprites()
 void DrawItem(const Item &item, const Surface &out, Point position, ClxSprite clx)
 {
 	const bool usable = !IsInspectingPlayer() ? item._iStatFlag : InspectPlayer->CanUseItem(item);
-	if (usable && gbIsPoe2 && item._iMiscId == IMISC_SPEC_BOOK) {
+	if (IsDrawnRuneItem(item)) {
+		// POE2 Mashup: a rune is drawn in code, a carved stone that glows by its strength (build spec step 3).
+		const int height = static_cast<int>(clx.height());
+		DrawRuneIcon(out, { position - Displacement { 0, height - 1 }, { static_cast<int>(clx.width()), height } }, GetAugmentId(item), /*dim=*/false);
+	} else if (usable && gbIsPoe2 && item._iMiscId == IMISC_SPEC_BOOK) {
 		// POE2 Mashup: a Book of Specialisation is bound in gold, not the plain red of a spell book (Curtis 2026-10-16).
 		// The cover's dusky reds (the beige ramp's darker half) become the gold of the game's own lettering.
 		static const std::array<uint8_t, 256> GoldBinding = [] {

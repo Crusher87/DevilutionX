@@ -139,6 +139,15 @@ int FirstSupportChancePerMille(const Player &player, LootSource source, int dung
 /** @brief Rolls the first support gem's chance with the game's generator; a kill without one makes the next likelier. */
 bool RollFirstSupportDrop(Player &player, LootSource source, int dungeonLevel);
 
+// --- The first uncut skill gem ---
+// POE2 Mashup: at least one uncut skill gem by dungeon level 2, the same way (Curtis, Monk run 2: "promise one early";
+// none dropped in 54 minutes, so Sweeping Wind stayed at gem level 1).
+
+/** @brief The first uncut skill gem's chance on dungeon levels 1 and 2, as the first support's: 0 once one has dropped. */
+int FirstSkillGemChancePerMille(const Player &player, LootSource source, int dungeonLevel);
+/** @brief Rolls the first uncut skill gem's chance; a kill without one makes the next likelier. */
+bool RollFirstSkillGemDrop(Player &player, LootSource source, int dungeonLevel);
+
 /** @brief Natural rares have 3 to 6 affixes, weighted 3:13:6:2, as RareModCount (poe2/modifiers.hpp). */
 int RollNaturalRareAffixCount();
 
@@ -220,6 +229,8 @@ constexpr int GoldPileMultiplier = 4;
 /** @brief Extra chances a boss gives on top of its rolls: a guaranteed rare, maybe currency, maybe a unique. */
 constexpr int BossBonusCurrencyPercent = 35;
 constexpr int BossBonusUniquePercent = 8;
+/** @brief The chance a quest boss of Act 3 or later (or a map's) drops a Rune of Legend, each of the eight as likely. */
+constexpr int BossRuneOfLegendPercent = 25;
 
 /** @brief The rarity a dropped item was given, stored on the item so it comes back the same when loaded. */
 std::optional<item_quality> GetLootRarity(const Item &item);

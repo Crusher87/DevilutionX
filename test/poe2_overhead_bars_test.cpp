@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <array>
+#include <vector>
 
 #include "engine/clx_sprite.hpp"
+#include "engine/palette.h"
+#include "engine/render/primitive_render.hpp"
 #include "engine/surface.hpp"
 #include "game_mode.hpp"
 #include "monster.h"
@@ -18,6 +21,16 @@ void Fill(const Surface &surface, uint8_t color)
 {
 	for (int y = 0; y < surface.h(); y++)
 		std::fill_n(surface.at(0, y), surface.w(), color);
+}
+
+/** @brief A palette with the bars' colours at 40 onwards and black elsewhere, so each shade is found exactly. */
+void UseBarPalette()
+{
+	for (SDL_Color &colour : logical_palette)
+		colour = { 0, 0, 0, 255 };
+	int index = 40;
+	for (const std::array<uint8_t, 3> &colour : OverheadBarTargetColours())
+		logical_palette[index++] = { colour[0], colour[1], colour[2], 255 };
 }
 
 TEST(Poe2OverheadBarsTest, FillFollowsTheValue)
@@ -41,8 +54,26 @@ TEST(Poe2OverheadBarsTest, SolidTopRowSkipsTheEmptyRowsAboveTheSprite)
 	EXPECT_EQ(ClxSolidTopRow(ClxSprite { Empty.data(), static_cast<uint32_t>(Empty.size()) }), 5);
 }
 
+TEST(Poe2OverheadBarsTest, BarShadesComeFromTheLevelPalette)
+{
+	UseBarPalette();
+	const OverheadBarShades &shades = GetOverheadBarShades();
+	EXPECT_EQ(shades.frame, 40);
+	EXPECT_EQ(shades.empty, 41);
+	EXPECT_EQ(shades.life[0], 42);
+	EXPECT_EQ(shades.life[1], 43) << "the life bar's middle is a bright green";
+	EXPECT_GT(logical_palette[shades.life[1]].g, 2 * logical_palette[shades.life[1]].r);
+	EXPECT_EQ(shades.mana[HeroManaRows - 1], 40 + static_cast<int>(OverheadBarTargetColours().size()) - 1);
+
+	logical_palette[43] = { 0, 0, 0, 255 };
+	EXPECT_NE(GetOverheadBarShades().life[1], 43) << "a new palette is matched again";
+}
+
 TEST(Poe2OverheadBarsTest, HeroBarShowsLifeWithManaUnder)
 {
+	UseBarPalette();
+	const OverheadBarShades &shades = GetOverheadBarShades();
+	EXPECT_EQ(HeroBarWidth, 44) << "about a tenth bigger than the old 40";
 	OwnedSurface out(HeroBarWidth + 4, HeroBarHeight + 4);
 	Fill(out, 0);
 	OverheadBarValues values;
@@ -52,18 +83,21 @@ TEST(Poe2OverheadBarsTest, HeroBarShowsLifeWithManaUnder)
 	values.maxMana = 100;
 	DrawHeroBar(out, { 0, 0 }, values, false);
 
-	EXPECT_EQ(out[Point(0, 0)], HeroBarFrameColor);
-	EXPECT_EQ(out[Point(1, 1)], OverheadBarLifeColor);
-	EXPECT_EQ(out[Point(1, HeroLifeRows)], OverheadBarLifeColor);
-	EXPECT_EQ(out[Point(HeroBarWidth - 2, 1)], OverheadBarEmptyColor) << "half the life, half the bar";
-	EXPECT_EQ(out[Point(1, HeroLifeRows + 1)], OverheadBarEmptyColor) << "a dark line between life and mana";
-	EXPECT_EQ(out[Point(HeroBarWidth - 2, HeroLifeRows + 2)], OverheadBarManaColor);
-	EXPECT_EQ(out[Point(1, HeroBarHeight - 1)], HeroBarFrameColor);
+	EXPECT_EQ(out[Point(0, 0)], shades.frame);
+	for (int row = 0; row < HeroLifeRows; row++)
+		EXPECT_EQ(out[Point(1, 1 + row)], shades.life[row]) << "each row its own shade";
+	EXPECT_EQ(out[Point(HeroBarWidth - 2, 1)], shades.empty) << "half the life, half the bar";
+	EXPECT_EQ(out[Point(1, HeroLifeRows + 1)], shades.empty) << "a dark line between life and mana";
+	for (int row = 0; row < HeroManaRows; row++)
+		EXPECT_EQ(out[Point(HeroBarWidth - 2, HeroLifeRows + 2 + row)], shades.mana[row]);
+	EXPECT_EQ(out[Point(1, HeroBarHeight - 1)], shades.frame);
 	EXPECT_EQ(out[Point(HeroBarWidth, 0)], 0) << "nothing outside the bar";
 }
 
-TEST(Poe2OverheadBarsTest, EnergyShieldGoesOverTheTopOfTheLifeBar)
+TEST(Poe2OverheadBarsTest, EnergyShieldWashesOverTheLifeBar)
 {
+	UseBarPalette();
+	const OverheadBarShades &shades = GetOverheadBarShades();
 	OwnedSurface out(HeroBarWidth, HeroBarHeight);
 	OverheadBarValues values;
 	values.life = 100;
@@ -73,19 +107,47 @@ TEST(Poe2OverheadBarsTest, EnergyShieldGoesOverTheTopOfTheLifeBar)
 
 	Fill(out, 0);
 	DrawHeroBar(out, { 0, 0 }, values, false);
-	EXPECT_EQ(out[Point(1, 1)], OverheadBarLifeColor) << "Energy Shield only shows with its option";
+	EXPECT_EQ(out[Point(1, 1)], shades.life[0]) << "Energy Shield only shows with its option";
 
 	Fill(out, 0);
 	DrawHeroBar(out, { 0, 0 }, values, true);
-	EXPECT_EQ(out[Point(1, 1)], OverheadBarEnergyShieldColor);
-	EXPECT_EQ(out[Point(1, HeroEnergyShieldRows)], OverheadBarEnergyShieldColor);
-	EXPECT_EQ(out[Point(1, HeroEnergyShieldRows + 1)], OverheadBarLifeColor) << "the life still shows under it";
-	EXPECT_EQ(out[Point(HeroBarWidth - 2, 1)], OverheadBarLifeColor) << "a quarter of the shield covers a quarter of the bar";
+	for (int row = 0; row < HeroLifeRows; row++)
+		EXPECT_EQ(out[Point(1, 1 + row)], shades.energyShield[row]) << "the whole height of the life bar";
+	EXPECT_EQ(out[Point(HeroBarWidth - 2, 1)], shades.life[0]) << "a quarter of the shield covers a quarter of the bar";
+
+	values.life = 10;
+	values.energyShield = 100;
+	Fill(out, 0);
+	DrawHeroBar(out, { 0, 0 }, values, true);
+	EXPECT_EQ(out[Point(1, 2)], shades.energyShield[1]) << "over the life left";
+	EXPECT_EQ(out[Point(HeroBarWidth - 2, 2)], shades.energyShieldOverEmpty[1]) << "and over the empty bar";
 
 	values.maxEnergyShield = 0;
 	Fill(out, 0);
 	DrawHeroBar(out, { 0, 0 }, values, true);
-	EXPECT_EQ(out[Point(1, 1)], OverheadBarLifeColor) << "no Energy Shield, nothing over the life";
+	EXPECT_EQ(out[Point(1, 1)], shades.life[0]) << "no Energy Shield, nothing over the life";
+}
+
+TEST(Poe2OverheadBarsTest, HeroBarIsDrawnInFullColourOverTheWorld)
+{
+	UseBarPalette();
+	OwnedSurface out(HeroBarWidth, HeroBarHeight);
+	Fill(out, 0);
+	std::vector<UiCover> cells(static_cast<size_t>(HeroBarWidth) * HeroBarHeight);
+	std::vector<UiTint> tints(cells.size());
+	SetUiCoverTarget(out.surface, cells.data(), tints.data());
+	OverheadBarValues values;
+	values.life = 100;
+	values.maxLife = 100;
+	DrawHeroBar(out, { 0, 0 }, values, false);
+	SetUiCoverTarget(nullptr, nullptr);
+
+	const UiTint &bright = tints[(2 * static_cast<size_t>(HeroBarWidth)) + 1];
+	EXPECT_TRUE(bright.trueColour) << "the palette has no true green, so the layer over the world draws it";
+	EXPECT_EQ(bright.alpha, 255);
+	EXPECT_GT(bright.g, 2 * bright.r);
+	EXPECT_GT(bright.g, 2 * bright.b);
+	EXPECT_EQ(bright.color, out[Point(1, 2)]) << "the palette's nearest still drawn under it";
 }
 
 void MakeMonster(Monster &monster, uint32_t seed)
@@ -178,7 +240,7 @@ TEST(Poe2OverheadBarsTest, MonsterBarShowsItsLifeInsideTheFrame)
 	EXPECT_EQ(out[Point(MonsterBarWidth - 1, MonsterBarHeight - 1)], RareMonsterBarFrameColor);
 	EXPECT_EQ(out[Point(1, 1)], OverheadBarLifeColor);
 	EXPECT_EQ(out[Point(1, MonsterLifeRows)], OverheadBarLifeColor);
-	EXPECT_EQ(out[Point(MonsterBarWidth / 2, 1)], OverheadBarEmptyColor) << "a quarter of the life, a quarter of the bar";
+	EXPECT_EQ(out[Point(MonsterBarWidth / 2, 1)], GetOverheadBarShades().empty) << "a quarter of the life, a quarter of the bar";
 }
 
 } // namespace

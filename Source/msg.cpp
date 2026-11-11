@@ -5,6 +5,7 @@
  */
 #include "msg.h"
 
+#include <array>
 #include <climits>
 #include <cmath>
 #include <cstdint>
@@ -50,13 +51,17 @@
 #include "player.h"
 #include "players/validation.hpp"
 #include "plrmsg.h"
+#include "poe2/bound_demons.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/floors.hpp"
+#include "poe2/rune_fusing.hpp"
 #include "poe2/shrines.hpp"
+#include "poe2/telemetry.hpp"
 #include "portals/validation.hpp"
 #include "quests/validation.hpp"
 #include "spells.h"
+#include "stores.h"
 #include "storm/storm_net.hpp"
 #include "sync.h"
 #include "tmsg.h"
@@ -201,6 +206,8 @@ std::string_view CmdIdString(_cmd_id cmd)
 	case CMD_SPAWNMONSTER: return "CMD_SPAWNMONSTER";
 	case CMD_POE2_FRESHFLOOR: return "CMD_POE2_FRESHFLOOR";
 	case CMD_POE2_SHRINEBUFF: return "CMD_POE2_SHRINEBUFF";
+	case CMD_POE2_FUSERUNES: return "CMD_POE2_FUSERUNES";
+	case CMD_POE2_BREAKCRYSTAL: return "CMD_POE2_BREAKCRYSTAL";
 	case FAKE_CMD_SETID: return "FAKE_CMD_SETID";
 	case FAKE_CMD_DROPID: return "FAKE_CMD_DROPID";
 	case CMD_INVALID: return "CMD_INVALID";
@@ -227,6 +234,8 @@ struct DMonsterStr {
 	uint8_t mactive;
 	int32_t hitPoints;
 	int8_t mWhoHit;
+	/** POE2 Mashup: DeltaBoundReleased once a bound demon's crystal broke; 0xFF (the empty entry's fill) otherwise. */
+	uint8_t poe2Mark;
 };
 #pragma pack(pop)
 
@@ -879,6 +888,9 @@ void DeltaLoadMonsters(const DLevel &deltaLevel)
 
 		monster.hitPoints = Fixed26_6::fromRaw(Swap32LE(deltaMonster.hitPoints));
 		monster.whoHit = deltaMonster.mWhoHit;
+		// POE2 Mashup: a bound demon someone freed before this machine came to the level.
+		if (deltaMonster.poe2Mark == DeltaBoundReleased)
+			ReleaseBoundDemonOnLoad(monster);
 		if (deltaMonster.hitPoints != 0)
 			continue;
 
@@ -1107,6 +1119,8 @@ bool DeltaGetItem(const TCmdGItem &message, uint8_t bLevel)
 				delta.item.wValue = message.item.wValue;
 				delta.item.dwBuff = message.item.dwBuff;
 				delta.item.wToHit = message.item.wToHit;
+				memcpy(delta.item.craft, message.item.craft, sizeof(delta.item.craft));
+				memcpy(delta.item.craftExtension, message.item.craftExtension, sizeof(delta.item.craftExtension));
 			}
 			break;
 		}
@@ -1391,7 +1405,8 @@ int SyncDropItem(Point position, const TItem &item)
 	    Swap16LE(item.wValue),
 	    Swap32LE(item.dwBuff),
 	    Swap16LE(item.wToHit),
-	    Swap16LE(item.wMaxDam));
+	    Swap16LE(item.wMaxDam),
+	    NetItemCraft(item));
 }
 
 int SyncDropEar(Point position, const TEar &ear)
@@ -1626,8 +1641,10 @@ size_t OnPutItem(const TCmdPItem &message, Player &player)
 			if (ii != -1) {
 				PutItemRecord(dwSeed, wCI, wIndx);
 				DeltaPutItem(message, Items[ii].position, player);
-				if (isSelf)
+				if (isSelf) {
+					TelemetryItemAction(player, "put_down", Items[ii]);
 					pfile_update(true);
+				}
 			}
 		} else {
 			PutItemRecord(dwSeed, wCI, wIndx);
@@ -2639,6 +2656,47 @@ size_t OnShrineBuff(const TCmdShrineBuff &message, Player &player)
 	return sizeof(message);
 }
 
+size_t OnFuseRunes(const TCmdFuseRunes &message, Player &player)
+{
+	if (gbBufferMsgs == 1)
+		return sizeof(message);
+	// The runes come from the hero's own bag and stash, which only their game holds; the bag's changes sync as items.
+	if (&player != MyPlayer || !gbIsPoe2)
+		return sizeof(message);
+	if (message.family >= static_cast<uint8_t>(RuneFamily::Count) || message.strength >= static_cast<uint8_t>(RuneStrength::Count))
+		return sizeof(message);
+	FuseRunes(player, static_cast<RuneFamily>(message.family), static_cast<RuneStrength>(message.strength), Swap32LE(message.seed));
+	RefreshRuneFusing();
+	return sizeof(message);
+}
+
+size_t OnBreakCrystal(const TCmdBreakCrystal &message, Player &player)
+{
+	if (gbBufferMsgs == 1) {
+		BufferMessage(player, &message, sizeof(message));
+		return sizeof(message);
+	}
+	const Point position { message.x, message.y };
+	const uint16_t monsterId = Swap16LE(message.monsterId);
+	if (!gbIsPoe2 || player.plrlevel == 0 || monsterId >= MaxMonsters || !InDungeonBounds(position))
+		return sizeof(message);
+	if (player.isOnActiveLevel())
+		BreakBoundCrystal(Monsters[monsterId]);
+	if (gbIsMultiplayer) {
+		// The level's delta keeps it for whoever comes to the level later; an entry nothing wrote yet gets the demon's place.
+		DMonsterStr &delta = GetDeltaLevel(player).monster[monsterId];
+		if (!IsMonsterDeltaValid(delta)) {
+			delta.position = position;
+			delta.menemy = 0xFF;
+			delta.mactive = 0;
+			delta.hitPoints = message.hitPoints;
+			delta.mWhoHit = 0;
+		}
+		delta.poe2Mark = DeltaBoundReleased;
+	}
+	return sizeof(message);
+}
+
 size_t OnSpawnMonster(const TCmdSpawnMonster &message, const Player &player)
 {
 	if (gbBufferMsgs == 1)
@@ -2724,6 +2782,32 @@ void PrepareItemForNetwork(const Item &item, TItem &messageItem)
 	messageItem.wToHit = Swap16LE(item._iPLToHit);
 	messageItem.wMaxDam = Swap16LE(item._iMaxDam);
 	messageItem.dwBuff = Swap32LE(item.dwBuff);
+	// POE2 Mashup: and its crafting state (build spec step 9), as the item save keeps it; zeros for none.
+	std::array<uint8_t, CraftStateSaveSize> craft {};
+	std::array<uint8_t, CraftExtensionSaveSize> extension {};
+	if ((item.dwBuff & CF_POE2) != 0) {
+		craft = PackCraftState(item._iPoe2Craft);
+		if (const auto packed = PackCraftExtension(item._iPoe2Craft))
+			extension = *packed;
+	}
+	memcpy(messageItem.craft, craft.data(), sizeof(messageItem.craft));
+	memcpy(messageItem.craftExtension, extension.data(), sizeof(messageItem.craftExtension));
+}
+
+static_assert(sizeof(TItem) == 23 + CraftStateSaveSize + CraftExtensionSaveSize, "a network item is Diablo's 23 bytes and the crafting state");
+
+Poe2Craft NetItemCraft(const TItem &messageItem)
+{
+	if ((Swap32LE(messageItem.dwBuff) & CF_POE2) == 0)
+		return {};
+	std::array<uint8_t, CraftStateSaveSize> craft;
+	std::array<uint8_t, CraftExtensionSaveSize> extension;
+	memcpy(craft.data(), messageItem.craft, craft.size());
+	memcpy(extension.data(), messageItem.craftExtension, extension.size());
+	// Zeros, or bytes that don't check out, give no crafting: the item recreates from its seed alone, as before.
+	Poe2Craft result = UnpackCraftState(craft);
+	UnpackCraftExtension(extension, result);
+	return result;
 }
 
 void PrepareEarForNetwork(const Item &item, TEar &ear)
@@ -2737,7 +2821,7 @@ void RecreateItem(const Player &player, const TItem &messageItem, Item &item)
 	const uint32_t dwBuff = Swap32LE(messageItem.dwBuff);
 	RecreateItem(player, item,
 	    static_cast<_item_indexes>(Swap16LE(messageItem.wIndx)), Swap16LE(messageItem.wCI),
-	    Swap32LE(messageItem.dwSeed), Swap16LE(messageItem.wValue), dwBuff);
+	    Swap32LE(messageItem.dwSeed), Swap16LE(messageItem.wValue), dwBuff, NetItemCraft(messageItem));
 	if (messageItem.bId != 0)
 		item._iIdentified = true;
 	item._iMaxDur = messageItem.bMDur;
@@ -3047,6 +3131,29 @@ void NetSendCmdShrineBuff(uint8_t kind, uint8_t variant, uint8_t curse)
 	cmd.kind = kind;
 	cmd.variant = variant;
 	cmd.curse = curse;
+	NetSendHiPri(MyPlayerId, reinterpret_cast<std::byte *>(&cmd), sizeof(cmd));
+}
+
+void NetSendCmdFuseRunes(uint8_t family, uint8_t strength, uint32_t seed)
+{
+	TCmdFuseRunes cmd;
+
+	cmd.bCmd = CMD_POE2_FUSERUNES;
+	cmd.family = family;
+	cmd.strength = strength;
+	cmd.seed = Swap32LE(seed);
+	NetSendHiPri(MyPlayerId, reinterpret_cast<std::byte *>(&cmd), sizeof(cmd));
+}
+
+void NetSendCmdBreakCrystal(const Monster &monster)
+{
+	TCmdBreakCrystal cmd;
+
+	cmd.bCmd = CMD_POE2_BREAKCRYSTAL;
+	cmd.x = static_cast<uint8_t>(monster.position.tile.x);
+	cmd.y = static_cast<uint8_t>(monster.position.tile.y);
+	cmd.monsterId = Swap16LE(static_cast<uint16_t>(monster.getId()));
+	cmd.hitPoints = SwapSigned32LE(monster.hitPoints.raw());
 	NetSendHiPri(MyPlayerId, reinterpret_cast<std::byte *>(&cmd), sizeof(cmd));
 }
 
@@ -3570,6 +3677,10 @@ size_t ParseCmd(uint8_t pnum, const TCmd *pCmd, size_t maxCmdSize)
 		return HandleCmd(OnFreshFloor, player, pCmd, maxCmdSize);
 	case CMD_POE2_SHRINEBUFF:
 		return HandleCmd(OnShrineBuff, player, pCmd, maxCmdSize);
+	case CMD_POE2_FUSERUNES:
+		return HandleCmd(OnFuseRunes, player, pCmd, maxCmdSize);
+	case CMD_POE2_BREAKCRYSTAL:
+		return HandleCmd(OnBreakCrystal, player, pCmd, maxCmdSize);
 	default:
 		break;
 	}

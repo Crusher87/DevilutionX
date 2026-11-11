@@ -20,6 +20,18 @@ namespace {
 constexpr uint8_t CraftStateMarker = 0xC2;
 /** The marker of the wide socket layout: bytes 4 and 5 are the two sockets' augment ids. */
 constexpr uint8_t WideAugmentsMarker = 0xC3;
+/** In the wide layout, the top bit of a socket's byte: a Zod Rune raised the rune in it (augment ids stay below 128). */
+constexpr uint8_t ZodMark = 0x80;
+/**
+ * The marker of the wide socket layout from the runes' own numbers on (build spec step 5): an item with anything in a
+ * socket saves with it, so one saved with either older marker has its augments' values from before (SavedBeforeRuneNumbers).
+ */
+constexpr uint8_t RuneNumbersMarker = 0xC5;
+/**
+ * The marker of the wide socket layout from the soulstones' and relics' own numbers on (build spec step 6): one saved
+ * with RuneNumbersMarker has its runes' values of today but its soulstones' from before (SavedBeforeSoulstoneNumbers).
+ */
+constexpr uint8_t SoulstoneNumbersMarker = 0xC6;
 /** The crafting extension's marker; Diablo's anim width constant puts 0x60 there. */
 constexpr uint8_t CraftExtensionMarker = 0xC4;
 
@@ -61,10 +73,19 @@ uint8_t MemoryFamily(uint8_t stored)
 	return stored;
 }
 
-/** Whether an augment in a socket needs the wide socket layout. */
+/**
+ * Whether the craft saves in the wide socket layout: an id of today in a socket does since the runes took their own
+ * numbers. Only legacy ids pack narrow, as they did before the runes rework (they become today's when they load).
+ */
 bool HasWideAugments(const Poe2Craft &craft)
 {
-	return std::any_of(craft.augments.begin(), craft.augments.end(), [](uint8_t augment) { return augment > NarrowMaxAugmentId; });
+	// A Zod Rune's mark is kept only in the wide layout.
+	return craft.raised != 0 || std::any_of(craft.augments.begin(), craft.augments.end(), [](uint8_t augment) { return augment > LegacyAugmentCount; });
+}
+
+bool IsCraftMarker(uint8_t marker)
+{
+	return marker == CraftStateMarker || marker == WideAugmentsMarker || marker == RuneNumbersMarker || marker == SoulstoneNumbersMarker;
 }
 
 /** Whether a modifier's family needs the wide layout: a real family the narrow one can't hold. */
@@ -76,6 +97,8 @@ bool IsWideCraft(const Poe2Craft &craft)
 }
 
 } // namespace
+
+bool PackAsBeforeSoulstoneNumbers = false;
 
 uint8_t CraftSaltLimit(uint8_t family)
 {
@@ -93,13 +116,14 @@ std::array<uint8_t, CraftStateSaveSize> PackCraftState(const Poe2Craft &craft)
 	if (craft.isEmpty())
 		return bytes;
 	const bool wideAugments = HasWideAugments(craft);
-	bytes[0] = wideAugments ? WideAugmentsMarker : CraftStateMarker;
+	bytes[0] = wideAugments ? (PackAsBeforeSoulstoneNumbers ? RuneNumbersMarker : SoulstoneNumbersMarker) : CraftStateMarker;
 	bytes[1] = static_cast<uint8_t>((craft.explicitMods ? 1 : 0) | ((craft.rarity & 3) << 1) | ((craft.rolledMagic ? 1 : 0) << 3) | ((craft.sockets & 3) << 4) | ((craft.desecrated ? 1 : 0) << 6));
 	bytes[2] = static_cast<uint8_t>((craft.enchant & 0x1F) | ((craft.enchantRoll & 7) << 5));
 	bytes[3] = static_cast<uint8_t>(craft.magnitude);
 	if (wideAugments) {
-		bytes[4] = craft.augments[0];
-		bytes[5] = craft.augments[1];
+		// Bit 7 of each socket's byte is the Zod Rune's mark.
+		bytes[4] = static_cast<uint8_t>((craft.augments[0] & ~ZodMark) | ((craft.raised & 1) != 0 ? ZodMark : 0));
+		bytes[5] = static_cast<uint8_t>((craft.augments[1] & ~ZodMark) | ((craft.raised & 2) != 0 ? ZodMark : 0));
 	} else {
 		bytes[4] = static_cast<uint8_t>((craft.augments[0] & 0xF) | ((craft.augments[1] & 0xF) << 4));
 		bytes[5] = static_cast<uint8_t>((craft.augments[2] & 0xF) | ((craft.catalyst & 0xF) << 4));
@@ -122,7 +146,7 @@ std::array<uint8_t, CraftStateSaveSize> PackCraftState(const Poe2Craft &craft)
 Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 {
 	Poe2Craft craft;
-	if ((bytes[0] != CraftStateMarker && bytes[0] != WideAugmentsMarker) || bytes[CraftStateSaveSize - 1] != Checksum(bytes))
+	if (!IsCraftMarker(bytes[0]) || bytes[CraftStateSaveSize - 1] != Checksum(bytes))
 		return craft;
 	craft.explicitMods = (bytes[1] & 1) != 0;
 	craft.rarity = (bytes[1] >> 1) & 3;
@@ -133,9 +157,10 @@ Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 	craft.enchant = bytes[2] & 0x1F;
 	craft.enchantRoll = bytes[2] >> 5;
 	craft.magnitude = static_cast<int8_t>(bytes[3]);
-	if (bytes[0] == WideAugmentsMarker) {
-		craft.augments[0] = bytes[4];
-		craft.augments[1] = bytes[5];
+	if (bytes[0] == WideAugmentsMarker || bytes[0] == RuneNumbersMarker || bytes[0] == SoulstoneNumbersMarker) {
+		craft.augments[0] = static_cast<uint8_t>(bytes[4] & ~ZodMark);
+		craft.augments[1] = static_cast<uint8_t>(bytes[5] & ~ZodMark);
+		craft.raised = static_cast<uint8_t>(((bytes[4] & ZodMark) != 0 ? 1 : 0) | ((bytes[5] & ZodMark) != 0 ? 2 : 0));
 	} else {
 		craft.augments[0] = bytes[4] & 0xF;
 		craft.augments[1] = bytes[4] >> 4;
@@ -150,6 +175,16 @@ Poe2Craft UnpackCraftState(const std::array<uint8_t, CraftStateSaveSize> &bytes)
 			craft.mods[i] = { MemoryFamily(static_cast<uint8_t>(packed & 0x7F)), static_cast<uint8_t>((packed >> 7) & 0xF), static_cast<uint8_t>(packed >> 11) };
 	}
 	return craft;
+}
+
+bool SavedBeforeRuneNumbers(const std::array<uint8_t, CraftStateSaveSize> &bytes)
+{
+	return bytes[0] != RuneNumbersMarker && bytes[0] != SoulstoneNumbersMarker && IsCraftMarker(bytes[0]) && bytes[CraftStateSaveSize - 1] == Checksum(bytes);
+}
+
+bool SavedBeforeSoulstoneNumbers(const std::array<uint8_t, CraftStateSaveSize> &bytes)
+{
+	return bytes[0] == RuneNumbersMarker && bytes[CraftStateSaveSize - 1] == Checksum(bytes);
 }
 
 std::optional<std::array<uint8_t, CraftExtensionSaveSize>> PackCraftExtension(const Poe2Craft &craft)

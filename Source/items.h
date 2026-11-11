@@ -586,6 +586,13 @@ inline bool IsOneCellCopy(const Item &item)
 }
 /** @brief POE2 Mashup: whether the item takes one cell, whatever picture it was saved with (one-cell copies and charms). */
 bool TakesOneCell(const Item &item);
+/**
+ * @brief Whether a worn item's modifiers count: normal items have none hidden, and in POE2 mode an unidentified
+ * item's modifiers work while worn, as in POE2 (Curtis, Monk run 2); in Diablo they wait for identifying.
+ */
+bool ItemModifiersCount(const Item &item);
+/** @brief POE2 Mashup: whether the tooltip shows the item's modifiers; before identifying it shows the base and quality only. */
+bool ItemModifiersShown(const Item &item);
 /** @brief POE2 Mashup: items saved when they were bigger let go of the inventory cells they no longer cover. */
 void FitOneCellItems(Player &player);
 /** @param quality POE2 Mashup: the quality the item is made with, as starting gear rebuilt by crafting keeps its quality. */
@@ -773,6 +780,15 @@ std::string GetRareItemName(const Item &item);
  * @brief POE2 Mashup: refills the affix data that isn't saved (rare powers, regeneration) by regenerating the item from its seed.
  */
 void RestoreRareItemPowers(Item &item);
+/**
+ * @brief POE2 Mashup: an item saved before the runes took their own numbers (build spec step 5) keeps what else changed
+ * it, and its socketed augments' share of its values becomes what they do now.
+ * @param saved The crafting state as saved, before legacy ids converted.
+ * @param soulstonesOnly A save from step 5, whose runes had their numbers of today but whose soulstones and relics
+ * still had their old ones (build spec step 6, AugmentBeforeSoulstoneNumbers); otherwise AugmentBeforeRuneNumbers.
+ * @return Whether its values changed.
+ */
+bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved, bool soulstonesOnly = false);
 
 /**
  * @brief POE2 Mashup: makes one of the bundle's uniques (poe2/uniques.hpp) on its base, the way a drop of it is made.

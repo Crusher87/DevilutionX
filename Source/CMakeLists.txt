@@ -57,6 +57,7 @@ set(libdevilutionx_SRCS
   poe2/hd_light.cpp
   poe2/hd_ui.cpp
   poe2/loot_filter.cpp
+  poe2/rune_icons.cpp
   poe2/stash_layouts.cpp
   poe2/stash_tabs.cpp
   portal.cpp
@@ -164,6 +165,7 @@ set(libdevilutionx_SRCS
   panels/partypanel.cpp
   panels/quest_log.cpp
   panels/item_spawner.cpp
+  panels/monster_spawner.cpp
   panels/skill_lab_panel.cpp
   panels/atlas_panel.cpp
   panels/anvil_panel.cpp
@@ -804,6 +806,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/defenses.cpp
   poe2/area_levels.cpp
   poe2/bases.cpp
+  poe2/bound_demons.cpp
   poe2/weapon_kinds.cpp
   poe2/belt_uniques.cpp
   poe2/boss_loot.cpp
@@ -835,6 +838,7 @@ add_devilutionx_object_library(libdevilutionx_player
   poe2/table_skills.cpp
   poe2/shrines.cpp
   poe2/effect_primitives.cpp
+  poe2/rune_fusing.cpp
   poe2/summon_commands.cpp
   poe2/support_table.cpp
   poe2/support_tiers.cpp

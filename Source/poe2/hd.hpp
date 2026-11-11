@@ -225,6 +225,23 @@ void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);
  */
 void RegisterRecolour(const uint8_t *trn, std::string_view name);
 
+/** @brief Forgets the names of a sprite file's frames, before its pixels are freed (so other pictures don't take its art). */
+void ForgetSprites(ClxSpriteListOrSheet sprites);
+
+/** @brief Whether the HD pack has art of this name, as RegisterSprites names a frame (e.g. monsters/zombie/zombien/d0_f00). */
+bool HasArt(std::string_view name);
+
+/**
+ * @brief Shows a sprite's HD art over the UI this frame, filling @p dest (UI pixels), for a preview in a panel.
+ * Only one such sprite is shown at a time.
+ * @param subFrame How far the sprite is towards its next frame, for the in-between drawings.
+ * @return false when HD art isn't shown or the sprite has none: the caller then draws the game's own pixels.
+ */
+bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame);
+
+/** @brief Draws what DrawUiSprite asked for, over the UI. */
+void RenderUi(SDL_Renderer *renderer);
+
 using RegisterSpritesFn = void (*)(std::string_view path, ClxSpriteListOrSheet sprites);
 
 /**

@@ -12,6 +12,10 @@
  * pixel positions, or widget layout.
  */
 
+#include <algorithm>
+#include <tuple>
+#include <vector>
+
 #include <gtest/gtest.h>
 
 #include "ui_test.hpp"
@@ -23,6 +27,7 @@
 #include "panels/stack_split_panel.hpp"
 #include "pfile.h"
 #include "player.h"
+#include "poe2/crafting_items.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "poe2/stash_tabs.hpp"
@@ -735,6 +740,34 @@ protected:
 		return item;
 	}
 
+	static Item MakeCrafting(item_misc_id miscId, uint8_t variant, int count = 1)
+	{
+		Item item = MakeOrb(miscId);
+		SetCraftingItemVariant(item, variant);
+		// As a stash slot keeps it: past an inventory stack.
+		SetStoredStackCount(item, count);
+		return item;
+	}
+
+	static Item MakeRune(AugmentId id, int count = 1)
+	{
+		return MakeCrafting(IMISC_AUGMENT, static_cast<uint8_t>(id), count);
+	}
+
+	static Item MakeEssence(EssenceKind kind, EssenceTier tier, int count = 1)
+	{
+		return MakeCrafting(IMISC_ESSENCE, EssenceVariant(kind, tier), count);
+	}
+
+	/** Puts the item in a premade tab's slot as the stash file holds it, whatever the tab would say. */
+	static void PutInSlotAsSaved(unsigned page, unsigned slot, const Item &item)
+	{
+		Stash.stashList.push_back(item);
+		const Point cell { static_cast<int>(slot % 10), static_cast<int>((slot % 100) / 10) };
+		Stash.stashList.back().position = cell;
+		Stash.stashGrids[StashGridKey(page, slot / 100)][cell.x][cell.y] = static_cast<StashStruct::StashCell>(Stash.stashList.size());
+	}
+
 	static Item MakeUncutGem(int level)
 	{
 		Item item = MakeSmallItem();
@@ -802,7 +835,10 @@ TEST_F(Poe2StashTabsTest, ANewStashHasThePremadeTabs)
 	EXPECT_EQ(StashTabs.kind(DefaultBlankStashTabs + 1), StashTabKind::Gems);
 	EXPECT_EQ(StashTabs.kind(DefaultBlankStashTabs + 2), StashTabKind::Maps);
 	EXPECT_EQ(StashTabs.kind(DefaultBlankStashTabs + 3), StashTabKind::Uniques);
+	EXPECT_EQ(StashTabs.kind(DefaultBlankStashTabs + 4), StashTabKind::Runes);
+	EXPECT_EQ(StashTabs.kind(DefaultBlankStashTabs + 5), StashTabKind::Essences);
 	EXPECT_EQ(StashTabs.displayName(DefaultBlankStashTabs), "Currency");
+	EXPECT_EQ(StashTabs.displayName(DefaultBlankStashTabs + 4), "Runes");
 	EXPECT_EQ(StashTabs.displayName(0), "1");
 }
 
@@ -966,7 +1002,7 @@ TEST_F(Poe2StashTabsTest, TabsSurviveSaving)
 	StashTabs.rename(0, "Currency dump that is far too long");
 	StashTabs.setColor(0, 7);
 	StashTabs.setAffinity(1, StashAffinity::Gems, true);
-	StashTabs.moveTab(DefaultStashTabs - 1, 0);
+	StashTabs.moveTab(PageOf(StashTabKind::Uniques), 0);
 	StashTabs.tabs[0].bigPictures = true;
 	const std::vector<uint8_t> data = SerializeStashTabs(StashTabs);
 
@@ -1004,10 +1040,38 @@ TEST_F(Poe2StashTabsTest, VersionOneTabsStillLoad)
 	EXPECT_TRUE(loaded.hasAffinity(0, StashAffinity::Currency));
 	EXPECT_EQ(loaded.kind(0), StashTabKind::Blank);
 	EXPECT_EQ(loaded.kind(1), StashTabKind::Blank);
-	loaded.addMissingPremadeTabs();
-	EXPECT_EQ(loaded.count(), 6u) << "The premade tabs go after the old ones";
+	loaded.addMissingPremadeTabs(version);
+	EXPECT_EQ(loaded.count(), 8u) << "The premade tabs go after the old ones";
 	EXPECT_EQ(loaded.kind(2), StashTabKind::Currency);
 	EXPECT_EQ(loaded.kind(5), StashTabKind::Uniques);
+	EXPECT_EQ(loaded.kind(6), StashTabKind::Runes);
+	EXPECT_EQ(loaded.kind(7), StashTabKind::Essences);
+}
+
+TEST_F(Poe2StashTabsTest, VersionThreeTabsGetOnlyTheRunesAndEssencesTabs)
+{
+	// A stash saved before version 4 whose player made the Gems tab blank: it gets the new tabs, and no Gems tab back.
+	StashTabSet old;
+	old.tabs.erase(old.tabs.begin() + static_cast<std::ptrdiff_t>(DefaultBlankStashTabs + 4), old.tabs.end());
+	old.tabs[DefaultBlankStashTabs + 1].kind = StashTabKind::Blank;
+	const std::vector<uint8_t> data = SerializeStashTabs(old, 3);
+	EXPECT_EQ(data[0], 3);
+	StashTabSet loaded;
+	uint8_t version = 0;
+	ASSERT_TRUE(DeserializeStashTabs(data, loaded, &version));
+	EXPECT_EQ(version, 3);
+	ASSERT_EQ(loaded.count(), DefaultBlankStashTabs + 4);
+	loaded.addMissingPremadeTabs(version);
+	ASSERT_EQ(loaded.count(), DefaultBlankStashTabs + 6);
+	EXPECT_EQ(loaded.countOf(StashTabKind::Gems), 0u);
+	EXPECT_EQ(loaded.kind(DefaultBlankStashTabs + 4), StashTabKind::Runes);
+	EXPECT_EQ(loaded.kind(DefaultBlankStashTabs + 5), StashTabKind::Essences);
+	// A version 3 save can't name a kind version 3 didn't have: such a tab is written blank.
+	const std::vector<uint8_t> newer = SerializeStashTabs(loaded, 3);
+	StashTabSet reread;
+	ASSERT_TRUE(DeserializeStashTabs(newer, reread));
+	EXPECT_EQ(reread.countOf(StashTabKind::Runes), 0u);
+	EXPECT_EQ(reread.countOf(StashTabKind::Blank), loaded.countOf(StashTabKind::Blank) + 2);
 }
 
 TEST_F(Poe2StashTabsTest, CurrencyJoinsItsStackOnABlankTab)
@@ -1223,6 +1287,111 @@ TEST_F(Poe2StashTabsTest, RepairMovesMisplacedItems)
 	EXPECT_GT(CountOccupiedCells(Stash.stashGrids[0]), 0) << "It went to a blank tab";
 }
 
+TEST_F(Poe2StashTabsTest, RunesAndEssencesHaveTheirOwnTabs)
+{
+	const unsigned currency = PageOf(StashTabKind::Currency);
+	const unsigned runes = PageOf(StashTabKind::Runes);
+	const unsigned essences = PageOf(StashTabKind::Essences);
+	// Ctrl+click from the bag routes them to their tabs, not the Currency tab.
+	EXPECT_EQ(StashTabs.affinityTabFor(MakeRune(AugmentId::GreaterOrt)), runes);
+	EXPECT_EQ(StashTabs.affinityTabFor(MakeEssence(EssenceKind::Flames, EssenceTier::Perfect)), essences);
+	EXPECT_EQ(StashTabs.affinityTabFor(MakeOrb()), currency);
+	EXPECT_FALSE(StashTabs.accepts(currency, MakeRune(AugmentId::LesserRal)));
+	EXPECT_FALSE(StashTabs.accepts(runes, MakeOrb()));
+	EXPECT_FALSE(StashTabs.accepts(essences, MakeRune(AugmentId::LesserRal)));
+
+	Stash.SetPage(runes);
+	ASSERT_TRUE(AutoPlaceItemInStash(MakeRune(AugmentId::GreaterOrt, 30), true));
+	ASSERT_TRUE(AutoPlaceItemInStash(MakeRune(AugmentId::GreaterOrt, 30), true));
+	ASSERT_TRUE(AutoPlaceItemInStash(MakeRune(AugmentId::Zamphir), true));
+	EXPECT_FALSE(AutoPlaceItemInStash(MakeOrb(), true)) << "Not an orb";
+	Stash.SetPage(essences);
+	ASSERT_TRUE(AutoPlaceItemInStash(MakeEssence(EssenceKind::Terror, EssenceTier::Normal), true));
+	// A row per family, a column per strength.
+	const unsigned ort = (static_cast<unsigned>(RuneFamily::Ort) * RuneRowSlots) + static_cast<unsigned>(RuneStrength::Greater);
+	const StashStruct::StashCell stack = StashTabSlotItem(runes, ort);
+	ASSERT_NE(stack, StashStruct::EmptyCell);
+	EXPECT_EQ(StoredStackCount(Stash.stashList[stack]), 60) << "Stacks join past an inventory stack, as on the Currency tab";
+	const std::span<const AugmentId> soulstones = SoulstonesAndRelics();
+	const auto zamphir = static_cast<unsigned>(std::find(soulstones.begin(), soulstones.end(), AugmentId::Zamphir) - soulstones.begin());
+	EXPECT_NE(StashTabSlotItem(runes, GetRunePage(RunePage::SoulstonesAndRelics).first + zamphir), StashStruct::EmptyCell);
+	EXPECT_NE(StashTabSlotItem(essences, EssenceEvilSlotsFirst), StashStruct::EmptyCell);
+	EXPECT_TRUE(StashTabItems(currency).empty());
+	EXPECT_TRUE(StashTabItems(0).empty());
+	// A click takes an inventory stack, which is 10 for runes (build spec step 5).
+	const Item taken = TakeFromStash(stack);
+	EXPECT_EQ(StackCount(taken), RuneStackMax);
+	EXPECT_EQ(StoredStackCount(Stash.stashList[StashTabSlotItem(runes, ort)]), 60 - RuneStackMax);
+}
+
+TEST_F(Poe2StashTabsTest, OldCurrencyTabRunesAndEssencesMoveToTheirTabs)
+{
+	// What a stash saved before version 4 holds: augments in Currency slots 40-49, essences in 70-119.
+	const unsigned currency = PageOf(StashTabKind::Currency);
+	PutInSlotAsSaved(currency, 42, MakeRune(AugmentId::LesserOrt, 4000));
+	PutInSlotAsSaved(currency, 49, MakeRune(AugmentId::RelicOfAkarat, 2));
+	PutInSlotAsSaved(currency, 70, MakeEssence(EssenceKind::Body, EssenceTier::Lesser, 7));
+	PutInSlotAsSaved(currency, 117, MakeEssence(EssenceKind::Command, EssenceTier::Greater, 3));
+	PutInSlotAsSaved(currency, CurrencyFixedSlot(MakeOrb(IMISC_ORB_CHAOS)).value(), MakeOrb(IMISC_ORB_CHAOS, 9));
+	RepairStashTabs();
+	EXPECT_EQ(StashTabItems(currency).size(), 1u) << "Only the orb stays";
+	const unsigned runes = PageOf(StashTabKind::Runes);
+	const unsigned essences = PageOf(StashTabKind::Essences);
+	const auto countIn = [](unsigned page, const Item &item, auto slotOf) {
+		const StashStruct::StashCell index = StashTabSlotItem(page, slotOf(item).value());
+		return index == StashStruct::EmptyCell ? 0 : StoredStackCount(Stash.stashList[index]);
+	};
+	EXPECT_EQ(countIn(runes, MakeRune(AugmentId::LesserOrt), RuneTabSlot), 4000) << "A big stack moves whole";
+	EXPECT_EQ(countIn(runes, MakeRune(AugmentId::RelicOfAkarat), RuneTabSlot), 2);
+	EXPECT_EQ(countIn(essences, MakeEssence(EssenceKind::Body, EssenceTier::Lesser), EssenceTabSlot), 7);
+	EXPECT_EQ(countIn(essences, MakeEssence(EssenceKind::Command, EssenceTier::Greater), EssenceTabSlot), 3);
+	for (unsigned slot = 40; slot < 50; slot++)
+		EXPECT_EQ(GetCurrencySlotKind(slot).miscId, IMISC_INVALID) << "Old augment places stay empty: " << slot;
+	for (unsigned slot = 70; slot < 120; slot++)
+		EXPECT_EQ(GetCurrencySlotKind(slot).miscId, IMISC_INVALID) << "Old essence places stay empty: " << slot;
+}
+
+TEST_F(Poe2StashTabsTest, OldCurrencyTabRunesKeepFewCellsWithoutARunesTab)
+{
+	// A stash saved before version 4 with every tab it can have gets no Runes tab: its runes go to blank tabs.
+	const unsigned runesPage = PageOf(StashTabKind::Runes);
+	StashTabs.tabs.erase(StashTabs.tabs.begin() + runesPage);
+	const unsigned currency = PageOf(StashTabKind::Currency);
+	PutInSlotAsSaved(currency, 42, MakeRune(AugmentId::LesserOrt, 85));
+	RepairStashTabs();
+	EXPECT_TRUE(StashTabItems(currency).empty());
+	int total = 0;
+	int cells = 0;
+	for (const Item &item : Stash.stashList) {
+		if (item._iMiscId != IMISC_AUGMENT)
+			continue;
+		total += StoredStackCount(item);
+		cells++;
+		EXPECT_LE(StoredStackCount(item), CurrencyStackMax);
+	}
+	EXPECT_EQ(total, 85) << "None lost";
+	EXPECT_EQ(cells, 3) << "Cells of 40, as an old stack keeps, not of 10";
+}
+
+TEST_F(Poe2StashTabsTest, TheEssencesTabHoldsGearToUseEssencesOn)
+{
+	const unsigned essences = PageOf(StashTabKind::Essences);
+	Item sword = MakeSword();
+	ASSERT_TRUE(StoreInEssenceCraftSlot(essences, sword));
+	EXPECT_TRUE(sword.isEmpty());
+	const StashStruct::StashCell held = StashTabSlotItem(essences, EssenceCraftSlot);
+	ASSERT_NE(held, StashStruct::EmptyCell);
+	Item club = MakeClub();
+	EXPECT_FALSE(StoreInEssenceCraftSlot(essences, club)) << "One item at a time";
+	Item orb = MakeOrb();
+	EXPECT_FALSE(StoreInEssenceCraftSlot(essences, orb)) << "Gear only";
+	EXPECT_FALSE(StoreInEssenceCraftSlot(PageOf(StashTabKind::Runes), club)) << "Only the Essences tab has one";
+	// The repair on load keeps it there.
+	RepairStashTabs();
+	EXPECT_EQ(StashTabSlotItem(essences, EssenceCraftSlot), held);
+	EXPECT_EQ(StashTabItems(essences).size(), 1u);
+}
+
 class Poe2StashSaveTest : public Poe2StashTabsTest {
 protected:
 	void SetUp() override
@@ -1288,6 +1457,68 @@ TEST_F(Poe2StashSaveTest, PremadeTabsSurviveSavingAndLoading)
 	EXPECT_EQ(StashTabItems(gems).size(), 103u) << "The gems in the tab's extra grid load too";
 	EXPECT_NE(StashTabSlotItem(uniques, 2), StashStruct::EmptyCell);
 	EXPECT_EQ(StashTabItems(0).size(), 1u);
+}
+
+TEST_F(Poe2StashSaveTest, AVersionThreeStashMovesItsRunesAndEssencesToTheirTabs)
+{
+	// A stash saved before version 4: the six tabs of then, augments and essences on the Currency tab.
+	StashTabs.tabs.resize(DefaultBlankStashTabs + 4);
+	const unsigned currency = PageOf(StashTabKind::Currency);
+	const unsigned gems = PageOf(StashTabKind::Gems);
+	PutInSlotAsSaved(currency, 40, MakeRune(AugmentId::LesserRal, 120));
+	PutInSlotAsSaved(currency, 45, MakeRune(AugmentId::LordOfThePit, 3));
+	PutInSlotAsSaved(currency, 70 + 5, MakeEssence(EssenceKind::Mind, EssenceTier::Normal, 11));
+	PutInSlotAsSaved(currency, 70 + 47, MakeEssence(EssenceKind::Command, EssenceTier::Perfect, 1));
+	PutInSlotAsSaved(currency, CurrencyFixedSlot(MakeOrb(IMISC_ORB_DIVINE)).value(), MakeOrb(IMISC_ORB_DIVINE, 5));
+	PutInSlotAsSaved(gems, 0, MakeUncutGem(3));
+	Stash.SetPage(gems);
+	StashTabsSaveVersion = 3;
+	Stash.dirty = true;
+	sfile_write_stash();
+	StashTabsSaveVersion = StashTabsVersion;
+
+	Stash = {};
+	StashTabs.reset();
+	LoadStash();
+	ASSERT_EQ(StashTabs.count(), DefaultStashTabs) << "It gets the Runes and Essences tabs";
+	EXPECT_EQ(Stash.GetPage(), gems);
+	const unsigned runes = PageOf(StashTabKind::Runes);
+	const unsigned essences = PageOf(StashTabKind::Essences);
+	EXPECT_EQ(runes, DefaultBlankStashTabs + 4u) << "At the end";
+	EXPECT_EQ(StashTabItems(currency).size(), 1u) << "Only the orb stays on the Currency tab";
+	EXPECT_EQ(StashTabItems(runes).size(), 2u);
+	EXPECT_EQ(StashTabItems(essences).size(), 2u);
+	const auto stored = [](unsigned page, std::optional<unsigned> slot) {
+		const StashStruct::StashCell index = StashTabSlotItem(page, slot.value());
+		return index == StashStruct::EmptyCell ? 0 : StoredStackCount(Stash.stashList[index]);
+	};
+	EXPECT_EQ(stored(runes, RuneTabSlot(MakeRune(AugmentId::LesserRal))), 120);
+	EXPECT_EQ(stored(runes, RuneTabSlot(MakeRune(AugmentId::LordOfThePit))), 3);
+	EXPECT_EQ(stored(essences, EssenceTabSlot(MakeEssence(EssenceKind::Mind, EssenceTier::Normal))), 11);
+	EXPECT_EQ(stored(essences, EssenceTabSlot(MakeEssence(EssenceKind::Command, EssenceTier::Perfect))), 1);
+	EXPECT_EQ(stored(currency, CurrencyFixedSlot(MakeOrb(IMISC_ORB_DIVINE))), 5);
+	EXPECT_EQ(StashTabItems(gems).size(), 1u);
+
+	// Saved as version 4, it loads the same again.
+	const auto layout = [] {
+		std::vector<std::tuple<unsigned, int, int, int, uint32_t, int>> cells;
+		for (const auto &[key, grid] : Stash.stashGrids) {
+			for (int x = 0; x < 10; x++) {
+				for (int y = 0; y < 10; y++) {
+					if (grid[x][y] == 0)
+						continue;
+					const Item &item = Stash.stashList[grid[x][y] - 1];
+					cells.emplace_back(key, x, y, item._iMiscId, item.dwBuff, StoredStackCount(item));
+				}
+			}
+		}
+		std::sort(cells.begin(), cells.end());
+		return cells;
+	};
+	const auto first = layout();
+	SaveAndReload();
+	ASSERT_EQ(StashTabs.count(), DefaultStashTabs);
+	EXPECT_EQ(layout(), first);
 }
 
 TEST_F(Poe2StashSaveTest, HardcoreHasItsOwnStash)

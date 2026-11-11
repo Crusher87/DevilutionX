@@ -473,9 +473,10 @@ TEST_F(Poe2ChaosGemsTest, HexRuptureBurstsHalfSpentCurses)
 	const TableSkillData *data = FindTableSkill(WeaponSkill::HexRupture);
 	ASSERT_NE(data, nullptr);
 	EXPECT_EQ(data->name, "Hex Rupture");
-	EXPECT_EQ(data->level, 11);
+	// Tier VII to XI, 200% to 350% a burst (Curtis 2026-11-07, Q31).
+	EXPECT_EQ(data->level, 20);
 	EXPECT_EQ(data->type, DamageType::Chaos);
-	EXPECT_EQ(data->damagePercent, 200);
+	EXPECT_EQ(data->damagePercent, 350);
 	EXPECT_FALSE(IsGrantedSkill(WeaponSkill::HexRupture));
 	EXPECT_TRUE(IsTableAreaSkill(*data));
 	const SkillSlot hex = SkillSlot::ForAttack(WeaponSkill::HexRupture);
@@ -586,12 +587,12 @@ TEST_F(Poe2ChaosGemsTest, HexRuptureBurstsEachMonsterOnceACast)
 		EXPECT_EQ(pack[i]->poe2.weakenTicks, 0) << i;
 		EXPECT_EQ(pack[i]->maxHitPoints - pack[i]->hitPoints, burst) << i;
 	}
-	// One burst is 200% of the spell base at gem level 1.
+	// One burst is 350% of the spell base at gem level 1.
 	const Monster &middle = *pack[4];
 	const int taken = MonsterDamageTakenPercent(middle, DamageType::Chaos);
 	const int curve = GemDamagePercent(hex, 1);
-	const int64_t low = static_cast<int64_t>(SpellBaseMin(player, 1)) * 64 * curve / 100 * 200 / 100 * taken / 100;
-	const int64_t high = static_cast<int64_t>(SpellBaseMax(player, 1)) * 64 * curve / 100 * 200 / 100 * taken / 100;
+	const int64_t low = static_cast<int64_t>(SpellBaseMin(player, 1)) * 64 * curve / 100 * 350 / 100 * taken / 100;
+	const int64_t high = static_cast<int64_t>(SpellBaseMax(player, 1)) * 64 * curve / 100 * 350 / 100 * taken / 100;
 	EXPECT_GE(burst.raw(), low - 1);
 	EXPECT_LE(burst.raw(), high + 1);
 }

@@ -33,7 +33,10 @@ struct Poe2MissileData {
 	bool ricochet = false;
 	/** @brief Fired by one of the hero's minions: it deals its own damage and hits like a spell, even an arrow. */
 	bool minionShot = false;
-	/** @brief How the effects draw it: 0 by its graphic, 1 the staff's own small bolt, 2 a great spear (Bone Spear). */
+	/**
+	 * @brief How the effects draw it: 0 by its graphic, 1 the staff's own small bolt, 2 a great spear (Bone Spear), 3 an
+	 * arcing spark another skill throws (Charged Bolt's), 4 a spinning thrown blade.
+	 */
 	uint8_t look = 0;
 	/**
 	 * @brief The spell the play log credits this missile's hits to, when it isn't the last skill used: a rune's burst
@@ -53,6 +56,12 @@ struct Poe2MissileData {
 	uint8_t commandShot = 0;
 	uint8_t commandX = 0;
 	uint8_t commandY = 0;
+	/** @brief The monster it steers towards while it flies (Guided Arrow), or -1. */
+	int16_t homingMonster = -1;
+	/** @brief A draft gem's lesser projectile (Magma Hurl's shrapnel): its hits set off nothing more of the skill's. */
+	bool draftPart = false;
+	/** @brief Whirling Volley's cast this arrow of its ring belongs to, which hits each monster once (not saved), or 0. */
+	uint16_t volleyCast = 0;
 };
 
 } // namespace devilution

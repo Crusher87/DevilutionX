@@ -16,6 +16,8 @@ struct Player;
 
 /** @brief How many of one currency (or Scrolls of Identify) fit in one cell. */
 constexpr int CurrencyStackMax = 40;
+/** @brief How many augments (runes, soulstones, talismans) fit in one cell (build spec step 5: runes stack to 10). */
+constexpr int RuneStackMax = 10;
 
 /** @brief A Scroll of Identify, which stacks like currency and is only used up when it identifies something. */
 bool IsIdentifyScroll(const Item &item);
@@ -23,8 +25,13 @@ bool IsIdentifyScroll(const Item &item);
 bool IsStackable(const Item &item);
 /** @brief POE2 Mashup: a shard item, which stacks like currency up to ShardsPerOrb (Curtis 2026-10-29). */
 bool IsShard(const Item &item);
-/** @brief The most of the item one inventory cell holds: ShardsPerOrb for shards, CurrencyStackMax for other currency. */
+/**
+ * @brief The most of the item one inventory cell holds: ShardsPerOrb for shards, RuneStackMax for augments,
+ * CurrencyStackMax for other currency. A stack of augments from before runes stacked to 10 keeps its count.
+ */
 int StackMax(const Item &item);
+/** @brief The most a stack may hold: StackMax, but a stack of augments saved when they stacked to 40 keeps its count. */
+int StackHoldMax(const Item &item);
 /**
  * @brief A stack of ShardsPerOrb shards becomes one of their orb in its place, like POE2's, keeping its seed.
  * @return true if it did.

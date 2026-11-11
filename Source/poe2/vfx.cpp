@@ -4,12 +4,16 @@
  * POE2 Mashup effects engine. The effects live in the world's isometric pixel space (a tile's centre is at
  * ((x - y) * 32, (x + y) * 16)), move on with real time, and are drawn as triangles: glowing ones added together into
  * their own layer (which is blurred for bloom), dark ones (smoke, dust, scorch marks) blended straight onto the world.
+ *
+ * The physics debris (chips of stone, sparks, drops of blood) is the one part that moves over the floor in tile units, so
+ * it can bounce off the dungeon's walls: it reads the map's solid tiles and nothing else of the game.
  */
 #include "poe2/vfx.hpp"
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <iterator>
 #include <optional>
@@ -27,6 +31,7 @@
 #include "engine/size.hpp"
 #include "engine/surface.hpp"
 #include "headless_mode.hpp"
+#include "items.h"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
@@ -35,8 +40,11 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/bound_demons.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/floor_chests.hpp"
+#include "poe2/loot_filter.hpp"
+#include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/skill_looks.hpp"
@@ -318,6 +326,10 @@ enum class SpikeKind : uint8_t {
 	Effigy,
 	/** @brief A squat iron gas canister (Venom Sentry). */
 	Canister,
+	/** @brief A jagged slab of rock thrust up out of the floor (Shield Wall). */
+	Earth,
+	/** @brief A great golden bell of light standing on the floor (Wave of Light's bell). */
+	Bell,
 };
 
 /** @brief The colours of what bursts out of the ground other than ice: its shadowed side, its face, its lit side, the earth at its foot. */
@@ -338,6 +350,10 @@ SpikePalette PaletteOf(SpikeKind kind)
 		return { { 64, 92, 18 }, { 140, 182, 48 }, { 214, 240, 120 }, { 48, 54, 20 }, { 172, 214, 70 }, { 80, 120, 24 }, { 130, 170, 50 }, { 70, 96, 30 }, { 40, 52, 14 }, { 30, 40, 12 } };
 	case SpikeKind::Effigy:
 		return { { 36, 26, 18 }, { 84, 62, 42 }, { 134, 106, 74 }, { 40, 32, 22 }, { 96, 74, 50 }, { 50, 38, 26 }, { 96, 90, 60 }, { 56, 52, 34 }, { 38, 34, 22 }, { 28, 26, 16 } };
+	case SpikeKind::Bell:
+		return { { 120, 86, 24 }, { 214, 170, 64 }, { 255, 238, 160 }, { 70, 58, 30 }, { 255, 226, 130 }, { 190, 150, 60 }, { 255, 240, 190 }, { 200, 170, 90 }, { 60, 50, 30 }, { 40, 34, 20 } };
+	case SpikeKind::Earth:
+		return { { 46, 40, 34 }, { 104, 92, 78 }, { 160, 148, 128 }, { 52, 44, 34 }, { 128, 116, 98 }, { 70, 62, 52 }, { 130, 120, 102 }, { 80, 72, 60 }, { 44, 38, 30 }, { 30, 26, 20 } };
 	case SpikeKind::Canister:
 		return { { 34, 36, 38 }, { 80, 84, 86 }, { 150, 156, 158 }, { 40, 40, 34 }, { 120, 126, 128 }, { 60, 62, 64 }, { 120, 160, 60 }, { 60, 84, 30 }, { 40, 44, 30 }, { 30, 32, 24 } };
 	default:
@@ -419,6 +435,19 @@ struct Beam {
 
 std::vector<Beam> Beams;
 
+/** @brief A loot filter beam: a steady column of light over a good item on the ground, this frame. */
+struct LootBeamFx {
+	Vec pos;
+	Rgb colour;
+	float alpha;
+	/** @brief Its own shimmer, so no two beams pulse together. */
+	float phase;
+};
+
+std::vector<LootBeamFx> LootBeams;
+/** @brief When each ground item on the level was first in sight, for the beams that show only for a while (by item seed). */
+std::unordered_map<uint32_t, float> LootSeenAt;
+
 constexpr int RitualRunes = 15;
 // The level-up circle's timeline, in ms from the start.
 constexpr float RitualRingMs = 450;
@@ -484,6 +513,34 @@ struct LobFx {
 	float drips = 0;
 };
 std::vector<LobFx> Lobs;
+
+/** @brief One spike of a thorns burst: its direction on the screen, its length and width, and how soon it stabs out. */
+struct ThornSpike {
+	Vec dir;
+	float length;
+	float width;
+	float delay;
+};
+
+/**
+ * @brief Thorns striking back at a monster: dark red spikes stabbing out of its body all round and drawing back in, as
+ * POE2 shows thorns on the enemy they hurt.
+ */
+struct ThornsFx {
+	/** @brief The middle of the monster's body, where the spikes come out of. */
+	Vec body;
+	float age = 0;
+	float life;
+	float scale;
+	std::vector<ThornSpike> spikes;
+};
+std::vector<ThornsFx> ThornBursts;
+/** @brief How long a thorns burst lasts, in ms: the stab, a moment held, then drawn back in. */
+constexpr float ThornsLifeMs = 340;
+/** @brief At most this many bursts at once, however many monsters are hit. */
+constexpr size_t MaxThornBursts = 10;
+/** @brief When each monster may show a burst again (AmbientTime), so one shows it at most every ThornsCueGapMs. */
+std::array<float, MaxMonsters> ThornsReadyAt {};
 /** @brief Glows that last one frame (projectile heads). */
 std::vector<Ring> FrameGlows;
 /** @brief A projectile's body this frame, drawn instead of its classic sprite: a bright head and a tapering tail. */
@@ -548,6 +605,8 @@ enum class Ambient : uint8_t {
 	Embers,
 	/** @brief POE2 Mashup: a burning stake's big fire: a column of slow embers and soft smoke (Curtis 2026-10-29). */
 	Bonfire,
+	/** @brief POE2 Mashup: a small flame on the burning cross's wood, licking up off it (Curtis, Rogue run 2). */
+	CrossFlame,
 };
 
 /** @brief A flame or a patch of lava or water on screen, found anew each frame. */
@@ -805,6 +864,352 @@ void Spray(Vec pos, int count, float speedLo, float speedHi, float lifeLo, float
 	}
 }
 
+/**
+ * @brief How a kind of debris moves: its weight, how it bounces off the floor and walls, and how long it lies still.
+ * Heights and the fall are in pixels, movement over the floor in tiles.
+ */
+struct DebrisPhysics {
+	/** @brief Its fall, in pixels a second each second. */
+	float gravity;
+	/** @brief The share of its downward speed it bounces back up with. */
+	float restitution;
+	/** @brief The share of its speed over the floor each bounce takes away. */
+	float friction;
+	/** @brief How fast it slows sliding on the floor, in tiles a second each second. */
+	float slide;
+	/** @brief The share of its speed it keeps off a wall. */
+	float wall;
+	/** @brief How long it lies still before it's gone, fading over the last of it, in ms. */
+	float linger;
+	/** @brief The most bounces before it stops (a spark is gone at its last). */
+	int bounces;
+};
+
+constexpr DebrisPhysics RubblePhysics { 980, 0.38F, 0.35F, 9, 0.45F, 1100, 3 };
+constexpr DebrisPhysics SparkPhysics { 760, 0.55F, 0.25F, 14, 0.6F, 0, 2 };
+constexpr DebrisPhysics DropletPhysics { 1100, 0.18F, 0.6F, 12, 0.15F, 900, 1 };
+/** @brief A landing slower than this, in pixels a second, doesn't bounce. */
+constexpr float DebrisMinBounce = 50;
+/** @brief The longest physics step, in ms: a long frame is cut into steps this short, so a slow frame rate moves alike. */
+constexpr float DebrisStepMs = 8;
+/** @brief How long a piece of rubble or a drop may last at most, should it never come to rest, in ms. */
+constexpr float DebrisMaxLife = 4000;
+
+const DebrisPhysics &PhysicsOf(DebrisKind kind)
+{
+	switch (kind) {
+	case DebrisKind::Spark: return SparkPhysics;
+	case DebrisKind::Droplet: return DropletPhysics;
+	default: return RubblePhysics;
+	}
+}
+
+/** @brief A piece of debris: a point on the floor in tile units, its height above it in pixels, and how it moves. */
+struct DebrisPiece {
+	float x, y;
+	float vx, vy;
+	float z;
+	float vz;
+	float angle;
+	float spin;
+	float size;
+	float age = 0;
+	float life;
+	/** @brief When it came to rest, or below 0 while it moves. */
+	float restAt = -1;
+	Rgb colour;
+	DebrisKind kind;
+	bool grounded = false;
+	uint8_t bounces = 0;
+	uint8_t wallHits = 0;
+	uint8_t corners;
+	uint32_t seed;
+};
+
+/** @brief The debris, oldest first; room for MaxDebris is kept, so a throw never allocates. */
+std::vector<DebrisPiece> Debris;
+
+/** @brief The debris' own dice, apart from the other effects' and never the game's seeded RNG. */
+uint32_t DebrisSeed = 0x2545F491U;
+
+float DebrisRandom(float lo, float hi)
+{
+	DebrisSeed ^= DebrisSeed << 13;
+	DebrisSeed ^= DebrisSeed >> 17;
+	DebrisSeed ^= DebrisSeed << 5;
+	return lo + (hi - lo) * static_cast<float>(DebrisSeed & 0xFFFFFF) / static_cast<float>(0xFFFFFF);
+}
+
+/** @brief A point on the floor in tile units from world pixels: the inverse of TileCentre. */
+void WorldToFloor(Vec world, float &x, float &y)
+{
+	x = (world.x / 32 + world.y / 16) / 2;
+	y = (world.y / 16 - world.x / 32) / 2;
+}
+
+Vec FloorToWorld(float x, float y)
+{
+	return { (x - y) * 32, (x + y) * 16 };
+}
+
+/** @brief Whether a point on the floor is in a wall (or off the map): the dungeon's solid tiles, only read. */
+bool DebrisSolidAt(float x, float y)
+{
+	const Point tile { static_cast<int>(std::floor(x + 0.5F)), static_cast<int>(std::floor(y + 0.5F)) };
+	return !InDungeonBounds(tile) || IsTileSolid(tile);
+}
+
+/** @brief How many pieces of a throw to make: the base count by the Effect Intensity, none with the option off. */
+int DebrisCount(float base)
+{
+	if (!DebrisEnabled())
+		return 0;
+	return std::max(1, static_cast<int>(base * Intensity() + 0.5F));
+}
+
+void ThrowDebris(DebrisKind kind, float x, float y, float z, float vx, float vy, float vz, float size, float life, Rgb colour)
+{
+	if (DebrisSolidAt(x, y))
+		return;
+	if (Debris.capacity() < MaxDebris)
+		Debris.reserve(MaxDebris);
+	// Full: the oldest piece makes way.
+	if (Debris.size() >= MaxDebris)
+		Debris.erase(Debris.begin());
+	DebrisPiece piece;
+	piece.x = x;
+	piece.y = y;
+	piece.vx = vx;
+	piece.vy = vy;
+	piece.z = z;
+	piece.vz = vz;
+	piece.angle = DebrisRandom(0, 2 * Pi);
+	piece.spin = DebrisRandom(-14, 14);
+	piece.size = size;
+	piece.life = life;
+	piece.colour = colour;
+	piece.kind = kind;
+	piece.corners = static_cast<uint8_t>(4 + static_cast<int>(DebrisRandom(0, 2.99F)));
+	piece.seed = static_cast<uint32_t>(DebrisRandom(1, 16777215));
+	Debris.push_back(piece);
+}
+
+/** @brief A direction over the floor and a speed in tiles a second, as a velocity. */
+void FloorVelocity(float angle, float speed, float &vx, float &vy)
+{
+	vx = std::cos(angle) * speed;
+	vy = std::sin(angle) * speed;
+}
+
+/** @brief Chips of dark stone knocked out of the floor round a point, landing within about the reach (in tiles). */
+void ThrowRubble(Vec at, float reach, int count)
+{
+	float cx;
+	float cy;
+	WorldToFloor(at, cx, cy);
+	for (int i = 0; i < count; i++) {
+		const float angle = DebrisRandom(0, 2 * Pi);
+		const float from = DebrisRandom(0, 0.35F) * reach;
+		float vx;
+		float vy;
+		FloorVelocity(angle, DebrisRandom(0.5F, 1.1F) * reach, vx, vy);
+		// Stone, a little lighter or darker piece by piece.
+		const float shade = DebrisRandom(0.8F, 1.15F);
+		const Rgb stone { static_cast<uint8_t>(82 * shade), static_cast<uint8_t>(74 * shade), static_cast<uint8_t>(64 * shade) };
+		ThrowDebris(DebrisKind::Rubble, cx + std::cos(angle) * from, cy + std::sin(angle) * from, DebrisRandom(2, 10), vx, vy, DebrisRandom(200, 340), DebrisRandom(2.2F, 4.2F), DebrisMaxLife, stone);
+	}
+}
+
+/** @brief Bright sparks struck off steel at body height, bouncing once or twice before they're gone. */
+void ThrowSparks(Vec at, int count)
+{
+	float cx;
+	float cy;
+	WorldToFloor(at, cx, cy);
+	for (int i = 0; i < count; i++) {
+		float vx;
+		float vy;
+		FloorVelocity(DebrisRandom(0, 2 * Pi), DebrisRandom(1.5F, 3.5F), vx, vy);
+		ThrowDebris(DebrisKind::Spark, cx, cy, DebrisRandom(18, 28), vx, vy, DebrisRandom(60, 220), DebrisRandom(1.2F, 1.8F), DebrisRandom(260, 460), { 255, 214, 140 });
+	}
+}
+
+/** @brief Dark drops of blood flung from a body: they arc, bounce a little and lie a moment where they stop. */
+void ThrowDroplets(Vec at, float speed, int count)
+{
+	float cx;
+	float cy;
+	WorldToFloor(at, cx, cy);
+	for (int i = 0; i < count; i++) {
+		float vx;
+		float vy;
+		FloorVelocity(DebrisRandom(0, 2 * Pi), DebrisRandom(0.6F, 2.F) * speed, vx, vy);
+		const float shade = DebrisRandom(0.85F, 1.1F);
+		const Rgb blood { static_cast<uint8_t>(104 * shade), static_cast<uint8_t>(10 * shade), static_cast<uint8_t>(12 * shade) };
+		ThrowDebris(DebrisKind::Droplet, cx, cy, DebrisRandom(14, 28), vx, vy, DebrisRandom(120, 260), DebrisRandom(1.3F, 2.2F), DebrisMaxLife, blood);
+	}
+}
+
+/** @brief Pale chips of bone knocked off an undead body: rubble's physics in bone's colour, never pure white. */
+void ThrowBoneChips(Vec at, float speed, int count)
+{
+	float cx;
+	float cy;
+	WorldToFloor(at, cx, cy);
+	for (int i = 0; i < count; i++) {
+		float vx;
+		float vy;
+		FloorVelocity(DebrisRandom(0, 2 * Pi), DebrisRandom(0.6F, 2.F) * speed, vx, vy);
+		const float shade = DebrisRandom(0.85F, 1.05F);
+		const Rgb bone { static_cast<uint8_t>(214 * shade), static_cast<uint8_t>(204 * shade), static_cast<uint8_t>(180 * shade) };
+		ThrowDebris(DebrisKind::Rubble, cx, cy, DebrisRandom(14, 28), vx, vy, DebrisRandom(140, 280), DebrisRandom(1.6F, 2.8F), DebrisMaxLife, bone);
+	}
+}
+
+/** @brief The monster standing on a tile (or moving into or out of it), if any. */
+const Monster *MonsterOn(Point tile)
+{
+	if (!InDungeonBounds(tile))
+		return nullptr;
+	const int id = dMonster[tile.x][tile.y];
+	if (id == 0)
+		return nullptr;
+	return &Monsters[std::abs(id) - 1];
+}
+
+/** @brief What flies off a hurt or dying body: dark drops of blood, or chips of bone off the undead (skeletons don't bleed). */
+void ThrowGore(Vec at, const Monster *monster, float speed, int count)
+{
+	if (monster != nullptr && monster->data().monsterClass == MonsterClass::Undead)
+		ThrowBoneChips(at, speed, count);
+	else
+		ThrowDroplets(at, speed, count);
+}
+
+/** @brief Whether the monster on a tile wears armour enough for steel to spark on it (and its armour isn't broken). */
+bool ArmouredAt(Point tile)
+{
+	const Monster *monster = MonsterOn(tile);
+	return monster != nullptr && monster->poe2.armourBreakTicks == 0 && MonsterArmourPercent(*monster) > LightArmourMaxPercent;
+}
+
+/** @brief Moves a piece over the floor for a step, turning it back off any wall it runs into. */
+void MoveOverFloor(DebrisPiece &piece, float dt, float wall)
+{
+	const float nx = piece.x + piece.vx * dt;
+	const float ny = piece.y + piece.vy * dt;
+	if (!DebrisSolidAt(nx, ny)) {
+		piece.x = nx;
+		piece.y = ny;
+		return;
+	}
+	// The wall's side it crossed: walls follow the tiles, so a side is one axis. Running into a corner turns both.
+	bool hitX = DebrisSolidAt(nx, piece.y);
+	bool hitY = DebrisSolidAt(piece.x, ny);
+	if (!hitX && !hitY)
+		hitX = hitY = true;
+	if (hitX)
+		piece.vx = -piece.vx * wall;
+	else
+		piece.x = nx;
+	if (hitY)
+		piece.vy = -piece.vy * wall;
+	else
+		piece.y = ny;
+	// Scraping along the wall slows it too.
+	if (hitX != hitY) {
+		if (hitX)
+			piece.vy *= 0.85F;
+		else
+			piece.vx *= 0.85F;
+	}
+	piece.spin = -piece.spin * wall;
+	if (piece.wallHits < 255)
+		piece.wallHits++;
+}
+
+/** @brief One physics step of a piece, dt in seconds: falling and bouncing, sliding to a stop, and the walls. */
+void StepDebris(DebrisPiece &piece, float dt)
+{
+	const DebrisPhysics &physics = PhysicsOf(piece.kind);
+	if (!piece.grounded) {
+		piece.vz -= physics.gravity * dt;
+		piece.z += piece.vz * dt;
+		if (piece.z <= 0) {
+			piece.z = 0;
+			const float landing = -piece.vz;
+			if (landing > DebrisMinBounce && piece.bounces < physics.bounces) {
+				piece.vz = landing * physics.restitution;
+				piece.vx *= 1 - physics.friction;
+				piece.vy *= 1 - physics.friction;
+				piece.spin *= 0.6F;
+				piece.bounces++;
+			} else {
+				piece.vz = 0;
+				piece.grounded = true;
+				// A spark dies out on the floor.
+				if (piece.kind == DebrisKind::Spark)
+					piece.life = std::min(piece.life, piece.age + 40);
+			}
+		}
+	} else {
+		const float speed = std::sqrt(piece.vx * piece.vx + piece.vy * piece.vy);
+		const float slow = physics.slide * dt;
+		if (speed <= slow || speed < 0.02F) {
+			piece.vx = 0;
+			piece.vy = 0;
+			piece.spin = 0;
+			piece.restAt = piece.age;
+			return;
+		}
+		piece.vx *= (speed - slow) / speed;
+		piece.vy *= (speed - slow) / speed;
+	}
+	MoveOverFloor(piece, dt, physics.wall);
+	piece.angle += piece.spin * dt;
+}
+
+/** @brief How opaque a piece is now: a spark fades over its short life, the rest over the end of their linger. */
+float DebrisAlpha(const DebrisPiece &piece)
+{
+	if (piece.kind == DebrisKind::Spark) {
+		const float t = std::clamp(piece.age / piece.life, 0.F, 1.F);
+		return 1 - t * t;
+	}
+	const float end = std::min(piece.life, piece.restAt >= 0 ? piece.restAt + PhysicsOf(piece.kind).linger : piece.life);
+	const float fade = PhysicsOf(piece.kind).linger * 0.6F;
+	return std::clamp((end - piece.age) / std::max(fade, 1.F), 0.F, 1.F);
+}
+
+/** @brief Whether a piece is gone: a spark at the end of its life, the rest once they've lain their linger out. */
+bool DebrisGone(const DebrisPiece &piece)
+{
+	if (piece.age >= piece.life)
+		return true;
+	return piece.restAt >= 0 && piece.age >= piece.restAt + PhysicsOf(piece.kind).linger;
+}
+
+/** @brief Moves the debris on by the frame's time, in steps of at most DebrisStepMs so any frame rate moves alike. */
+void AdvanceDebris(float ms)
+{
+	if (Debris.empty())
+		return;
+	const int steps = std::clamp(static_cast<int>(std::ceil(ms / DebrisStepMs)), 1, 256);
+	const float stepMs = ms / static_cast<float>(steps);
+	for (DebrisPiece &piece : Debris) {
+		if (piece.restAt >= 0) {
+			piece.age += ms;
+			continue;
+		}
+		for (int i = 0; i < steps; i++) {
+			piece.age += stepMs;
+			if (piece.restAt < 0)
+				StepDebris(piece, stepMs / 1000.F);
+		}
+	}
+	std::erase_if(Debris, DebrisGone);
+}
+
 void AddRing(Vec pos, float r0, float r1, float life, float width, Rgb colour, float alpha, bool disc, bool ground, bool dark = false, float jitter = 0)
 {
 	Ring ring;
@@ -971,6 +1376,13 @@ void BloodImpact(Vec pos, float size, const Colours &c)
 	AddRing(pos + Vec { 0, -16 }, 0, 18 * size, 120, 0, c.mid, 0.7F, true, false);
 	Spray(pos, Scaled(22 * size), 60, 200 * size, 400, 800, Shape::Chunk, { 150, 10, 10 }, { 70, 0, 0 }, 2.5F, 2, 80, 220, 700, 0.5F, 1);
 	AddRing(pos, TileRadius * 0.6F * size, TileRadius * 0.9F * size, 3500, 0, { 70, 0, 0 }, 0.5F, true, true, true, 0.35F);
+	// A big bloody hit flings a few drops that bounce and settle (chips of bone off the undead).
+	if (size >= 0.8F) {
+		float x;
+		float y;
+		WorldToFloor(pos, x, y);
+		ThrowGore(pos, MonsterOn({ static_cast<int>(std::floor(x + 0.5F)), static_cast<int>(std::floor(y + 0.5F)) }), 1.F, DebrisCount(3 * size));
+	}
 }
 
 /** @brief Bone shattering: a dull pale flash, a ring of dust thrown out over the floor, bone chips, splinters and dust. */
@@ -1024,6 +1436,17 @@ Vec ArrowTip(const Missile &missile)
 	    { 3, -28 }, { 16, -26 }, { 26, -22 }, { 31, -16 }, { 32, -9 }, { 28, -3 }, { 19, 1 }, { 7, 4 },
 	} };
 	return MissileCentre(missile) + Tips[std::clamp(missile._miAnimFrame - 1, 0, 15)];
+}
+
+bool IsArrowGraphic(MissileGraphicID graphic)
+{
+	return IsAnyOf(graphic, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow);
+}
+
+/** @brief Where a flying missile's glow and trail start: an arrow's tip, or the centre of a bolt or ball. */
+Vec HeadOf(const Missile &missile)
+{
+	return IsArrowGraphic(missile._miAnimType) ? ArrowTip(missile) : MissileCentre(missile);
 }
 
 struct GraphicLook {
@@ -1127,6 +1550,14 @@ void SparksAt(Vec pos, Element element, float size)
 	Spray(pos + Vec { 0, -16 }, Scaled(14 * size), 120, 320 * size, 100, 260, Shape::Streak, core, mid, 1.5F, 0.5F, 30, 140, 500, 1.5F, 1);
 }
 
+/** @brief Steel striking (a sword, an axe, an arrowhead): a brief pale flash and a few short white-grey sparks off the edge. */
+void SteelHitAt(Vec pos)
+{
+	const Vec at = pos + Vec { 0, -16 };
+	AddRing(at, 0, 11, 70, 0, { 240, 238, 232 }, 0.45F, true, false);
+	Spray(at, Scaled(6), 90, 230, 70, 150, Shape::Streak, { 250, 248, 242 }, { 150, 148, 145 }, 1.2F, 0.4F, 30, 120, 500, 2.F, 0.8F);
+}
+
 /** @brief The trail particles a projectile leaves behind it each frame. */
 void EmitTrail(Trail &trail, Vec head, float ms)
 {
@@ -1147,6 +1578,42 @@ void EmitTrail(Trail &trail, Vec head, float ms)
 			p.size1 = 0.5F;
 			p.drag = 3.F;
 			p.alpha = 0.7F;
+			AddParticle(p);
+		}
+		return;
+	}
+	if (trail.arrow && trail.element == Element::Poison) {
+		// Venom clinging to the arrowhead: beads that wink out within a few frames and now and then a drop falling off the
+		// tip, so the green stays on the head with only a short, faint streak behind it. The general poison trail's drips
+		// started above the arrow and lived half a second, and its vapour almost a second: a fast arrow left them strewn
+		// far behind and beside it (Curtis, Rogue run 2: the green should be "closer to the tip of the arrow").
+		trail.emit += 60 * Intensity() * ms / 1000.F;
+		while (trail.emit >= 1) {
+			trail.emit -= 1;
+			Particle p;
+			p.c0 = c.core;
+			p.c1 = c.mid;
+			if (NextRandom() % 4 == 0) {
+				// A drop forms on the tip and falls a few pixels before it's gone.
+				const float fall = Random(6, 10);
+				p.pos = head + Vec { Random(-1, 1), fall };
+				p.z = fall;
+				p.vz = -50;
+				p.gravity = 300;
+				p.life = Random(60, 100);
+				p.size0 = 1.6F;
+				p.size1 = 1.1F;
+				p.c0 = c.mid;
+				p.c1 = c.edge;
+				p.alpha = 0.8F;
+			} else {
+				p.pos = head + Vec { Random(-1.5F, 1.5F), Random(-1, 1) };
+				p.vel = { Random(-6, 6), Random(-3, 3) };
+				p.life = Random(40, 80);
+				p.size0 = 1.8F;
+				p.size1 = 0.5F;
+				p.alpha = 0.55F;
+			}
 			AddParticle(p);
 		}
 		return;
@@ -1607,7 +2074,19 @@ void AdvanceLobs(float ms)
 			Particle p;
 			p.pos = at;
 			p.z = z + 6;
-			if (fx.kind == LobKind::Canister) {
+			if (fx.kind == LobKind::Bomb || fx.kind == LobKind::Spark) {
+				// Sparks fly from the bomb's fuse, or crackle off the ball of lightning.
+				const Colours spark = ColoursOf(fx.kind == LobKind::Bomb ? Element::Fire : Element::Lightning);
+				p.shape = Shape::Streak;
+				p.vel = { Random(-40, 40), Random(-30, 10) };
+				p.gravity = fx.kind == LobKind::Bomb ? 200 : 0;
+				p.drag = 2;
+				p.life = Random(150, 300);
+				p.size0 = 1.6F;
+				p.size1 = 0.6F;
+				p.c0 = spark.core;
+				p.c1 = spark.edge;
+			} else if (fx.kind == LobKind::Canister) {
 				// A hiss of gas from its nozzle.
 				p.shape = Shape::Puff;
 				p.life = Random(500, 800);
@@ -1996,6 +2475,77 @@ void AddBonfire(const Object &object, int16_t id, Vec corner, const std::vector<
 	Emitters.push_back(emitter);
 }
 
+/** @brief A beam of the burning cross in its sprite (burncros), in pixels from the sprite's top left. */
+struct CrossBeam {
+	Point from;
+	Point to;
+};
+
+/** @brief The size of the burning cross's sprite, the same in all its frames; the beams below are measured off it. */
+constexpr int CrossSpriteSize = 160;
+/**
+ * @brief The cross's wood in the sprite, a dark shape in its blaze: the upright stands at x 78 from the ground (y 135) up
+ * to its top (y 80), and the bar crosses it low, running down the isometric slope from (62, 114) to (98, 131).
+ */
+constexpr std::array<CrossBeam, 2> CrossBeams { { { { 78, 135 }, { 78, 80 } }, { { 62, 114 }, { 98, 131 } } } };
+/** @brief How far apart the flames sit along the wood, in sprite pixels. */
+constexpr int CrossFlameSpacing = 6;
+
+/**
+ * @brief POE2 Mashup: small flames along the burning cross's upright and bar, hugging its shape (Curtis, Rogue run 2: the
+ * one big bonfire glow "looks like you threw a special effect on top of it without blending it at all"). Each flame
+ * flickers on its own with a small warm light; one soft glow ties them into the sprite's own blaze, and the firelight
+ * lies on the floor round it.
+ */
+void AddBurningCross(const Object &object, int16_t id, Vec corner, int spriteHeight, uint32_t seed)
+{
+	const Vec topLeft = corner - Vec { 0, static_cast<float>(spriteHeight - 1) };
+	const std::vector<Point> &flames = BurningCrossFlames();
+	for (size_t i = 0; i < flames.size(); i++) {
+		const uint32_t flameSeed = (seed + static_cast<uint32_t>(i) * 40503U) * 2654435761U;
+		const Vec at = topLeft + Vec { static_cast<float>(flames[i].x), static_cast<float>(flames[i].y) };
+		const float flicker = NaturalFlicker(flameSeed, false);
+		// The flames up the wood burn a little smaller than those at its foot and on the bar.
+		const float size = flames[i].y < 100 ? 0.8F : 1.F;
+		Ring glow;
+		glow.pos = at - Vec { 0, 3 };
+		glow.life = 1;
+		glow.width = 0;
+		glow.disc = true;
+		glow.ground = false;
+		glow.flame = id;
+		glow.r0 = glow.r1 = 10 * size * (0.94F + 0.06F * flicker);
+		glow.colour = { 255, 130, 45 };
+		glow.alpha = 0.15F * flicker;
+		FrameGlows.push_back(glow);
+		glow.r0 = glow.r1 = 3.5F * size;
+		glow.colour = { 255, 205, 130 };
+		glow.alpha = 0.3F * flicker;
+		FrameGlows.push_back(glow);
+		Emitters.push_back({ at, size, Ambient::CrossFlame, { 255, 150, 50 }, 0, id });
+	}
+	const float phase = static_cast<float>(seed % 628) / 100.F;
+	const float breathe = 0.92F + 0.05F * std::sin(AmbientTime * 0.0011F + phase) + 0.07F * (SmoothNoise(seed, AmbientTime * 0.0035F) - 0.5F);
+	Ring glow;
+	glow.life = 1;
+	glow.width = 0;
+	glow.disc = true;
+	glow.ground = false;
+	glow.flame = id;
+	glow.pos = topLeft + Vec { 80, 110 };
+	glow.r0 = glow.r1 = 44 * (0.97F + 0.03F * breathe);
+	glow.colour = { 255, 125, 40 };
+	glow.alpha = 0.16F * breathe;
+	FrameGlows.push_back(glow);
+	glow.pos = TileCentre(object.position);
+	glow.ground = true;
+	glow.flame = -1;
+	glow.r0 = glow.r1 = TileRadius * 2.F;
+	glow.colour = { 255, 140, 50 };
+	glow.alpha = 0.14F * breathe;
+	FrameGlows.push_back(glow);
+}
+
 void ScanFlames(const View &view)
 {
 	for (int i = 0; i < ActiveObjectCount; i++) {
@@ -2013,7 +2563,9 @@ void ScanFlames(const View &view)
 		// The grate's fire comes and goes with its frames; the lights keep their flames where the whole animation has them.
 		const std::vector<HotSpot> &spots = object._otype == OBJ_FLAMEHOLE ? FlameSpots(sprite) : SteadyFlameSpots(object);
 		if (IsBonfire(object)) {
-			if (!spots.empty())
+			if (sprite.width() == CrossSpriteSize && sprite.height() == CrossSpriteSize)
+				AddBurningCross(object, static_cast<int16_t>(id), corner, sprite.height(), seed);
+			else if (!spots.empty())
 				AddBonfire(object, static_cast<int16_t>(id), corner, spots, seed);
 			continue;
 		}
@@ -2110,6 +2662,9 @@ void OnModeChange(const Monster &monster, MonsterMode from, MonsterMode to, Vec 
 		HolyImpact(feet, 0.6F * big, { { 220, 255, 220 }, { 90, 230, 110 }, { 30, 120, 50 } });
 		break;
 	case MonsterMode::Death:
+		// A few drops of blood fly off the body, bounce and settle (more off a rare, more again off a unique or boss); the
+		// undead shed chips of bone instead.
+		ThrowGore(feet, &monster, rank >= Rank::Unique ? 1.4F : 1.F, DebrisCount(rank >= Rank::Unique ? 8 : (rank == Rank::Rare ? 6 : 4)));
 		switch (rank) {
 		case Rank::Normal:
 			break;
@@ -2187,6 +2742,35 @@ void ScanStrongboxes(const View &view)
 	}
 }
 
+/**
+ * @brief The loot filter's beams over good items on the ground in sight (Curtis 2026-11-05), NeverSink's colours. A
+ * "Temp" beam shows only for a few seconds after its item is first seen, fading out at the end.
+ */
+void ScanLoot(const View &view)
+{
+	for (int i = 0; i < ActiveItemCount; i++) {
+		const Item &item = Items[ActiveItems[i]];
+		const Point tile = item.position;
+		// Only in sight: nothing lights up in the dark or behind a wall (Curtis 2026-11-05).
+		if (item.isEmpty() || !InDungeonBounds(tile) || !HasAnyOf(dFlags[tile.x][tile.y], DungeonFlag::Visible) || BehindWall(tile))
+			continue;
+		const Vec feet = TileCentre(tile);
+		if (!view.contains(feet, 300))
+			continue;
+		const uint32_t key = item._iSeed;
+		const auto seen = LootSeenAt.try_emplace(key, AmbientTime).first;
+		const float since = AmbientTime - seen->second;
+		const std::optional<LootRgb> colour = LootBeamColour(item, since);
+		if (!colour)
+			continue;
+		const LootStyle *style = LootFilterStyle(item);
+		float alpha = std::clamp(since / 250.F, 0.F, 1.F);
+		if (style != nullptr && style->beamTemp)
+			alpha *= std::clamp((LootTempBeamMs - since) / 800.F, 0.F, 1.F);
+		LootBeams.push_back({ feet, { colour->r, colour->g, colour->b }, alpha, static_cast<float>(key % 997) });
+	}
+}
+
 void ScanTowners(const View &view)
 {
 	if (MyPlayer == nullptr) {
@@ -2221,7 +2805,7 @@ void ScanTowners(const View &view)
 		for (size_t i = 0; i < ActiveMonsterCount; i++) {
 			const Monster &monster = Monsters[ActiveMonsters[i]];
 			const Point tile = monster.position.tile;
-			if (!CanTalkToMonst(monster) || !monster.animInfo.sprites || !InDungeonBounds(tile) || !IsTileLit(tile) || BehindWall(tile))
+			if (!CanTalkToMonst(monster) || IsBoundDemon(monster) || !monster.animInfo.sprites || !InDungeonBounds(tile) || !IsTileLit(tile) || BehindWall(tile))
 				continue;
 			const Vec feet = TileCentre(tile);
 			if (!view.contains(feet, 150))
@@ -2689,6 +3273,44 @@ void EmitAmbient(float ms)
 			for (int i = Occurrences(3, ms); i > 0; i--)
 				Spray(emitter.pos + Vec { Random(-10, 10), Random(-10, 10) }, 2, 40, 110, 150, 300, Shape::Streak, { 255, 230, 160 }, { 220, 90, 20 }, 1.3F, 0.4F, 20, 90, 300, 1.5F, 1);
 			break;
+		case Ambient::CrossFlame: {
+			// Small tongues licking up off the wood, bright at the root and gone a few pixels up, and now and then an
+			// ember rising off it.
+			const float s = emitter.size;
+			for (int i = Occurrences(11 * s, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-3, 3), Random(-1.5F, 1.5F) };
+				p.vel = { Random(-4, 4), 0 };
+				p.vz = Random(16, 34);
+				p.gravity = -10;
+				p.drag = 1.5F;
+				p.life = Random(200, 380);
+				p.size0 = Random(2.2F, 3.4F) * s;
+				p.size1 = 0.5F;
+				p.c0 = { 255, 200, 100 };
+				p.c1 = { 200, 55, 10 };
+				p.alpha = 0.6F;
+				p.flame = emitter.object;
+				AddParticle(p);
+			}
+			for (int i = Occurrences(0.9F, ms); i > 0; i--) {
+				Particle p;
+				p.pos = emitter.pos + Vec { Random(-2, 2), 0 };
+				p.vel = { Random(-6, 6), 0 };
+				p.vz = Random(30, 50);
+				p.gravity = -8;
+				p.drag = 0.5F;
+				p.life = Random(900, 1600);
+				p.size0 = Random(1.2F, 1.8F);
+				p.size1 = 0.3F;
+				p.c0 = { 255, 215, 130 };
+				p.c1 = { 210, 70, 15 };
+				p.alpha = 0.9F;
+				p.flame = emitter.object;
+				AddParticle(p);
+			}
+			break;
+		}
 		case Ambient::Bonfire: {
 			// POE2 Mashup: more embers than a torch's, bigger and slower, drifting up in a tall column, with soft
 			// smoke rolling off the top of the flames (Curtis 2026-10-29).
@@ -2826,6 +3448,11 @@ bool Enabled()
 #else
 	return gbIsPoe2 && !HeadlessMode && *GetOptions().Graphics.modernEffects;
 #endif
+}
+
+bool DebrisEnabled()
+{
+	return Enabled() && *GetOptions().Graphics.physicsDebris;
 }
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
@@ -3053,6 +3680,9 @@ Surface FrontMask()
 void Clear()
 {
 	Particles.clear();
+	Debris.clear();
+	LootBeams.clear();
+	LootSeenAt.clear();
 	Rings.clear();
 	Bolts.clear();
 	Sigils.clear();
@@ -3064,6 +3694,8 @@ void Clear()
 	IceSpikes.clear();
 	Miasmas.clear();
 	Lobs.clear();
+	ThornBursts.clear();
+	ThornsReadyAt.fill(0);
 	Sweeps.clear();
 	FrameGlows.clear();
 	FrameComets.clear();
@@ -3313,6 +3945,48 @@ void Thorns(Point tile, int radiusTiles, int durationMs, uint32_t key)
 	AddBoneSpikes(std::move(fx), 0);
 }
 
+void EarthWall(Point tile, int lifeMs, uint32_t key)
+{
+	TelemetryEffect("vfx", "EarthWall", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	IceSpikeFx fx = StandingSpike(SpikeKind::Earth, tile, static_cast<float>(lifeMs), key);
+	fx.size = 1;
+	// A thick slab of rock in the middle and broken ones leaning on it, the floor heaved up round their foot.
+	fx.crystals.push_back({ { Random(-2, 2), Random(-1, 1) }, { Random(-0.05F, 0.05F), 0 }, Random(58, 66), Random(20, 24), 0 });
+	for (int i = 0; i < 4; i++) {
+		const float side = i % 2 == 0 ? -1.F : 1.F;
+		const float out = Random(10, 18) * (i < 2 ? 1.F : 1.6F);
+		fx.crystals.push_back({ { side * out, Random(-3, 3) }, { side * Random(0.1F, 0.3F), 0 }, Random(28, 44), Random(12, 17), Random(0, 60) });
+	}
+	AddBoneSpikes(std::move(fx), 0);
+	const Vec pos = TileCentre(tile);
+	Spray(pos, Scaled(6), 50, 150, 450, 800, Shape::Chunk, { 110, 98, 82 }, { 60, 52, 42 }, 2.5F, 2, 90, 200, 700, 0.5F, 1);
+}
+
+void Bell(Point tile, int lifeMs, uint32_t key)
+{
+	TelemetryEffect("vfx", "Bell", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	IceSpikeFx fx = StandingSpike(SpikeKind::Bell, tile, static_cast<float>(lifeMs), key);
+	fx.size = 1;
+	// A broad cone of gold, its crown on top, its lip spread on the floor.
+	fx.crystals.push_back({ {}, {}, 84, 46, 0 });
+	fx.crystals.push_back({ { 0, -2 }, {}, 100, 12, 0 });
+	AddBoneSpikes(std::move(fx), 0);
+	Impact(tile, Element::Holy, 1.6F);
+}
+
+void BellToll(Point tile, int radiusTiles)
+{
+	TelemetryEffect("vfx", "BellToll", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	Nova(tile, std::max(radiusTiles, 1), Element::Holy);
+	AddRing(TileCentre(tile), 0, TileRadius * (static_cast<float>(radiusTiles) + 0.5F), 380, 4, { 255, 236, 170 }, 0.7F, false, true, true);
+}
+
 void Pod(Point tile, int lifeMs, uint32_t key)
 {
 	TelemetryEffect("vfx", "Pod", tile.x, tile.y);
@@ -3443,6 +4117,9 @@ void Slam(Point tile, int radiusTiles, Element element)
 	Spray(pos, Scaled(18), 80, 240, 600, 1000, Shape::Chunk, { 75, 62, 48 }, { 40, 34, 28 }, 3.5F, 3, 150, 320, 800, 0.4F, 1);
 	Spray(pos, Scaled(14), 30, 110, 700, 1300, Shape::Puff, { 115, 100, 80 }, { 70, 60, 50 }, 10, 30, 10, 40, 0, 0.8F, 0.35F);
 	AddCracks(pos, r * 0.9F, 5 + static_cast<int>(NextRandom() % 4), CrackGlow(element, c), 3500);
+	// Chips of stone knocked out of the floor, bouncing and settling within the slam's reach.
+	const int reach = std::clamp(radiusTiles, 1, 3);
+	ThrowRubble(pos, static_cast<float>(reach), DebrisCount(static_cast<float>(4 + 2 * reach)));
 	// Bone slams throw pale chips out of the cracks as well as the rock.
 	if (element == Element::Bone)
 		Spray(pos, Scaled(14), 60, 200, 600, 1000, Shape::Chunk, { 236, 228, 205 }, { 160, 146, 120 }, 2.5F, 2, 160, 320, 800, 0.4F, 1);
@@ -3511,6 +4188,8 @@ void Fissure(Point from, Point to, Element element)
 		Spray(p, Scaled(3), 20, 80, 500, 900, Shape::Chunk, { 75, 62, 48 }, { 40, 34, 28 }, 3, 3, 120, 260, 800, 0.4F, 1);
 		Spray(p, Scaled(2), 10, 50, 600, 1100, Shape::Puff, { 115, 100, 80 }, { 70, 60, 50 }, 8, 22, 10, 30, 0, 0.8F, 0.3F);
 	}
+	// Where it ends, the ground breaks up: a few chips of stone.
+	ThrowRubble(b, 0.8F, DebrisCount(3));
 }
 
 void Impact(Point tile, Element element, float size)
@@ -3590,6 +4269,9 @@ void Cut(Point tile, Element element)
 	AddRing(pos, 0, 10, 70, 0, { 235, 225, 210 }, 0.35F, true, false);
 	Spray(pos, Scaled(5), 80, 220, 70, 160, Shape::Streak, { 255, 225, 170 }, { 200, 120, 50 }, 1.2F, 0.4F, 30, 120, 500, 2.F, 0.8F);
 	Spray(pos, Scaled(7), 40, 130, 300, 550, Shape::Chunk, { 110, 8, 8 }, { 45, 0, 0 }, 1.2F, 0.8F, 60, 160, 700, 0.6F, 0.9F);
+	// Steel biting into an armoured monster strikes a few sparks that bounce off the floor.
+	if (ArmouredAt(tile))
+		ThrowSparks(TileCentre(tile), DebrisCount(4));
 	if (element == Element::Physical)
 		return;
 	// The weapon's added element is only a faint touch on the wound (Curtis 2026-10-22: lightning on his staff was "far
@@ -3611,6 +4293,61 @@ void Cut(Point tile, Element element)
 		Spray(pos, Scaled(3), 30, 80, 200, 360, Shape::Shard, c.core, c.mid, 2.F, 1.F, 20, 70, 300, 1.F, 0.5F);
 		break;
 	}
+}
+
+void ThornsHit(const Monster &monster)
+{
+	const Point tile = monster.position.tile;
+	TelemetryEffect("vfx", "ThornsHit", tile.x, tile.y);
+	if (!Enabled())
+		return;
+	// One burst a monster now and then, and only so many at once: a crowd hitting the hero stays readable.
+	const size_t id = monster.getId();
+	if (id >= ThornsReadyAt.size() || AmbientTime < ThornsReadyAt[id] || ThornBursts.size() >= MaxThornBursts)
+		return;
+	ThornsReadyAt[id] = AmbientTime + static_cast<float>(ThornsCueGapMs);
+	float height = 72;
+	if (monster.animInfo.sprites)
+		height = std::min(static_cast<float>(monster.animInfo.currentSprite().height()), 128.F);
+	ThornsFx fx;
+	// The spikes come out of the middle of its body.
+	fx.body = TileCentre(tile) - Vec { 0, height * 0.4F };
+	fx.scale = std::clamp(height / 80.F, 0.8F, 1.4F);
+	fx.life = ThornsLifeMs;
+	// Long and short spikes in turn, all the way round, a little uneven so no two bursts look the same.
+	constexpr int Spikes = 9;
+	const float turn = Random(0, 2 * Pi);
+	for (int i = 0; i < Spikes; i++) {
+		const float angle = turn + 2 * Pi * static_cast<float>(i) / Spikes + Random(-0.2F, 0.2F);
+		ThornSpike spike;
+		// Flattened a little, as the floor is.
+		const Vec way { std::cos(angle), std::sin(angle) * 0.8F };
+		spike.dir = way * (1 / Length(way));
+		spike.length = Random(17, 25) * (i % 2 == 0 ? 1.F : 0.65F) * Length(way);
+		spike.width = Random(4.5F, 6.F);
+		spike.delay = Random(0, 35);
+		fx.spikes.push_back(spike);
+	}
+	// A few red splinters snap off the points.
+	for (int i = 0; i < Scaled(4); i++) {
+		const float angle = Random(0, 2 * Pi);
+		Particle p;
+		p.pos = TileCentre(tile);
+		p.z = height * 0.4F;
+		p.vel = Vec { std::cos(angle), std::sin(angle) * 0.5F } * Random(90, 170);
+		p.vz = Random(20, 80);
+		p.gravity = 400;
+		p.drag = 2.5F;
+		p.life = Random(160, 260);
+		p.size0 = 3;
+		p.size1 = 1.5F;
+		p.c0 = { 220, 40, 36 };
+		p.c1 = { 90, 8, 12 };
+		p.alpha = 0.7F;
+		p.shape = Shape::Shard;
+		AddParticle(p);
+	}
+	ThornBursts.push_back(std::move(fx));
 }
 
 void Arc(Point from, Point to, Element element)
@@ -3999,6 +4736,10 @@ void Showcase(Point tile)
 	Fissure(tile + Displacement { 0, 1 }, tile + Displacement { 0, 6 }, Element::Physical);
 	Swing(tile, tile + Displacement { 1, 1 }, Element::Fire, true);
 	Arc(tile + Displacement { -4, 3 }, tile + Displacement { -1, 5 }, Element::Lightning);
+	// The physics debris: the slam's and the fissure's rubble above, a bloody hit's drops, and sparks off steel.
+	Impact(tile + Displacement { 3, -3 }, Element::Blood, 1.2F);
+	SparksAt(TileCentre(tile + Displacement { -1, -3 }), Element::Physical, 0.8F);
+	ThrowSparks(TileCentre(tile + Displacement { -1, -3 }), DebrisCount(6));
 }
 
 void SetCamera(Point viewTile, Displacement offset, bool zoom)
@@ -4103,6 +4844,19 @@ void ScanMissiles()
 		if (missile._mitype == MissileID::WeaponExplosion)
 			continue;
 		const SkillLookScope skillLook(missile.poe2.skillKind, missile.poe2.skillId);
+		if (IsSteelHit(missile)) {
+			SeenBurst &seen = SeenBursts.try_emplace(&missile, SeenBurst { ScanFrame, false }).first->second;
+			seen.frame = ScanFrame;
+			if (missile._miDrawFlag && !seen.fired) {
+				seen.fired = true;
+				TelemetryEffect("steel hit", magic_enum::enum_name(missile._miAnimType), missile.position.tile.x, missile.position.tile.y);
+				SteelHitAt(TileCentre(missile.position.tile));
+				// Steel on an armoured monster strikes sparks that bounce off the floor.
+				if (ArmouredAt(missile.position.tile))
+					ThrowSparks(TileCentre(missile.position.tile), DebrisCount(3));
+			}
+			continue;
+		}
 		const SkillLook *styled = CurrentSkillLook();
 		GraphicLook look = LookOf(missile._miAnimType);
 		// A skill's bolt or burst on a borrowed graphic takes its skill's look: Bone Spear's and Bone Bolt's on a flare.
@@ -4116,7 +4870,7 @@ void ScanMissiles()
 			if (missile._miDrawFlag && !seen.fired) {
 				seen.fired = true;
 				TelemetryEffect("hit flash", magic_enum::enum_name(missile._miAnimType), missile.position.tile.x, missile.position.tile.y);
-				SparksAt(TileCentre(missile.position.tile), look.element == Element::Lightning && missile._miAnimType == MissileGraphicID::ChargedBolt ? Element::Physical : look.element, 0.8F);
+				SparksAt(TileCentre(missile.position.tile), look.element, 0.8F);
 			}
 			continue;
 		}
@@ -4133,8 +4887,8 @@ void ScanMissiles()
 		}
 		if (!look.projectile || !missile._miDrawFlag)
 			continue;
-		const bool isArrow = IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow);
-		const Vec head = isArrow ? ArrowTip(missile) : MissileCentre(missile);
+		const bool isArrow = IsArrowGraphic(missile._miAnimType);
+		const Vec head = HeadOf(missile);
 		Trail &trail = Trails[&missile];
 		if (trail.frame == 0) {
 			trail.element = look.element;
@@ -4189,6 +4943,13 @@ void ScanMissiles()
 		if (bone)
 			glow.alpha *= 0.2F;
 		FrameGlows.push_back(glow);
+		if (arrow && look.element == Element::Poison) {
+			// A bead of venom bright on the poison arrow's head, where its glow is.
+			glow.r0 = glow.r1 = 3 * scale;
+			glow.colour = c.core;
+			glow.alpha = 0.6F * std::min(scale, 1.F);
+			FrameGlows.push_back(glow);
+		}
 		if (trail.style == TrailStyle::Orb && !small) {
 			// The orb throbs.
 			glow.r0 = glow.r1 = 30 * scale * (1 + 0.3F * std::sin(AmbientTime * 0.018F + head.x * 0.05F));
@@ -4238,16 +4999,24 @@ void ScanMissiles()
 	std::erase_if(Portals, [](const auto &entry) { return entry.second.frame != ScanFrame; });
 }
 
+bool IsSteelHit(const Missile &missile)
+{
+	return missile._mitype == MissileID::VisualEffect && missile.poe2.vfxElement == static_cast<int8_t>(Element::Physical);
+}
+
 bool IsArcingSpark(const Missile &missile)
 {
 	return missile._miAnimType == MissileGraphicID::ChargedBolt
-	    && SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId } == SkillSlot::ForAttack(WeaponSkill::Spark);
+	    && (missile.poe2.look == ArcingSparkLook || SkillSlot { static_cast<SkillKind>(missile.poe2.skillKind), missile.poe2.skillId } == SkillSlot::ForAttack(WeaponSkill::Spark));
 }
 
 bool ReplacesSprite(const Missile &missile)
 {
 	if (!Enabled() || ScanFrame == 0 || ScanFrame - LastDrawnScan > 2)
 		return false;
+	// A blow of steel is the effects' pale flash alone, not the grey shatter it borrows.
+	if (IsSteelHit(missile))
+		return true;
 	if (missile._mitype == MissileID::VisualEffect)
 		return false;
 	// The portals are drawn whole by the effects, and a weapon's added element shows only faintly on its swing and cut,
@@ -4255,9 +5024,30 @@ bool ReplacesSprite(const Missile &missile)
 	if (IsAnyOf(missile._mitype, MissileID::TownPortal, MissileID::RedPortal, MissileID::WeaponExplosion))
 		return true;
 	// Arrows keep their sprite: the effects only streak and spark them.
-	if (IsAnyOf(missile._miAnimType, MissileGraphicID::Arrow, MissileGraphicID::FireArrow, MissileGraphicID::LightningArrow))
+	if (IsArrowGraphic(missile._miAnimType))
 		return false;
 	return LookOf(missile._miAnimType).projectile;
+}
+
+const std::vector<Point> &BurningCrossFlames()
+{
+	static const std::vector<Point> Flames = [] {
+		std::vector<Point> flames;
+		for (const CrossBeam &beam : CrossBeams) {
+			const Displacement span = beam.to - beam.from;
+			const int length = std::max(std::abs(span.deltaX), std::abs(span.deltaY));
+			const int steps = std::max(length / CrossFlameSpacing, 1);
+			for (int step = 0; step <= steps; step++) {
+				const Point at = beam.from + Displacement { span.deltaX * step / steps, span.deltaY * step / steps };
+				// Where the bar crosses the upright, the upright's flame is already there.
+				if (&beam != &CrossBeams[0] && std::abs(at.x - CrossBeams[0].from.x) < 3)
+					continue;
+				flames.push_back(at);
+			}
+		}
+		return flames;
+	}();
+	return Flames;
 }
 
 ClxSprite ObjectSprite(const Object &object)
@@ -4284,6 +5074,7 @@ void ScanWorld(const Surface &world)
 	Emitters.clear();
 	Halos.clear();
 	QuestMarks.clear();
+	LootBeams.clear();
 	if (!Enabled() || world.w() <= 0 || world.h() <= 0)
 		return;
 	const View view { CameraOrigin, CameraOrigin + Vec { static_cast<float>(world.w()), static_cast<float>(world.h()) } * (1 / CameraScale) };
@@ -4292,6 +5083,7 @@ void ScanWorld(const Surface &world)
 	ScanFluids(world, view);
 	ScanMonsters(view);
 	ScanTowners(view);
+	ScanLoot(view);
 }
 
 Colours PortalColours(const PortalFx &portal)
@@ -4747,6 +5539,7 @@ void Advance(float ms)
 		}
 	}
 	AdvanceParticles(ms);
+	AdvanceDebris(ms);
 	Age(Rings, ms);
 	Age(Sigils, ms);
 	Age(Rituals, ms);
@@ -4757,6 +5550,7 @@ void Advance(float ms)
 	AdvanceIceSpikes(ms);
 	AdvanceMiasmas(ms);
 	AdvanceLobs(ms);
+	Age(ThornBursts, ms);
 	for (Bolt &bolt : Bolts) {
 		bolt.reseedTimer += ms;
 		if (bolt.reseedTimer >= 50) {
@@ -4772,9 +5566,23 @@ size_t ParticleCount()
 	return Particles.size();
 }
 
+float FarthestParticleFrom(const Missile &missile)
+{
+	const Vec head = HeadOf(missile);
+	float farthest = 0;
+	for (const Particle &p : Particles)
+		farthest = std::max(farthest, Length(p.pos - Vec { 0, p.z } - head));
+	return farthest;
+}
+
 size_t ShapeCount()
 {
-	return Rings.size() + Sigils.size() + Rituals.size() + Bolts.size() + Cracks.size() + Sweeps.size() + IceSpikes.size() + Beams.size() + Miasmas.size() + Lobs.size();
+	return Rings.size() + Sigils.size() + Rituals.size() + Bolts.size() + Cracks.size() + Sweeps.size() + IceSpikes.size() + Beams.size() + Miasmas.size() + Lobs.size() + ThornBursts.size();
+}
+
+size_t ThornsCueCount()
+{
+	return ThornBursts.size();
 }
 
 size_t AmbientCount()
@@ -4791,6 +5599,26 @@ size_t DropCount()
 {
 	return Drops.size();
 }
+
+namespace debris_test {
+
+void Throw(DebrisKind kind, float x, float y, float z, float vx, float vy, float vz)
+{
+	ThrowDebris(kind, x, y, z, vx, vy, vz, 3, kind == DebrisKind::Spark ? 450 : DebrisMaxLife, { 82, 74, 64 });
+}
+
+size_t Count()
+{
+	return Debris.size();
+}
+
+Piece At(size_t index)
+{
+	const DebrisPiece &piece = Debris[index];
+	return { piece.kind, piece.x, piece.y, piece.z, piece.vx, piece.vy, piece.vz, piece.bounces, piece.wallHits, piece.restAt >= 0, DebrisAlpha(piece), { piece.colour.r, piece.colour.g, piece.colour.b } };
+}
+
+} // namespace debris_test
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 #if SDL_VERSION_ATLEAST(2, 0, 18)
@@ -5288,6 +6116,105 @@ void DrawParticles(bool behind = false)
 		case Shape::Puff:
 			SoftDisc(dark, at, size, colour, p.alpha * std::sin(Pi * t), false, 0);
 			break;
+		}
+	}
+}
+
+/** @brief A small soft shadow on the floor under a piece in the air, fainter the higher it is. */
+void DebrisShadow(Vec floor, float size, float z, float alpha)
+{
+	if (z < 1)
+		return;
+	const float a = alpha * 0.32F * std::clamp(1 - z / 90, 0.F, 1.F);
+	if (a < 0.02F)
+		return;
+	const Vec c = ToScreen(floor);
+	const float r = size * 1.3F * CameraScale;
+	constexpr Rgb Shadow { 18, 14, 12 };
+	const int middle = Dark.add(c, Shadow, a);
+	constexpr int Segments = 6;
+	for (int i = 0; i < Segments; i++) {
+		const float angle = 2 * Pi * static_cast<float>(i) / Segments;
+		Dark.add(c + Vec { std::cos(angle) * r, std::sin(angle) * r * 0.5F }, Shadow, 0);
+	}
+	for (int i = 0; i < Segments; i++)
+		Dark.tri(middle, middle + 1 + i, middle + 1 + (i + 1) % Segments);
+}
+
+/** @brief The physics debris: stone chips and drops of blood blended dark, sparks glowing. */
+void DrawDebris()
+{
+	for (const DebrisPiece &piece : Debris) {
+		const float alpha = DebrisAlpha(piece);
+		if (alpha <= 0.01F)
+			continue;
+		const Vec floor = FloorToWorld(piece.x, piece.y);
+		const Vec at = floor - Vec { 0, piece.z };
+		switch (piece.kind) {
+		case DebrisKind::Rubble: {
+			DebrisShadow(floor, piece.size, piece.z, alpha);
+			// A tumbling chip: a few uneven corners round a lighter middle, lit from the upper left.
+			const Vec c = ToScreen(at);
+			const auto scaled = [&](float s) {
+				return Rgb { static_cast<uint8_t>(std::min(piece.colour.r * s, 235.F)), static_cast<uint8_t>(std::min(piece.colour.g * s, 235.F)), static_cast<uint8_t>(std::min(piece.colour.b * s, 235.F)) };
+			};
+			const Rgb lit = scaled(1.25F);
+			const Rgb shade = scaled(0.75F);
+			const int middle = Dark.add(c, lit, alpha);
+			uint32_t seed = piece.seed;
+			const int corners = piece.corners;
+			for (int i = 0; i < corners; i++) {
+				const float angle = piece.angle + 2 * Pi * static_cast<float>(i) / static_cast<float>(corners);
+				const float r = piece.size * CameraScale * (0.7F + 0.5F * SeededRandom(seed));
+				const Vec dir { std::cos(angle), std::sin(angle) };
+				const float light = std::clamp(0.5F - 0.5F * (dir.x * 0.6F + dir.y * 0.8F), 0.F, 1.F);
+				Dark.add(c + dir * r, Mix(shade, piece.colour, light), alpha);
+			}
+			for (int i = 0; i < corners; i++)
+				Dark.tri(middle, middle + 1 + i, middle + 1 + (i + 1) % corners);
+			break;
+		}
+		case DebrisKind::Spark: {
+			// A short bright streak along its flight, hot yellow-white cooling to orange; never pure white.
+			const Vec flight { (piece.vx - piece.vy) * 32, (piece.vx + piece.vy) * 16 - piece.vz };
+			const float speed = std::max(Length(flight), 1.F);
+			const Vec tail = at - flight * (std::min(speed * 0.025F, 10.F) / speed);
+			const float t = std::clamp(piece.age / piece.life, 0.F, 1.F);
+			const Rgb head = Mix(piece.colour, { 255, 150, 60 }, t);
+			SoftLine(Glowing, at, tail, piece.size * 2, head, { 230, 110, 40 }, alpha, 0);
+			break;
+		}
+		case DebrisKind::Droplet: {
+			const Rgb colour = piece.grounded ? Mix(piece.colour, { 62, 4, 6 }, 0.4F) : piece.colour;
+			if (!piece.grounded) {
+				DebrisShadow(floor, piece.size, piece.z, alpha);
+				// A drop drawn out a little along its flight.
+				const Vec flight { (piece.vx - piece.vy) * 32, (piece.vx + piece.vy) * 16 - piece.vz };
+				const float speed = std::max(Length(flight), 1.F);
+				const Vec dir = flight * (1 / speed);
+				const Vec side { -dir.y * piece.size * 0.6F, dir.x * piece.size * 0.6F };
+				const float stretch = piece.size * std::min(1.F + speed / 250, 2.2F);
+				const int a = Dark.add(ToScreen(at + dir * stretch), colour, alpha);
+				const int b = Dark.add(ToScreen(at + side), colour, alpha);
+				const int c = Dark.add(ToScreen(at - dir * piece.size * 0.7F), colour, alpha);
+				const int d = Dark.add(ToScreen(at - side), colour, alpha);
+				Dark.tri(a, b, c);
+				Dark.tri(a, c, d);
+			} else {
+				// Settled: a small flat splat on the floor.
+				const Vec c = ToScreen(floor);
+				const float r = piece.size * 1.4F * CameraScale;
+				const int middle = Dark.add(c, colour, alpha * 0.9F);
+				constexpr int Segments = 6;
+				for (int i = 0; i < Segments; i++) {
+					const float angle = piece.angle + 2 * Pi * static_cast<float>(i) / Segments;
+					Dark.add(c + Vec { std::cos(angle) * r, std::sin(angle) * r * 0.5F }, colour, alpha * 0.5F);
+				}
+				for (int i = 0; i < Segments; i++)
+					Dark.tri(middle, middle + 1 + i, middle + 1 + (i + 1) % Segments);
+			}
+			break;
+		}
 		}
 	}
 }
@@ -5866,6 +6793,22 @@ void DrawGlyph(Vec centre, float size, float angle, uint32_t seed, Rgb colour, f
 		SoftLine(Glowing, at(u, v), at(nu, nv), 2.2F, colour, colour, alpha, alpha);
 		u = nu;
 		v = nv;
+	}
+}
+
+/** @brief The loot filter's beams: a tall soft column of light with a bright thread down its middle and a pool at its foot. */
+void DrawLootBeams()
+{
+	for (const LootBeamFx &beam : LootBeams) {
+		const float shimmer = 0.85F + (0.15F * std::sin((AmbientTime * 0.004F) + beam.phase));
+		const float a = beam.alpha * shimmer;
+		const Rgb core = Mix(beam.colour, { 255, 255, 255 }, 0.6F);
+		const Vec foot = beam.pos;
+		const Vec top = foot - Vec { 0, 300 };
+		SoftDisc(Ground, foot, 18, beam.colour, 0.35F * a, true);
+		SoftLine(Glowing, foot, top, 16, beam.colour, beam.colour, 0.22F * a, 0);
+		SoftLine(Glowing, foot, top, 6, beam.colour, beam.colour, 0.6F * a, 0);
+		SoftLine(Glowing, foot, top - Vec { 0, -60 }, 1.8F, core, core, 0.8F * a, 0);
 	}
 }
 
@@ -7385,6 +8328,68 @@ void DrawLobs()
 			SoftDisc(Glowing, at + dir * 5, 2.5F, venom.core, 0.9F, false);
 			SoftDisc(Glowing, at + dir * 5, 9, venom.mid, 0.3F, false);
 			break;
+		case LobKind::Bomb: {
+			// A round black bomb, its fuse burning at the tip.
+			const Colours fire = ColoursOf(Element::Fire);
+			SoftDisc(Dark, at, 6.5F, { 34, 30, 28 }, 0.97F, false, 0.95F);
+			SoftDisc(Dark, at + Vec { -1.5F, -1.5F }, 2.5F, { 90, 86, 80 }, 0.6F, false, 0.5F);
+			SoftLine(Dark, at + dir * 5, at + dir * 9, 1.4F, { 120, 100, 70 }, { 120, 100, 70 }, 0.9F, 0.9F);
+			SoftDisc(Glowing, at + dir * 9.5F, 2.2F, fire.core, 0.95F, false);
+			SoftDisc(Glowing, at + dir * 9.5F, 7, fire.mid, 0.35F, false);
+			break;
+		}
+		case LobKind::Spark: {
+			// A crackling ball of lightning, flickering as it turns.
+			const Colours storm = ColoursOf(Element::Lightning);
+			const float flicker = 0.75F + 0.25F * std::sin(fx.age * 0.05F);
+			SoftDisc(Glowing, at, 12, storm.mid, 0.3F * flicker, false);
+			SoftDisc(Glowing, at, 5, storm.core, 0.95F, false);
+			SoftLine(Glowing, at - dir * 7, at + dir * 7, 1.2F, storm.core, storm.edge, 0.8F * flicker, 0.4F);
+			SoftLine(Glowing, at - Vec { -dir.y, dir.x } * 6, at + Vec { -dir.y, dir.x } * 6, 1.2F, storm.core, storm.edge, 0.6F * flicker, 0.3F);
+			break;
+		}
+		}
+	}
+}
+
+/**
+ * @brief The thorns bursts: dark red spikes stabbing out of a body all round, held a moment and drawn back in, each with
+ * a thin red sheen along its lit side. Only a dim red glow at the heart: no flash.
+ */
+void DrawThorns()
+{
+	constexpr Rgb Root { 60, 6, 10 };
+	constexpr Rgb Shade { 116, 12, 18 };
+	constexpr Rgb Face { 168, 22, 26 };
+	constexpr Rgb Lit { 226, 52, 44 };
+	constexpr Rgb Tip { 255, 128, 104 };
+	for (const ThornsFx &fx : ThornBursts) {
+		const float t = fx.age / fx.life;
+		// Drawn back in over the last half, fading as they go.
+		const float back = std::clamp((t - 0.5F) / 0.5F, 0.F, 1.F);
+		const float alpha = 1 - back * back;
+		SoftDisc(Glowing, fx.body, 13 * fx.scale, { 190, 18, 22 }, 0.28F * alpha, false);
+		for (const ThornSpike &spike : fx.spikes) {
+			const float local = fx.age - spike.delay;
+			if (local <= 0)
+				continue;
+			const float reach = std::min(EaseOutBack(local / 75.F), 1.08F) * (1 - back);
+			const float length = spike.length * fx.scale * reach;
+			if (length < 1)
+				continue;
+			const Vec side = Vec { -spike.dir.y, spike.dir.x } * (spike.width * 0.5F * fx.scale);
+			const Vec root = fx.body + spike.dir * (4 * fx.scale);
+			const Vec tip = root + spike.dir * length;
+			const float a = 0.95F * alpha;
+			// Two faces, shadowed and lit, meeting along its spine.
+			const int r0 = Dark.add(ToScreen(root - side), Root, a);
+			const int r1 = Dark.add(ToScreen(root), Face, a);
+			const int r2 = Dark.add(ToScreen(root + side), Shade, a);
+			const int shadeTip = Dark.add(ToScreen(tip), Shade, a);
+			const int litTip = Dark.add(ToScreen(tip), Lit, a);
+			Dark.tri(r0, r1, shadeTip);
+			Dark.tri(r1, r2, litTip);
+			SoftLine(Glowing, root + side * 0.5F, tip, 1.5F * fx.scale, Lit, Tip, 0.2F * alpha, 0.5F * alpha);
 		}
 	}
 }
@@ -7972,7 +8977,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
+	if (Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
 		FrontFresh = false;
 		return;
 	}
@@ -8000,14 +9005,17 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawMiasmas();
 	DrawRituals();
 	DrawBeams();
+	DrawLootBeams();
 	DrawIceSpikes();
 	DrawRings();
 	DrawComets();
 	DrawLobs();
+	DrawThorns();
 	DrawBolts();
 	DrawSweeps();
 	DrawQuestMarks();
 	DrawParticles();
+	DrawDebris();
 	DrawWeather();
 
 	const float toLogical = static_cast<float>(logicalSize.width) / static_cast<float>(worldSize.width);

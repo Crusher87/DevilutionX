@@ -115,6 +115,105 @@ enum class ModEffect : uint8_t {
 	/** Increased chaos spell damage, and levels of chaos skills: on the chaos wands and staves only (ModBaseChaosSpell). */
 	ChaosSpellDamage,
 	ChaosSkillLevels,
+	// The effect primitives of build spec step 4: runes, soulstones, relics and essences name them (effect_primitives.hpp).
+	/** Percent of an attack hit's damage leeched as life or mana, up to MaxLeechPercent in all. */
+	LifeLeech,
+	ManaLeech,
+	/** Physical damage, a range, dealt back to a monster whose melee hit lands. */
+	Thorns,
+	/** Percent of maximum life or mana recovered on a kill. */
+	LifePercentOnKill,
+	ManaPercentOnKill,
+	/** Percent of each hit's damage gained as extra damage of the element; cold meets magic resistance. */
+	FireAsExtra,
+	LightningAsExtra,
+	ColdAsExtra,
+	/** Cold damage, a range, added to melee hits; it meets magic resistance. */
+	AddedCold,
+	/** Increased flask recovery in percent. */
+	FlaskRecovery,
+	/** Increased stun buildup in percent. */
+	StunBuildup,
+	/** Added to the stun threshold, in points of life. */
+	StunThreshold,
+	/** Percent of maximum energy shield added to the stun threshold. */
+	EnergyShieldAsStunThreshold,
+	/** Percent of armour that applies to fire, lightning or cold (magic) hits. */
+	ArmourToFire,
+	ArmourToLightning,
+	ArmourToCold,
+	/** Percent of hit damage taken recouped as life over RecoupSeconds. */
+	LifeRecoup,
+	/** Faster energy shield recharge in percent. */
+	EnergyShieldRecharge,
+	/** Levels of the skills with a tag: Strike, Slam, Warcry, Curse, Herald, Placed (totems), Bow, area spells, elemental spells. */
+	StrikeSkillLevels,
+	SlamSkillLevels,
+	WarcrySkillLevels,
+	CurseSkillLevels,
+	HeraldSkillLevels,
+	PlacedSkillLevels,
+	BowSkillLevels,
+	AreaSpellSkillLevels,
+	ElementalSpellSkillLevels,
+	/** Percent of the item's other attribute requirements that become requirements of this attribute. */
+	RequirementsToStrength,
+	RequirementsToDexterity,
+	RequirementsToIntelligence,
+	// The runes' effects (build spec step 5).
+	/** Increased magnitude of the ignites the hero inflicts, in percent. */
+	IgniteMagnitude,
+	/** Increased freeze buildup, in percent; adds to the tree's. */
+	FreezeBuildup,
+	/** Increased magnitude of the shocks the hero inflicts, in percent. */
+	ShockMagnitude,
+	/** Life regenerated per second, in hundredths of a percent of maximum life. */
+	LifeRegenPercent,
+	/** Percent of skills' mana costs paid with life instead. */
+	ManaCostAsLife,
+	/** Added to the chance of attacks to crit, in tenths of a percent. */
+	AttackCritChance,
+	/** Increased movement speed, in percent. */
+	MovementSpeed,
+	/** Added to maximum energy shield, in the points shown (not defence points). */
+	MaximumEnergyShield,
+	/** All elemental resistances (first value) and maximum life (second value). */
+	AllResistancesAndLife,
+	// The soulstones' effects (build spec step 6).
+	/** Increased magnitude of the poisons and bleeds the hero inflicts, in percent. */
+	PoisonMagnitude,
+	BleedMagnitude,
+	/** Increased fire, lightning and cold damage of attacks, in percent; it adds to the attack's increased damage. */
+	ElementalAttackDamage,
+	/** Percent of the monster's fire, lightning and cold resistance an attack's hit gets past. */
+	AttackElementalPenetration,
+	/** Added to the maximum fire, lightning or cold (magic) resistance. */
+	MaxFireResistance,
+	MaxLightningResistance,
+	MaxColdResistance,
+	/** Increased duration of the curses the hero casts and faster cooldowns of their skills, in percent. */
+	SkillDurationAndCooldown,
+	/** One point of maximum mana for each this many points of the item's own armour. */
+	ManaPerArmour,
+	/** Armour equal to this percent of the life lost to hits in the last RecentHitLossSeconds. */
+	ArmourFromRecentHitLoss,
+	/** Percent of the physical damage armour stops that is recouped as life. */
+	PreventedPhysicalRecoup,
+	// The essences' effects (build spec step 7).
+	/** Increased armour, evasion and energy shield from all gear, in percent (Perfect Essence of Enhancement). */
+	GlobalDefencesPercent,
+	/** Percent of the fire, cold (magic) or lightning damage of hits taken that is recouped as life. */
+	FireRecoup,
+	ColdRecoup,
+	LightningRecoup,
+	/** Increased gold from slain monsters, in percent. */
+	GoldFind,
+	/** Mana cost efficiency in percent: skills cost 100 / (100 + this) of their mana. */
+	ManaCostEfficiency,
+	/** Increased block chance of the shield that has it, in percent. */
+	IncreasedBlock,
+	/** Chance in percent for attack hits to poison (first value), and increased poison magnitude (second value). */
+	PoisonOnHit,
 	/** Not an effect: the number of them. New effects go before it. */
 	Count,
 };
@@ -238,6 +337,11 @@ struct ModFamily {
  * and an item saved before then has only these.
  */
 constexpr uint8_t LegacyModFamilyCount = 94;
+/**
+ * @brief The essences' own families (build spec step 7) start here, after the caster weapons rework's and the chaos
+ * spell families: they never roll naturally, and only the rework's families stand in for a slot (FindFamilyForItem).
+ */
+constexpr uint8_t EssenceModFamilyStart = 174;
 /** @brief Families in memory stay below the desecrated families' ids (desecration.hpp). */
 constexpr size_t MaxModFamilies = 239;
 
@@ -252,6 +356,9 @@ void LoadModifierData();
 
 /** @brief A modifier effect by its name in the data; MagicResistance, ColdResistance's name before the cold rename, still reads. */
 std::optional<ModEffect> ParseModEffectName(std::string_view name);
+/** @brief Whether the effect adds levels to skills (a "+level" effect, which a weapon holds only one of in its sockets). */
+[[nodiscard]] bool IsSkillLevelEffect(ModEffect effect);
+
 /** @brief A unique rule by its name in the data; MaxMagicResistance, MaxColdResistance's old name, still reads. */
 std::optional<UniqueRule> ParseUniqueRuleName(std::string_view name);
 

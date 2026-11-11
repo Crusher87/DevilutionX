@@ -15,6 +15,7 @@
 #include "player.h"
 #include "poe2/attack_speed.hpp"
 #include "poe2/default_attack.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
@@ -197,6 +198,9 @@ void AddWeaponHit(HitEstimate &hit, const Player &player, SkillSlot skill, int l
 		hit.parts.push_back(WholePart(DamageType::Fire, ScaleWhole(player._pIFMinDam, elements), ScaleWhole(player._pIFMaxDam, elements)));
 	if (player._pILMaxDam > 0)
 		hit.parts.push_back(WholePart(DamageType::Lightning, ScaleWhole(player._pILMinDam, elements), ScaleWhole(player._pILMaxDam, elements)));
+	// The gear's added cold lands on melee hits only.
+	if (const auto [minCold, maxCold] = AddedColdDamage(player); maxCold > 0 && !ShootsArrows(player))
+		hit.parts.push_back(WholePart(DamageType::Cold, ScaleWhole(minCold, elements), ScaleWhole(maxCold, elements)));
 }
 
 /** @brief The base of a spell-like skill, from Magic and the gem level (Ice Bolt, table spells), each roll cut to whole points. */
@@ -273,6 +277,9 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	case WeaponSkill::EscapeShot:
 		AddWeaponHit(hit, player, skill, level, percent, VaultShotArrowDamagePercent);
 		return hit;
+	case WeaponSkill::Barrage:
+		AddWeaponHit(hit, player, skill, level, percent, BarrageArrowDamagePercent);
+		return hit;
 	case WeaponSkill::EmberFusillade:
 		// Each ember and spark rolls the spell base times its own row (poe2/spell_damage.hpp), then the gem's curve.
 		AddSpellBase(hit, player, level, DamageType::Fire, ScaleWhole(percent, SkillSpellDamagePercent(attack)));
@@ -298,7 +305,9 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 	}
 	if (const TableSkillData *table = FindTableSkill(attack); table != nullptr) {
 		if (table->buff == TableBuff::WarCry) {
-			hit.effect = std::format("Stuns enemies within {:d} tiles", table->radius);
+			// Only War Cry stuns; the other cries say what they do (balance re-score, batch2-fixes.md 7).
+			const std::string note = table->skill == WeaponSkill::WarCry ? std::string() : TableSkillExtraNote(table->skill);
+			hit.effect = note.empty() ? std::format("Stuns enemies within {:d} tiles", table->radius) : note;
 			return hit;
 		}
 		if (table->shape == TableShape::Buff) {
@@ -322,9 +331,28 @@ HitEstimate EstimateHit(const Player &player, SkillSlot skill, int level)
 			AddSpellBase(hit, player, level, table->type, tablePercent);
 		} else {
 			// A table skill's weapon hit takes the gem's percent, then its own (SkillHitMonster).
-			AddWeaponHit(hit, player, skill, level, percent, table->damagePercent);
-			if (table->type != DamageType::Physical && !hit.parts.empty())
+			// Swamp Gas Arrow's arrow deals only its share of the row, as FireTableMissile shoots it (audit-drafts-bow.md 7.2).
+			// Shock Web's hit is its burst, half the row (audit-drafts-dagger.md 6.2); its pulses are in its note.
+			int rowPercent = table->damagePercent;
+			if (table->skill == WeaponSkill::SwampGasArrow)
+				rowPercent = table->damagePercent * SwampGasArrowPercent / 100;
+			else if (table->skill == WeaponSkill::ShockWeb)
+				rowPercent = table->damagePercent * ShockWebBurstPercent / 100;
+			AddWeaponHit(hit, player, skill, level, percent, rowPercent);
+			// Wrath of the Skies' hit is part lightning (ApplyPlayerAttackDamage), the rest physical.
+			if (table->type != DamageType::Physical && !hit.parts.empty() && table->convertPercent > 0 && table->convertPercent < 100) {
+				HitPart element = hit.parts.front();
+				const double share = table->convertPercent / 100.0;
+				for (double *value : { &element.min, &element.max, &element.average })
+					*value *= share;
+				element.type = table->type;
+				HitPart &physical = hit.parts.front();
+				for (double *value : { &physical.min, &physical.max, &physical.average })
+					*value *= 1.0 - share;
+				hit.parts.insert(hit.parts.begin() + 1, element);
+			} else if (table->type != DamageType::Physical && !hit.parts.empty()) {
 				hit.parts.front().type = table->type;
+			}
 		}
 		return hit;
 	}
@@ -363,6 +391,11 @@ double UseSeconds(const Player &player, SkillSlot skill)
 			return (((every - 1) * ActionSeconds(SkillUseTime(player, skill, false))) + ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))) / every;
 		}
 		return ActionSeconds(SkillUseTime(player, skill, false));
+	}
+	// Rime Strikes' strikes on average: two quick ones, then the slower third that throws the shards.
+	if (attack == WeaponSkill::RimeStrikes) {
+		const int every = RimeStrikesShardEvery;
+		return (((every - 1) * ActionSeconds(SkillUseTime(player, skill, false))) + ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))) / every;
 	}
 	// A skill with its own animation; a dash's time counts from its start, for the shortest dash.
 	return ActionSeconds(SkillUseTime(player, skill, PlaysCastAnimation(attack)));
@@ -839,6 +872,8 @@ std::string SkillTagText(SkillSlot skill)
 		add("Attack");
 	if ((tags & ST_Spell) != 0)
 		add("Spell");
+	if ((tags & ST_Buff) != 0)
+		add("Buff");
 	if ((tags & ST_Melee) != 0)
 		add("Melee");
 	if ((tags & ST_Strike) != 0)
@@ -873,6 +908,8 @@ std::string SkillTagText(SkillSlot skill)
 		add("Physical");
 	if ((tags & ST_Chaos) != 0)
 		add("Chaos");
+	if ((tags & ST_Poison) != 0)
+		add("Poison");
 	return text;
 }
 
@@ -1003,6 +1040,10 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 			Value(lines, "Strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false))));
 			Value(lines, "Bursting strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))));
 		}
+		if (skill.kind == SkillKind::Attack && skill.attack() == WeaponSkill::RimeStrikes) {
+			Value(lines, "Strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false))));
+			Value(lines, "Third strike", Seconds(ActionSeconds(SkillUseTime(player, skill, false, SkillStep::Finisher))));
+		}
 		if (const SkillSpeedRow *row = FindSkillSpeedRow(skill); row != nullptr && row->distanceMs > 0 && skill.kind == SkillKind::Attack)
 			Text(lines, Kind::Note, std::format("A longer leap adds up to {:s}", Seconds(row->distanceMs / 1000.0)));
 		if (perHitBurst > 0)
@@ -1054,16 +1095,21 @@ std::vector<SkillDetailLine> SkillDetails(const Player &player, size_t socket)
 		Value(shape, "Extra projectiles", std::format("+{:d}", extraProjectiles));
 	if (table != nullptr && table->radius > 0)
 		Value(shape, "Area radius", std::format("{:d} tiles", static_cast<int>(table->radius)));
-	// Bone Spikes' line: one spike wide, then two.
+	// Bone Spikes' cone.
 	if (table != nullptr && table->shape == TableShape::Line && (table->flags & TF_Spell) != 0)
-		Value(shape, "Line", std::format("{:d} tiles: one wide for {:d}, then two wide", static_cast<int>(table->count), BoneSpikesSingleTiles));
+		Value(shape, "Cone", std::format("{:d} tiles long", static_cast<int>(table->count)));
 	if (table != nullptr && (table->flags & TF_PoisonBurst) != 0)
 		Text(shape, Kind::Note, std::format("The first hit bursts: it poisons all there and hits the others for {:d}%", PlagueArrowSplashPercent));
+	if (const std::string note = table != nullptr ? TableSkillExtraNote(table->skill) : std::string(); !note.empty())
+		Text(shape, Kind::Note, note);
 	// The poison skills' ground, traps, pods, effigy and bog.
 	if (table != nullptr) {
 		switch (table->zone) {
 		case TableZone::PoisonGround:
-			Text(shape, Kind::Note, (table->flags & TF_LandingZone) != 0 ? std::format("The vine poisons and hinders {:d}% every half second", ThornvineHinderPercent) : std::string("The ground poisons all in it every half second"));
+			if (table->skill == WeaponSkill::SwampGasArrow)
+				Text(shape, Kind::Note, std::string("The gas poisons all in it every half second"));
+			else
+				Text(shape, Kind::Note, (table->flags & TF_LandingZone) != 0 ? std::format("The vine poisons and hinders {:d}% every half second", ThornvineHinderPercent) : std::string("The ground poisons all in it every half second"));
 			break;
 		case TableZone::GasTrap:
 			Text(shape, Kind::Note, std::format("Waits {:d} seconds for an enemy, then fills with gas", VenomSentryArmTicks / TicksPerSecond));

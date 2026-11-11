@@ -51,6 +51,7 @@
 #include "portal.h"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/hit_trace.hpp"
 #include "poe2/profane_roads.hpp"
 #include "poe2/shrines.hpp"
@@ -157,6 +158,11 @@ int ScaleSpellEffect(int base, int spellLevel)
 int SpellFormulaLevel(const Player &player, int spellLevel)
 {
 	return gbIsPoe2 ? spellLevel : player.getCharacterLevel();
+}
+
+int ScaleByPercent(int damage, int percent)
+{
+	return std::max(damage * percent / 100, 1);
 }
 
 int GenerateRndSum(int range, int iterations)
@@ -268,6 +274,39 @@ void HomeElemental(Missile &missile, Point position)
 	missile.var3 = 2;
 	missile.var4 = position.x;
 	missile.var5 = position.y;
+}
+
+/**
+ * @brief POE2 Mashup: Guided Arrow (Curtis 2026-11-07, Q37) turns towards the monster it was shot at every other tick
+ * while that one lives, keeping its speed. With its target gone it flies straight on.
+ */
+void HomeGuidedArrow(Missile &missile)
+{
+	const int16_t id = missile.poe2.homingMonster;
+	if (id < 0 || static_cast<size_t>(id) >= MaxMonsters || missile._midist % 2 != 0)
+		return;
+	const Monster &target = Monsters[id];
+	const Point position = missile.position.tile;
+	if (target.hasNoLife() || target.mode == MonsterMode::Death || target.position.tile == position) {
+		if (target.hasNoLife() || target.mode == MonsterMode::Death)
+			missile.poe2.homingMonster = -1;
+		return;
+	}
+	const int64_t vx = missile.position.velocity.deltaX;
+	const int64_t vy = missile.position.velocity.deltaY;
+	int64_t rest = vx * vx + vy * vy;
+	int64_t root = 0;
+	for (int64_t bit = int64_t { 1 } << 62; bit != 0; bit >>= 2) {
+		if (rest >= root + bit) {
+			rest -= root + bit;
+			root = (root >> 1) + bit;
+		} else {
+			root >>= 1;
+		}
+	}
+	const int speed = std::max(static_cast<int>(root >> 16), 1);
+	UpdateMissileVelocity(missile, target.position.tile, speed);
+	missile._miAnimFrame = static_cast<int>(GetDirection16(position, target.position.tile)) + 1;
 }
 
 /**
@@ -466,7 +505,12 @@ bool MonsterMHit(const Player &player, Monster &monster, int mindam, int maxdam,
 		dam >>= 2;
 	// An elemental arrow meets its element's resistance here: its hit is split into packets as if it were physical.
 	if (isAttack && gbIsPoe2) {
-		const int resistance = MonsterHitResistance(monster, damageType, SupportHitPenetration(damageType));
+		// The gear's elemental attack damage and penetration (Dreadjudge, Blackskull) reach an elemental arrow's element.
+		if (const int elemental = damageType != DamageType::Physical ? GearElementalAttackDamage(player) : 0; elemental != 0) {
+			const int64_t increased = std::max(100 + player._pIBonusDam, 1);
+			dam = static_cast<int>(static_cast<int64_t>(dam) * std::max<int64_t>(increased + elemental, 0) / increased);
+		}
+		const int resistance = MonsterHitResistance(monster, damageType, SupportHitPenetration(damageType) + GearAttackPenetration(player, damageType));
 		dam = static_cast<int>(static_cast<int64_t>(dam) * (100 - resistance) / 100);
 		TelemetryHitStep(false, "monster resistance after penetration", resistance, true);
 	}
@@ -1247,14 +1291,15 @@ DamageRange GetDamageAmt(SpellID spell, int spellLevel)
 		case SpellID::BloodStar:
 			return Poe2SpellDamageRange(myPlayer, spell, spellLevel);
 		case SpellID::FireWall:
-		case SpellID::LightningWall:
 		case SpellID::RingOfFire:
 		case SpellID::RuneOfLight:
 			return { (2 * spellLevel) + 4, (2 * spellLevel) + 40 };
+		case SpellID::LightningWall:
+			return { ScaleByPercent((2 * spellLevel) + 4, LightningWallDamagePercent), ScaleByPercent((2 * spellLevel) + 40, LightningWallDamagePercent) };
 		case SpellID::Guardian:
 			return { (spellLevel / 2) + 1, (spellLevel / 2) + 10 };
 		case SpellID::Inferno:
-			return { 3, (spellLevel + 4) + ((spellLevel + 4) / 2) };
+			return { ScaleByPercent(3, InfernoDamagePercent), ScaleByPercent((spellLevel + 4) + ((spellLevel + 4) / 2), InfernoDamagePercent) };
 		default:
 			break;
 		}
@@ -2538,10 +2583,14 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 	// A bone hit borrows the stone curse's shatter, and the effects draw it as bone, not stone dust.
 	const bool bone = graphic == MissileGraphicID::BoneHit;
 	const bool blood = graphic == MissileGraphicID::BloodHit;
+	// A blow of steel borrows the shatter's grey for its timing (and for the classic look), and the effects draw it as a
+	// pale flash and sparks: it borrowed Charged Bolt's blue spark, lightning on every sword, axe and arrow hit, and the
+	// owner won't have lightning on a skill that isn't lightning (Rogue run 2, Cleave).
+	const bool steel = graphic == MissileGraphicID::MetalHit;
 	// Some graphic ids have no sprite file of their own (Diablo drew hits from monster art), so they borrow a look-alike.
 	switch (graphic) {
 	case MissileGraphicID::MetalHit:
-		graphic = MissileGraphicID::ChargedBolt;
+		graphic = MissileGraphicID::StoneCurseShatter;
 		break;
 	case MissileGraphicID::BloodHit:
 		graphic = MissileGraphicID::BloodStarRedExplosion;
@@ -2569,19 +2618,25 @@ void AddVisualEffect(WorldTilePosition tile, MissileGraphicID graphic, int delay
 		effect->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Bone);
 	if (effect != nullptr && blood)
 		effect->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Blood);
+	if (effect != nullptr && steel)
+		effect->poe2.vfxElement = static_cast<int8_t>(vfx::Element::Physical);
 }
 
 void AddWeaponExplosion(Missile &missile, AddMissileParameter &parameter)
 {
 	bool isFireExplosion = parameter.dst.x == 1;
+	// POE2 Mashup: the gear's added cold, which meets magic resistance.
+	const bool isColdExplosion = parameter.dst.x == WeaponExplosionCold;
 
 	if (missile._midam > 0) {
-		DamageType damageType = isFireExplosion ? DamageType::Fire : DamageType::Lightning;
+		DamageType damageType = isFireExplosion ? DamageType::Fire : (isColdExplosion ? DamageType::Cold : DamageType::Lightning);
 		CheckMissileCol(missile, damageType, missile._midam, missile._midam, false, missile.position.tile, true);
 	}
 
 	if (isFireExplosion)
 		missile.setAnimation(MissileGraphicID::MagmaBallExplosion);
+	else if (isColdExplosion)
+		missile.setAnimation(MissileGraphicID::BlueFlareExplosion);
 	else
 		missile.setAnimation(MissileGraphicID::ChargedBolt);
 	missile.duration = missile._miAnimLen - 1;
@@ -3230,6 +3285,8 @@ void AddInferno(Missile &missile, AddMissileParameter &parameter)
 	if (missile._micaster == TARGET_MONSTERS) {
 		const int i = GenerateRnd(SpellFormulaLevel(Players[missile._misource], missile._mispllvl)) + GenerateRnd(2);
 		missile._midam = 8 * i + 16 + ((8 * i + 16) / 2);
+		if (gbIsPoe2)
+			missile._midam = ScaleByPercent(missile._midam, InfernoDamagePercent);
 	} else {
 		const Monster &monster = Monsters[missile._misource];
 		missile._midam = RandomIntBetween(monster.minDamage, monster.maxDamage);
@@ -3553,6 +3610,11 @@ void ProcessArrow(Missile &missile)
 		maxd = 2 * currlevel;
 		break;
 	}
+	if (missile.poe2.homingMonster >= 0)
+		HomeGuidedArrow(missile);
+	// POE2 Mashup: a thrown blade or shield turns over and over as it flies: its 16 facings, one a tick.
+	if (missile.poe2.look == vfx::SpinningBladeLook)
+		missile._miAnimFrame = missile._miAnimFrame % 16 + 1;
 	MoveMissileAndCheckMissileCol(missile, GetMissileData(missile._mitype).damageType(), mind, maxd, true, false);
 	if (missile.duration == 0)
 		missile._miDelFlag = true;
@@ -4495,6 +4557,8 @@ void ProcessWallControl(Missile &missile)
 		type = MissileID::LightningWall;
 		lvl = !missile.IsTrap() ? SpellFormulaLevel(Players[sourceIdx], missile._mispllvl) : 0;
 		dmg = 16 * (GenerateRndSum(10, 2) + lvl + 2);
+		if (gbIsPoe2 && !missile.IsTrap())
+			dmg = ScaleByPercent(dmg, LightningWallDamagePercent);
 		break;
 	default:
 		app_fatal("ProcessWallControl: Invalid missile type for control missile");

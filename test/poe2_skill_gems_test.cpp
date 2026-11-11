@@ -1,3 +1,4 @@
+#include <optional>
 #include <string>
 
 #include <gtest/gtest.h>
@@ -5,6 +6,7 @@
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "panels/skill_bar.hpp"
 #include "player.h"
 #include "poe2/gem_levels.hpp"
 #include "poe2/skill_gems.hpp"
@@ -69,8 +71,8 @@ TEST_F(Poe2SkillGemsTest, EveryGemGrantsASkillAndRoundTrips)
 			EXPECT_EQ(AllItemsList[i].iMinMag, GetSpellData(skill.spell()).minInt) << AllItemsList[i].iName;
 		}
 	}
-	// Skill gems plus 70 Spirit gems (Despair made it 182, Cleansing 183, Plague Arrow 184, Hex Rupture 185, Bone Spikes 186, Bone Spear 187, Blood Nova 188, the poison skills plan's eleven 199).
-	EXPECT_EQ(gems, 199);
+	// Skill gems plus 70 Spirit gems (Despair made it 182, Cleansing 183, Plague Arrow 184, Hex Rupture 185, Bone Spikes 186, Bone Spear 187, Blood Nova 188, the poison skills plan's eleven 199, the draft gems' Staff batch of twelve 211, the Mace and Axe batch's twenty-one 232, the Sword and Shield batch's five 237, the Bow batch's nine 246, the Dagger batch's nine 255).
+	EXPECT_EQ(gems, 255);
 }
 
 TEST_F(Poe2SkillGemsTest, SpellGemGrantsTheSpellWhileSocketed)

@@ -11,6 +11,7 @@
 #include "poe2/support_gems.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/waystones.hpp"
+#include "utils/is_of.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
 
@@ -21,9 +22,9 @@ namespace {
 constexpr std::array<CurrencySectionRange, static_cast<size_t>(CurrencySection::Count)> CurrencySections = { {
     { 0, 30 },   // Orbs
     { 30, 10 },  // Catalysts
-    { 40, 10 },  // Augments
+    { 40, 10 },  // Augments before the Runes tab: empty, never reused
     { 50, 20 },  // Other
-    { 70, 50 },  // Essences: 12 kinds of 4 tiers (the legacy kinds' places, holding what they became)
+    { 70, 50 },  // Essences before the Essences tab: empty, never reused
     { 120, 30 }, // Omens
 } };
 
@@ -64,8 +65,6 @@ constexpr unsigned EssenceTiers = static_cast<unsigned>(EssenceTier::Count);
 
 static_assert(std::size(OrbSlots) <= 30);
 static_assert(static_cast<unsigned>(Catalyst::Count) - 1 <= 10);
-static_assert(LegacyAugmentCount <= 10);
-static_assert(LegacyEssenceKindCount * EssenceTiers <= 50);
 static_assert(static_cast<unsigned>(OmenId::Count) - 1 <= 30);
 
 std::optional<size_t> ItemIndexForMiscId(item_misc_id miscId)
@@ -73,28 +72,6 @@ std::optional<size_t> ItemIndexForMiscId(item_misc_id miscId)
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		if (AllItemsList[i].iMiscId == miscId)
 			return i;
-	}
-	return std::nullopt;
-}
-
-/** The augment section's place of the item's augment: the place of the legacy id it is, or that became it. */
-std::optional<unsigned> AugmentPlace(AugmentId id)
-{
-	for (int legacy = 1; legacy <= LegacyAugmentCount; legacy++) {
-		const auto legacyId = static_cast<AugmentId>(legacy);
-		if (id == legacyId || id == CurrentAugmentId(legacyId))
-			return static_cast<unsigned>(legacy - 1);
-	}
-	return std::nullopt;
-}
-
-/** The same for the essence sections' kinds. */
-std::optional<unsigned> EssencePlace(EssenceKind kind)
-{
-	for (int legacy = 1; legacy <= LegacyEssenceKindCount; legacy++) {
-		const auto legacyKind = static_cast<EssenceKind>(legacy);
-		if (kind == legacyKind || kind == CurrentEssenceKind(legacyKind))
-			return static_cast<unsigned>(legacy - 1);
 	}
 	return std::nullopt;
 }
@@ -138,13 +115,6 @@ CurrencySlotKind GetCurrencySlotKind(unsigned slot)
 		return { OrbSlots[*i], 0 };
 	if (const auto i = inSection(CurrencySection::Catalysts); i && *i + 1 < static_cast<unsigned>(Catalyst::Count))
 		return { IMISC_ORB_CATALYST, static_cast<uint8_t>(*i + 1) };
-	if (const auto i = inSection(CurrencySection::Augments); i && *i < static_cast<unsigned>(LegacyAugmentCount))
-		return { IMISC_AUGMENT, static_cast<uint8_t>(CurrentAugmentId(static_cast<AugmentId>(*i + 1))) };
-	if (const auto i = inSection(CurrencySection::Essences); i && *i / EssenceTiers < static_cast<unsigned>(LegacyEssenceKindCount)) {
-		const EssenceKind kind = CurrentEssenceKind(static_cast<EssenceKind>((*i / EssenceTiers) + 1));
-		const auto tier = static_cast<EssenceTier>(*i % EssenceTiers);
-		return { IMISC_ESSENCE, EssenceVariant(kind, tier) };
-	}
 	if (const auto i = inSection(CurrencySection::Omens); i && *i + 1 < static_cast<unsigned>(OmenId::Count))
 		return { IMISC_OMEN, static_cast<uint8_t>(*i + 1) };
 	return {};
@@ -162,18 +132,10 @@ std::optional<unsigned> CurrencyFixedSlot(const Item &item)
 			return std::nullopt;
 		return section(CurrencySection::Catalysts) + catalyst - 1;
 	}
-	case IMISC_AUGMENT: {
-		const std::optional<unsigned> place = AugmentPlace(GetAugmentId(item));
-		if (!place)
-			return std::nullopt;
-		return section(CurrencySection::Augments) + *place;
-	}
-	case IMISC_ESSENCE: {
-		const std::optional<unsigned> place = EssencePlace(GetEssenceKind(item));
-		if (!place)
-			return std::nullopt;
-		return section(CurrencySection::Essences) + (*place * EssenceTiers) + static_cast<unsigned>(GetEssenceTier(item));
-	}
+	// Augments and essences have the Runes and Essences tabs (RuneTabSlot, EssenceTabSlot).
+	case IMISC_AUGMENT:
+	case IMISC_ESSENCE:
+		return std::nullopt;
 	case IMISC_OMEN: {
 		const auto id = static_cast<unsigned>(GetOmenId(item));
 		if (id == 0)
@@ -189,9 +151,10 @@ std::optional<unsigned> CurrencyFixedSlot(const Item &item)
 	return section(CurrencySection::Orbs) + static_cast<unsigned>(found - std::begin(OrbSlots));
 }
 
-bool MakeCurrencySlotItem(unsigned slot, Item &item)
+namespace {
+
+bool MakeSlotItem(CurrencySlotKind kind, Item &item)
 {
-	const CurrencySlotKind kind = GetCurrencySlotKind(slot);
 	if (kind.miscId == IMISC_INVALID)
 		return false;
 	const std::optional<size_t> index = ItemIndexForMiscId(kind.miscId);
@@ -205,6 +168,139 @@ bool MakeCurrencySlotItem(unsigned slot, Item &item)
 		FinishCraftingItem(item);
 	}
 	return true;
+}
+
+constexpr std::array<StashSlotRange, static_cast<size_t>(RunePage::Count)> RunePages = { {
+    { 0, 80 },   // Runes: 20 rows of four strengths (17 families today)
+    { 80, 20 },  // Runes of Legend
+    { 100, 100 }, // Soulstones and relics
+} };
+
+static_assert(static_cast<unsigned>(RuneFamily::Count) * RuneRowSlots <= 80);
+static_assert(RunesOfLegendCount <= 20);
+static_assert(std::size(RunePages) == static_cast<size_t>(RunePage::Count));
+static_assert(EssenceEvilSlotsFirst + (static_cast<unsigned>(EssenceKind::Count) - static_cast<unsigned>(FirstEvilEssence)) <= EssenceCraftSlot);
+
+std::optional<unsigned> EssenceFamilyIndex(EssenceKind kind)
+{
+	const std::span<const EssenceKind> families = EssenceFamilies();
+	const auto found = std::find(families.begin(), families.end(), kind);
+	if (found == families.end())
+		return std::nullopt;
+	return static_cast<unsigned>(found - families.begin());
+}
+
+} // namespace
+
+bool MakeCurrencySlotItem(unsigned slot, Item &item)
+{
+	return MakeSlotItem(GetCurrencySlotKind(slot), item);
+}
+
+StashSlotRange GetRunePage(RunePage page)
+{
+	return RunePages[std::min(static_cast<size_t>(page), RunePages.size() - 1)];
+}
+
+std::string_view RunePageName(RunePage page)
+{
+	switch (page) {
+	case RunePage::Runes:
+		return _("Runes");
+	case RunePage::RunesOfLegend:
+		return _("Runes of Legend");
+	case RunePage::SoulstonesAndRelics:
+		return _("Soulstones and Relics");
+	default:
+		return {};
+	}
+}
+
+std::optional<unsigned> RuneTabSlot(const Item &item)
+{
+	if (item.isEmpty() || item._iMiscId != IMISC_AUGMENT)
+		return std::nullopt;
+	const AugmentId id = CurrentAugmentId(GetAugmentId(item));
+	if (id == AugmentId::None)
+		return std::nullopt;
+	if (const std::optional<RuneKind> rune = GetRuneKind(id))
+		return GetRunePage(RunePage::Runes).first + (static_cast<unsigned>(rune->family) * RuneRowSlots) + static_cast<unsigned>(rune->strength);
+	if (IsRuneOfLegend(id))
+		return GetRunePage(RunePage::RunesOfLegend).first + static_cast<unsigned>(id) - static_cast<unsigned>(FirstRuneOfLegend);
+	const std::span<const AugmentId> soulstones = SoulstonesAndRelics();
+	if (const auto found = std::find(soulstones.begin(), soulstones.end(), id); found != soulstones.end())
+		return GetRunePage(RunePage::SoulstonesAndRelics).first + static_cast<unsigned>(found - soulstones.begin());
+	return std::nullopt;
+}
+
+AugmentId RuneTabSlotAugment(unsigned slot)
+{
+	const auto inPage = [slot](RunePage page) -> std::optional<unsigned> {
+		const StashSlotRange range = GetRunePage(page);
+		if (slot >= range.first && slot < range.first + range.count)
+			return slot - range.first;
+		return std::nullopt;
+	};
+	if (const auto i = inPage(RunePage::Runes))
+		return RuneOf(static_cast<RuneFamily>(*i / RuneRowSlots), static_cast<RuneStrength>(*i % RuneRowSlots));
+	if (const auto i = inPage(RunePage::RunesOfLegend); i && *i < static_cast<unsigned>(RunesOfLegendCount))
+		return static_cast<AugmentId>(static_cast<unsigned>(FirstRuneOfLegend) + *i);
+	if (const auto i = inPage(RunePage::SoulstonesAndRelics); i && *i < SoulstonesAndRelics().size())
+		return SoulstonesAndRelics()[*i];
+	return AugmentId::None;
+}
+
+std::optional<unsigned> EssenceTabSlot(const Item &item)
+{
+	if (item.isEmpty() || item._iMiscId != IMISC_ESSENCE)
+		return std::nullopt;
+	const EssenceKind kind = CurrentEssenceKind(GetEssenceKind(item));
+	if (kind == EssenceKind::None)
+		return std::nullopt;
+	if (IsEvilEssence(kind))
+		return EssenceEvilSlotsFirst + static_cast<unsigned>(kind) - static_cast<unsigned>(FirstEvilEssence);
+	const std::optional<unsigned> family = EssenceFamilyIndex(kind);
+	if (!family)
+		return std::nullopt;
+	return EssenceFamilySlotsFirst + (*family * EssenceTiers) + static_cast<unsigned>(GetEssenceTier(item));
+}
+
+uint8_t EssenceTabSlotVariant(unsigned slot)
+{
+	const std::span<const EssenceKind> families = EssenceFamilies();
+	if (slot >= EssenceFamilySlotsFirst && slot < EssenceFamilySlotsFirst + (families.size() * EssenceTiers)) {
+		const unsigned i = slot - EssenceFamilySlotsFirst;
+		return EssenceVariant(families[i / EssenceTiers], static_cast<EssenceTier>(i % EssenceTiers));
+	}
+	const unsigned evils = static_cast<unsigned>(EssenceKind::Count) - static_cast<unsigned>(FirstEvilEssence);
+	if (slot >= EssenceEvilSlotsFirst && slot < EssenceEvilSlotsFirst + evils)
+		return EssenceVariant(static_cast<EssenceKind>(static_cast<unsigned>(FirstEvilEssence) + slot - EssenceEvilSlotsFirst), EssenceTier::Normal);
+	return 0;
+}
+
+bool EssenceCraftSlotTakes(const Item &item)
+{
+	if (item.isEmpty() || IsStackable(item))
+		return false;
+	return IsAnyOf(item._iClass, ICLASS_WEAPON, ICLASS_ARMOR) || IsAnyOf(item._itype, ItemType::Ring, ItemType::Amulet);
+}
+
+bool MakePremadeSlotItem(StashTabKind kind, unsigned slot, Item &item)
+{
+	switch (kind) {
+	case StashTabKind::Currency:
+		return MakeCurrencySlotItem(slot, item);
+	case StashTabKind::Runes: {
+		const AugmentId id = RuneTabSlotAugment(slot);
+		return id != AugmentId::None && MakeSlotItem({ IMISC_AUGMENT, static_cast<uint8_t>(id) }, item);
+	}
+	case StashTabKind::Essences: {
+		const uint8_t variant = EssenceTabSlotVariant(slot);
+		return variant != 0 && MakeSlotItem({ IMISC_ESSENCE, variant }, item);
+	}
+	default:
+		return false;
+	}
 }
 
 int StoredStackCount(const Item &item)

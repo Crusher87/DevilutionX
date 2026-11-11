@@ -1874,14 +1874,17 @@ void TransferItemToStash(Player &player, int location)
 	const Item &item = GetInventoryItem(player, location);
 	// POE2 Mashup: Ctrl+click sends an item to its own tab (currency to Currency) from whichever tab is open.
 	bool sent = false;
+	unsigned page = Stash.GetPage();
 	if (gbIsPoe2) {
 		if (const std::optional<unsigned> home = StashTabs.affinityTabFor(item); home && *home != Stash.GetPage()) {
 			const unsigned current = Stash.GetPage();
 			Stash.SetPage(*home);
 			sent = AutoPlaceItemInStash(item, true);
 			Stash.SetPage(current);
-			if (sent)
+			if (sent) {
+				page = *home;
 				EventPlrMsg(StrCat(_("Sent to "), StashTabs.displayName(*home)), UiFlags::ColorWhitegold);
+			}
 		}
 	}
 	if (sent) {
@@ -1895,6 +1898,7 @@ void TransferItemToStash(Player &player, int location)
 	}
 
 	PlaySFX(ItemInvSnds[ItemCAnimTbl[item._iCurs]]);
+	TelemetryItemAction(player, "stash", item, StashTabLogName(page));
 
 	if (location < INVITEM_INV_FIRST) {
 		RemoveEquipment(player, static_cast<inv_body_loc>(location), false);
@@ -2152,14 +2156,14 @@ uint16_t ClampMaxDam(const Item &item, uint16_t maxDam)
 	return maxDam;
 }
 
-int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int iseed, int id, int dur, int mdur, int ch, int mch, int ivalue, uint32_t ibuff, int toHit, int maxDam)
+int SyncDropItem(Point position, _item_indexes idx, uint16_t icreateinfo, int iseed, int id, int dur, int mdur, int ch, int mch, int ivalue, uint32_t ibuff, int toHit, int maxDam, const Poe2Craft &craft)
 {
 	if (ActiveItemCount >= MAXITEMS)
 		return -1;
 
 	Item item;
 
-	RecreateItem(*MyPlayer, item, idx, icreateinfo, iseed, ivalue, ibuff);
+	RecreateItem(*MyPlayer, item, idx, icreateinfo, iseed, ivalue, ibuff, craft);
 	if (id != 0)
 		item._iIdentified = true;
 	item._iMaxDur = mdur;
@@ -2591,8 +2595,11 @@ bool UseInvItem(int cii)
 				player.RemoveSpdBarItem(c);
 			else
 				player.RemoveInvItem(c);
-			// The skull leaves a gem to spend the Spirit on.
-			GiveUncutSpiritGem(player);
+			// The skull leaves a gem to spend the Spirit on, and the gem cutter opens on it so the Spirit gem is picked
+			// there and then (Curtis 2026-11-10: he never noticed the gem). One that fell at his feet waits to be picked up;
+			// closing the cutter leaves the gem uncut in the bag.
+			if (const std::optional<int> gem = GiveUncutSpiritGem(player); gem && &player == MyPlayer)
+				OpenGemcutting(false, *gem);
 		}
 		return true;
 	}

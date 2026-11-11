@@ -10,4 +10,4 @@ red_portal	circle	red	Portal
 shrine	cross	lightblue	Shrine
 strongbox	square	orange	Strongbox
 rare_monster	circle	yellow	-
-unique_monster	circle	orange	{name}
+unique_monster	circle	orange	-

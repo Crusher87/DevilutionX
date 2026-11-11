@@ -15,6 +15,7 @@
 #include "objects.h"
 #include "player.h"
 #include "poe2/defenses.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/minion_gems.hpp"
@@ -249,7 +250,7 @@ SpiritUseResult UseGrimFeast(Player &player)
 	}
 	if (raised == 0)
 		return SpiritUseResult::Empty;
-	state.grimFeastCooldown = GrimFeastCooldownTicks;
+	state.grimFeastCooldown = static_cast<decltype(state.grimFeastCooldown)>(CooldownTicks(player, GrimFeastCooldownTicks));
 	AddVisualEffect(player.position.tile, MissileGraphicID::BloodStarRedExplosion);
 	TelemetryLog("spirit", StrCat("Grim Feast raised ", raised, " skeletons"));
 	return SpiritUseResult::Used;
@@ -512,8 +513,8 @@ int BannerDefencePercent(const Player &player)
 
 int BannerWalkSkippedFrames(const Player &player, int walkFrames)
 {
-	// Defiance Banner, and the shrines' movement speed (Acceleration, and Temporal Chains slowing).
-	const int percent = (InBanner(player, 1) ? DefianceBannerMovementPercent : 0) + GetShrineBonuses(player).movePercent;
+	// Defiance Banner, the shrines' movement speed (Acceleration, and Temporal Chains slowing) and the gear's (Korlic's Rune).
+	const int percent = (InBanner(player, 1) ? DefianceBannerMovementPercent : 0) + GetShrineBonuses(player).movePercent + GearMovementSpeedPercent(player);
 	if (percent == 0)
 		return 0;
 	// A tile takes the frames left after the usual 2 skipped; 30% faster takes 100/130 of them.
@@ -586,7 +587,7 @@ void ProcessSpiritUses(Player &player)
 		const Poe2PlayerData &data = player.poe2;
 		if (--state.convalescenceTicks == 0 || data.energyShield >= data.maxEnergyShield * 64) {
 			state.convalescenceTicks = 0;
-			state.convalescenceCooldown = ConvalescenceCooldownTicks;
+			state.convalescenceCooldown = static_cast<decltype(state.convalescenceCooldown)>(CooldownTicks(player, ConvalescenceCooldownTicks));
 		}
 	} else if (state.convalescenceCooldown > 0) {
 		state.convalescenceCooldown--;

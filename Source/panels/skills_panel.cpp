@@ -27,6 +27,7 @@
 #include "poe2/spirit.hpp"
 #include "poe2/spirit_uses.hpp"
 #include "poe2/support_gems.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/weapon_skills.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -869,6 +870,7 @@ void ClickSocket(Player &player, size_t slot, size_t socket)
 	}
 	int tier = 1;
 	const SupportGem gem = UnsocketSupportGem(player.poe2, slot, socket, &tier);
+	TelemetrySupportGem(player, false, gem, tier, slot);
 	Item item;
 	if (gem != SupportGem::None && CreateSupportGemItem(item, gem, tier))
 		HoldGem(player, std::move(item));

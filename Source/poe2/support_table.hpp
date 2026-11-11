@@ -64,6 +64,10 @@ enum SkillTag : uint32_t {
 	ST_Chaos = 1U << 25,
 	/** A Summon Command (poe2/summon_commands.hpp): no support gem fits it. */
 	ST_Command = 1U << 26,
+	/** A buff on the hero (Frozen Armor, Holy Shield, Shield Wall): not an attack (Curtis 2026-11-07, Q41). */
+	ST_Buff = 1U << 27,
+	/** The skill poisons, or leaves poison on the ground. Shown only: no support asks for it (Q41). */
+	ST_Poison = 1U << 28,
 	ST_Elemental = ST_Fire | ST_Lightning | ST_Frost,
 };
 
@@ -176,8 +180,9 @@ constexpr int PoisonTicks = 2 * 20;
 /**
  * @brief Poisons a monster: total is the poison's whole damage, as a raw Fixed26_6, spread over ticks. With maxStacks 1
  * only the strongest poison counts: a weaker one is lost, a stronger one takes over. More stacks add up to that many.
+ * Returns whether the poison landed.
  */
-void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1, bool fromHit = true);
+bool InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks = 1, bool fromHit = true);
 /**
  * @brief Puts a poison of perTick (a raw Fixed26_6 a tick) for ticks into the monster's poison, with no supports: with
  * maxStacks 1 only the strongest counts, as InflictPoison. Returns false when the poison was weaker and so lost.
@@ -218,6 +223,20 @@ void OnSupportedFreeze(const Player &player);
  * the classic effect where it lands; for powers that aren't a skill's hit (the shrines' storms).
  */
 void AddPlayerBurst(Point center, int radius, int delay, DamageType type, MissileGraphicID effect, Fixed26_6 damage);
+/** @brief Whether the skill going off now is a support's free repeat or trigger (Thundering Roar's, a shrine's echo...). */
+[[nodiscard]] bool IsSupportRepeat();
+/**
+ * @brief A melee weapon hit of the local player's landed on the monster for this much: the war cries waiting on the
+ * hero's next hits act on it (Hellfire Roar, Quaking Roar, Cry of Bul-Kathos; Curtis 2026-11-07, Q48).
+ */
+void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixed26_6 dealt);
+/**
+ * @brief How many of Hellfire Roar's or Quaking Roar's hits a use of the skill spends: its use time in the hero's free
+ * attacks, to the nearest, at least one (balance re-score, batch2-fixes.md 5).
+ */
+[[nodiscard]] int CrySwingsOfUse(const Player &player, SkillSlot skill);
+/** @brief A skill's blink came out here (Skylord's Storm, Phantom Step): Assassin's Blink bursts where it landed. */
+void OnSkillBlinked(Player &player, SkillSlot skill, Point landing);
 /** @brief A skill went off (a cast, a strike, a landing); the supports that repeat or add to it act now. */
 void OnSkillUsed(Player &player, SkillSlot skill, Point target);
 /** @brief A monster the local player hit last died. */

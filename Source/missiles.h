@@ -247,6 +247,11 @@ struct DamageRange {
 };
 DamageRange GetDamageAmt(SpellID spell, int spellLevel);
 
+/** @brief POE2 Mashup: Inferno moved from tier V to III, so its Diablo per-tick damage is scaled to keep its score. */
+constexpr int InfernoDamagePercent = 80;
+/** @brief POE2 Mashup: Lightning Wall moved from tier VII to V, so its Diablo damage is scaled to keep its score. */
+constexpr int LightningWallDamagePercent = 83;
+
 /**
  * @brief Returns the direction a vector from p1(x1, y1) to p2(x2, y2) is pointing to.
  *
@@ -348,6 +353,8 @@ void AddLightningControl(Missile &missile, AddMissileParameter &parameter);
 void AddLightning(Missile &missile, AddMissileParameter &parameter);
 void AddMissileExplosion(Missile &missile, AddMissileParameter &parameter);
 void AddVisualEffect(Missile &missile, AddMissileParameter &parameter);
+/** @brief POE2 Mashup: the destination x that makes a weapon explosion cold; 1 is fire and anything else lightning. */
+constexpr int WeaponExplosionCold = 3;
 void AddWeaponExplosion(Missile &missile, AddMissileParameter &parameter);
 
 /**

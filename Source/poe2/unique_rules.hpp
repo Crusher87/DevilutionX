@@ -277,6 +277,12 @@ struct UniqueRuleState {
 	uint8_t moonwaterTicks = 0;
 	/** @brief The Second Bell's activations, every third free. */
 	uint8_t bellActivations = 0;
+	/** @brief Life still to be recouped, as a raw value, and the game ticks left to pay it out (effect_primitives.hpp). */
+	int32_t recoupPool = 0;
+	uint8_t recoupTicks = 0;
+	/** @brief Life lost to hits in each of the last 8 seconds, newest first, as raw values, and the ticks into the newest (effect_primitives.hpp). */
+	std::array<int32_t, 8> hitLossSeconds {};
+	uint8_t hitLossTick = 0;
 };
 
 } // namespace devilution

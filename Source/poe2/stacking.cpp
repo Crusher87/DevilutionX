@@ -28,7 +28,14 @@ bool IsStackable(const Item &item)
 
 int StackMax(const Item &item)
 {
-	return IsShard(item) ? ShardsPerOrb : CurrencyStackMax;
+	if (IsShard(item))
+		return ShardsPerOrb;
+	return item._iMiscId == IMISC_AUGMENT ? RuneStackMax : CurrencyStackMax;
+}
+
+int StackHoldMax(const Item &item)
+{
+	return item._iMiscId == IMISC_AUGMENT ? CurrencyStackMax : StackMax(item);
 }
 
 bool CombineShardStack(Item &stack)
@@ -59,13 +66,13 @@ int StackCount(const Item &item)
 {
 	if (!IsStackable(item))
 		return 1;
-	return std::clamp(item._iCharges, 1, StackMax(item));
+	return std::clamp(item._iCharges, 1, StackHoldMax(item));
 }
 
 void SetStackCount(Item &item, int count)
 {
 	item._iMaxCharges = StackMax(item);
-	item._iCharges = std::clamp(count, 1, StackMax(item));
+	item._iCharges = std::clamp(count, 1, StackHoldMax(item));
 }
 
 bool CanStackWith(const Item &stack, const Item &item)
@@ -80,7 +87,7 @@ bool CanStackWith(const Item &stack, const Item &item)
 
 int StackRoom(const Item &stack)
 {
-	return IsStackable(stack) ? StackMax(stack) - StackCount(stack) : 0;
+	return IsStackable(stack) ? std::max(StackMax(stack) - StackCount(stack), 0) : 0;
 }
 
 bool MergeStack(Item &stack, Item &item)

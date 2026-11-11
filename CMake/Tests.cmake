@@ -49,12 +49,16 @@ set(tests
   poe2_caves_floors_test
   poe2_hell_floors_test
   poe2_hive_floors_test
+  poe2_crypt_floors_test
   poe2_cathedral_floors_test
+  poe2_cathedral_objects_test
   poe2_floors_test
   poe2_gemcutting_test
   poe2_item_bases_test
   poe2_item_spawner_test
+  poe2_monster_spawner_test
   poe2_hud_globes_test
+  poe2_gem_buff_icons_test
   poe2_overhead_bars_test
   poe2_corner_map_test
   poe2_quest_tracker_test
@@ -67,6 +71,11 @@ set(tests
   poe2_item_levels_test
   poe2_modifiers_test
   poe2_crafting_test
+  poe2_effect_primitives_test
+  poe2_runes_test
+  poe2_essences_test
+  poe2_net_pack_test
+  poe2_bound_demons_test
   poe2_caster_golden_test
   poe2_weapon_kinds_test
   poe2_caster_stats_test
@@ -92,6 +101,10 @@ set(tests
   poe2_save_fixture_test
   poe2_skill_effects_test
   poe2_spirit_test
+  poe2_staff_drafts_test
+  poe2_weapon_drafts_test
+  poe2_bow_drafts_test
+  poe2_dagger_drafts_test
   poe2_spirit_order_test
   poe2_regen_test
   poe2_skill_gems_test
@@ -117,6 +130,7 @@ set(tests
   poe2_telemetry_test
   poe2_ui_scale_test
   poe2_vfx_test
+  poe2_vfx_debris_test
   poe2_weather_test
   poe2_uniques_test
   poe2_waystones_test

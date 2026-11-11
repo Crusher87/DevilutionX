@@ -13,6 +13,7 @@
 #include "plrmsg.h"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/charms.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/mix.hpp"
@@ -640,6 +641,16 @@ void RecoverOnKill(Player &player)
 	}
 	if (const int mana = PassiveTotal(player, PassiveStat::ManaOnKill) + gear(Poe2ItemStat::ManaOnKill); mana > 0 && !HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana)) {
 		const auto raw = static_cast<int32_t>(static_cast<int64_t>(Fixed26_6::fromInt(mana).raw()) * ManaRecoveryPercent(player) / 100);
+		Restore(player._pMana, player._pManaBase, player._pMaxMana, raw);
+	}
+	// The gear's share of maximum life and mana on a kill (soulstones).
+	if (const int percent = PercentOnKill(player, false); percent > 0 && !IsRecoveryLocked(player)) {
+		const auto raw = static_cast<int32_t>(static_cast<int64_t>(player._pMaxHP.raw()) * percent / 100 * LifeRecoveryPercent(player, false) / 100);
+		Restore(player._pHitPoints, player._pHPBase, player._pMaxHP, raw);
+		OnLifeRecovered(player, raw);
+	}
+	if (const int percent = PercentOnKill(player, true); percent > 0 && !HasAnyOf(player._pIFlags, ItemSpecialEffect::NoMana)) {
+		const auto raw = static_cast<int32_t>(static_cast<int64_t>(player._pMaxMana.raw()) * percent / 100 * ManaRecoveryPercent(player) / 100);
 		Restore(player._pMana, player._pManaBase, player._pMaxMana, raw);
 	}
 	RedrawComponent(PanelDrawComponent::Health);

@@ -14,6 +14,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/area_levels.hpp"
+#include "poe2/bound_demons.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/endgame.hpp"
@@ -416,7 +417,8 @@ void ChooseMapBoss()
 	int64_t bestScore = -1;
 	for (size_t i = 0; i < ActiveMonsterCount; i++) {
 		const Monster &monster = Monsters[ActiveMonsters[i]];
-		if (monster.isPlayerMinion() || monster.isUnique() || monster.hasNoLife())
+		// A bound demon is its own fight, never the boss.
+		if (monster.isPlayerMinion() || monster.isUnique() || monster.hasNoLife() || IsEssenceDemon(monster))
 			continue;
 		int64_t score = monster.maxHitPoints.raw();
 		if (GetMonsterAffixes(monster).rarity == MonsterRarity::Rare)

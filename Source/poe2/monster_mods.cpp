@@ -9,6 +9,8 @@
 #include "monster.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/bound_demons.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/meta_gems.hpp"
 #include "poe2/mix.hpp"
@@ -160,6 +162,8 @@ int MonsterModsDamagePercent(const Monster &monster)
 	}
 	if (GetMonsterAffixes(monster).has(MonsterMod::HardHitting))
 		percent = percent * (100 + HardHittingPercent) / 100;
+	// A bound demon's essences make it hit harder (bound_demons.tsv).
+	percent = percent * (100 + BoundDemonDamagePercent(monster)) / 100;
 	return static_cast<int>(std::clamp<int64_t>(percent, 0, 100000));
 }
 
@@ -266,8 +270,8 @@ void ProcessMonsterAilments(Monster &monster)
 		monster.hitPoints = std::min(monster.hitPoints + Fixed26_6::fromRaw(static_cast<int32_t>(total / Divisor)), monster.maxHitPoints);
 	}
 
-	if (state.shockTicks > 0)
-		state.shockTicks--;
+	if (state.shockTicks > 0 && --state.shockTicks == 0)
+		state.shockBonus = 0;
 	if (state.hinderTicks > 0 && --state.hinderTicks == 0)
 		state.hinderPercent = 0;
 	if (state.manaDrainTicks > 0)
@@ -315,11 +319,16 @@ void ProcessMonsterAilments(Monster &monster)
 	ProcessUniqueMonsterAilments(monster);
 }
 
+int ShockedDamagePercent(const Monster &monster)
+{
+	return ShockDamagePercent * (100 + monster.poe2.shockBonus) / 100;
+}
+
 Fixed26_6 ApplyShock(const Monster &monster, Fixed26_6 damage)
 {
 	if (!gbIsPoe2 || monster.poe2.shockTicks == 0)
 		return damage;
-	const Fixed26_6 shocked = Fixed26_6::fromRaw(damage.raw() + damage.raw() * ShockDamagePercent * MapExposurePercent() / 10000);
+	const Fixed26_6 shocked = Fixed26_6::fromRaw(damage.raw() + damage.raw() * ShockedDamagePercent(monster) * MapExposurePercent() / 10000);
 	TelemetryHitStep(false, "after shock", shocked.raw(), false, true);
 	return shocked;
 }
@@ -475,7 +484,8 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	const bool wasShocked = state.shockTicks > 0;
 	OnAilmentInflicted(player, monster, damageType, wasShocked);
 	if (damageType == DamageType::Fire) {
-		const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * IgnitePercentPerSecond / 100 * SupportAilmentEffectPercent(damageType) / 100 / TicksPerSecond), 1);
+		// Stronger ignites from the gear (Ral runes bonded) scale the burn.
+		const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(damage.raw()) * IgnitePercentPerSecond / 100 * SupportAilmentEffectPercent(damageType) / 100 * IgniteMagnitudePercent(player) / 100 / TicksPerSecond), 1);
 		// A new ignite only replaces a weaker one, like POE2.
 		if (state.igniteTicks == 0 || perTick >= state.igniteDamagePerTick) {
 			state.igniteDamagePerTick = perTick;
@@ -486,6 +496,10 @@ void TryInflictAilment(Monster &monster, const Player &player, DamageType damage
 	} else {
 		if (state.shockTicks == 0)
 			AddVisualEffect(monster.position.tile, MissileGraphicID::BlueFlareExplosion);
+		// The stronger of the shocks on it counts (Ort runes bonded make the hero's stronger).
+		const auto bonus = static_cast<uint8_t>(std::clamp(ShockMagnitudeBonus(player), 0, 255));
+		if (state.shockTicks == 0 || bonus > state.shockBonus)
+			state.shockBonus = bonus;
 		state.shockTicks = ShockTicks;
 		OnMetaAilment(Players[player.getId()], monster, MetaAilment::Shock);
 	}

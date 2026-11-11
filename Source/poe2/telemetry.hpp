@@ -83,6 +83,8 @@ void TelemetryStep(std::string_view step);
 void TelemetryMissingSprite(std::string_view what);
 
 void TelemetryGameStarted(const Player &player, bool loaded);
+/** @brief The stash (and with it POE2's gold purse) was read from disk: its gold is the new starting point, not a gain. */
+void TelemetryStashLoaded();
 void TelemetryGameEnded();
 void TelemetryLevelEntered();
 /** @brief Names what is about to hit the player (a monster or a trap) for the hit that follows. */
@@ -157,6 +159,20 @@ void TelemetryItemDropped(const Item &item, std::string_view source);
 void TelemetryItemPickedUp(const Player &player, const Item &item);
 /** @brief Orb or oil use on an item. */
 void TelemetryCrafted(const Player &player, std::string_view currency, const Item &item);
+/**
+ * @brief Something the hero did with an item, so no item turns up in the log from nowhere: identify, buy, sell,
+ * stash, unstash, put_down, gem_cut. The detail says how or where (the scroll or Cain, the vendor, the stash tab);
+ * gold is the price, when there is one.
+ */
+void TelemetryItemAction(const Player &player, std::string_view action, const Item &item, std::string_view detail = {}, int gold = 0);
+/** @brief A support gem put in (socketed) or taken out of a Skills panel row, the weapon's default attack row included. */
+void TelemetrySupportGem(const Player &player, bool socketed, SupportGem gem, int tier, size_t row);
+/**
+ * @brief The game was paused or resumed: call it after PauseMode or the game menu changes. It works out from those
+ * whether the game is paused now, and on resuming writes how long the pause lasted.
+ * @param reason What paused or resumed it: "pause key", "window lost focus", "game menu".
+ */
+void TelemetryPauseChanged(std::string_view reason);
 /** @brief A line typed with mark() in the console, to find a moment in the log later. */
 void TelemetryMark(std::string_view text);
 /** @brief Once per game tick: tracks mana, stalls and build changes, and writes the stats line when it's due. */
@@ -186,6 +202,43 @@ inline constexpr size_t NumFrameParts = 7;
 uint64_t TelemetryFramePartStart();
 /** @brief Adds the time since start to that part of the frame being drawn. */
 void TelemetryFramePartDone(FramePart part, uint64_t start);
+
+/** @brief Work that can take long in one frame, timed apart so a freeze in the play log says where its time went. */
+enum class SlowWork : uint8_t {
+	/** An autosave. */
+	Saving,
+	/** HD art read from disk the first time it shows. */
+	HdArt,
+	/** The game's own pictures made ready for the HD world (where there is no HD art). */
+	HdRaster,
+};
+inline constexpr size_t NumSlowWorks = 3;
+/** @brief Adds the time since start (from TelemetryFramePartStart) to that slow work. */
+void TelemetrySlowWorkDone(SlowWork work, uint64_t start);
+/** @brief Notes an autosave (`why`: "level up", "level entered"...) and how long it took since start (TelemetryFramePartStart). */
+void TelemetryGameSaved(std::string_view why, uint64_t start);
+/** @brief The HD world's cache of the game's own pictures filled up and was emptied. */
+void TelemetryHdCacheDropped(size_t pictures);
+
+/** @brief Times slow work from here to the end of the scope. */
+class SlowWorkScope {
+public:
+	explicit SlowWorkScope(SlowWork work)
+	    : work_(work)
+	    , start_(TelemetryFramePartStart())
+	{
+	}
+	~SlowWorkScope()
+	{
+		TelemetrySlowWorkDone(work_, start_);
+	}
+	SlowWorkScope(const SlowWorkScope &) = delete;
+	SlowWorkScope &operator=(const SlowWorkScope &) = delete;
+
+private:
+	SlowWork work_;
+	uint64_t start_;
+};
 
 /** @brief Times a part of drawing a frame from here to the end of the scope. */
 class FramePartScope {

@@ -25,6 +25,20 @@ constexpr int DefaultAreaMonsterDamagePercent = 100;
 /** @brief Reads the area level table; does nothing (and never fails) outside POE2 mode. */
 void LoadAreaLevels();
 
+/** @brief What CurrentAct() gives past the story's acts: in maps, and on Nightmare and Hell. */
+constexpr int PastStoryAct = 4;
+
+/** @brief The act of a raw dungeon level (the table's act column), or 0 when the table has no row for it. */
+int ActForFloor(int floor);
+
+/**
+ * @brief The act here: the floor's act on Normal, PastStoryAct in a map or on Nightmare and Hell, 0 in town and where
+ * the floor has no row. Act-gated drops (the Zod Rune, the Runes of Legend) drop at act 3 and later.
+ */
+int CurrentAct(int difficulty);
+/** @brief CurrentAct() at the game's difficulty. */
+int CurrentAct();
+
 /** @brief The Normal area level of a raw dungeon level, or 0 when the table has no row for it. */
 int AreaLevelForFloor(int floor);
 

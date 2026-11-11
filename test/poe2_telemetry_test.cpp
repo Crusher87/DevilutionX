@@ -6,8 +6,10 @@
 #include <string>
 #include <thread>
 
+#include "diablo.h"
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
+#include "inv.h"
 #include "items.h"
 #include "monster.h"
 #include "player.h"
@@ -16,8 +18,10 @@
 #include "poe2/telemetry.hpp"
 #include "poe2/tree_telemetry.hpp"
 #include "poe2/unique_effects.hpp"
+#include "qol/stash.h"
 #include "spells.h"
 #include "storm/storm_net.hpp"
+#include "stores.h"
 #include "tables/monstdat.h"
 #include "tables/playerdat.hpp"
 #include "utils/file_util.h"
@@ -183,6 +187,37 @@ TEST_F(Poe2TelemetryTest, EventsGoToTheEventFileAsData)
 	EXPECT_NE(events.find("\"k\":\"mark\",\"area\":\"town\",\"text\":\"events check\""), std::string::npos) << events;
 	EXPECT_NE(events.find("\"k\":\"skill\",\"area\":\"town\",\"p\":0,\"skill\":\"Spark\",\"gem\":3,\"mana\":7"), std::string::npos) << events;
 	EXPECT_NE(events.find("\"attacker\":\"Hidden\",\"type\":\"lightning\",\"damage\":5.00"), std::string::npos) << events;
+}
+
+TEST_F(Poe2TelemetryTest, ItemActionsAndPausesAreLogged)
+{
+	// Curtis 2026-11-06: items turned up in the log from nowhere (identified, bought, taken from the stash) and pauses
+	// had to be guessed from gaps.
+	Item item {};
+	InitializeItem(item, IDI_GOLD);
+	item._ivalue = 75;
+	TelemetryItemAction(*MyPlayer, "put_down", item);
+	TelemetryItemAction(Players[0], "sell", item, "Griswold", 30);
+	Player other {};
+	TelemetryItemAction(other, "buy", item, "Adria", 10);
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[put_down] gold, 75 gold"), std::string::npos) << log;
+	EXPECT_NE(log.find("[sell] gold, Griswold, 30 gold"), std::string::npos) << log;
+	EXPECT_EQ(log.find("Adria"), std::string::npos) << "only the local hero's actions are logged";
+	const std::string events = ReadLatestEvents();
+	EXPECT_NE(events.find("\"k\":\"sell\",\"area\":\"town\",\"p\":0,\"item\":"), std::string::npos) << events;
+	EXPECT_NE(events.find("\"detail\":\"Griswold\",\"gold\":30"), std::string::npos) << events;
+
+	PauseMode = 2;
+	TelemetryPauseChanged("pause key");
+	TelemetryPauseChanged("pause key"); // still paused: nothing more
+	PauseMode = 0;
+	TelemetryPauseChanged("pause key");
+	const std::string paused = ReadLatestLog();
+	EXPECT_NE(paused.find("[pause] game paused (pause key)"), std::string::npos) << paused;
+	EXPECT_NE(paused.find("[resume] game resumed after "), std::string::npos) << paused;
+	EXPECT_EQ(paused.find("[pause]"), paused.rfind("[pause]"));
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"resume\",\"area\":\"town\",\"ms\":"), std::string::npos);
 }
 
 TEST_F(Poe2TelemetryTest, ChaosDamageTakenIsLoggedAsChaos)
@@ -372,6 +407,34 @@ TEST_F(Poe2TelemetryTest, ALevelChangeIsLoadingTimeNotAStall)
 	EXPECT_NE(TelemetryStatsText().find("stalls 1"), std::string::npos) << TelemetryStatsText();
 }
 
+TEST_F(Poe2TelemetryTest, AFreezeSaysWhereItsTimeWent)
+{
+	// Curtis 2026-11-07: "game froze for 1004 ms (72 monsters, 0 missiles)" in the Bone Chamber, and 1.6 s on floor 4
+	// after a unique's kill. The line now says how much of it was drawing, saving and the HD world's first looks.
+	using namespace std::chrono_literals;
+	TelemetryFrameDrawn();
+	TelemetryTick();
+	{
+		const uint64_t start = TelemetryFramePartStart();
+		std::this_thread::sleep_for(200ms);
+		TelemetryGameSaved("level up", start);
+	}
+	{
+		const SlowWorkScope raster(SlowWork::HdRaster);
+		std::this_thread::sleep_for(100ms);
+	}
+	TelemetryTick();
+	const std::string log = ReadLatestLog();
+	EXPECT_NE(log.find("[save] autosave (level up) took "), std::string::npos) << log;
+	const size_t stall = log.rfind("[stall] game froze for ");
+	ASSERT_NE(stall, std::string::npos) << log;
+	const std::string line = log.substr(stall, log.find('\n', stall) - stall);
+	EXPECT_NE(line.find(" missiles): drawing 0 ms (hd 0, present 0), game logic "), std::string::npos) << line;
+	EXPECT_NE(line.find(", saving 2"), std::string::npos) << line;
+	EXPECT_NE(line.find(", 1 classic pictures made for HD in 1"), std::string::npos) << line;
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"autosave\",\"area\":\"town\",\"why\":\"level up\",\"ms\":"), std::string::npos);
+}
+
 TEST_F(Poe2TelemetryTest, StatsSplitEachFrameIntoItsParts)
 {
 	// Curtis 2026-11-04 asked whether the game could get back to 60 fps: the stats line shows where a frame's time goes.
@@ -445,6 +508,30 @@ TEST_F(Poe2TelemetryTest, BuildLineBlockIsZeroWithoutAShield)
 	player._pClass = HeroClass::Warrior;
 	player.poe2.shieldBlockChance = 28;
 	EXPECT_NE(TelemetryBuildText(player).find("block 28%"), std::string::npos) << TelemetryBuildText(player);
+}
+
+TEST_F(Poe2TelemetryTest, GoldPickedUpIntoTheLeaguePurseIsCounted)
+{
+	// Curtis's play logs from 2026-10-20 on: "gold 0 (0/min)" for hours of play. POE2 gold goes straight to the league's
+	// purse (Stash.gold), not the bag the play log watched.
+	Player &player = *MyPlayer;
+	Stash.gold = 1000;
+	TelemetryStashLoaded();
+	TelemetryTick();
+	EXPECT_NE(TelemetryStatsText().find(", gold 0 ("), std::string::npos) << "a loaded purse isn't a gain: " << TelemetryStatsText();
+
+	Item pile {};
+	MakeGoldStack(pile, 250);
+	ASSERT_TRUE(GoldAutoPlace(player, pile));
+	ASSERT_EQ(Stash.gold, 1250);
+	ASSERT_EQ(player._pGold, 0);
+	TelemetryTick();
+	EXPECT_NE(TelemetryStatsText().find(", gold 250 ("), std::string::npos) << TelemetryStatsText();
+
+	TakePlrsMoney(100);
+	TelemetryTick();
+	EXPECT_NE(ReadLatestEvents().find("\"k\":\"gold_out\",\"area\":\"town\",\"p\":0,\"amount\":100,\"left\":1150"), std::string::npos) << ReadLatestEvents();
+	Stash = {};
 }
 
 } // namespace

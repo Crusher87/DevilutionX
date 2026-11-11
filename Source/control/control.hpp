@@ -79,6 +79,8 @@ enum class InfoLineStyle : uint8_t {
 	Affix,
 	/** A property the item's modifiers raised, in blue like POE2's augmented values. */
 	AugmentedProperty,
+	/** A modifier line that does nothing yet, like a bonded rune line whose sockets don't match, in grey. */
+	InactiveMod,
 };
 /** @brief The style given to the next floating info lines; reset to Default after each item. */
 extern InfoLineStyle CurrentInfoLineStyle;

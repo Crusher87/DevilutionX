@@ -2,8 +2,9 @@
  * @file poe2/overhead_bars.hpp
  *
  * POE2 Mashup: small bars drawn over characters in the world (Curtis 2026-10-28, questions 12 and 13).
- *  - "Mini Life Bar Above You": the hero's life with a thin mana bar under it, and with "Mini Bar Shows Energy
- *    Shield" the Energy Shield laid over the top of the life bar, as POE2 draws it.
+ *  - "Mini Life Bar Above You": the hero's green life bar with the mana bar under it, and with "Mini Bar Shows Energy
+ *    Shield" a pale Energy Shield laid over the life bar, as POE2 draws it (Curtis 2026-11-06: match POE2's bar, about
+ *    10% bigger than ours was).
  *  - "Life Bars Over Hurt Monsters": a small life bar over every monster that has taken damage, its frame in the
  *    monster's rarity colour. Diablo's target bar at the top of the screen stays.
  * The world drawing notes where the hero and the monsters were drawn; the bars are drawn afterwards with the UI, so
@@ -11,7 +12,9 @@
  */
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <vector>
 
 #include "engine/clx_sprite.hpp"
 #include "engine/palette.h"
@@ -24,11 +27,9 @@ struct Monster;
 struct Player;
 
 /** @brief Sizes, in UI pixels. */
-constexpr int HeroBarWidth = 40;
+constexpr int HeroBarWidth = 44;
 constexpr int HeroLifeRows = 4;
-constexpr int HeroManaRows = 2;
-/** @brief Rows at the top of the life bar the Energy Shield covers. */
-constexpr int HeroEnergyShieldRows = 2;
+constexpr int HeroManaRows = 3;
 constexpr int MonsterBarWidth = 32;
 /** @brief Uniques and rares get a wider bar. */
 constexpr int BigMonsterBarWidth = 44;
@@ -38,12 +39,8 @@ constexpr int OverheadBarGap = 6;
 /** @brief How far above the hero's feet the bar sits when the stand picture isn't loaded, in world pixels. */
 constexpr int DefaultHeroHeight = 76;
 
-/** @brief Bar colours. */
-constexpr uint8_t OverheadBarEmptyColor = PAL16_GRAY + 15;
-constexpr uint8_t HeroBarFrameColor = PAL16_GRAY + 13;
+/** @brief A monster's life colour. */
 constexpr uint8_t OverheadBarLifeColor = PAL16_RED + 6;
-constexpr uint8_t OverheadBarEnergyShieldColor = PAL16_BLUE + 3;
-constexpr uint8_t OverheadBarManaColor = PAL16_BLUE + 9;
 /** @brief A monster's bar has a frame in its rarity's colour, as its name has in POE2. */
 constexpr uint8_t NormalMonsterBarFrameColor = PAL16_GRAY + 12;
 constexpr uint8_t MagicMonsterBarFrameColor = PAL16_BLUE + 5;
@@ -75,6 +72,23 @@ struct OverheadBarValues {
 	int64_t mana = 0;
 	int64_t maxMana = 0;
 };
+
+/**
+ * @brief The palette colours of the bars, each row its own shade so the bars look rounded like POE2's. The game's own
+ * colours have no green, so the closest the level's palette has is found, again whenever the palette changes.
+ */
+struct OverheadBarShades {
+	uint8_t frame;
+	uint8_t empty;
+	std::array<uint8_t, HeroLifeRows> life;
+	std::array<uint8_t, HeroLifeRows> energyShield;
+	std::array<uint8_t, HeroLifeRows> energyShieldOverEmpty;
+	std::array<uint8_t, HeroManaRows> mana;
+};
+const OverheadBarShades &GetOverheadBarShades();
+
+/** @brief The colours the shades are matched to, as red, green, blue; for tests. */
+std::vector<std::array<uint8_t, 3>> OverheadBarTargetColours();
 
 /** @brief Draws the hero's bar with its top left corner at @p topLeft. */
 void DrawHeroBar(const Surface &out, Point topLeft, const OverheadBarValues &values, bool showEnergyShield);

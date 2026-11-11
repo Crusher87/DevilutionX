@@ -16,6 +16,7 @@
 #include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/item_stats.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_armour.hpp"
@@ -479,11 +480,13 @@ Fixed26_6 DealPacket(const Player &player, Monster &monster, DamageType type, in
 void InflictBleed(const Player &player, Monster &monster, int32_t physical)
 {
 	Poe2MonsterState &state = monster.poe2;
-	const int32_t perTick = std::max<int32_t>(Percent(physical, BleedPercentPerSecond) / TicksPerSecond, 1);
+	const int32_t perTick = std::max<int32_t>(Percent(Percent(physical, BleedPercentPerSecond), BleedMagnitudePercent(player)) / TicksPerSecond, 1);
 	if (state.bleedTicks == 0 || perTick >= state.bleedDamagePerTick) {
 		state.bleedDamagePerTick = perTick;
 		state.bleedSource = static_cast<int8_t>(player.getId());
 		state.bleedSkill = WeaponSkill::None;
+		// Bloodletting's own hit's bleed, which its next stab doesn't consume (Q48).
+		state.bleedFromBloodletting = SupportHitSkill() == SkillSlot::ForAttack(WeaponSkill::Bloodletting);
 	}
 	state.bleedTicks = BleedTicks;
 	NoteSupportedBleed(player, monster);
@@ -587,6 +590,8 @@ void ProcessUniqueRules(Player &player)
 		return;
 	UniqueRuleState &state = State(player);
 	state.lowLife = IsOnLowLife(player);
+	ProcessRecoup(player);
+	ProcessRecentHitLoss(player);
 
 	if (player.isWalking()) {
 		state.stillTicks = 0;
@@ -706,8 +711,14 @@ int AttackCritChance(const Player &player)
 bool RollAttackCrit(const Player &player)
 {
 	const int chance = AttackCritChance(player);
-	if (chance <= 0 || GenerateRnd(100) >= chance)
+	// The gear's tenths of a percent (Gul runes bonded) roll in per mille; without them the roll is as before.
+	const int tenths = chance < 100 ? GearAttackCritTenths(player) : 0;
+	if (tenths > 0) {
+		if (GenerateRnd(1000) >= (chance * 10) + tenths)
+			return false;
+	} else if (chance <= 0 || GenerateRnd(100) >= chance) {
 		return false;
+	}
 	if (gbIsPoe2 && Rule(player, UniqueRule::CritActionSpeed) > 0)
 		State(player).critSpeedTicks = 2 * TicksPerSecond;
 	return true;
@@ -784,6 +795,12 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 		state.storedChill = 0;
 	}
 	raw = raw * HitConditionPercent(player, monster) / 100;
+	// A table skill's arrow: the skill's own row, for its payoff (Deadeye Shot's frozen target) and its element.
+	const TableSkillData *arrowRow = nullptr;
+	if (const SkillSlot arrowSkill = ranged ? SupportHitSkill() : SkillSlot {}; arrowSkill.kind == SkillKind::Attack)
+		arrowRow = FindTableSkill(arrowSkill.attack());
+	if (arrowRow != nullptr)
+		raw = raw * TableArrowHitPercent(*arrowRow, monster) / 100;
 	// War Banner: more attack damage in its area. Every attack hit builds the banners' Glory.
 	raw = raw * (100 + BannerAttackDamagePercent(player)) / 100;
 	OnSpiritAttackHit(player, monster);
@@ -820,16 +837,33 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	}
 	// Fire converts first; a staff's lightning (Staff of the Storm Gods) takes what is left. Smite's blow is lightning,
 	// like POE2's (Curtis 2026-10-28): all of what the fire leaves.
-	const int toFire = std::clamp(Rule(player, UniqueRule::PhysicalToFire), 0, 100);
+	// The draft gems' hits are their element, Wrath of the Skies' in part (TableSkillData::convertPercent): a swing's
+	// skill, or an arrow's own (the Bow batch's Cold, Shatter, Spark and Kindling arrows). A fire row's is fire, swing or
+	// arrow (balance re-score, batch2-fixes.md 4: Brimstone Rift, Cinder Strike and Pyre Blow had landed physical).
+	const TableSkillData *table = ranged ? arrowRow : FindTableSkill(CurrentWeaponSkill(player));
+	if (table != nullptr && table->convertPercent == 0)
+		table = nullptr;
+	int toFire = std::clamp(Rule(player, UniqueRule::PhysicalToFire), 0, 100);
+	if (table != nullptr && table->type == DamageType::Fire)
+		toFire = std::max<int>(toFire, std::min<int>(table->convertPercent, 100));
 	int toLightning = staffHit ? std::clamp(Rule(player, UniqueRule::StaffToLightning), 0, 100 - toFire) : 0;
 	if (!ranged && IsLightningAttackSkill(player.poe2.activeSkill))
 		toLightning = 100 - toFire;
-	if (toFire > 0 || toLightning > 0) {
+	int toCold = 0;
+	if (table != nullptr) {
+		if (table->type == DamageType::Lightning)
+			toLightning = std::max(toLightning, std::min<int>(table->convertPercent, 100 - toFire));
+		else if (table->type == DamageType::Cold)
+			toCold = std::min<int>(table->convertPercent, 100 - toFire - toLightning);
+	}
+	if (toFire > 0 || toLightning > 0 || toCold > 0) {
 		const int64_t fire = packets[0] * toFire / 100;
 		const int64_t lightning = packets[0] * toLightning / 100;
-		packets[0] -= fire + lightning;
+		const int64_t cold = packets[0] * toCold / 100;
+		packets[0] -= fire + lightning + cold;
 		packets[1] += fire;
 		packets[2] += lightning;
+		packets[3] += cold;
 	}
 	// Fire in the Hand: spell damage adds to the increased damage of the attack's fire.
 	if (const int share = Rule(player, UniqueRule::SpellDamageToFireAttacks); share > 0 && packets[1] > 0) {
@@ -839,6 +873,12 @@ Fixed26_6 ApplyPlayerAttackDamage(const Player &player, Monster &monster, Fixed2
 	}
 	if (Rule(player, UniqueRule::NoColdDamage) > 0)
 		packets[3] = 0;
+	// Dreadjudge: increased elemental damage with attacks adds to the attack's increased damage.
+	if (const int elemental = GearElementalAttackDamage(player); elemental != 0) {
+		const int64_t increased = std::max(100 + player._pIBonusDam, 1);
+		for (size_t i = 1; i <= 3; i++)
+			packets[i] = packets[i] * std::max<int64_t>(increased + elemental, 0) / increased;
+	}
 
 	const int32_t physical = static_cast<int32_t>(packets[0]);
 	// Briarpatch stores part of the physical damage as thorns.
@@ -1022,7 +1062,8 @@ bool TakeFreeSkill(const Player &player)
 
 int UniqueManaCostPercent(const Player &player)
 {
-	return std::max((100 + Rule(player, UniqueRule::ManaCost)) * MapSkillCostPercent() / 100, 0);
+	// The gear's mana cost efficiency (the Perfect Essence of Alacrity) divides what is left.
+	return std::max((100 + Rule(player, UniqueRule::ManaCost)) * MapSkillCostPercent() / 100 * GearManaCostPercent(player) / 100, 0);
 }
 
 Fixed26_6 SpendableEnergyShield(const Player &player)
@@ -1257,7 +1298,7 @@ MonsterDamageTaken MonsterDamageTakenParts(const Monster &monster, DamageType ty
 			percent += ArmourBreakDamagePercent;
 	}
 	const bool deep = TelemetryDeepDamage();
-	// Death Mark and Decrepify.
+	// Death Mark.
 	percent += TableCurseDamageTakenPercent(monster, type);
 	if (type == DamageType::Lightning && IsMonsterElectrocuted(monster) && MyPlayer != nullptr)
 		percent += Rule(*MyPlayer, UniqueRule::ElectrocutedLightning);
@@ -1301,6 +1342,9 @@ int HitPenetration(DamageType type)
 	// Storm Thesis and its kind: spells penetrate the resistance of the remembered element.
 	if (MyPlayer != nullptr) {
 		const UniqueRuleState &state = State(*MyPlayer);
+		// Blackskull: attacks get past part of the elemental resistances.
+		if (!state.lastHitBySpell)
+			penetration += GearAttackPenetration(*MyPlayer, type);
 		if (const int memory = Rule(*MyPlayer, UniqueRule::MemoryPenetration); memory > 0 && state.lastHitBySpell && state.memoryTicks > 0 && static_cast<uint8_t>(type) == state.memoryElement)
 			penetration += memory;
 	}
@@ -1361,7 +1405,8 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 		raw = raw * (100 - std::min(overcap / 10, cap)) / 100;
 	}
 	if (IsElemental(type)) {
-		if (const int share = Rule(player, UniqueRule::ArmourVsElements); share > 0)
+		// A unique's armour against all elements, and the gear's against one (soulstones).
+		if (const int share = ArmourAppliesToElementPercent(player, type); share > 0)
 			raw -= raw * ArmourReductionPercent(ArmourRating(player) * share / 100, Fixed26_6::fromRaw(static_cast<int32_t>(raw))) / 100;
 		if (state.stolenMod == static_cast<int>(MonsterMod::Resistant) + 1)
 			raw = raw * 80 / 100;
@@ -1387,6 +1432,7 @@ Fixed26_6 ApplyUniqueHitTaken(Player &player, Fixed26_6 damage, DamageType type)
 	// Berserk and Mana Shield.
 	raw = ApplySpiritHitTaken(player, Fixed26_6::fromRaw(static_cast<int32_t>(std::min<int64_t>(raw, INT32_MAX / 2)))).raw();
 	state.lifeLost[0] = static_cast<int32_t>(std::min<int64_t>(state.lifeLost[0] + raw, INT32_MAX / 2));
+	NoteRecoup(player, raw, type);
 	return Fixed26_6::fromRaw(static_cast<int32_t>(raw));
 }
 

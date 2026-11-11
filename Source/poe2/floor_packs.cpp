@@ -20,6 +20,8 @@
 #include "missiles.h"
 #include "monster.h"
 #include "objects.h"
+#include "poe2/area_levels.hpp"
+#include "poe2/bound_demons.hpp"
 #include "poe2/cathedral_floors.hpp"
 #include "poe2/floor_chests.hpp"
 #include "poe2/floor_rooms.hpp"
@@ -74,6 +76,10 @@ constexpr size_t RestRoomSearchSteps = 40;
 constexpr int LastPackSlack = 8;
 /** Monster slots left free for monsters that come later: summons, and a strongbox's guards (InitMonsters leaves the same). */
 constexpr size_t SpawnHeadroom = 10;
+/** A bound demon's spot is picked among those at most this many steps further from the way down than the nearest. */
+constexpr int BoundDemonSlack = 6;
+/** Salt for the bound demon's own random numbers, so the packs' rolls stay as they were. */
+constexpr uint32_t BoundDemonSalt = 0x43525953U;
 constexpr int MaxRooms = MaxFloorRooms;
 constexpr int16_t Unreached = INT16_MAX;
 
@@ -216,7 +222,8 @@ struct RoomFacts {
 class Planner {
 public:
 	Planner(size_t count, std::span<const size_t> types)
-	    : rng_(static_cast<uint32_t>(AdvanceRndSeed()))
+	    : seed_(static_cast<uint32_t>(AdvanceRndSeed()))
+	    , rng_(seed_)
 	    , types_(types)
 	    , left_(count)
 	{
@@ -227,6 +234,7 @@ public:
 		if (types_.empty())
 			return 0;
 		studyFloor();
+		reserveBoundDemon();
 		placeBigFights();
 		placeRoomRewards();
 		guardTheWayDown();
@@ -234,10 +242,12 @@ public:
 		guardDeadEnds();
 		fillTheFloor();
 		rateChests();
+		placeBoundDemon();
 		return placed_;
 	}
 
 private:
+	uint32_t seed_;
 	DiabloGenerator rng_;
 	std::span<const size_t> types_;
 	size_t left_;
@@ -249,12 +259,91 @@ private:
 	bool shrineWanted_ = false;
 	/** A designed room's strongbox got its guards, so no other strongbox on this floor. */
 	bool strongboxPlaced_ = false;
+	/** This floor's bound demon, of these kinds, is still to place; its monster is kept out of the packs' count. */
+	bool demonWanted_ = false;
+	std::vector<size_t> demonKinds_;
 	Point end_;
 	std::vector<Point> route_;
 
 	int random(int below)
 	{
 		return rng_.generateRnd(below);
+	}
+
+	/**
+	 * A bound demon (poe2/bound_demons.hpp), about every second floor, one of the floor's monsters (kept back from the
+	 * packs, so the floor's count and the slots left for summons stay as they were): placed last, on open floor near
+	 * the way down, in a room with no stairs, set piece or reward, and well apart from every other monster, so it is met
+	 * and fought on its own. Its choices have their own random numbers (from the floor's).
+	 */
+	DiabloGenerator demonRng() const
+	{
+		return DiabloGenerator(seed_ ^ BoundDemonSalt);
+	}
+
+	/** Whether this floor gets a bound demon: if so, one monster of the floor's count is kept back for it. */
+	void reserveBoundDemon()
+	{
+		DiabloGenerator rng = demonRng();
+		if (rng.generateRnd(BoundDemonOneIn) != 0 || left_ == 0)
+			return;
+		// Without the essence table (it failed to load) there is nothing for it to hold.
+		if (EssencesForSeed(seed_, CurrentAct(), CurrentAreaLevel()).empty())
+			return;
+		for (const size_t type : types_) {
+			const MonsterData &data = LevelMonsterTypes[type].data();
+			// Not one that starts hidden or as a statue: it stands in plain sight in its crystal.
+			if (!isRanged(type) && (data.abilityFlags & MFLAG_HIDDEN) == 0 && data.ai != MonsterAIID::Gargoyle)
+				demonKinds_.push_back(type);
+		}
+		if (demonKinds_.empty())
+			return;
+		demonWanted_ = true;
+		left_--;
+	}
+
+	void placeBoundDemon()
+	{
+		if (!demonWanted_)
+			return;
+		DiabloGenerator rng = demonRng();
+		rng.generateRnd(BoundDemonOneIn);
+		const std::vector<size_t> &kinds = demonKinds_;
+		int best = INT_MAX;
+		std::vector<std::pair<Point, int>> spots;
+		for (int y = 0; y < MAXDUNY; y++) {
+			for (int x = 0; x < MAXDUNX; x++) {
+				const Point tile { x, y };
+				if (Reach[x][y] < BoundDemonApartSteps || (hasStart_ && FromStart[x][y] == Unreached) || !CanHold(tile) || !CanHoldChest(tile))
+					continue;
+				const RoomFacts &room = rooms_[RoomAt(tile)];
+				if (room.theme || room.stairs || room.reward || room.quiet || room.free < NookTiles)
+					continue;
+				const int score = route_.empty() ? -std::min<int>(Reach[x][y], FarSteps) : NearRoute[x][y];
+				best = std::min(best, score);
+				spots.emplace_back(tile, score);
+			}
+		}
+		std::vector<Point> near;
+		for (const auto &[tile, score] : spots) {
+			if (score <= best + BoundDemonSlack)
+				near.push_back(tile);
+		}
+		if (near.empty())
+			return;
+		const Point tile = near[rng.generateRnd(static_cast<int>(near.size()))];
+		const size_t type = kinds[rng.generateRnd(static_cast<int>(kinds.size()))];
+		// The monster's own rolls come from the demon's numbers too, and the floor's go on where they were.
+		const uint32_t floorState = GetLCGEngineState();
+		SetRndSeed(static_cast<uint32_t>(rng.advanceRndSeed()));
+		Monster *monster = AddMonster(tile, Direction::South, type, true);
+		if (monster != nullptr) {
+			// A monster that can't be rare (none from the floor's kinds) would stay a plain one; floor monsters always can.
+			BindDemon(*monster);
+			placed_++;
+			rooms_[RoomAt(tile)].monsters++;
+		}
+		SetRndSeed(floorState);
 	}
 
 	bool isRanged(size_t typeIndex) const

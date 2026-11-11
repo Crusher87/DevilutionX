@@ -13,8 +13,8 @@ namespace devilution {
 /** @brief Whether the game saves on its own (POE2 Mashup single player). */
 bool AutosaveEnabled();
 
-/** @brief Asks for a save at the next safe moment. */
-void RequestAutosave();
+/** @brief Asks for a save at the next safe moment; `why` names it in the play log. */
+void RequestAutosave(const char *why);
 
 /** @brief Runs once per game tick: saves when one was asked for, or when it's been a while and it's quiet. */
 void ProcessAutosave();

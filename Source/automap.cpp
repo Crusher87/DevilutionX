@@ -1990,7 +1990,7 @@ void DrawAutomap(const Surface &out)
 		SearchAutomapItem(out, myPlayerOffset, std::max(MAXDUNX, MAXDUNY), ShouldHighlightDebugAutomapTile);
 #endif
 
-	// POE2 Mashup: stairs, portals, shrines, strongboxes and rare and unique monsters, with their names.
+	// POE2 Mashup: stairs, portals, shrines, strongboxes, rare monsters and bosses; monsters without names.
 	if (gbIsPoe2) {
 		const Rectangle clip = GetAutomapType() == AutomapType::Minimap ? MinimapRect : Rectangle { { 0, 0 }, { out.w(), out.h() } };
 		DrawMapMarkers(out, clip, scale, [&](Point tile) { return TileToAutomapScreen(tile, myPlayerOffset); });

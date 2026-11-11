@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <string>
+#include <vector>
 
 #include <function_ref.hpp>
 
@@ -17,6 +18,10 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "poe2/defenses.hpp"
+#include "poe2/effect_primitives.hpp"
+#include "poe2/jewels.hpp"
+#include "poe2/passive_tree.hpp"
+#include "poe2/regen.hpp"
 #include "tables/playerdat.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/display.h"
@@ -132,6 +137,43 @@ constexpr int RightColumnLabelWidth = 68;
 constexpr Rectangle ResistanceBoxesRect { { RightColumnLabelX - RightColumnLabelWidth, 256 }, { RightColumnLabelWidth + 57, 313 + 24 - 256 } };
 
 // Indices in `panelEntries`.
+// The Life and Mana rows, labels and both boxes: hovering them shows regeneration a second.
+constexpr Rectangle LifeRowRect { { LeftColumnLabelX - LeftColumnLabelWidth, 284 }, { LeftColumnLabelWidth + 135 + 45 - LeftColumnLabelX, 24 } };
+constexpr Rectangle ManaRowRect { { LeftColumnLabelX - LeftColumnLabelWidth, 312 }, { LeftColumnLabelWidth + 135 + 45 - LeftColumnLabelX, 24 } };
+
+std::string Tenths(int tenths)
+{
+	return StrCat(tenths / 10, ".", tenths % 10);
+}
+
+/** @brief Life regeneration a second, and what gives it: each worn item and jewel, the passive tree (Curtis 2026-11-07). */
+void ShowLifeRegenInfo(const Player &player)
+{
+	InfoString = FormatRuntime(_("Life regeneration: {:s} a second"), Tenths(LifeRegenTenthsPerSecond(player)));
+	InfoColor = UiFlags::ColorWhite;
+	int listed = 0;
+	std::vector<const Item *> worn;
+	for (const Item &item : player.InvBody)
+		worn.push_back(&item);
+	for (const Item *jewel : ActiveJewels(player))
+		worn.push_back(jewel);
+	for (const Item *item : worn) {
+		if (item->isEmpty() || !item->_iStatFlag || item->_iPLLifeRegen == 0)
+			continue;
+		AddInfoBoxString(FormatRuntime(_("{:s}: {:+d}"), item->getName().str(), item->_iPLLifeRegen));
+		listed += item->_iPLLifeRegen;
+	}
+	const int tree = PassiveTotal(player, PassiveStat::LifeRegen);
+	if (tree != 0)
+		AddInfoBoxString(FormatRuntime(_("Passive tree: {:+d}"), tree));
+	if (const int other = player.poe2.lifeRegen - listed - tree; other != 0)
+		AddInfoBoxString(FormatRuntime(_("Other: {:+d}"), other));
+	if (player.poe2.lifeRegenPerMille != 0)
+		AddInfoBoxString(FormatRuntime(_(/*xgettext:no-c-format*/ "Passive tree: {:s}% of maximum life"), Tenths(player.poe2.lifeRegenPerMille)));
+	if (const int gear = GearLifeRegenPerTenThousand(player); gear != 0)
+		AddInfoBoxString(FormatRuntime(_(/*xgettext:no-c-format*/ "Gear: {:d}.{:02d}% of maximum life"), gear / 100, gear % 100));
+}
+
 constexpr unsigned AttributeHeaderEntryIndices[2] = { 5, 6 };
 constexpr unsigned GoldHeaderEntryIndex = 16;
 
@@ -338,6 +380,20 @@ void CheckCharPanelInfo()
 	if (!gbIsPoe2 || !CharFlag)
 		return;
 	const Point origin = GetPanelPosition(UiPanels::Character, { 0, 0 });
+	const auto hovered = [&](const Rectangle &rect) {
+		return Rectangle { origin + Displacement { rect.position.x, rect.position.y }, rect.size }.contains(MousePosition);
+	};
+	if (hovered(LifeRowRect)) {
+		ShowLifeRegenInfo(*InspectPlayer);
+		MainPanelFlag = true;
+		return;
+	}
+	if (hovered(ManaRowRect)) {
+		InfoString = FormatRuntime(_("Mana regeneration: {:s} a second"), Tenths(ManaRegenTenthsPerSecond(*InspectPlayer)));
+		InfoColor = UiFlags::ColorWhite;
+		MainPanelFlag = true;
+		return;
+	}
 	const Rectangle boxes { origin + Displacement { ResistanceBoxesRect.position.x, ResistanceBoxesRect.position.y }, ResistanceBoxesRect.size };
 	if (!boxes.contains(MousePosition))
 		return;

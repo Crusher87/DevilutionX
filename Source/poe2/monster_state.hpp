@@ -22,6 +22,8 @@ struct Poe2MonsterState {
 	/** @brief Flammability fades this many ticks after the last fire hit. */
 	uint8_t flammabilityTicks = 0;
 	uint8_t shockTicks = 0;
+	/** @brief The shock's increased magnitude, in percent, from the gear of the hero who shocked it (runes). */
+	uint8_t shockBonus = 0;
 	int regenRemainder = 0;
 	uint8_t chillTicks = 0;
 	/** @brief How much a chill slows the monster, in percent. */
@@ -54,7 +56,7 @@ struct Poe2MonsterState {
 	uint8_t amplifyPercent = 0;
 	/** @brief Armour broken by Smite: takes more physical damage. */
 	uint8_t armourBreakTicks = 0;
-	/** @brief Curses from the skill table, in game ticks left: Weaken and Decrepify make it hit softer, Iron Maiden turns its
+	/** @brief Curses from the skill table, in game ticks left: Weaken makes it hit softer, Decrepify slows it, Iron Maiden turns its
 	 * melee hits back on it, Lower Resist and Death Mark make it take more damage, Confuse sets it on other monsters. */
 	uint8_t weakenTicks = 0;
 	uint8_t decrepifyTicks = 0;
@@ -66,6 +68,15 @@ struct Poe2MonsterState {
 	uint8_t confuseTicks = 0;
 	/** @brief Confuse made the monster turn on its kind, so its flags go back when the curse ends. */
 	bool confusedByCurse = false;
+	/**
+	 * @brief Confuse's Berserk (Curtis 2026-11-07, Q36): a rare or unique it was aimed at from gem level 10 hits this much
+	 * harder, in percent (Berserk's 120-129%), while confuseTicks last; 0 when it isn't berserk (not saved).
+	 */
+	uint8_t berserkPercent = 0;
+	/** @brief Attract (Q36): game ticks the monster draws the monsters near it onto itself (not saved). */
+	uint8_t attractTicks = 0;
+	/** @brief Attract's roll at the cast, so each rare near it obeys or not for the whole curse, alike on every machine. */
+	uint8_t attractSeed = 0;
 	/** @brief Haunt and Locust Swarm drain the monster and move on to another when it dies. */
 	uint8_t hauntTicks = 0;
 	uint8_t locustTicks = 0;
@@ -97,6 +108,17 @@ struct Poe2MonsterState {
 	uint8_t poisonTicks = 0;
 	int8_t poisonSource = -1;
 	int32_t poisonDamagePerTick = 0;
+	/** @brief The poison is Cobra Strike's own, which its next strike doesn't consume (Curtis 2026-11-07, Q42; not saved). */
+	bool poisonFromCobra = false;
+	/** @brief The bleed is Bloodletting's own, which its next stab doesn't consume (the Cobra Strike rule, Q42; not saved). */
+	bool bleedFromBloodletting = false;
+	/**
+	 * @brief Pyre Blow (Curtis 2026-11-07, Q48; not saved): it dies within this many game ticks of the blow and it bursts
+	 * into flame, for this much (a raw Fixed26_6 value), from this player.
+	 */
+	uint8_t pyreTicks = 0;
+	int8_t pyreSource = -1;
+	int32_t pyreBurst = 0;
 	/** @brief Plague Burst: the poison builds plague, the chaos its ticks dealt as a raw Fixed26_6 value, which bursts on death. */
 	bool poisonPlague = false;
 	int32_t plagueStore = 0;
@@ -170,6 +192,12 @@ struct Poe2MonsterState {
 	uint8_t plagueTicks = 0;
 	/** @brief The per-target granted cast whose projectile last hit it, which hits it once (not saved). */
 	uint16_t grantedCastHit = 0;
+	/** @brief The Whirling Volley cast whose ring of arrows hit it, which hits it once (not saved). */
+	uint16_t volleyCastHit = 0;
+	/** @brief The Hellfire Roar use whose fire burst last hit it, which burns it once a use (not saved). */
+	uint16_t hellfireUseHit = 0;
+	/** @brief Game ticks a fire hit on it counts as fresh, for Swamp Gas Arrow's clouds (FireHitTicks; not saved). */
+	uint8_t fireHitTicks = 0;
 	/**
 	 * @brief Summon Commands (poe2/summon_commands.hpp; none saved). A minion's Command waiting for its attack's action
 	 * frame (a SummonCommand, 0 for none) and the tile it's aimed at.
@@ -192,6 +220,13 @@ struct Poe2MonsterState {
 	uint8_t commandStaggerTicks = 0;
 	bool commandStaggerHard = false;
 	uint8_t commandStaggerImmuneTicks = 0;
+	/**
+	 * @brief A bound demon (poe2/bound_demons.hpp; none saved): game ticks it still stands after its crystal broke, its
+	 * crystal's heartbeat, and its speed building up to an extra turn at 100.
+	 */
+	uint8_t boundWakeTicks = 0;
+	uint8_t boundPulse = 0;
+	uint8_t boundHasteCarry = 0;
 };
 
 } // namespace devilution

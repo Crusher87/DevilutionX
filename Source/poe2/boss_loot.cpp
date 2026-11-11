@@ -5,6 +5,8 @@
 #include "game_mode.hpp"
 #include "levels/gendung_defs.hpp"
 #include "monster.h"
+#include "poe2/belt_uniques.hpp"
+#include "poe2/uniques.hpp"
 
 namespace devilution {
 
@@ -26,6 +28,26 @@ const std::vector<BossLootTable> &BossLootTables()
 		{ "the_starved_god", "The Starved God", 100, {}, true, { { "Hunger Eternal", 60 }, { "Empty Cup", 30 }, { "God's Last Breath", 10 } } },
 	};
 	return Tables;
+}
+
+int BossUniqueDropLevel(std::string_view unique)
+{
+	if (const Poe2Unique *found = FindPoe2Unique(unique); found != nullptr)
+		return found->dropLevel;
+	if (const BeltUnique *belt = FindBeltUnique(unique); belt != nullptr)
+		return belt->dropLevel;
+	return 0;
+}
+
+std::vector<BossUniqueEntry> BossUniquesAt(const BossLootTable &table, int bossItemLevel)
+{
+	std::vector<BossUniqueEntry> pool;
+	for (const BossUniqueEntry &entry : table.pool) {
+		const int dropLevel = BossUniqueDropLevel(entry.unique);
+		if (dropLevel > 0 && dropLevel <= bossItemLevel + BossUniqueLevelSlack)
+			pool.push_back(entry);
+	}
+	return pool;
 }
 
 const BossLootTable *BossLootTableFor(const Monster &monster)

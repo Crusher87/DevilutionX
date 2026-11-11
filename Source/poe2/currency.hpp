@@ -89,8 +89,9 @@ CurrencyOrb CurrencyOrbForMiscId(int miscId);
 /**
  * @brief Whether the currency looks like it can do something to the item, for outlining the items it fits while it
  * is held. A quick check without rolling anything; using it may still fizzle (e.g. no more affixes fit).
+ * @param variant An essence's, when it is known: then Perfect and Evil essences fit only rares, the others only magic items.
  */
-[[nodiscard]] bool CurrencyFitsItem(CurrencyOrb orb, const Item &item);
+[[nodiscard]] bool CurrencyFitsItem(CurrencyOrb orb, const Item &item, uint8_t variant = 0);
 /** @brief Whether the item kind is POE2 crafting currency: orbs, essences, augments and catalysts. */
 [[nodiscard]] bool IsCurrencyMiscId(int miscId);
 std::string_view CurrencyOrbDescription(CurrencyOrb orb);

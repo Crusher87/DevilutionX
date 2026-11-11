@@ -13,6 +13,7 @@
 #include "player.h"
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/modifiers.hpp"
 #include "poe2/skill_looks.hpp"
 #include "poe2/uniques.hpp"
 #include "poe2/weapon_kinds.hpp"
@@ -403,9 +404,31 @@ int LocalQuality(const Item &item, QualityKind kind)
 int WeaponDamagePercent(const Item &item)
 {
 	const int quality = LocalQuality(item, QualityKind::Weapon);
-	const bool identified = item._iMagical == ITEM_QUALITY_NORMAL || item._iIdentified;
-	const int increased = identified ? item._iPLDam - quality : 0;
+	const int increased = ItemModifiersCount(item) ? item._iPLDam - quality : 0;
 	return ((100 + increased) * (100 + quality) / 100) - 100;
+}
+
+void ShownWeaponPhysicalDamage(const Item &item, int &minDamage, int &maxDamage)
+{
+	minDamage = item._iMinDam;
+	maxDamage = item._iMaxDam;
+	if (ItemModifiersShown(item)) {
+		const int percent = WeaponDamagePercent(item);
+		minDamage = minDamage * (100 + percent) / 100;
+		maxDamage = maxDamage * (100 + percent) / 100;
+		return;
+	}
+	// Take the modifiers' added physical damage back out; only the quality is left of the % increases.
+	for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+		const ModFamily *family = ItemModFamily(mod);
+		if (family != nullptr && family->effect == ModEffect::AddedPhysical) {
+			minDamage -= mod.values[0];
+			maxDamage -= mod.values[1];
+		}
+	}
+	const int quality = LocalQuality(item, QualityKind::Weapon);
+	minDamage = std::max(minDamage, 0) * (100 + quality) / 100;
+	maxDamage = std::max(maxDamage, 0) * (100 + quality) / 100;
 }
 
 } // namespace devilution

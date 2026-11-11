@@ -52,11 +52,13 @@
 #include "poe2/autosave.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/belt_uniques.hpp"
+#include "poe2/bound_demons.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/dodge_roll.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/attack_speed.hpp"
 #include "poe2/experience.hpp"
 #include "poe2/gem_levels.hpp"
@@ -812,8 +814,11 @@ bool PlrHitMonst(Player &player, Monster &monster, bool adjacentDamage = false, 
 		}
 		RedrawComponent(PanelDrawComponent::Health);
 	}
-	if (gbIsPoe2)
+	if (gbIsPoe2) {
 		OnSkillMeleeHit(player);
+		// POE2 Mashup: the war cries waiting on the hero's next melee hits.
+		OnEmpoweredMeleeHit(player, CurrentAttackSkill(player), monster, Fixed26_6::fromRaw(dam));
+	}
 	if (monster.hasNoLife()) {
 		M_StartKill(monster, player);
 	} else {
@@ -922,6 +927,8 @@ void DashSkillLanding(Player &player, WeaponSkill skill)
 	PlaySfxLoc(skill == WeaponSkill::ShieldCharge ? SfxID::ItemShield : SfxID::Swing, player.position.tile);
 	PlaySkillEffects(player, skill, player.position.tile + player._pdir);
 	OnSkillUsed(player, SkillSlot::ForAttack(skill), player.position.tile + player._pdir);
+	// Leap Slam and Shield Charge shatter the hero's Shield Wall where they land (Curtis 2026-11-07, Q37).
+	ShatterShieldWall(player, player.position.tile + player._pdir);
 	for (int i = 0; i < 8; i++) {
 		const auto dir = static_cast<Direction>(i);
 		if (skill == WeaponSkill::ShieldCharge && IsNoneOf(dir, player._pdir, Left(player._pdir), Right(player._pdir)))
@@ -997,6 +1004,9 @@ bool DoAttack(Player &player)
 			}
 		}
 
+		// POE2 Mashup: Wave of Light's bell tolls when a swing lands on it (Curtis 2026-11-07, Q38).
+		StrikeWaveBell(player, position);
+
 		// POE2 Mashup: the weapon's swing and sparks where it lands. It follows the hero's animation: an axe or mace
 		// comes down from overhead. The weapon's strongest added element only flickers faintly along the swing and on
 		// the cut (Curtis 2026-10-22: lightning on his staff was "far too in-your-face"). Skills with their own swing draw
@@ -1025,6 +1035,13 @@ bool DoAttack(Player &player)
 				const auto [minLightning, maxLightning] = SwingElementDamage(player, true);
 				int elementalDamage = didhit ? RandomIntBetween(minLightning, maxLightning) : 0;
 				AddMissile(position, { 2, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, elementalDamage, 0);
+			}
+		}
+		// POE2 Mashup: the gear's added cold (runes), which meets magic resistance.
+		if (gbIsPoe2 && !SupportMeleeIsPhysicalOnly(player)) {
+			if (const auto [minCold, maxCold] = AddedColdDamage(player); maxCold > 0) {
+				const int coldDamage = didhit ? RandomIntBetween(minCold, maxCold) : 0;
+				AddMissile(position, { WeaponExplosionCold, 0 }, Direction::South, MissileID::WeaponExplosion, TARGET_MONSTERS, player, coldDamage, 0);
 			}
 		}
 
@@ -1062,6 +1079,9 @@ bool DoAttack(Player &player)
 			const Point origin = player.position.tile;
 			const Point primary = origin + player._pdir;
 			const int reach = skill == WeaponSkill::GroundSlam ? GroundSlamReach : WhirlingStaffReach;
+			// Ground Slam shatters the hero's Shield Wall in front (Curtis 2026-11-07, Q37).
+			if (skill == WeaponSkill::GroundSlam)
+				ShatterShieldWall(player, primary);
 			for (int dy = -reach; dy <= reach; dy++) {
 				for (int dx = -reach; dx <= reach; dx++) {
 					position = origin + Displacement { dx, dy };
@@ -1539,7 +1559,10 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 
 					if (x < 2 && y < 2) {
 						ClrPlrPath(player);
-						if (player.destAction == ACTION_ATTACKMON && monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
+						// POE2 Mashup: walking up to a bound demon breaks its crystal.
+						if (player.destAction == ACTION_ATTACKMON && IsBoundDemon(*monster)) {
+							RequestBreakBoundCrystal(player, *monster);
+						} else if (player.destAction == ACTION_ATTACKMON && monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
 							TalktoMonster(player, *monster);
 						} else {
 							StartAttack(player, d, pmWillBeCalled);
@@ -1605,7 +1628,9 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 			y = std::abs(player.position.tile.y - monster->position.future.y);
 			if (x <= 1 && y <= 1) {
 				d = GetDirection(player.position.future, monster->position.future);
-				if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
+				if (IsBoundDemon(*monster)) {
+					RequestBreakBoundCrystal(player, *monster);
+				} else if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
 					TalktoMonster(player, *monster);
 				} else {
 					StartAttack(player, d, pmWillBeCalled);
@@ -1626,7 +1651,9 @@ void CheckNewPath(Player &player, bool pmWillBeCalled)
 			break;
 		case ACTION_RATTACKMON:
 			d = GetDirection(player.position.future, monster->position.future);
-			if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
+			if (IsBoundDemon(*monster)) {
+				RequestBreakBoundCrystal(player, *monster);
+			} else if (monster->talkMsg != TEXT_NONE && monster->talkMsg != TEXT_VILE14) {
 				TalktoMonster(player, *monster);
 			} else {
 				StartRangeAttack(player, d, monster->position.future.x, monster->position.future.y, pmWillBeCalled);
@@ -2836,7 +2863,7 @@ void NextPlrLevel(Player &player)
 {
 	player.setCharacterLevel(player.getCharacterLevel() + 1);
 	if (&player == MyPlayer)
-		RequestAutosave();
+		RequestAutosave("level up");
 
 	CalcPlrInv(player, true);
 
@@ -3131,7 +3158,8 @@ void StartPlrHit(Player &player, Fixed26_6 dam, bool forcehit)
 		// POE2 Mashup: POE2's light stun, a chance from the hit's share of the hero's life, so walking through a pack
 		// doesn't lock the hero in place but a big hit usually does (Curtis 2026-10-21).
 		if (!forcehit) {
-			const int64_t stunDamage = static_cast<int64_t>(dam.raw()) * 100 / std::max(UniqueStunThresholdPercent(player), 1);
+			// The gear's stun threshold (soulstones, runes) adds to the hero's life for this.
+			const int64_t stunDamage = StunDamageAgainstLife(player, dam.raw(), UniqueStunThresholdPercent(player));
 			const int chance = LightStunChance(stunDamage, player._pMaxHP.raw());
 			if (chance == 0 || GenerateRnd(100) >= chance)
 				return;
@@ -3600,6 +3628,7 @@ void ProcessPlayers()
 				ProcessSkillZones(player);
 				ProcessSupportEffects(player);
 			}
+			ProcessDashLooks(player);
 			// A Leap Slam or Shield Charge lands once the dash is over.
 			if (player.poe2.dashSkillTicks > 0) {
 				// It lands the moment the hero stands at the dash's end, not after the dodge's last ticks run out

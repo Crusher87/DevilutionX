@@ -80,6 +80,8 @@ class Run:
         self.pickups = []
         self.crafts = []
         self.gold_out = 0
+        self.item_actions = collections.Counter()
+        self.paused_ms = 0
         self.deaths = []
         self.crashes = []
         self.warnings = collections.Counter()
@@ -147,6 +149,10 @@ class Run:
                 self.crafts.append(e)
             elif k == 'gold_out':
                 self.gold_out += e.get('amount', 0)
+            elif k in ('identify', 'buy', 'sell', 'stash', 'unstash', 'put_down', 'gem_cut', 'support_in', 'support_out'):
+                self.item_actions[k] += 1
+            elif k == 'resume':
+                self.paused_ms += e.get('ms', 0)
             elif k == 'death':
                 self.deaths.append(e)
             elif k == 'crash':
@@ -390,6 +396,10 @@ def report(run):
         parts.append('<p>Uniques: ' + ', '.join(f"{esc(u.get('item'))} ({esc(u['area'])})" for u in uniques) + '.</p>')
     gold_in = sum(s.get('goldIn', 0) for s in run.summaries)
     parts.append(f'<p>Gold picked up {gold_in:,}, gold out (shops and stash) {run.gold_out:,}.</p>')
+    if run.item_actions:
+        parts.append('<p>Item actions: ' + ', '.join(f"{esc(k)} x{n}" for k, n in run.item_actions.most_common()) + '.</p>')
+    if run.paused_ms:
+        parts.append(f'<p>Paused {num(run.paused_ms / 60000)} minutes in all.</p>')
 
     parts.append('<h2>Deaths, crashes and warnings</h2>')
     items = [f"<li>Died in {esc(d['area'])} at level {d.get('heroLevel')}: {esc(d.get('lastHit', ''))}</li>" for d in run.deaths]

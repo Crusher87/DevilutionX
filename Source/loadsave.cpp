@@ -293,9 +293,9 @@ struct LevelConversionData {
 [[nodiscard]] bool LoadItemData(LoadHelper &file, Item &item)
 {
 	// A blank item first. The save doesn't hold an item's POE2 modifiers and stats, rare powers, tiers or life and mana
-	// regeneration; RestoreRareItemPowers rebuilds them from the seed, but not on a normal item without a POE2 base.
-	// Such an item (an Orb of Alchemy) kept those of whatever the Item held before: the previous item of the bag in
-	// LoadMatchingItems, the item at its place in the bag before an in-game load, or an old floor item in Items[].
+	// regeneration; RestoreRareItemPowers rebuilds them from the seed, but not on a normal item without a POE2 base or
+	// crafting. Such an item (an Orb of Alchemy) kept those of whatever the Item held before: the previous item of the
+	// bag in LoadMatchingItems, the item at its place in the bag before an in-game load, or an old floor item in Items[].
 	item = {};
 	// POE2 Mashup: crafting state lives in the alignment bytes, which older saves leave at zero.
 	std::array<uint8_t, CraftStateSaveSize> craftBytes {};
@@ -421,9 +421,16 @@ struct LevelConversionData {
 	if ((item.dwBuff & CF_POE2) != 0)
 		UnpackCraftExtension(extensionBytes, item._iPoe2Craft);
 	// POE2 Mashup: an item saved before the runes rework gets today's augment and essence ids.
+	const Poe2Craft savedCraft = item._iPoe2Craft;
 	if (gbIsPoe2)
 		ConvertLegacyCraftingIds(item);
 	RestoreRareItemPowers(item);
+	// And one saved before the runes took their own numbers (build spec step 5) gets what its augments do now.
+	if (gbIsPoe2 && (item.dwBuff & CF_POE2) != 0 && SavedBeforeRuneNumbers(craftBytes))
+		MigrateRuneNumbers(item, savedCraft);
+	// And one saved after that but before the soulstones and relics took theirs (step 6) gets what they do now.
+	else if (gbIsPoe2 && (item.dwBuff & CF_POE2) != 0 && SavedBeforeSoulstoneNumbers(craftBytes))
+		MigrateRuneNumbers(item, savedCraft, /*soulstonesOnly=*/true);
 	// POE2 Mashup: a caster weapon of the rework keeps the modifiers it rolled, written out, from now on.
 	LockCasterWeaponMods(item);
 	FinishFlask(item);
@@ -2508,7 +2515,7 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player)
  * shards turn into shard items when they load. Version 27 adds the minions waiting in town to go with the hero to the next dungeon
  * level.
  */
-constexpr uint8_t Poe2HeroDataVersion = 27;
+constexpr uint8_t Poe2HeroDataVersion = 28;
 /**
  * @brief The socket byte saved with an emptied middle mouse button. Heroes from before default attacks saved the
  * button empty with socket 0, and get the attack on loading; one the player emptied stays empty.
@@ -2879,6 +2886,15 @@ uint8_t ReadPoe2HeroData(Player &player)
 	for (size_t i = 1; i < minionBytes.size(); i++)
 		minionBytes[i] = file.NextLE<uint8_t>();
 	UnpackTravellingMinions(player.poe2, minionBytes);
+
+	// Version 28: whether an uncut skill gem has dropped for the hero, and the kills on levels 1 and 2 without one. A
+	// hero from before counts as having had one once past level 2, so the promise only helps new heroes.
+	if (version < 28 || !file.IsValid(SkillGemDropSaveSize)) {
+		player.poe2.economy.skillGemDropped = player.poe2.economy.supportGemDropped;
+		return version;
+	}
+	player.poe2.economy.skillGemDropped = file.NextLE<uint8_t>() != 0;
+	player.poe2.economy.skillDroughtKills = file.NextLE<uint8_t>();
 	return version;
 }
 
@@ -3021,7 +3037,7 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	const size_t weaponSetsSize = 4 + (2 * sizeof(uint16_t)) + (setNodeCount * 3) + player.swapHands.size() + (swapItemCount * (gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize));
 	const std::vector<uint8_t> travellingMinions = PackTravellingMinions(player.poe2);
 
-	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8 + player.poe2.openedSockets.size() + 1 + (MinionCountSkills.size() * 2) + sizeof(uint16_t) + (NumSkillSlots * MaxSupportSockets * 3) + SupportDropSaveSize + travellingMinions.size());
+	SaveHelper file(saveWriter, "poe2hero", (2 * sizeof(uint8_t)) + NumFlasks + (NumSkillSlots * 3) + 1 + (sizeof(uint16_t) * (1 + passives.size())) + (NumSkillSlots * MaxSupportSockets) + 2 + (NumTraySlots * 2) + sizeof(uint16_t) + (attributes.size() * 3) + 1 + (jewelCount * (SavedJewelSize + CraftStateSaveSize)) + CraftStateSaveSize + 6 + MapRunSaveSize + AtlasNodeCount + 2 + EconomySaveSize + (NumSkillSlots * MaxSupportSockets) + weaponSetsSize + (MaxSupportSockets * 2) + 8 + player.poe2.openedSockets.size() + 1 + (MinionCountSkills.size() * 2) + sizeof(uint16_t) + (NumSkillSlots * MaxSupportSockets * 3) + SupportDropSaveSize + travellingMinions.size() + SkillGemDropSaveSize);
 	file.WriteLE<uint8_t>(Poe2HeroDataVersion);
 	// Supports linked to spells (before version 5); they're in the skill bar now.
 	file.WriteLE<uint8_t>(0);
@@ -3178,6 +3194,9 @@ void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 	file.WriteLE<uint8_t>(player.poe2.economy.supportDroughtKills);
 	// Version 27: the minions waiting in town to go with the hero.
 	file.WriteBytes(travellingMinions.data(), travellingMinions.size());
+	// Version 28: whether an uncut skill gem has dropped for the hero, and the kills without one.
+	file.WriteLE<uint8_t>(player.poe2.economy.skillGemDropped ? 1 : 0);
+	file.WriteLE<uint8_t>(player.poe2.economy.skillDroughtKills);
 }
 
 void LoadHeroItems(Player &player)
@@ -3290,9 +3309,10 @@ void LoadStash()
 				usedPages = std::max(usedPages, StashGridPage(key) + 1);
 		}
 		StashTabs.ensureCount(usedPages);
-		// Stashes from before premade tabs get one of each at the end.
-		if (tabsVersion < 2)
-			StashTabs.addMissingPremadeTabs();
+		// Stashes from before premade tabs get one of each at the end, and stashes from before the Runes and Essences tabs
+		// (version 4) get those; RepairStashTabs then moves the augments and essences there from the Currency tab.
+		if (tabsVersion < 4)
+			StashTabs.addMissingPremadeTabs(tabsVersion);
 		// The open tab is set first so that it stays open as tabs are merged.
 		Stash.SetPage(openPage);
 		RepairStashTabs();
@@ -3558,7 +3578,7 @@ void SaveHeroItems(SaveWriter &saveWriter, Player &player)
 void SaveStash(SaveWriter &stashWriter)
 {
 	if (gbIsPoe2) {
-		const std::vector<uint8_t> tabs = SerializeStashTabs(StashTabs);
+		const std::vector<uint8_t> tabs = SerializeStashTabs(StashTabs, StashTabsSaveVersion);
 		SaveHelper tabsFile(stashWriter, gbIsMultiplayer ? "mpstashtabs" : "spstashtabs", sizeof(uint32_t) + tabs.size());
 		tabsFile.WriteLE<uint32_t>(static_cast<uint32_t>(tabs.size()));
 		for (const uint8_t byte : tabs)

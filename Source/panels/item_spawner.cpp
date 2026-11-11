@@ -26,6 +26,7 @@
 #include "inv.h"
 #include "msg.h"
 #include "multi.h"
+#include "panels/monster_spawner.hpp"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/belt_uniques.hpp"
@@ -75,6 +76,8 @@ constexpr uint8_t DividerColor = PAL16_GRAY + 11;
 const std::array<item_quality, 4> Qualities = { ITEM_QUALITY_NORMAL, ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE, ITEM_QUALITY_UNIQUE };
 
 bool IsOpen;
+/** @brief The Monsters tab is showing (kept while the spawner is closed). */
+bool ShowMonsters = false;
 char QueryBuffer[64];
 TextInputCursorState QueryCursor;
 TextInputState QueryInput {
@@ -100,6 +103,8 @@ int Level = 30;
 
 struct Layout {
 	Rectangle panel;
+	/** @brief The Items and Monsters tabs in the title. */
+	std::array<Rectangle, 2> tabs;
 	Rectangle search;
 	std::array<Rectangle, static_cast<size_t>(SpawnerCategory::Count)> categories;
 	std::array<Rectangle, Qualities.size()> qualities;
@@ -263,6 +268,11 @@ void RefreshResults()
 	ScrollTop = 0;
 }
 
+std::string_view TabName(size_t tab)
+{
+	return tab == 0 ? _("Items") : _("Monsters");
+}
+
 Layout ComputeLayout(const Surface &out)
 {
 	Layout layout;
@@ -273,6 +283,12 @@ Layout ComputeLayout(const Surface &out)
 
 	const int innerX = layout.panel.position.x + Padding;
 	const int innerWidth = width - (2 * Padding);
+	int tabX = innerX;
+	for (size_t i = 0; i < layout.tabs.size(); i++) {
+		const int tabWidth = GetLineWidth(TabName(i), GameFont24) + 20;
+		layout.tabs[i] = { { tabX, layout.panel.position.y + 6 }, { tabWidth, 30 } };
+		tabX += tabWidth + 6;
+	}
 	int y = layout.panel.position.y + 40;
 
 	layout.search = { { innerX, y }, { innerWidth, 24 } };
@@ -310,6 +326,24 @@ Layout ComputeLayout(const Surface &out)
 Layout CurrentLayout()
 {
 	return ComputeLayout(GlobalBackBuffer());
+}
+
+/** @brief Where the Monsters tab draws: between the title and the footer. */
+Rectangle MonsterArea(const Layout &layout)
+{
+	const int top = layout.panel.position.y + 40;
+	return { { layout.search.position.x, top }, { layout.search.size.width, layout.footer.position.y - 8 - top } };
+}
+
+void SetMonsterMode(bool monsters)
+{
+	if (monsters == ShowMonsters)
+		return;
+	ShowMonsters = monsters;
+	if (ShowMonsters)
+		OpenMonsterSpawner();
+	else
+		CloseMonsterSpawner();
 }
 
 void KeepSelectionVisible(const Layout &layout)
@@ -563,6 +597,11 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 					// A legacy kind is listed as the kind it became.
 					if (CurrentEssenceKind(static_cast<EssenceKind>(kind)) != static_cast<EssenceKind>(kind))
 						continue;
+					// An Evil essence has one strength.
+					if (IsEvilEssence(static_cast<EssenceKind>(kind))) {
+						addVariant(EssenceVariant(static_cast<EssenceKind>(kind), EssenceTier::Normal));
+						continue;
+					}
 					for (uint8_t tier = 0; tier < static_cast<uint8_t>(EssenceTier::Count); tier++)
 						addVariant(EssenceVariant(static_cast<EssenceKind>(kind), static_cast<EssenceTier>(tier)));
 				}
@@ -775,8 +814,18 @@ void OpenItemSpawner()
 	Catalog = BuildItemSpawnerCatalog();
 	LastCategory = SpawnerCategory::Count; // Forces a refresh.
 	RefreshResults();
+	if (ShowMonsters)
+		OpenMonsterSpawner();
 	ClearWasdMovementKeys();
 	SDLC_StartTextInput(ghMainWnd);
+}
+
+void OpenSpawnerTab(bool monsters)
+{
+	if (!IsOpen)
+		OpenItemSpawner();
+	if (IsOpen)
+		SetMonsterMode(monsters);
 }
 
 void CloseItemSpawner()
@@ -784,6 +833,7 @@ void CloseItemSpawner()
 	if (!IsOpen)
 		return;
 	IsOpen = false;
+	CloseMonsterSpawner();
 	ClearWasdMovementKeys();
 	SDLC_StopTextInput(ghMainWnd);
 }
@@ -800,6 +850,32 @@ bool ItemSpawnerHandleEvent(const SDL_Event &event)
 {
 	if (!IsOpen)
 		return false;
+
+	if (event.type == SDL_EVENT_KEY_DOWN && IsAnyOf(SDLC_EventKey(event), SDLK_ESCAPE, SDLK_INSERT)) {
+		CloseItemSpawner();
+		return true;
+	}
+	if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN && event.button.button == SDL_BUTTON_LEFT) {
+		const Layout layout = CurrentLayout();
+		if (!layout.panel.contains(MousePosition)) {
+			CloseItemSpawner();
+			return true;
+		}
+		for (size_t i = 0; i < layout.tabs.size(); i++) {
+			if (layout.tabs[i].contains(MousePosition)) {
+				SetMonsterMode(i == 1);
+				return true;
+			}
+		}
+	}
+	if (ShowMonsters) {
+		bool close = false;
+		const bool handled = MonsterSpawnerHandleEvent(event, MonsterArea(CurrentLayout()), close);
+		// Closed once a monster is spawned, to see it.
+		if (close)
+			CloseItemSpawner();
+		return handled;
+	}
 
 	if (HandleTextInputEvent(event, QueryInput)) {
 		RefreshResults();
@@ -872,11 +948,29 @@ void DrawItemSpawner(const Surface &out)
 	const Layout layout = ComputeLayout(out);
 	KeepSelectionVisible(layout);
 
+	CoverUi(out, layout.panel);
 	FillRectangle(out, layout.panel, PanelColor);
 	DrawFrame(out, layout.panel, BorderColor);
 
+	for (size_t i = 0; i < layout.tabs.size(); i++) {
+		const Rectangle &tab = layout.tabs[i];
+		const bool active = (i == 1) == ShowMonsters;
+		if (!active && tab.contains(MousePosition))
+			FillRectangle(out, tab, RowHoverColor);
+		DrawString(out, TabName(i), tab, { .flags = UiFlags::FontSize24 | UiFlags::AlignCenter | UiFlags::VerticalCenter | (active ? UiFlags::ColorUiGold : UiFlags::ColorButtonpushed) });
+		if (active)
+			FillRect(out, tab.position.x + 4, tab.position.y + tab.size.height - 2, tab.size.width - 8, 2, BorderColor);
+	}
 	const Rectangle title { layout.panel.position + Displacement { Padding, 8 }, { layout.panel.size.width - (2 * Padding), 26 } };
-	DrawString(out, _("Item Spawner"), title, { .flags = UiFlags::FontSize24 | UiFlags::ColorUiGold | UiFlags::VerticalCenter });
+	if (ShowMonsters) {
+		DrawString(out, FormatRuntime(_("{:d} monsters  -  Esc to close"), static_cast<int>(MonsterSpawnerResultCount())), title,
+		    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | UiFlags::ColorWhite });
+		DrawMonsterSpawner(out, MonsterArea(layout));
+		DrawHorizontalLine(out, layout.footer.position - Displacement { 0, 4 }, layout.footer.size.width, DividerColor);
+		DrawString(out, _("Left/Right: turn - Up/Down: pick - Enter or double-click: spawn"), layout.footer,
+		    { .flags = UiFlags::VerticalCenter | UiFlags::AlignCenter | UiFlags::ColorButtonface });
+		return;
+	}
 	DrawString(out, FormatRuntime(_("{:d} items  -  Esc to close"), static_cast<int>(Results.size())), title,
 	    { .flags = UiFlags::AlignRight | UiFlags::VerticalCenter | UiFlags::ColorWhite });
 

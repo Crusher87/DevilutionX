@@ -9,6 +9,8 @@
 
 #include <array>
 #include <cstdint>
+#include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -50,8 +52,7 @@ enum class EssenceKind : uint8_t {
 	Spirit,
 	Summoning,
 	// The runes rework's kinds. The twelve above are legacy: an item that has one gets the kind essences.tsv's
-	// becomes column names when it loads (ConvertLegacyCraftingIds). Until the rework gives these their own names and
-	// modifiers, each has those of the legacy kind that becomes it.
+	// becomes column names when it loads (ConvertLegacyCraftingIds).
 	Body,
 	Mind,
 	Insulation,
@@ -66,13 +67,39 @@ enum class EssenceKind : uint8_t {
 	Command,
 	/** Chaos resistance, from armour, belts, jewellery, shields and foci (chaos damage plan step 5). */
 	Ruin,
+	// The rest of the build spec's 19 families (stash step 3; their modifiers came in step 7).
+	Flames,
+	Ice,
+	Electricity,
+	/** POE2's Essence of Sorcery; the legacy kind Sorcery above became Alacrity. */
+	SpellSorcery,
+	Seeking,
+	Opulence,
+	/** The seven Evil essences: one strength each, which their variants keep as Normal. */
+	Terror,
+	Hatred,
+	Destruction,
+	Lies,
+	Sin,
+	Pain,
+	Anguish,
 	Count,
 };
 
 /** @brief The essence kinds before the runes rework: the currency stash keeps a slot for each, holding what it became. */
 constexpr int LegacyEssenceKindCount = static_cast<int>(EssenceKind::Summoning);
-/** @brief An essence's variant: the kind's low 4 bits, the tier in bits 4-5 and the kind's 5th bit in bit 6, so 31 kinds fit and older variants read the same. */
-static_assert(static_cast<int>(EssenceKind::Count) <= 32);
+/** @brief The first Evil essence; it and the kinds after it have one strength. */
+constexpr EssenceKind FirstEvilEssence = EssenceKind::Terror;
+/**
+ * @brief An essence's variant: the kind's low 4 bits, the tier in bits 4-5, the kind's 5th bit in bit 6 and its 6th in
+ * bit 7, so 63 kinds fit and older variants read the same.
+ */
+static_assert(static_cast<int>(EssenceKind::Count) <= 64);
+/** @brief Whether the kind is one of the seven Evil essences. */
+[[nodiscard]] constexpr bool IsEvilEssence(EssenceKind kind)
+{
+	return kind >= FirstEvilEssence && kind < EssenceKind::Count;
+}
 
 enum class EssenceTier : uint8_t {
 	Lesser,
@@ -82,19 +109,93 @@ enum class EssenceTier : uint8_t {
 	Count,
 };
 
+/** @brief What an Evil essence does besides removing a modifier (build spec step 7); None adds a modifier of its lines. */
+enum class EssenceSpecial : uint8_t {
+	None,
+	/** Socketed augments are 50% stronger, except resistances (the enchant byte's HatredEnchantBit). */
+	Hatred,
+	/** The item's next corruption gives two enchantments (DestructionMark). */
+	Destruction,
+	/** A hidden (unrevealed) desecrated modifier. */
+	Lies,
+	/** Body armour: a random notable of the passive tree (SinNotable). */
+	Sin,
+	/** Jewellery: its quality can go past 20% (PainMark). */
+	Pain,
+};
+
 struct Essence {
 	EssenceKind kind = EssenceKind::None;
 	std::string name;
-	/** @brief The modifier family it guarantees. */
+	/** @brief The modifier family it guarantees: a legacy kind's only one, and the first of a kind of today's lines. */
 	std::string family;
 	/** @brief A legacy kind: the kind it becomes when an item that has it loads. None for a kind of today. */
 	EssenceKind becomes = EssenceKind::None;
+	/** @brief Whether it drops. */
+	bool drops = false;
+	/**
+	 * @brief The families a Lesser, plain or Greater one adds, and an Evil one that adds a modifier: the item's slot
+	 * takes one of them (one that fits, picked by the seed). Empty means family alone.
+	 */
+	std::vector<std::string> lines;
+	/** @brief The families a Perfect one adds; empty means the lines. */
+	std::vector<std::string> perfect;
+	EssenceSpecial special = EssenceSpecial::None;
+	/** @brief The first act it drops in (3 for the Evil essences), and its weight: a percent of its tiers' EssenceWeights, or for an Evil essence (one strength) the weight itself. */
+	int dropAct = 0;
+	int dropWeight = 0;
+	/** @brief Tooltip text: what a Lesser, plain or Greater one adds (an Evil one: what it does), and what a Perfect one adds. */
+	std::string text;
+	std::string perfectText;
 };
 
-/** @brief POE2 drop level of each essence tier, its weight, and the lowest modifier level it adds. */
+/** @brief POE2 drop level of each essence tier (the area level it drops from), its weight, and the lowest modifier level it adds. */
 constexpr std::array<int, 4> EssenceDropLevels = { 20, 35, 55, 72 };
 constexpr std::array<int, 4> EssenceWeights = { 100, 70, 35, 12 };
 constexpr std::array<int, 4> EssenceModLevelFloors = { 0, 20, 35, 50 };
+
+/**
+ * @brief The essence marks a craft keeps (build spec step 7). The Essence of Hatred's is the enchant byte's spare bit;
+ * the others are in Poe2Craft::extension: byte 0 holds flags, byte 1 a second enchantment (the Essence of
+ * Destruction's: its id in the low 4 bits, its roll in bits 4-6), bytes 2-3 the Essence of Sin's notable (its node id
+ * plus 1, little-endian).
+ */
+constexpr uint8_t HatredEnchantBit = 0x10;
+constexpr uint8_t EnchantIdMask = 0x0F;
+constexpr size_t EssenceFlagsByte = 0;
+constexpr uint8_t DestructionMark = 1 << 0;
+constexpr uint8_t PainMark = 1 << 1;
+constexpr size_t SecondEnchantByte = 1;
+constexpr size_t SinNotableByte = 2;
+/** @brief The quality jewellery with the Essence of Pain's mark can reach: as high as the save keeps (MaxExceptionalQuality). */
+constexpr int PainQualityLimit = 30;
+/** @brief The Essence of Hatred makes socketed augments this percent as strong, resistances aside. */
+constexpr int HatredAugmentPercent = 150;
+
+[[nodiscard]] bool HasHatredMark(const Poe2Craft &craft);
+[[nodiscard]] bool HasDestructionMark(const Poe2Craft &craft);
+[[nodiscard]] bool HasPainMark(const Poe2Craft &craft);
+/** @brief The corruption enchantment (a CorruptionEnchant id), without the Essence of Hatred's bit. */
+[[nodiscard]] uint8_t CraftEnchantId(const Poe2Craft &craft);
+/** @brief The second enchantment the Essence of Destruction gave the item at its corruption, and its roll. */
+[[nodiscard]] uint8_t SecondEnchantId(const Poe2Craft &craft);
+[[nodiscard]] uint8_t SecondEnchantRoll(const Poe2Craft &craft);
+void SetSecondEnchant(Poe2Craft &craft, uint8_t id, uint8_t roll);
+/** @brief The passive node the Essence of Sin gave the body armour; nullopt for none. */
+[[nodiscard]] std::optional<uint16_t> SinNotable(const Poe2Craft &craft);
+void SetSinNotable(Poe2Craft &craft, uint16_t node);
+/** @brief The tooltip lines of the item's essence marks (Hatred, Destruction, Sin, Pain); empty for none. */
+std::vector<std::string> EssenceMarkText(const Item &item);
+/** @brief Whether the effect is a resistance, which the Essence of Hatred doesn't strengthen. */
+[[nodiscard]] bool IsResistanceEffect(ModEffect effect);
+
+/** @brief The essence's families the item takes (index into ModifierFamilies()), for its tier: those of its slot and base that don't repeat an implicit, in the row's order. */
+[[nodiscard]] std::vector<uint8_t> EssenceFamiliesForItem(const Essence &essence, EssenceTier tier, const Item &item);
+/**
+ * @brief The essence a drop is (its variant): weighted among the kinds and tiers that drop at the area level
+ * (EssenceDropLevels) and in the act (dropAct). 0 when nothing can drop.
+ */
+[[nodiscard]] uint8_t RollEssenceDrop(uint32_t roll, int areaLevel, int act);
 
 const Essence &GetEssence(EssenceKind kind);
 EssenceKind GetEssenceKind(const Item &item);
@@ -182,6 +283,103 @@ enum class AugmentId : uint8_t {
 	RelicOfAkarat,
 	/** Chaos resistance in every slot (chaos damage plan step 5). */
 	VenomRune,
+	// The full sets of the build spec's steps 5 and 6 (stash step 3). Until steps 5 and 6 give them their numbers, each
+	// row of augments.tsv copies those of the nearest older row and never drops (its drops column is 0).
+	// The rune families' other strengths: a family is Lesser, plain, Greater and Perfect (Ith has no Lesser).
+	Ral,
+	GreaterRal,
+	PerfectRal,
+	Thul,
+	GreaterThul,
+	PerfectThul,
+	Ort,
+	GreaterOrt,
+	PerfectOrt,
+	Ohm,
+	GreaterOhm,
+	PerfectOhm,
+	LesserAmn,
+	Amn,
+	GreaterAmn,
+	PerfectAmn,
+	LesserVex,
+	Vex,
+	GreaterVex,
+	PerfectVex,
+	LesserIo,
+	Io,
+	GreaterIo,
+	PerfectIo,
+	LesserTir,
+	Tir,
+	GreaterTir,
+	PerfectTir,
+	LesserSol,
+	Sol,
+	GreaterSol,
+	PerfectSol,
+	LesserGul,
+	Gul,
+	GreaterGul,
+	PerfectGul,
+	LesserFal,
+	Fal,
+	GreaterFal,
+	PerfectFal,
+	LesserKo,
+	Ko,
+	GreaterKo,
+	PerfectKo,
+	LesserLum,
+	Lum,
+	GreaterLum,
+	PerfectLum,
+	Ith,
+	GreaterIth,
+	PerfectIth,
+	Zod,
+	// The Runes of Legend.
+	TalicsRune,
+	MadawcsRune,
+	KorlicsRune,
+	BulKathosRune,
+	TalRashasRune,
+	HorazonsRune,
+	JeredCainsRune,
+	ZoltunKullesRune,
+	// Soulstones that add levels to a skill type.
+	ButcherSoulstone,
+	LeoricSoulstone,
+	LazarusSoulstone,
+	DoomcloudSoulstone,
+	BoneheadSoulstone,
+	WarlordSoulstone,
+	BloodmoonSoulstone,
+	NaKrulSoulstone,
+	HorkDemonSoulstone,
+	// The other soulstones.
+	ZharSoulstone,
+	SnotspillSoulstone,
+	GharbadSoulstone,
+	WitchfireSoulstone,
+	BlackJadeSoulstone,
+	// Greater soulstones (LordOfThePit, TheDefiler and StareyeTheWitch above are three more).
+	Plaguewrath,
+	NightwingTheCold,
+	Stormbane,
+	WrathfireTheDoomed,
+	Dreadjudge,
+	Bloodlust,
+	GutshankTheQuick,
+	Blackskull,
+	HowlingireTheShade,
+	BronzefistFirestone,
+	Shadowcrow,
+	Zamphir,
+	// Horadric soulstones.
+	TalRashasSoulstone,
+	JeredCainsSoulstone,
+	ZoltunKullesSoulstone,
 	Count,
 };
 
@@ -190,10 +388,24 @@ constexpr int LegacyAugmentCount = static_cast<int>(AugmentId::GuardianTalisman)
 /** @brief A socket of the wide craft layout keeps 8 bits, the top one spare for a Zod Rune, so ids stay below 128. */
 static_assert(static_cast<int>(AugmentId::Count) <= 128);
 
+/** @brief The armour an augment's armour line works in: any helmet, body armour or shield, or only one of them. */
+enum class ArmourSlot : uint8_t {
+	Any,
+	Helm,
+	Body,
+	Shield,
+};
+
+/** @brief An augment's tier: what an item may hold one of (build spec step 6: one relic and one Horadric soulstone). */
+constexpr int RuneTier = 1;
+constexpr int SoulstoneTier = 2;
+constexpr int RelicTier = 3;
+constexpr int HoradricTier = 4;
+
 struct Augment {
 	AugmentId id = AugmentId::None;
 	std::string name;
-	/** @brief 1 for runes, 2 for soul cores, 3 for talismans; an item takes one talisman. */
+	/** @brief RuneTier, SoulstoneTier, RelicTier or HoradricTier; an item takes one relic and one Horadric soulstone. */
 	int tier = 0;
 	int dropLevel = 0;
 	/** @brief What it does in a martial weapon, in a caster weapon (a staff, wand or sceptre of the rework), and in armour. */
@@ -211,7 +423,59 @@ struct Augment {
 	std::string armourText;
 	/** @brief A legacy id: the id it becomes when an item that has it loads. None for an id of today. */
 	AugmentId becomes = AugmentId::None;
+	/** @brief Whether it drops; the ids still waiting for their numbers don't. */
+	bool drops = false;
+	/**
+	 * @brief The hero level it needs to go in a socket, and the most a Zod Rune can raise a rune to: a rune's strength
+	 * band (Lesser 1, plain 15, Greater 30, Perfect 50), and 50 for Zod and the Runes of Legend. 0 for none.
+	 */
+	int level = 0;
+	/** @brief Its weight among the augments a drop can be (dropLevel is the lowest area level it drops at). */
+	int dropWeight = 0;
+	/** @brief The first act it drops in: 3 for Zod and the Runes of Legend; 0 for any. */
+	int dropAct = 0;
+	/** @brief It drops only from bosses (the Runes of Legend), never as an ordinary augment. */
+	bool bossOnly = false;
+	/** @brief The armour its armour line works in (Horazon's and Jered Cain's runes, and most soulstones, only one kind). */
+	ArmourSlot armourSlot = ArmourSlot::Any;
+	/** @brief A soulstone's Labyrinth unique (its name in unique_monstdat.tsv), which drops it now and then; empty for none. */
+	std::string namesake;
 };
+
+/** @brief The three kinds of item an augment does something different in. */
+enum class AugmentKind : uint8_t {
+	/** A martial weapon. */
+	Weapon,
+	/** A caster weapon: a staff, wand or sceptre of the rework (IsCasterWeapon). */
+	Staff,
+	/** A helmet, body armour or shield. */
+	Armour,
+};
+
+/** @brief A bonded line: what a rune family adds to a two-socket item whose sockets hold the same rune (rune_bonds.tsv). */
+struct RuneBond {
+	AugmentKind kind = AugmentKind::Weapon;
+	ModEffect effect = ModEffect::None;
+	std::array<int16_t, 2> values {};
+	UniqueRule rule = UniqueRule::None;
+	int16_t ruleValue = 0;
+	/** @brief The line; a family's further rows for the same kind add effects and have none. */
+	std::string text;
+};
+
+/** @brief The kind of item the augments in its sockets act as; nullopt for one that takes none. */
+[[nodiscard]] std::optional<AugmentKind> AugmentKindOf(const Item &item);
+/** @brief What the augment does in that kind of item. */
+[[nodiscard]] ModEffect AugmentEffect(const Augment &augment, AugmentKind kind);
+[[nodiscard]] const std::array<int16_t, 2> &AugmentValues(const Augment &augment, AugmentKind kind);
+[[nodiscard]] const std::string &AugmentText(const Augment &augment, AugmentKind kind);
+/** @brief Whether the augment does anything in the item (Ith does nothing in a staff; Horazon's goes only in a helmet).
+ * A socketed one that doesn't fit, as one saved before its row moved to one slot, does nothing. */
+[[nodiscard]] bool AugmentFitsItem(const Augment &augment, const Item &item);
+/** @brief The socketed augment's id, without a Zod Rune's mark. */
+[[nodiscard]] AugmentId SocketAugment(const Poe2Craft &craft, size_t socket);
+/** @brief Whether a Zod Rune raised the rune in the socket. */
+[[nodiscard]] bool SocketRaised(const Poe2Craft &craft, size_t socket);
 
 const Augment &GetAugment(AugmentId id);
 AugmentId GetAugmentId(const Item &item);
@@ -219,16 +483,106 @@ AugmentId GetAugmentId(const Item &item);
 AugmentId CurrentAugmentId(AugmentId id);
 /**
  * @brief Gives a loading item the ids of today in place of legacy ones (an augment or essence it is, and the augments
- * in its sockets), and renames a crafting item it changed. Saves from before the runes rework hold only legacy ids.
- * @return Whether it changed the item.
+ * in its sockets), and gives an augment or essence the name its row has today. Saves from before the runes rework hold
+ * only legacy ids.
+ * @return Whether it changed the item's ids.
  */
 bool ConvertLegacyCraftingIds(Item &item);
+/**
+ * @brief The id whose numbers the augment had before the runes took their own (build spec step 5): a legacy id itself,
+ * the legacy id that becomes an id of today, else the id.
+ */
+[[nodiscard]] AugmentId AugmentBeforeRuneNumbers(AugmentId id);
+/**
+ * @brief The id whose numbers the augment had before the soulstones and relics took their own (build spec step 6): for
+ * a soulstone or relic, AugmentBeforeRuneNumbers; a rune had its own numbers by then, so its own id.
+ */
+[[nodiscard]] AugmentId AugmentBeforeSoulstoneNumbers(AugmentId id);
 /** @brief Most augment sockets the item can have: 2 on body armour and two-handed weapons, 1 on other weapons and armour, 0 on jewellery. */
 int MaxAugmentSockets(const Item &item);
-/** @brief Gives the item what its socketed augments do. */
+/** @brief Gives the item what its socketed augments do, and its bonded line when both sockets match. Runes of Legend count on the hero instead (ApplyWornRunesOfLegend). */
 void ApplyAugments(Item &item);
-/** @brief The tooltip lines of the item's sockets. */
+/** @brief A tooltip line of the item's sockets; an inactive one (a bonded line whose sockets don't match) is greyed. */
+struct SocketLine {
+	std::string text;
+	bool inactive = false;
+};
+/** @brief The tooltip lines of the item's sockets: each socket's line for the item's kind, then the bonded lines. */
+std::vector<SocketLine> AugmentSocketLines(const Item &item);
+/** @brief The texts of AugmentSocketLines. */
 std::vector<std::string> AugmentSocketText(const Item &item);
+/**
+ * @brief The Runes of Legend in the worn items: each counts once, however many items hold it (build spec answers:
+ * one of each equipped at a time). Applies their effects to the stand-in and adds their rules.
+ * @return Whether the hero wears any.
+ */
+bool ApplyWornRunesOfLegend(std::span<const Item> worn, Item &standIn, UniqueRuleTotals &rules);
+/**
+ * @brief The augment a drop is: weighted by dropWeight among the rows that drop at the area level (dropLevel) and in
+ * the act (dropAct). The bosses' Runes of Legend never roll here (RollRuneOfLegend). None when nothing can drop.
+ */
+[[nodiscard]] AugmentId RollAugmentDrop(uint32_t roll, int areaLevel, int act);
+
+/** @brief A Rune of Legend, each as likely. */
+[[nodiscard]] AugmentId RollRuneOfLegend(uint32_t roll);
+
+/** @brief Chance in percent that a Labyrinth unique drops its own soulstone when it dies near the soulstone's level. */
+constexpr int NamesakeSoulstonePercent = 20;
+/** @brief The soulstone of a unique monster by its name in unique_monstdat.tsv; None for one without. */
+[[nodiscard]] AugmentId NamesakeSoulstone(std::string_view uniqueName);
+/** @brief The lesser soulstones: made from Zoltun Kulle's writings, each holds one of the Labyrinth's damned. */
+[[nodiscard]] bool IsLesserSoulstone(AugmentId id);
+
+/** @brief The rune families, in the order of the Runes tab's rows (Diablo 2 names, Curtis 2026-10-21). */
+enum class RuneFamily : uint8_t {
+	Ral,
+	Thul,
+	Ort,
+	Ohm,
+	Amn,
+	Vex,
+	Io,
+	Tir,
+	Sol,
+	Gul,
+	Fal,
+	Ko,
+	Lum,
+	Ith,
+	Shael,
+	Zod,
+	/** The chaos damage plan's rune, which has no family in the spec. */
+	Venom,
+	Count,
+};
+
+/** @brief A rune's strength, the Runes tab's columns: Lesser, plain, Greater and Perfect, as essence tiers are. */
+using RuneStrength = EssenceTier;
+
+struct RuneKind {
+	RuneFamily family;
+	RuneStrength strength;
+};
+
+/** @brief The rune's family and strength; none for soul cores, soulstones, relics and Runes of Legend. */
+[[nodiscard]] std::optional<RuneKind> GetRuneKind(AugmentId id);
+/** @brief The rune of the family at the strength; None where the family has no such strength (Ith has no Lesser). */
+[[nodiscard]] AugmentId RuneOf(RuneFamily family, RuneStrength strength);
+std::string_view RuneFamilyName(RuneFamily family);
+/** @brief Whether the id is a Rune of Legend. */
+[[nodiscard]] bool IsRuneOfLegend(AugmentId id);
+constexpr AugmentId FirstRuneOfLegend = AugmentId::TalicsRune;
+constexpr int RunesOfLegendCount = 8;
+/** @brief The soulstones and relics, in the order of the Runes tab's third page. */
+[[nodiscard]] std::span<const AugmentId> SoulstonesAndRelics();
+/** @brief The Essences tab's family order (the build spec's step 7 list): 19 families of 4 strengths. */
+[[nodiscard]] std::span<const EssenceKind> EssenceFamilies();
+/** @brief The rune whose bonded line works on the item: a two-socket item whose sockets hold the same rune; nullopt otherwise. */
+[[nodiscard]] std::optional<RuneFamily> BondedRuneFamily(const Item &item);
+/** @brief The family's bonded rows for that kind of item (rune_bonds.tsv); empty for none. */
+[[nodiscard]] std::vector<const RuneBond *> RuneBondsFor(RuneFamily family, AugmentKind kind);
+/** @brief The rune one strength stronger (a Zod Rune's raise); None for a Perfect rune or one with no stronger strength. */
+[[nodiscard]] AugmentId NextRuneStrength(AugmentId id);
 
 enum class Catalyst : uint8_t {
 	None,
@@ -265,6 +619,8 @@ std::vector<std::pair<CorruptionEnchant, int>> CorruptionEnchantChoices(const It
 void ApplyCorruptionEnchant(Item &item);
 /** @brief The enchantment's tooltip line, or an empty string. */
 std::string CorruptionEnchantText(const Item &item);
+/** @brief The Essence of Destruction's second enchantment's tooltip line, or an empty string. */
+std::string SecondCorruptionEnchantText(const Item &item);
 /** @brief Adds the rules of the item's talismans and enchantment to the totals. */
 void AddCraftRules(const Item &item, UniqueRuleTotals &totals);
 

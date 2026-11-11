@@ -12,6 +12,7 @@
 #include "items.h"
 #include "monster.h"
 #include "objects.h"
+#include "poe2/craft_state.hpp"
 #include "portal.h"
 #include "quests.h"
 
@@ -424,6 +425,14 @@ enum _cmd_id : uint8_t {
 	//
 	// body (TCmdShrineBuff)
 	CMD_POE2_SHRINEBUFF,
+	// POE2 Mashup: Cain fuses the hero's runes into one stronger rune made with the seed.
+	//
+	// body (TCmdFuseRunes)
+	CMD_POE2_FUSERUNES,
+	// POE2 Mashup: a hero broke a bound demon's crystal; it wakes on every machine and the level's delta keeps it.
+	//
+	// body (TCmdBreakCrystal)
+	CMD_POE2_BREAKCRYSTAL,
 	// Fake command; set current player for succeeding mega pkt buffer messages.
 	//
 	// body (TFakeCmdPlr)
@@ -526,6 +535,24 @@ struct TCmdShrineBuff {
 	uint8_t curse;
 };
 
+struct TCmdFuseRunes {
+	_cmd_id bCmd;
+	/** A RuneFamily. */
+	uint8_t family;
+	/** The RuneStrength of the runes it takes. */
+	uint8_t strength;
+	uint32_t seed;
+};
+
+struct TCmdBreakCrystal {
+	_cmd_id bCmd;
+	/** Where the demon stands, and its life (a raw Fixed26_6), for the delta of a level this machine doesn't have loaded. */
+	uint8_t x;
+	uint8_t y;
+	uint16_t monsterId;
+	int32_t hitPoints;
+};
+
 struct TCmdSpawnMonster {
 	_cmd_id bCmd;
 	uint8_t x;
@@ -567,6 +594,12 @@ struct TItem {
 	uint32_t dwBuff;
 	uint16_t wToHit;
 	uint16_t wMaxDam;
+	/**
+	 * POE2 Mashup: the crafting state the item's seed can't rebuild (sockets, runes, essence marks...), in the item
+	 * save's own layout (PackCraftState, PackCraftExtension). All zero for an item without any: it recreates as before.
+	 */
+	uint8_t craft[CraftStateSaveSize];
+	uint8_t craftExtension[CraftExtensionSaveSize];
 };
 
 struct TEar {
@@ -742,6 +775,8 @@ extern int dwRecCount;
 
 void PrepareItemForNetwork(const Item &item, TItem &messageItem);
 void PrepareEarForNetwork(const Item &item, TEar &ear);
+/** @brief POE2 Mashup: the crafting state a network item carries; none for an item without POE2 crafting. */
+Poe2Craft NetItemCraft(const TItem &messageItem);
 void RecreateItem(const Player &player, const TItem &messageItem, Item &item);
 void msg_send_drop_pkt(uint8_t pnum, leaveinfo_t reason);
 bool msg_wait_resync();
@@ -764,6 +799,8 @@ void ClearLastSentPlayerCmd();
 void NetSendCmd(bool bHiPri, _cmd_id bCmd);
 void NetSendCmdFreshFloor(uint8_t level, bool isSetLevel, uint32_t seed, uint16_t visits);
 void NetSendCmdShrineBuff(uint8_t kind, uint8_t variant, uint8_t curse);
+void NetSendCmdFuseRunes(uint8_t family, uint8_t strength, uint32_t seed);
+void NetSendCmdBreakCrystal(const Monster &monster);
 void NetSendCmdSpawnMonster(Point position, Direction dir, uint16_t typeIndex, uint16_t monsterId, uint32_t seed, uint8_t golemOwnerPlayerId, uint8_t golemSpellLevel);
 void NetSendCmdLoc(uint8_t playerId, bool bHiPri, _cmd_id bCmd, Point position);
 void NetSendCmdLocParam1(bool bHiPri, _cmd_id bCmd, Point position, uint16_t wParam1);

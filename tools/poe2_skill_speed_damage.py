@@ -56,6 +56,8 @@ NO_DAMAGE = {
 	'Weaken', 'IronMaiden', 'Decrepify', 'LowerResist', 'Confuse', 'Attract',
 	'Spell Healing', 'Spell ManaShield', 'Spell StoneCurse', 'Spell Phasing', 'Spell Golem', 'Spell Teleport', 'Spell Warp',
 	'Spell Etherealize', 'Spell Berserk', 'Spell Reflect',
+	# The draft gems' warcries (Q48): priced on the hits they empower, not a hit of their own.
+	'HellfireRoar', 'QuakingRoar', 'CryOfBulKathos', 'BulwarkRoar',
 }
 
 # The skills the caster weapons rework's staves and wands grant (caster-weapons-plan-v2.md 7.2 and 7.4): each hit is set

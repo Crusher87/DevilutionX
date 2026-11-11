@@ -9,15 +9,18 @@
 #include <array>
 #include <cstring>
 
+#include "interfac.h"
 #include "levels/gendung.h"
 #include "msg.h"
-#include "options.h"
 #include "multi.h"
+#include "options.h"
 #include "player.h"
+#include "plrmsg.h"
 #include "poe2/cathedral_floors.hpp"
 #include "poe2/telemetry.hpp"
 #include "portal.h"
 #include "quests.h"
+#include "utils/language.h"
 #include "utils/str_cat.hpp"
 
 namespace devilution {
@@ -28,7 +31,7 @@ bool Poe2ForceFreshFloor = false;
 
 namespace {
 
-constexpr uint8_t FloorsVersion = 2;
+constexpr uint8_t FloorsVersion = 3;
 constexpr size_t SetLevelCount = static_cast<size_t>(SL_LAST) + 1;
 
 /** @brief What the save remembers about one floor. */
@@ -41,12 +44,15 @@ struct FloorRecord {
 	uint16_t visits = 0;
 	/** The builder and rooms of the floor's current build are settled (see Poe2FloorBuildFor). */
 	bool stamped = false;
-	/** Built by the new floor builder (poe2/cathedral_floors.hpp): the Cathedral's, Catacombs', Caves', Hell's or the Hive's. */
+	/** Built by the new floor builder (poe2/cathedral_floors.hpp): the Cathedral's, Catacombs', Caves', Hell's, the Hive's or the Crypt's. */
 	bool cathedralFunnel = false;
 	/** The designed rooms this build had to leave out, so building it again gives the same floor. */
 	uint64_t avoidRooms = 0;
 	/** The rooms of this build still have to go into the room history. */
 	bool roomsPending = false;
+	/** CathedralRoomsStamp of the rooms the new builder used (0: saved before stamps), so a game update that changes
+	 * the rooms builds the floor fresh instead of loading its old chests and fires onto a new layout. */
+	uint32_t roomsStamp = 0;
 };
 
 std::array<FloorRecord, NUMLEVELS> Floors;
@@ -83,6 +89,54 @@ bool MyPortalLeadsTo(int level, bool isSetLevel)
 		return false;
 	const Portal &portal = Portals[MyPlayerId];
 	return portal.open && portal.level != 0 && portal.setlvl == isSetLevel && portal.level == level;
+}
+
+/** A saved game was just loaded: its floors still have to be checked against this version's rooms. */
+bool CheckRoomsAfterLoad = false;
+
+/** The floor was built by the new builder from rooms this game version no longer has (or before rooms were stamped). */
+bool BuiltFromOtherRooms(int level, bool isSetLevel)
+{
+	if (isSetLevel || level <= 0 || level >= NUMLEVELS)
+		return false;
+	const FloorRecord &record = Floors[level];
+	if (!record.stamped || !record.cathedralFunnel)
+		return false;
+	const dungeon_type type = GetLevelType(level);
+	const bool catacombs = type == DTYPE_CATACOMBS;
+	const bool caves = type == DTYPE_CAVES;
+	const bool hell = type == DTYPE_HELL;
+	const bool hive = type == DTYPE_NEST;
+	const bool crypt = type == DTYPE_CRYPT;
+	return record.roomsStamp != CathedralRoomsStamp(catacombs, caves, hell, hive, crypt);
+}
+
+/**
+ * Loading builds the floor you stand on again from its seed and puts its saved chests, fires and monsters back on it.
+ * After a game update that changed its rooms that seed gives a different layout, so the floor is built fresh instead
+ * and you start at its stairs. A town portal into such a floor closes for the same reason.
+ */
+void RebuildFloorsFromOtherRooms()
+{
+	Player &myPlayer = *MyPlayer;
+	if (MyPlayerId < MAXPORTAL) {
+		const Portal &portal = Portals[MyPlayerId];
+		// Its far end would open onto the new layout, maybe inside a wall.
+		if (portal.open && portal.level != 0 && BuiltFromOtherRooms(portal.level, portal.setlvl)) {
+			const int level = portal.level;
+			if (PortalOnLevel(myPlayer))
+				RemovePortalMissile(myPlayer);
+			DeactivatePortal(myPlayer);
+			Poe2ForgetFloor(level, false);
+			TelemetryLog("floor", StrCat("portal to floor ", level, " closed: the floor was saved with other rooms"));
+		}
+	}
+	if (setlevel || !BuiltFromOtherRooms(currlevel, false) || myPlayer._pmode == PM_NEWLVL)
+		return;
+	TelemetryLog("floor", StrCat("floor ", static_cast<int>(currlevel), " was saved with other rooms: built fresh"));
+	EventPlrMsg(_("The game was updated, so this floor was built anew."), UiFlags::ColorWhitegold);
+	Poe2ForceFreshFloor = true;
+	StartNewLvl(myPlayer, WM_DIABNEXTLVL, currlevel);
 }
 
 bool AnyoneElseOnFloor(int level, bool isSetLevel)
@@ -167,6 +221,7 @@ void PutRecord(std::vector<uint8_t> &out, const FloorRecord &record)
 	Put16(out, record.visits);
 	out.push_back(static_cast<uint8_t>((record.stamped ? 1 : 0) | (record.cathedralFunnel ? 2 : 0)));
 	Put64(out, record.avoidRooms);
+	Put32(out, record.roomsStamp);
 }
 
 FloorRecord GetRecord(std::span<const uint8_t> data, size_t &pos, uint8_t version)
@@ -180,6 +235,8 @@ FloorRecord GetRecord(std::span<const uint8_t> data, size_t &pos, uint8_t versio
 		record.stamped = (flags & 1) != 0;
 		record.cathedralFunnel = (flags & 2) != 0;
 		record.avoidRooms = Get64(data, pos);
+		if (version >= 3)
+			record.roomsStamp = Get32(data, pos);
 	} else if (record.visits > 0) {
 		// Saved before the new Cathedral floors: every floor built so far came from Diablo's builder.
 		record.stamped = true;
@@ -189,6 +246,8 @@ FloorRecord GetRecord(std::span<const uint8_t> data, size_t &pos, uint8_t versio
 
 size_t RecordSize(uint8_t version)
 {
+	if (version >= 3)
+		return 1 + 4 + 2 + 1 + 8 + 4;
 	return version >= 2 ? 1 + 4 + 2 + 1 + 8 : 1 + 4 + 2;
 }
 
@@ -201,6 +260,7 @@ void Poe2FloorsReset()
 	Poe2GameTicks = 0;
 	Poe2FloorFresh = false;
 	Poe2ForceFreshFloor = false;
+	CheckRoomsAfterLoad = false;
 	FloorRollState = MixSeed(sgGameInitInfo.gameSeed[0] ^ 0x5F10EDU);
 	RecentRooms.fill(0);
 }
@@ -208,6 +268,11 @@ void Poe2FloorsReset()
 void Poe2FloorsTick()
 {
 	Poe2GameTicks++;
+	if (CheckRoomsAfterLoad) {
+		CheckRoomsAfterLoad = false;
+		if (!gbIsMultiplayer)
+			RebuildFloorsFromOtherRooms();
+	}
 }
 
 bool Poe2FloorIsKept(int level, bool isSetLevel)
@@ -337,6 +402,7 @@ void Poe2FloorsAfterLoadGame()
 		else
 			SetFloors[i].leftAt = Poe2GameTicks;
 	}
+	CheckRoomsAfterLoad = true;
 }
 
 void Poe2PortalClosed(int level, bool isSetLevel)
@@ -401,7 +467,6 @@ bool Poe2UnpackFloors(std::span<const uint8_t> data)
 	return true;
 }
 
-
 Poe2FloorBuild Poe2FloorBuildFor(int level)
 {
 	FloorRecord *record = RecordFor(level, false);
@@ -413,8 +478,11 @@ Poe2FloorBuild Poe2FloorBuildFor(int level)
 		const bool caves = leveltype == DTYPE_CAVES;
 		const bool hell = leveltype == DTYPE_HELL;
 		const bool hive = leveltype == DTYPE_NEST;
+		const bool crypt = leveltype == DTYPE_CRYPT;
 		bool wanted = *GetOptions().Gameplay.newCathedralFloors;
-		if (hive)
+		if (crypt)
+			wanted = *GetOptions().Gameplay.newCryptFloors;
+		else if (hive)
 			wanted = *GetOptions().Gameplay.newHiveFloors;
 		else if (hell)
 			wanted = *GetOptions().Gameplay.newHellFloors;
@@ -424,8 +492,9 @@ Poe2FloorBuild Poe2FloorBuildFor(int level)
 			wanted = *GetOptions().Gameplay.newCatacombsFloors;
 		// A kept floor that was never settled was built before its dungeon had the new builder: it stays Diablo's.
 		record->cathedralFunnel = !record->kept && wanted;
-		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs, caves || hive, hell, hive) : 0;
+		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs, caves || hive, hell, hive, crypt) : 0;
 		record->roomsPending = record->cathedralFunnel;
+		record->roomsStamp = record->cathedralFunnel ? CathedralRoomsStamp(catacombs, caves, hell, hive, crypt) : 0;
 	}
 	return { record->cathedralFunnel, record->avoidRooms };
 }

@@ -65,6 +65,8 @@ constexpr int IgnitePercentPerSecond = 20;
 /** @brief POE2: shocked monsters take 20% more damage for 4 seconds. */
 constexpr int ShockTicks = 4 * 20;
 constexpr int ShockDamagePercent = 20;
+/** @brief The more damage a shocked monster takes, in percent: ShockDamagePercent, raised by its shock's magnitude. */
+[[nodiscard]] int ShockedDamagePercent(const Monster &monster);
 
 /** @brief POE2: cold hits always chill, slowing by up to 50% for 2 seconds. */
 constexpr int ChillTicks = 2 * 20;

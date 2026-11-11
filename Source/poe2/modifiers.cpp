@@ -273,6 +273,17 @@ void AddPoe2Stat(Item &item, Poe2ItemStat stat, int value)
 	total = static_cast<int16_t>(std::clamp(total + value, static_cast<int>(INT16_MIN), static_cast<int>(INT16_MAX)));
 }
 
+/** Moves this percent of the item's two other attribute requirements to the one it names, which caps at 255. */
+void ConvertRequirements(uint8_t &to, uint8_t &first, uint8_t &second, int percent)
+{
+	percent = std::clamp(percent, 0, 100);
+	const int fromFirst = first * percent / 100;
+	const int fromSecond = second * percent / 100;
+	first = static_cast<uint8_t>(first - fromFirst);
+	second = static_cast<uint8_t>(second - fromSecond);
+	to = static_cast<uint8_t>(std::min(to + fromFirst + fromSecond, static_cast<int>(UINT8_MAX)));
+}
+
 /** Adds to an item's 16-bit weapon damage, clamped to the field. */
 uint16_t AddToDamage(uint16_t base, int value)
 {
@@ -369,9 +380,10 @@ std::optional<uint8_t> FindFamilyForItem(std::string_view id, ModSlot slot)
 	const uint32_t slotBit = 1U << static_cast<uint32_t>(slot);
 	if (!named || (Families[*named].slots & slotBit) != 0)
 		return named;
-	// Only the rework's families stand in, and they list only its new slots, so no older item's result changes.
+	// Only the rework's families stand in, and they list only its new slots, so no older item's result changes. The
+	// essences' own families after them never do.
 	const ModEffect effect = Families[*named].effect;
-	for (size_t i = LegacyModFamilyCount; i < Families.size(); i++) {
+	for (size_t i = LegacyModFamilyCount; i < std::min<size_t>(Families.size(), EssenceModFamilyStart); i++) {
 		if (Families[i].effect == effect && effect != ModEffect::None && (Families[i].slots & slotBit) != 0)
 			return static_cast<uint8_t>(i);
 	}
@@ -543,6 +555,16 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::LifeOnKill:
 	case ModEffect::MinionLife:
 	case ModEffect::MinionLifeRegen:
+	case ModEffect::LifeLeech:
+	case ModEffect::LifePercentOnKill:
+	case ModEffect::LifeRecoup:
+	case ModEffect::FlaskRecovery:
+	case ModEffect::LifeRegenPercent:
+	case ModEffect::ManaCostAsLife:
+	case ModEffect::PreventedPhysicalRecoup:
+	case ModEffect::FireRecoup:
+	case ModEffect::ColdRecoup:
+	case ModEffect::LightningRecoup:
 		return Life;
 	case ModEffect::Mana:
 	case ModEffect::ManaRegeneration:
@@ -551,6 +573,10 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::LocalSpiritPercent:
 	case ModEffect::SpiritAndMana:
 	case ModEffect::ManaOnKill:
+	case ModEffect::ManaLeech:
+	case ModEffect::ManaPercentOnKill:
+	case ModEffect::ManaPerArmour:
+	case ModEffect::ManaCostEfficiency:
 		return Mana;
 	case ModEffect::FlatDefense:
 	case ModEffect::FlatArmour:
@@ -561,6 +587,17 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::EvasionPercent:
 	case ModEffect::EnergyShieldPercent:
 	case ModEffect::BlockChance:
+	case ModEffect::Thorns:
+	case ModEffect::StunThreshold:
+	case ModEffect::EnergyShieldAsStunThreshold:
+	case ModEffect::ArmourToFire:
+	case ModEffect::ArmourToLightning:
+	case ModEffect::ArmourToCold:
+	case ModEffect::EnergyShieldRecharge:
+	case ModEffect::MaximumEnergyShield:
+	case ModEffect::ArmourFromRecentHitLoss:
+	case ModEffect::GlobalDefencesPercent:
+	case ModEffect::IncreasedBlock:
 		return Defence;
 	case ModEffect::LifeAndDefensePercent:
 		return Life | Defence;
@@ -583,6 +620,20 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::ChaosSpellDamage:
 	case ModEffect::DazeChance:
 	case ModEffect::MinionAddedDamage:
+	case ModEffect::FireAsExtra:
+	case ModEffect::LightningAsExtra:
+	case ModEffect::ColdAsExtra:
+	case ModEffect::AddedCold:
+	case ModEffect::StunBuildup:
+	case ModEffect::IgniteMagnitude:
+	case ModEffect::FreezeBuildup:
+	case ModEffect::ShockMagnitude:
+	case ModEffect::AttackCritChance:
+	case ModEffect::PoisonMagnitude:
+	case ModEffect::BleedMagnitude:
+	case ModEffect::ElementalAttackDamage:
+	case ModEffect::AttackElementalPenetration:
+	case ModEffect::PoisonOnHit:
 		return Damage;
 	case ModEffect::SpellDamageAndMana:
 		return Damage | Mana;
@@ -591,6 +642,9 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::Intelligence:
 	case ModEffect::AllAttributes:
 	case ModEffect::ReducedRequirements:
+	case ModEffect::RequirementsToStrength:
+	case ModEffect::RequirementsToDexterity:
+	case ModEffect::RequirementsToIntelligence:
 		return Attribute;
 	case ModEffect::FireResistance:
 	case ModEffect::ColdResistance:
@@ -599,9 +653,16 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::MinionResistances:
 	case ModEffect::ChaosResistance:
 	case ModEffect::MaxChaosResistance:
+	case ModEffect::MaxFireResistance:
+	case ModEffect::MaxLightningResistance:
+	case ModEffect::MaxColdResistance:
 		return Resistance;
+	case ModEffect::AllResistancesAndLife:
+		return Resistance | Life;
 	case ModEffect::AttackSpeed:
 	case ModEffect::CastSpeed:
+	case ModEffect::MovementSpeed:
+	case ModEffect::SkillDurationAndCooldown:
 		return Speed;
 	case ModEffect::MeleeSkillLevels:
 	case ModEffect::ProjectileSkillLevels:
@@ -612,11 +673,29 @@ uint8_t ModEffectTags(ModEffect effect)
 	case ModEffect::PhysicalSkillLevels:
 	case ModEffect::ChaosSkillLevels:
 	case ModEffect::MinionSkillLevels:
+	case ModEffect::StrikeSkillLevels:
+	case ModEffect::SlamSkillLevels:
+	case ModEffect::WarcrySkillLevels:
+	case ModEffect::CurseSkillLevels:
+	case ModEffect::HeraldSkillLevels:
+	case ModEffect::PlacedSkillLevels:
+	case ModEffect::BowSkillLevels:
+	case ModEffect::AreaSpellSkillLevels:
+	case ModEffect::ElementalSpellSkillLevels:
 		return Skill;
 	default:
 		return 0;
 	}
 }
+
+} // namespace
+
+bool IsSkillLevelEffect(ModEffect effect)
+{
+	return (ModEffectTags(effect) & (1 << 7)) != 0;
+}
+
+namespace {
 
 uint8_t ModsTags(const std::vector<Poe2ItemMod> &mods)
 {
@@ -1075,6 +1154,188 @@ void ApplyModEffect(Item &item, ModEffect effect, int v0, int v1)
 	case ModEffect::MaxChaosResistance:
 		AddPoe2Stat(item, Poe2ItemStat::MaxChaosResistance, v0);
 		break;
+	case ModEffect::LifeLeech:
+		AddPoe2Stat(item, Poe2ItemStat::LifeLeech, v0);
+		break;
+	case ModEffect::ManaLeech:
+		AddPoe2Stat(item, Poe2ItemStat::ManaLeech, v0);
+		break;
+	case ModEffect::Thorns:
+		AddPoe2Stat(item, Poe2ItemStat::ThornsMin, v0);
+		AddPoe2Stat(item, Poe2ItemStat::ThornsMax, std::max(v0, v1));
+		break;
+	case ModEffect::LifePercentOnKill:
+		AddPoe2Stat(item, Poe2ItemStat::LifePercentOnKill, v0);
+		break;
+	case ModEffect::ManaPercentOnKill:
+		AddPoe2Stat(item, Poe2ItemStat::ManaPercentOnKill, v0);
+		break;
+	case ModEffect::FireAsExtra:
+		AddPoe2Stat(item, Poe2ItemStat::FireAsExtra, v0);
+		break;
+	case ModEffect::LightningAsExtra:
+		AddPoe2Stat(item, Poe2ItemStat::LightningAsExtra, v0);
+		break;
+	case ModEffect::ColdAsExtra:
+		AddPoe2Stat(item, Poe2ItemStat::ColdAsExtra, v0);
+		break;
+	case ModEffect::AddedCold:
+		AddPoe2Stat(item, Poe2ItemStat::AddedColdMin, v0);
+		AddPoe2Stat(item, Poe2ItemStat::AddedColdMax, std::max(v0, v1));
+		break;
+	case ModEffect::FlaskRecovery:
+		AddPoe2Stat(item, Poe2ItemStat::FlaskRecovery, v0);
+		break;
+	case ModEffect::StunBuildup:
+		AddPoe2Stat(item, Poe2ItemStat::StunBuildup, v0);
+		break;
+	case ModEffect::StunThreshold:
+		AddPoe2Stat(item, Poe2ItemStat::StunThreshold, v0);
+		break;
+	case ModEffect::EnergyShieldAsStunThreshold:
+		AddPoe2Stat(item, Poe2ItemStat::EnergyShieldAsStunThreshold, v0);
+		break;
+	case ModEffect::ArmourToFire:
+		AddPoe2Stat(item, Poe2ItemStat::ArmourToFire, v0);
+		break;
+	case ModEffect::ArmourToLightning:
+		AddPoe2Stat(item, Poe2ItemStat::ArmourToLightning, v0);
+		break;
+	case ModEffect::ArmourToCold:
+		AddPoe2Stat(item, Poe2ItemStat::ArmourToCold, v0);
+		break;
+	case ModEffect::LifeRecoup:
+		AddPoe2Stat(item, Poe2ItemStat::LifeRecoup, v0);
+		break;
+	case ModEffect::EnergyShieldRecharge:
+		AddPoe2Stat(item, Poe2ItemStat::EnergyShieldRecharge, v0);
+		break;
+	case ModEffect::StrikeSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::StrikeSkillLevels, v0);
+		break;
+	case ModEffect::SlamSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::SlamSkillLevels, v0);
+		break;
+	case ModEffect::WarcrySkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::WarcrySkillLevels, v0);
+		break;
+	case ModEffect::CurseSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::CurseSkillLevels, v0);
+		break;
+	case ModEffect::HeraldSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::HeraldSkillLevels, v0);
+		break;
+	case ModEffect::PlacedSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::PlacedSkillLevels, v0);
+		break;
+	case ModEffect::BowSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::BowSkillLevels, v0);
+		break;
+	case ModEffect::AreaSpellSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::AreaSpellSkillLevels, v0);
+		break;
+	case ModEffect::ElementalSpellSkillLevels:
+		AddPoe2Stat(item, Poe2ItemStat::ElementalSpellSkillLevels, v0);
+		break;
+	case ModEffect::RequirementsToStrength:
+		ConvertRequirements(item._iMinStr, item._iMinDex, item._iMinMag, v0);
+		break;
+	case ModEffect::RequirementsToDexterity:
+		ConvertRequirements(item._iMinDex, item._iMinStr, item._iMinMag, v0);
+		break;
+	case ModEffect::RequirementsToIntelligence:
+		ConvertRequirements(item._iMinMag, item._iMinStr, item._iMinDex, v0);
+		break;
+	case ModEffect::IgniteMagnitude:
+		AddPoe2Stat(item, Poe2ItemStat::IgniteMagnitude, v0);
+		break;
+	case ModEffect::FreezeBuildup:
+		AddPoe2Stat(item, Poe2ItemStat::FreezeBuildup, v0);
+		break;
+	case ModEffect::ShockMagnitude:
+		AddPoe2Stat(item, Poe2ItemStat::ShockMagnitude, v0);
+		break;
+	case ModEffect::LifeRegenPercent:
+		AddPoe2Stat(item, Poe2ItemStat::LifeRegenRate, v0);
+		break;
+	case ModEffect::ManaCostAsLife:
+		AddPoe2Stat(item, Poe2ItemStat::ManaCostAsLife, v0);
+		break;
+	case ModEffect::AttackCritChance:
+		AddPoe2Stat(item, Poe2ItemStat::AttackCritChance, v0);
+		break;
+	case ModEffect::MovementSpeed:
+		AddPoe2Stat(item, Poe2ItemStat::MovementSpeed, v0);
+		break;
+	case ModEffect::MaximumEnergyShield:
+		AddPoe2Stat(item, Poe2ItemStat::MaximumEnergyShield, v0);
+		break;
+	case ModEffect::AllResistancesAndLife:
+		item._iPLFR = static_cast<int16_t>(item._iPLFR + v0);
+		item._iPLLR = static_cast<int16_t>(item._iPLLR + v0);
+		item._iPLMR = static_cast<int16_t>(item._iPLMR + v0);
+		item._iPLHP += Fixed10_6::fromInt(v1);
+		break;
+	case ModEffect::PoisonMagnitude:
+		AddPoe2Stat(item, Poe2ItemStat::PoisonMagnitude, v0);
+		break;
+	case ModEffect::BleedMagnitude:
+		AddPoe2Stat(item, Poe2ItemStat::BleedMagnitude, v0);
+		break;
+	case ModEffect::ElementalAttackDamage:
+		AddPoe2Stat(item, Poe2ItemStat::ElementalAttackDamage, v0);
+		break;
+	case ModEffect::AttackElementalPenetration:
+		AddPoe2Stat(item, Poe2ItemStat::AttackElementalPenetration, v0);
+		break;
+	case ModEffect::MaxFireResistance:
+		AddPoe2Stat(item, Poe2ItemStat::MaxFireResistance, v0);
+		break;
+	case ModEffect::MaxLightningResistance:
+		AddPoe2Stat(item, Poe2ItemStat::MaxLightningResistance, v0);
+		break;
+	case ModEffect::MaxColdResistance:
+		AddPoe2Stat(item, Poe2ItemStat::MaxColdResistance, v0);
+		break;
+	case ModEffect::SkillDurationAndCooldown:
+		AddPoe2Stat(item, Poe2ItemStat::SkillDurationAndCooldown, v0);
+		break;
+	case ModEffect::ManaPerArmour:
+		AddPoe2Stat(item, Poe2ItemStat::ManaPerArmour, v0);
+		break;
+	case ModEffect::ArmourFromRecentHitLoss:
+		AddPoe2Stat(item, Poe2ItemStat::ArmourFromRecentHitLoss, v0);
+		break;
+	case ModEffect::PreventedPhysicalRecoup:
+		AddPoe2Stat(item, Poe2ItemStat::PreventedPhysicalRecoup, v0);
+		break;
+	case ModEffect::GlobalDefencesPercent:
+		AddPoe2Stat(item, Poe2ItemStat::ArmourPercent, v0);
+		AddPoe2Stat(item, Poe2ItemStat::EvasionPercent, v0);
+		AddPoe2Stat(item, Poe2ItemStat::EnergyShieldPercent, v0);
+		break;
+	case ModEffect::FireRecoup:
+		AddPoe2Stat(item, Poe2ItemStat::FireRecoup, v0);
+		break;
+	case ModEffect::ColdRecoup:
+		AddPoe2Stat(item, Poe2ItemStat::ColdRecoup, v0);
+		break;
+	case ModEffect::LightningRecoup:
+		AddPoe2Stat(item, Poe2ItemStat::LightningRecoup, v0);
+		break;
+	case ModEffect::GoldFind:
+		AddPoe2Stat(item, Poe2ItemStat::GoldFind, v0);
+		break;
+	case ModEffect::ManaCostEfficiency:
+		AddPoe2Stat(item, Poe2ItemStat::ManaCostEfficiency, v0);
+		break;
+	case ModEffect::IncreasedBlock:
+		AddPoe2Stat(item, Poe2ItemStat::IncreasedBlock, v0);
+		break;
+	case ModEffect::PoisonOnHit:
+		AddPoe2Stat(item, Poe2ItemStat::PoisonChance, v0);
+		AddPoe2Stat(item, Poe2ItemStat::PoisonMagnitude, v1);
+		break;
 	}
 }
 
@@ -1083,6 +1344,9 @@ namespace {
 /** @brief A modifier's value as its line shows it: flat energy shield is rolled in defence points, each worth EnergyShieldPerDefense. */
 int ShownModValue(const ModFamily &family, size_t stat, int value)
 {
+	// Attack critical chance is kept in tenths of a percent; its modifiers roll whole percents (Essence of Seeking).
+	if (family.effect == ModEffect::AttackCritChance && stat == 0)
+		return value / 10;
 	return family.effect == ModEffect::FlatEnergyShield && stat == 0 ? value * EnergyShieldPerDefense : value;
 }
 
@@ -1222,9 +1486,60 @@ DamageType TaggedDamageType(uint32_t tags)
 	return DamageType::Physical;
 }
 
+/** @brief The gear's levels to the skills of a tag (build spec step 4): a skill takes each whose tags it has. */
+struct TaggedSkillLevels {
+	Poe2ItemStat stat;
+	/** The skill needs all of these tags... */
+	uint32_t all;
+	/** ...and one of these, when there are any. */
+	uint32_t any;
+};
+
+constexpr TaggedSkillLevels TaggedLevels[] = {
+	{ Poe2ItemStat::StrikeSkillLevels, ST_Strike, 0 },
+	{ Poe2ItemStat::SlamSkillLevels, ST_Slam, 0 },
+	{ Poe2ItemStat::WarcrySkillLevels, ST_Warcry, 0 },
+	{ Poe2ItemStat::CurseSkillLevels, ST_Curse, 0 },
+	{ Poe2ItemStat::HeraldSkillLevels, ST_Herald, 0 },
+	{ Poe2ItemStat::PlacedSkillLevels, ST_Placed, 0 },
+	{ Poe2ItemStat::BowSkillLevels, ST_Bow, 0 },
+	{ Poe2ItemStat::AreaSpellSkillLevels, ST_Area | ST_Spell, 0 },
+	{ Poe2ItemStat::ElementalSpellSkillLevels, ST_Spell, ST_Elemental },
+};
+
+int TaggedSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
+{
+	if (skill.kind == SkillKind::None)
+		return 0;
+	uint32_t tags = 0;
+	int bonus = 0;
+	bool tagged = false;
+	for (const TaggedSkillLevels &levels : TaggedLevels) {
+		const int value = data.itemStats[static_cast<size_t>(levels.stat)];
+		if (value == 0)
+			continue;
+		if (!tagged) {
+			tags = SkillTags(skill);
+			tagged = true;
+		}
+		if ((tags & levels.all) == levels.all && (levels.any == 0 || (tags & levels.any) != 0))
+			bonus += value;
+	}
+	return bonus;
+}
+
+int BaseItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill);
+
 } // namespace
 
 int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
+{
+	return BaseItemSkillLevelBonus(data, skill) + TaggedSkillLevelBonus(data, skill);
+}
+
+namespace {
+
+int BaseItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 {
 	const auto stat = [&data](Poe2ItemStat which) { return static_cast<int>(data.itemStats[static_cast<size_t>(which)]); };
 	// Some uniques add levels to every skill while on Low Life; Dark Arts adds them to the chaos skill it supports.
@@ -1280,6 +1595,8 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill)
 		return lowLife;
 	}
 }
+
+} // namespace
 
 std::string MagicModItemName(const Item &item, std::string_view baseName)
 {

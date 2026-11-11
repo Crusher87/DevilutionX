@@ -74,6 +74,8 @@ enum class TalkID : uint8_t {
 	Gamble,
 	/** POE2 Mashup: the Fountain of Tears trade window. */
 	Tears,
+	/** POE2 Mashup: Cain fuses runes (build spec step 5). */
+	RuneFusing,
 };
 
 /** Currently active store */
@@ -179,10 +181,13 @@ void DrawSLine(const Surface &out, int sy);
 void DrawSTextHelp();
 void ClearSText(int s, int e);
 void StartStore(TalkID s);
+/** @brief POE2 Mashup: redraws Cain's rune fusing list after a fusing, when it is open. */
+void RefreshRuneFusing();
 /** @brief Opens the shared stash beside the inventory. */
 void OpenStashPanel();
 /** @brief POE2 Mashup: Cain identifies everything the hero carries, for free, and says how many. */
-void CainIdentifyAll();
+/** @brief POE2 Mashup: Cain identifies everything the hero carries; how says how he was asked, for the play log. */
+void CainIdentifyAll(std::string_view how);
 
 /** @brief Remembers where the hero stood when a stash or vendor panel opened, so walking away closes it. */
 void RememberInteractionSpot();

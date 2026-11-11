@@ -802,6 +802,7 @@ GraphicsOptions::GraphicsOptions()
     , hdLighting("HD Lighting", OptionEntryFlags::None, N_("HD Lighting"), N_("Torches and spells light the room in their own colours, walls stop their light, and heroes and monsters cast soft shadows that move with each light. Needs HD Graphics."), true)
     , hdStrongMood("HD Stronger Mood", OptionEntryFlags::None, N_("HD Stronger Mood"), N_("Firelight warmer and dark corners darker, in a mood of its own for each part of the dungeon: cold Catacombs, ember-red Hell, a sickly green Crypt. Needs HD Graphics."), true)
     , hdLiftDarks("HD Lift Dark Shades", OptionEntryFlags::None, N_("HD Lift Dark Shades"), N_("Makes the darkest shades a little lighter, so dark scenes darken less on some screens while they move. Needs HD Graphics."), false)
+    , physicsDebris("Physics Debris", OptionEntryFlags::None, N_("Physics Debris"), N_("Chips of stone from slams, sparks off armoured monsters and drops of blood fly, bounce off the floor and walls, and settle. Looks only. Needs Modern Effects."), true)
     , brightness("Brightness Correction", OptionEntryFlags::Invisible, "Brightness Correction", "Brightness correction level.", 0)
     , zoom("Zoom", OptionEntryFlags::None, N_("Zoom"), N_("Zoom on when enabled."), false)
     , perPixelLighting("Per-pixel Lighting", OptionEntryFlags::None, N_("Per-pixel Lighting"), N_("Subtile lighting for smoother light gradients."), DEFAULT_PER_PIXEL_LIGHTING)
@@ -829,6 +830,7 @@ std::vector<OptionEntryBase *> GraphicsOptions::GetEntries()
 		&hdLighting,
 		&hdStrongMood,
 		&hdLiftDarks,
+		&physicsDebris,
 #endif
 #ifndef __vita__
 		&fullscreen,
@@ -897,12 +899,20 @@ GameplayOptions::GameplayOptions()
     , disableCripplingShrines("Disable Crippling Shrines", OptionEntryFlags::None, N_("Disable Crippling Shrines"), N_("When enabled Cauldrons, Fascinating Shrines, Goat Shrines, Ornate Shrines, Sacred Shrines and Murphy's Shrines are not able to be clicked on and labeled as disabled."), false)
     , quickCast("Quick Cast", OptionEntryFlags::None, N_("Quick Cast"), N_("Spell hotkeys instantly cast the spell, rather than switching the readied spell."), false)
     , wasdMovement("WASD Movement", OptionEntryFlags::None, N_("WASD Movement"), N_("On: walk with W, A, S and D; clicking the ground no longer walks and attacks hit in place. Off: click to move; W, A, S and D keep their usual shortcuts."), true)
-    , lootFilter("Loot Filter", OptionEntryFlags::None, N_("Loot Filter"), N_("Hides low quality weapons, armor and jewelry on the ground. Gold, potions, gems, orbs, rares and uniques always show."), LootFilter::Off,
+    , lootFilter("Loot Filter", OptionEntryFlags::None, N_("Loot Filter"), N_("POE2 mode: NeverSink's loot filter. Good items get coloured names, light beams, drop sounds and map icons. Each level hides more low value items than the one before. Off shows every item plainly."), LootFilter::Off,
           {
               { LootFilter::Off, N_("Off") },
-              { LootFilter::HideNormal, N_("Hide normal gear") },
-              { LootFilter::HideNormalAndMagic, N_("Hide normal and magic gear") },
+              { LootFilter::Soft, N_("Soft") },
+              { LootFilter::Regular, N_("Regular") },
+              { LootFilter::SemiStrict, N_("Semi-Strict") },
+              { LootFilter::Strict, N_("Strict") },
+              { LootFilter::VeryStrict, N_("Very Strict") },
+              { LootFilter::UberStrict, N_("Uber Strict") },
+              { LootFilter::UberPlusStrict, N_("Uber Plus Strict") },
           })
+    , lootFilterBeams("Loot Filter Beams", OptionEntryFlags::None, N_("Loot Filter Beams"), N_("POE2 mode, with the loot filter on: a column of light over good items."), true)
+    , lootFilterSounds("Loot Filter Sounds", OptionEntryFlags::None, N_("Loot Filter Sounds"), N_("POE2 mode, with the loot filter on: a sound when a good item drops."), true)
+    , lootFilterMapIcons("Loot Filter Map Icons", OptionEntryFlags::None, N_("Loot Filter Map Icons"), N_("POE2 mode, with the loot filter on: good items you have seen show on the maps."), true)
     , showLifeManaLevels("Show Life Mana Levels", OptionEntryFlags::None, N_("Show Life/Mana Levels"), N_("POE2 mode: shows your current and maximum Life and Energy Shield above the life globe, and Mana and Spirit (reserved / total) above the mana globe."), false)
     , heroMiniBar("Mini Life Bar Above You", OptionEntryFlags::None, N_("Mini Life Bar Above You"), N_("POE2 mode: a small life bar with a thin mana bar under it over your hero."), false)
     , heroMiniBarEnergyShield("Mini Bar Shows Energy Shield", OptionEntryFlags::None, N_("Mini Bar Shows Energy Shield"), N_("POE2 mode: the mini bar over your hero shows your Energy Shield over the top of the life bar."), false)
@@ -925,6 +935,7 @@ GameplayOptions::GameplayOptions()
     , newCavesFloors("New Caves Floors", OptionEntryFlags::None, N_("New Caves Floors"), N_("On: Caves floors are built like the new Cathedral floors, from their own rooms. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , newHellFloors("New Hell Floors", OptionEntryFlags::None, N_("New Hell Floors"), N_("On: Hell floors (levels 13 to 15) are built like the new Cathedral floors, from their own rooms. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , newHiveFloors("New Hive Floors", OptionEntryFlags::None, N_("New Hive Floors"), N_("On: Hellfire's Hive floors (levels 17 to 20) are built like the new Cathedral floors, from their own rooms. Off: Hellfire's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
+    , newCryptFloors("New Crypt Floors", OptionEntryFlags::None, N_("New Crypt Floors"), N_("On: Hellfire's Crypt floors (levels 21 to 24) are built like the new Cathedral floors, from their own rooms. Off: Hellfire's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , numHealPotionPickup("Heal Potion Pickup", OptionEntryFlags::None, N_("Heal Potion Pickup"), N_("Number of Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numFullHealPotionPickup("Full Heal Potion Pickup", OptionEntryFlags::None, N_("Full Heal Potion Pickup"), N_("Number of Full Healing potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
     , numManaPotionPickup("Mana Potion Pickup", OptionEntryFlags::None, N_("Mana Potion Pickup"), N_("Number of Mana potions to pick up automatically."), 0, { 0, 1, 2, 4, 8, 16 })
@@ -965,7 +976,9 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&showMonsterType,
 		&showItemLabels,
 		&lootFilter,
-		&showLifeManaLevels,
+		&lootFilterBeams,
+		&lootFilterSounds,
+		&lootFilterMapIcons,
 		&heroMiniBar,
 		&heroMiniBarEnergyShield,
 		&hurtMonsterBars,
@@ -982,6 +995,7 @@ std::vector<OptionEntryBase *> GameplayOptions::GetEntries()
 		&newCavesFloors,
 		&newHellFloors,
 		&newHiveFloors,
+		&newCryptFloors,
 		&autoRefillBelt,
 		&autoEquipWeapons,
 		&autoEquipArmor,

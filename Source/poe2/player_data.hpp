@@ -186,7 +186,68 @@ enum class WeaponSkill : uint8_t {
 	PoisonExplosion,
 	PoisonNova,
 	AcidCloud,
-	Last = AcidCloud,
+	/** The draft gems' Staff batch (Curtis 2026-11-07, Q48): POE2's quarterstaff skills. */
+	WrathOfTheSkies,
+	FrostveinRupture,
+	RimeStrikes,
+	NorthwindWave,
+	ThunderFurrow,
+	Shatterpalm,
+	DervishAdvance,
+	StormSiphon,
+	TempestSweep,
+	PhantomStep,
+	SkylordsStorm,
+	PalmOfTheFrozenNorth,
+	/** The draft gems' Mace, Axe and Sword batch (Curtis 2026-11-07, Q48), with the warcries the three tabs share. */
+	HellfireRoar,
+	FrostforgedHammer,
+	PlateBreaker,
+	MagmaHurl,
+	ArreatCrash,
+	Earthsplitter,
+	BrimstoneRift,
+	AncestorTotem,
+	HephastosHammer,
+	QuakingRoar,
+	HammerOfZakarum,
+	MountainsFall,
+	CryOfBulKathos,
+	StormEdge,
+	FrostbiteBlades,
+	CinderStrike,
+	SteelTempest,
+	ThunderHatchet,
+	BloodHarvest,
+	PyreBlow,
+	MammothCharge,
+	/** The draft gems' Sword and Shield batch (Q48). */
+	PhantomBlade,
+	HoradricSundering,
+	TollingShield,
+	BulwarkRoar,
+	ZakarumsJudgement,
+	/** The draft gems' Bow batch (Q48, build order 3): real arrows, with the bow's arrow supports. */
+	ColdArrow,
+	DeadeyeShot,
+	ShatterShot,
+	SparkArrow,
+	Strafe,
+	KindlingArrow,
+	WhirlingVolley,
+	LodestoneSalvo,
+	SwampGasArrow,
+	/** The draft gems' Dagger batch (Q48, build order 4): stabs, throws and a sentry on the Dagger tab. */
+	FireBlast,
+	ShockWeb,
+	BladesOfIce,
+	PhoenixStrike,
+	Bloodletting,
+	EmberFang,
+	DeathSentry,
+	VizJaqtaarStrike,
+	WintersEdge,
+	Last = WintersEdge,
 };
 
 /** @brief The first skill a caster weapon grants, and the last: every one between them is granted too. */
@@ -956,6 +1017,12 @@ int ItemSkillLevelBonus(const Poe2PlayerData &data, SkillSlot skill);
  *
  * Saved in its own "poe2hero" entry of the hero save, so heroes stay loadable by other builds.
  */
+/** @brief Holy Shield's extra chance to block, in percentage points, while it lasts (Curtis 2026-11-07, Q37). */
+constexpr int HolyShieldBlockChance = 15;
+/** @brief Bulwark Roar's extra chance to block while it lasts (Q48), and its place in Poe2PlayerData::cryHits (EmpoweringCry::Bulwark). */
+constexpr int BulwarkBlockChance = 20;
+constexpr size_t BulwarkRoarCry = 3;
+
 struct Poe2PlayerData {
 	/** @brief Support gems socketed in each Skills panel socket's skill. */
 	std::array<SupportSockets, NumSkillSlots> slotSupports {};
@@ -1048,13 +1115,44 @@ struct Poe2PlayerData {
 	uint8_t comboTicks = 0;
 	uint8_t rage = 0;
 	uint8_t rageTicks = 0;
-	/** @brief Defensive skill buffs (not saved): Frozen Armor, Holy Shield and Shield Wall, in game ticks left. */
+	/** @brief Defensive skill buffs (not saved): Frozen Armor and Holy Shield, in game ticks left. */
 	uint16_t frozenArmorTicks = 0;
 	uint16_t holyShieldTicks = 0;
-	uint16_t shieldWallTicks = 0;
 	/** @brief Soul Harvest: souls taken from corpses, each adding damage until the timer runs out (not saved). */
 	uint8_t soulStacks = 0;
 	uint16_t soulTicks = 0;
+	/** @brief Zeal's uses towards its heavy blow, and the game ticks until the count starts over (not saved). */
+	uint8_t zealCount = 0;
+	uint8_t zealTicks = 0;
+	/** @brief Rime Strikes' strikes towards its third, and the game ticks until the count starts over (not saved). */
+	uint8_t rimeCount = 0;
+	uint8_t rimeTicks = 0;
+	/** @brief Frostforged Hammer's hits towards its freezing third, and the game ticks until the count starts over (not saved). */
+	uint8_t frostforgedCount = 0;
+	uint8_t frostforgedTicks = 0;
+	/** @brief Blades of Ice's stabs towards its freezing third, and the game ticks until the count starts over (not saved). */
+	uint8_t bladesOfIceCount = 0;
+	uint8_t bladesOfIceTicks = 0;
+	/**
+	 * @brief Phoenix Strike's strikes towards its third, the game ticks until the count starts over, and the element its
+	 * next third adds, in turn fire, ice and lightning (not saved).
+	 */
+	uint8_t phoenixCount = 0;
+	uint8_t phoenixTicks = 0;
+	uint8_t phoenixElement = 0;
+	/**
+	 * @brief The damage war cries' empowered hits (not saved), by EmpoweringCry: the hits left, the game ticks they last,
+	 * and whether a use this tick took one already (a use's hits on several monsters spend one).
+	 */
+	std::array<uint8_t, 4> cryHits {};
+	std::array<uint8_t, 4> cryTicks {};
+	std::array<bool, 4> cryUsedThisTick {};
+	/** @brief The percent of its bonus that use gets: all of it, or the share of its swings it could pay for (not saved). */
+	std::array<uint8_t, 4> cryShareThisTick {};
+	/** @brief What is left of Bulwark Roar's Guard, raw life it takes instead of the hero while the cry lasts (not saved). */
+	int32_t bulwarkGuard = 0;
+	/** @brief Where Skylord's Storm last blinked from, for a support's repeat to strike there again (not saved). */
+	Point skylordFrom {};
 	/** @brief A skill still firing a stream of shots, one every few ticks, e.g. Barrage's arrows (not saved). */
 	WeaponSkill volleySkill = WeaponSkill::None;
 	uint8_t volleyShotsLeft = 0;
@@ -1335,9 +1433,25 @@ struct Poe2PlayerData {
 		commandState = {};
 		frozenArmorTicks = 0;
 		holyShieldTicks = 0;
-		shieldWallTicks = 0;
 		soulStacks = 0;
 		soulTicks = 0;
+		zealCount = 0;
+		zealTicks = 0;
+		rimeCount = 0;
+		rimeTicks = 0;
+		frostforgedCount = 0;
+		frostforgedTicks = 0;
+		bladesOfIceCount = 0;
+		bladesOfIceTicks = 0;
+		phoenixCount = 0;
+		phoenixTicks = 0;
+		phoenixElement = 0;
+		cryHits = {};
+		cryTicks = {};
+		cryUsedThisTick = {};
+		cryShareThisTick = {};
+		bulwarkGuard = 0;
+		skylordFrom = {};
 		riposteTicks = 0;
 		frenzyCharges = 0;
 		frenzyTicks = 0;
@@ -1387,10 +1501,25 @@ struct Poe2PlayerData {
 			frozenArmorTicks--;
 		if (holyShieldTicks > 0)
 			holyShieldTicks--;
-		if (shieldWallTicks > 0)
-			shieldWallTicks--;
 		if (soulTicks > 0 && --soulTicks == 0)
 			soulStacks = 0;
+		if (zealTicks > 0 && --zealTicks == 0)
+			zealCount = 0;
+		if (rimeTicks > 0 && --rimeTicks == 0)
+			rimeCount = 0;
+		if (frostforgedTicks > 0 && --frostforgedTicks == 0)
+			frostforgedCount = 0;
+		if (bladesOfIceTicks > 0 && --bladesOfIceTicks == 0)
+			bladesOfIceCount = 0;
+		if (phoenixTicks > 0 && --phoenixTicks == 0)
+			phoenixCount = 0;
+		for (size_t cry = 0; cry < cryHits.size(); cry++) {
+			cryUsedThisTick[cry] = false;
+			if (cryTicks[cry] > 0 && --cryTicks[cry] == 0)
+				cryHits[cry] = 0;
+		}
+		if (cryTicks[BulwarkRoarCry] == 0)
+			bulwarkGuard = 0;
 		if (frenzyTicks > 0 && --frenzyTicks == 0)
 			frenzyCharges = 0;
 		if (comboTicks > 0 && --comboTicks == 0)

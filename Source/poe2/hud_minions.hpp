@@ -36,6 +36,7 @@ std::vector<MinionPortrait> MinionHudPortraits(const Player &player);
 
 /** @brief An icon in the row that runs out: a ring drains round it and it blinks for its last seconds. */
 struct TimedHudIcon {
+	/** @brief A shrine's icon; unused when skill is set. */
 	SpellIcon icon;
 	/** @brief The tooltip, one line. */
 	std::string tooltip;
@@ -43,9 +44,16 @@ struct TimedHudIcon {
 	int ticksTotal;
 	/** @brief A curse on the hero rather than a buff: its ring is red. */
 	bool harmful;
+	/** @brief A skill gem's buff: the gem, drawn with the skill bar's icon. Empty for a shrine's. */
+	SkillSlot skill {};
+	/** @brief The hits or souls the buff has left, shown on the icon; 0 shows none. */
+	int count = 0;
 };
 
-/** @brief The timed icons after the portraits: the shrine buffs, oldest first, then a shrine's curse. */
+/**
+ * @brief The timed icons after the portraits: the shrine buffs, oldest first, a shrine's curse, then the skill gems'
+ * timed buffs on the hero (Battle Cry and the other war cries, Frozen Armor, Holy Shield and Soul Harvest).
+ */
 std::vector<TimedHudIcon> TimedHudIcons(const Player &player);
 
 void DrawMinionHud(const Surface &out);

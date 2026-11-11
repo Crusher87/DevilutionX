@@ -66,7 +66,7 @@ bool SkillHasStep(SkillSlot skill, SkillStep step)
 	case SkillStep::Backhand:
 		return skill.attack() == WeaponSkill::Flurry;
 	case SkillStep::Finisher:
-		return skill.attack() == WeaponSkill::FistsOfThunder;
+		return IsAnyOf(skill.attack(), WeaponSkill::FistsOfThunder, WeaponSkill::RimeStrikes);
 	default:
 		return false;
 	}
@@ -239,12 +239,12 @@ const Item *AttackWeapon(const Player &player)
 /** @brief The weapon's own increased attack speed, as POE2 applies it to the weapon alone. */
 int ItemLocalAttackSpeedPercent(const Item &item)
 {
-	if (item._iMagical != ITEM_QUALITY_NORMAL && !item._iIdentified)
+	if (!ItemModifiersCount(item))
 		return 0;
 	return item._iPoe2Stats[static_cast<size_t>(Poe2ItemStat::AttackSpeed)];
 }
 
-/** @brief The weapon's own increased attack speed if the hero's stats count it (CalcPlrItemVals: usable and identified). */
+/** @brief The weapon's own increased attack speed if the hero's stats count it (CalcPlrItemVals: usable, and identified outside POE2 mode). */
 int CountedLocalAttackSpeedPercent(const Player &player)
 {
 	const Item *weapon = AttackWeapon(player);

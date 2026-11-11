@@ -159,3 +159,60 @@ VenomBolt		0.8						Essence Drain
 PoisonExplosion		0.8						Profane Ritual
 PoisonNova		1.0						none (Diablo II Poison Nova)
 AcidCloud		1.0						none (Diablo III Acid Cloud)
+WrathOfTheSkies	70					143	122	Falling Thunder (POE2 slam 0.60; 0.70 so tier I is not sluggish)
+FrostveinRupture	75					134	117	Glacial Cascade
+RimeStrikes	140							Ice Strike: strikes 1-2
+RimeStrikes:finisher	70							every third strike, the shards
+NorthwindWave	55					182	141	Wave of Frost
+ThunderFurrow	75					134	117	Storm Wave
+Shatterpalm	75					134	117	Shattering Palm
+DervishAdvance	85			1000		273	187	Whirling Assault
+StormSiphon	100							Siphoning Strike
+TempestSweep	75					134	117	Wind Blast
+PhantomStep	60					167	134	Flicker Strike
+SkylordsStorm	70					143	122	Gathering Storm
+PalmOfTheFrozenNorth	120							Gelid Palm
+HellfireRoar		0.8						Infernal Cry
+FrostforgedHammer	85					118	109	Glacial Hammer (POE1)
+PlateBreaker	80					125	113	Armour Breaker
+MagmaHurl	75					134	117	Molten Blast
+ArreatCrash	75					134	117	Ice Crash (POE1)
+Earthsplitter	50					200	150	Sunder
+BrimstoneRift	80					125	113	Volcanic Fissure
+AncestorTotem	100							Ancestral Warrior Totem
+HephastosHammer	70					143	122	Forge Hammer
+QuakingRoar		0.8						Seismic Cry
+HammerOfZakarum	50					200	150	Hammer of the Gods
+MountainsFall	60					167	134	Avalanche
+CryOfBulKathos		0.8						Ancestral Cry
+StormEdge	100							Static Strike (POE1)
+FrostbiteBlades	100							Frost Blades (POE1)
+CinderStrike	100							Molten Strike (POE1)
+SteelTempest	70					143	122	Bladestorm (POE1)
+ThunderHatchet	80					125	113	none (thrown axe, as Double Throw)
+BloodHarvest	85					118	109	Blood Hunt
+PyreBlow	70					143	122	Infernal Blow (POE1)
+MammothCharge	80			300		172	136	Stampede (no leap at the end)
+PhantomBlade	90					112	106	Spectral Throw (POE1)
+HoradricSundering	55					182	141	Elemental Sundering
+TollingShield			0.8			124	112	Resonating Shield (one blast, like Blessed Shield)
+BulwarkRoar		0.8						Fortifying Cry
+ZakarumsJudgement			1.0			155	128	none (Workshop; nearest Condemn)
+ColdArrow	100							none (Diablo 2 Amazon); nearest Freezing Salvo
+DeadeyeShot	55					182	141	Snipe (a plain slow shot, no channel)
+ShatterShot	90					112	106	Ice Shot
+SparkArrow	110							Electrocuting Arrow
+Strafe	120							Tornado Shot (no tornado)
+KindlingArrow	70					143	122	Detonating Arrow (one shot, no channel)
+WhirlingVolley	100			400		162	131	Spiral Volley (no Frenzy)
+LodestoneSalvo	50					200	150	Magnetic Salvo
+SwampGasArrow	100							Gas Arrow
+FireBlast	80					125	113	none (Diablo 2 Assassin); nearest Explosive Spear
+ShockWeb	80					125	113	none (Diablo 2 Assassin); nearest Lightning Rod
+BladesOfIce	160							none (Diablo 2 Assassin); nearest Ice Strike
+PhoenixStrike	120							none (Diablo 2 Assassin)
+Bloodletting	100							Blood Hunt (Hemorrhage)
+EmberFang	100							none (Fire Fang)
+DeathSentry	80					125	113	none (Diablo 2 Assassin); nearest Detonate Dead
+VizJaqtaarStrike			0.8			124	112	Flicker Strike (Shadow Flight; no charges)
+WintersEdge	70					143	122	none; nearest Glacial Cascade's final spike

@@ -53,8 +53,6 @@ constexpr int ShieldChargeTiles = 6;
 constexpr int EscapeShotTiles = 3;
 /** Game ticks a dash skill may take to land before it's dropped. */
 constexpr uint8_t DashSkillTimeoutTicks = 40;
-/** Battle Cry empowers melee hits for 8 seconds. */
-constexpr uint8_t BattleCryTicks = 8 * 20;
 /** Bolts Rapid Fire looses before its gem level adds more. */
 constexpr int RapidFireBolts = 6;
 constexpr int RapidFireShotTicks = 3;
@@ -187,6 +185,9 @@ bool StartDashSkill(Player &player, WeaponSkill skill, int tiles)
 	AddVisualEffect(player.position.tile, skill == WeaponSkill::LeapSlam ? MissileGraphicID::StoneCurseShatter : MissileGraphicID::BoneHit);
 	player.poe2.dashSkill = skill;
 	player.poe2.dashSkillTicks = DashSkillTimeoutTicks;
+	// Whirlwind spins the whole way (Curtis 2026-11-07, Q39; see ProcessDashLooks).
+	if (SpinsWhileStriking(skill))
+		player.poe2.spinFrom = static_cast<uint8_t>(player._pdir);
 	player.poe2.dashEnd = end.value_or(player.position.future);
 	player.poe2.dashStart = start;
 	player.poe2.dashDistancePercent = static_cast<uint8_t>(end ? std::clamp(end->WalkingDistance(start) * 100 / std::max(tiles, 1), 0, 100) : 0);
@@ -214,7 +215,9 @@ bool StartSkillCast(Player &player, WeaponSkill skill, player_graphic graphic)
 	// Projectiles with nothing under the cursor fly exactly where it points, at any angle.
 	if (pcursmonst == -1 && &player == MyPlayer && (IsAnyOf(skill, WeaponSkill::EmberFusillade, WeaponSkill::Spark, WeaponSkill::IceBolt) || GrantedSkillAimsAlongCursor(skill)))
 		target = AimAlongCursor(player, AimTiles);
-	BeginSkillAnimation(player, skill, graphic, target);
+	// A throw is a short flick of the wrist, not the whole melee swing: it leaves the hand early in the same use time
+	// (Curtis 2026-11-07, Q39).
+	BeginSkillAnimation(player, skill, graphic, target, IsThrowingSkill(skill));
 	// Glacial Spike erupts where this monster will be (see ExecuteTableSkill).
 	if (pcursmonst != -1 && &player == MyPlayer)
 		player.poe2.castTargetMonster = static_cast<int16_t>(pcursmonst);
@@ -287,7 +290,7 @@ void FireVolleyShot(Player &player, WeaponSkill skill, Point target, int index, 
 		const Point aim = target + Displacement { Left(Left(dir)) } * Wobble[index % 7];
 		Missile *arrow = AddMissile(tile, aim, dir, type, TARGET_MONSTERS, player, damage, 0);
 		if (arrow != nullptr) {
-			arrow->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel));
+			arrow->poe2.damagePercent = static_cast<int16_t>(GemDamagePercent(slot, gemLevel) * BarrageArrowDamagePercent / 100);
 			SetMissileSkill(*arrow, player, slot);
 		}
 		PlaySfxLoc(index == 0 ? SfxID::ShootBow2 : SfxID::ShootBow, tile);
@@ -349,7 +352,8 @@ bool TableWeaponAllows(const Item &item, TableWeapon weapon)
 	case TableWeapon::Axe:
 		return item._itype == ItemType::Axe;
 	case TableWeapon::AxeOrSword:
-		return IsAnyOf(item._itype, ItemType::Axe, ItemType::Sword);
+		// Whirlwind: swords only, not daggers (Curtis 2026-11-07, Q40).
+		return IsAnyOf(item._itype, ItemType::Axe, ItemType::Sword) && !IsDagger(item);
 	case TableWeapon::Mace:
 		return item._itype == ItemType::Mace;
 	case TableWeapon::Staff:
@@ -360,6 +364,8 @@ bool TableWeaponAllows(const Item &item, TableWeapon weapon)
 		return IsCrossbow(item);
 	case TableWeapon::Melee:
 		return IsAnyOf(item._itype, ItemType::Sword, ItemType::Axe, ItemType::Mace, ItemType::Staff);
+	case TableWeapon::MaceOrAxe:
+		return IsAnyOf(item._itype, ItemType::Mace, ItemType::Axe);
 	default:
 		return false;
 	}
@@ -388,6 +394,8 @@ std::string_view TableWeaponName(TableWeapon weapon)
 		return _("shield");
 	case TableWeapon::Melee:
 		return _("melee weapon");
+	case TableWeapon::MaceOrAxe:
+		return _("mace or axe");
 	default:
 		return {};
 	}
@@ -503,9 +511,9 @@ std::string_view WeaponSkillDescription(WeaponSkill skill)
 	case WeaponSkill::Cleave:
 		return _("Hits the target and both sides");
 	case WeaponSkill::GroundSlam:
-		return _("Hits all around, knocks back");
+		return _("Hits in front of you, knocks back");
 	case WeaponSkill::Barrage:
-		return _("Fires a fan of five arrows");
+		return _("Five arrows in quick succession at one target");
 	case WeaponSkill::WhirlingStaff:
 		return _("Hits everything around you");
 	case WeaponSkill::Flurry:
@@ -574,7 +582,8 @@ int ListedManaCost(WeaponSkill skill)
 	case WeaponSkill::RainOfArrows:
 		return 10;
 	case WeaponSkill::ShieldCharge:
-		return 8;
+		// Curtis 2026-11-07 (Q42): 8 to 6, the normal mana for its new tier III.
+		return 6;
 	case WeaponSkill::BattleCry:
 		return 10;
 	case WeaponSkill::LightningArrow:
@@ -605,7 +614,8 @@ int ListedManaCost(WeaponSkill skill)
 	case WeaponSkill::RapidFire:
 		return 8;
 	case WeaponSkill::ShieldBash:
-		return 4;
+		// Curtis 2026-11-07 (Q42): 4 to 3, the normal mana for its new tier I.
+		return 3;
 	case WeaponSkill::AmplifyDamage:
 		return 8;
 	default:
@@ -619,6 +629,9 @@ int ListedManaCost(WeaponSkill skill)
 
 bool HasMeleeManaCut(WeaponSkill skill)
 {
+	// Blessed Shield, the thrown shield, pays a melee attack's mana (Curtis 2026-11-07, Q41).
+	if (skill == WeaponSkill::BlessedShield)
+		return true;
 	const uint32_t tags = SkillTags(SkillSlot::ForAttack(skill));
 	return (tags & ST_Attack) != 0 && (tags & (ST_Melee | ST_Slam)) != 0 && (tags & (ST_Bow | ST_Spell | ST_Minion)) == 0;
 }
@@ -727,7 +740,8 @@ bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 	case WeaponSkill::Flurry:
 		return item._itype == ItemType::Sword;
 	case WeaponSkill::LeapSlam:
-		return IsAnyOf(item._itype, ItemType::Mace, ItemType::Axe, ItemType::Sword, ItemType::Staff);
+		// Not with a dagger (Curtis 2026-11-07, Q40).
+		return IsAnyOf(item._itype, ItemType::Mace, ItemType::Axe, ItemType::Sword, ItemType::Staff) && !IsDagger(item);
 	case WeaponSkill::RainOfArrows:
 	case WeaponSkill::LightningArrow:
 	case WeaponSkill::EscapeShot:
@@ -737,7 +751,8 @@ bool ItemAllowsWeaponSkill(const Item &item, WeaponSkill skill)
 	case WeaponSkill::ShadowStep:
 		return IsDagger(item);
 	case WeaponSkill::Frenzy:
-		return IsAnyOf(item._itype, ItemType::Axe, ItemType::Sword);
+		// Not with a dagger (Curtis 2026-11-07, Q40).
+		return IsAnyOf(item._itype, ItemType::Axe, ItemType::Sword) && !IsDagger(item);
 	case WeaponSkill::Smite:
 		return item._itype == ItemType::Mace;
 	case WeaponSkill::FistsOfThunder:
@@ -770,7 +785,7 @@ std::string_view WeaponSkillWeapons(WeaponSkill skill)
 	case WeaponSkill::Flurry:
 		return _("sword or dagger");
 	case WeaponSkill::LeapSlam:
-		return _("melee weapon");
+		return _("mace, axe, sword or staff");
 	case WeaponSkill::RainOfArrows:
 	case WeaponSkill::LightningArrow:
 	case WeaponSkill::EscapeShot:
@@ -862,7 +877,10 @@ bool TryUseWeaponSkill(Player &player, WeaponSkill skill)
 			if (table->shape == TableShape::Dash)
 				return StartDashSkill(player, skill, table->count);
 			constexpr player_graphic Graphics[] = { player_graphic::Attack, player_graphic::Magic, player_graphic::Fire, player_graphic::Lightning };
-			return StartSkillCast(player, skill, Graphics[std::min<int>(table->graphic, 3)]);
+			if (!StartSkillCast(player, skill, Graphics[std::min<int>(table->graphic, 3)]))
+				return false;
+			BeginTableSkillCast(player, *table);
+			return true;
 		}
 		break;
 	}
@@ -909,7 +927,10 @@ bool TryUseGrantedSkill(Player &player)
 	if (!CanStartSkill(player) || !StartTableSkill(player, *table))
 		return false;
 	constexpr player_graphic Graphics[] = { player_graphic::Attack, player_graphic::Magic, player_graphic::Fire, player_graphic::Lightning };
-	return StartSkillCast(player, skill, Graphics[std::min<int>(table->graphic, 3)]);
+	if (!StartSkillCast(player, skill, Graphics[std::min<int>(table->graphic, 3)]))
+		return false;
+	BeginTableSkillCast(player, *table);
+	return true;
 }
 
 bool IsSwingWeaponSkill(WeaponSkill skill)
@@ -986,7 +1007,9 @@ void BeginSkillAnimation(Player &player, WeaponSkill skill, player_graphic graph
 		// The skill takes its attack or cast time (poe2/attack_speed.hpp), with any time it adds; a dash took part of it
 		// already. A quick strike hits DashStrikeWindupTicks in and spends the rest of the time after the hit.
 		const SkillSlot slot = SkillSlot::ForAttack(skill);
-		uint32_t time = SkillUseTime(player, slot, /*castAnimation=*/!attack, SkillStep::Main, dashTicks >= 0 ? player.poe2.dashDistancePercent : 0);
+		// Rime Strikes' third strike, which throws the shards, takes its slower finisher's time.
+		const SkillStep step = skill == WeaponSkill::RimeStrikes && RimeStrikesNextIsThird(player) ? SkillStep::Finisher : SkillStep::Main;
+		uint32_t time = SkillUseTime(player, slot, /*castAnimation=*/!attack, step, dashTicks >= 0 ? player.poe2.dashDistancePercent : 0);
 		if (dashTicks > 0)
 			time -= std::min(time, static_cast<uint32_t>(dashTicks) * ActionTimeOneTick);
 		NewPlrTimedAnim(player, graphic, dir, AnimationDistributionFlags::ProcessAnimationPending, actionFrame, TakeActionTicks(player, time), quickStrike ? DashStrikeWindupTicks : 0);
@@ -1028,9 +1051,17 @@ void LandDashSkill(Player &player)
 	BeginSkillAnimation(player, skill, player_graphic::Attack, player.position.tile + player._pdir, !SpinsWhileStriking(skill), dashTicks);
 }
 
+bool IsThrowingSkill(WeaponSkill skill)
+{
+	// The draft gems' thrown rock, hammer, axe and ghost sword too (Q48).
+	return IsAnyOf(skill, WeaponSkill::DoubleThrow, WeaponSkill::FanOfBlades, WeaponSkill::BladeFury, WeaponSkill::MagmaHurl, WeaponSkill::HephastosHammer, WeaponSkill::ThunderHatchet,
+	    WeaponSkill::PhantomBlade);
+}
+
 bool SpinsWhileStriking(WeaponSkill skill)
 {
-	return skill == WeaponSkill::Whirlwind;
+	// Whirling Volley spins as it goes, loosing its ring of arrows where it stops (Q48).
+	return IsAnyOf(skill, WeaponSkill::Whirlwind, WeaponSkill::DervishAdvance, WeaponSkill::WhirlingVolley);
 }
 
 namespace {
@@ -1068,6 +1099,33 @@ void BeginSpinningSwing(const Player &player)
 	// through all eight facings inside a funnel of wind, both ends of the staff sweeping round out to its far reach.
 	vfx::Whirl(player.position.tile, WhirlingStaffReach, vfx::Element::Physical, true, WeaponElementLook(player));
 	PlaySfxLoc(SfxID::Swing2, player.position.tile);
+}
+
+void ProcessDashLooks(Player &player)
+{
+	if (!gbIsPoe2 || player.poe2.dashSkillTicks == 0 || !player.isWalking())
+		return;
+	const int elapsed = DashSkillTimeoutTicks - player.poe2.dashSkillTicks;
+	switch (player.poe2.dashSkill) {
+	case WeaponSkill::LeapSlam:
+		// Dust kicked up along the way, not the dodge's afterimages (Curtis 2026-11-07, Q39; no jump animation).
+		if (elapsed % 2 == 0)
+			vfx::Impact(player.position.tile, vfx::Element::Physical, 0.45F);
+		break;
+	case WeaponSkill::Whirlwind:
+	case WeaponSkill::DervishAdvance:
+	case WeaponSkill::WhirlingVolley: {
+		// The hero spins through every facing all along the dash, inside its funnel of wind.
+		const PlayerAnimationData &walk = player.AnimationData[static_cast<size_t>(player_graphic::Walk)];
+		if (!HeadlessMode && walk.sprites)
+			player.AnimInfo.sprites = walk.spritesForDirection(SpinFacing(static_cast<Direction>(player.poe2.spinFrom), elapsed));
+		if (elapsed % 6 == 0)
+			vfx::Whirl(player.position.tile, 1, vfx::Element::Physical, false, WeaponElementLook(player));
+		break;
+	}
+	default:
+		break;
+	}
 }
 
 void TurnSpriteWithSpin(Player &player)
@@ -1119,11 +1177,15 @@ bool CastSkill(Player &player, WeaponSkill skill, Point target)
 	const SkillLookScope skillLook(skill);
 	PlaySkillLookSound(SkillSlot::ForAttack(skill), target);
 	PlaySkillEffects(player, skill, target);
-	OnSkillUsed(player, SkillSlot::ForAttack(skill), target);
+	// The supports that follow the hits go where they land (Wrath of the Skies' slam is in front of the hero).
+	OnSkillUsed(player, SkillSlot::ForAttack(skill), TableSkillHitTarget(player, skill, target));
 	switch (skill) {
 	case WeaponSkill::BattleCry:
 		player.poe2.warcryTicks = BattleCryTicks;
 		player.Say(HeroSpeech::TimeToDie);
+		// A war cry shatters the hero's Shield Wall near him (Curtis 2026-11-07, Q37), and Hephasto's Hammers (Q48).
+		ShatterShieldWall(player, player.position.tile);
+		ShatterLodgedHammers(player, player.position.tile);
 		for (int i = 0; i < 8; i++) {
 			Monster *monster = FindMonsterAtPosition(player.position.tile + static_cast<Direction>(i));
 			if (monster != nullptr && !CanTalkToMonst(*monster) && !monster->hasNoLife() && monster->mode != MonsterMode::Petrified)
@@ -1176,8 +1238,12 @@ bool CastSkill(Player &player, WeaponSkill skill, Point target)
 		return false;
 	}
 	case WeaponSkill::ShadowStep:
-		if (Monster *monster = MonsterInFront(player); monster != nullptr)
-			SkillHitMonster(player, *monster, ShadowStepDamagePercent);
+		if (Monster *monster = MonsterInFront(player); monster != nullptr) {
+			// Death Mark (Curtis 2026-11-07, Q38): the stab uses up the mark for double; a miss leaves it.
+			const uint8_t mark = monster->poe2.deathMarkTicks;
+			if (!SkillHitMonster(player, *monster, ShadowStepDamagePercent * ConsumeDeathMark(*monster) / 100) && mark > 0)
+				monster->poe2.deathMarkTicks = mark;
+		}
 		return false;
 	case WeaponSkill::ShieldBash:
 		if (Monster *monster = MonsterInFront(player); monster != nullptr) {
@@ -1235,6 +1301,41 @@ void SetSpellMissileSpeed(Missile &missile, SpellID spell)
 	if (percent == 100)
 		return;
 	missile.position.velocity = { missile.position.velocity.deltaX * percent / 100, missile.position.velocity.deltaY * percent / 100 };
+}
+
+int FireChargedBoltSparks(Player &player, Point target, int spellLevel)
+{
+	if (!gbIsPoe2 || spellLevel < ChargedBoltSparksGemLevel)
+		return 0;
+	const Point far = FarAlong(player, target, 8);
+	const Displacement side { Left(Left(GetDirection(player.position.tile, far))) };
+	int thrown = 0;
+	for (int i = 0; i < ChargedBoltSparks; i++) {
+		// Either side of the bolts' line: 1, -1, 2, -2, ...
+		const int offset = (i / 2 + 1) * (i % 2 == 0 ? 1 : -1);
+		const Point aim = far + side * offset;
+		// Spark's roll, at the sparks' own share (Q43).
+		const int sparkPercent = std::max(SkillSpellDamagePercent(WeaponSkill::Spark), 1);
+		const int hit = std::max(RollPoe2SkillSpellHit(player, WeaponSkill::Spark, std::max(spellLevel, 1)) * ChargedBoltSparkPercent / sparkPercent, 1);
+		Missile *spark = AddMissile(player.position.tile, aim, GetDirection(player.position.tile, aim), MissileID::ChargedBolt, TARGET_MONSTERS, player, hit, spellLevel);
+		if (spark == nullptr)
+			continue;
+		ApplySupportsToMissile(*spark, player, SpellID::ChargedBolt);
+		spark->poe2.look = vfx::ArcingSparkLook;
+		spark->poe2.spell = SpellID::ChargedBolt;
+		spark->poe2.piercesLeft = std::max(spark->poe2.piercesLeft, PierceCount);
+		if (spark->poe2.pierceLessPercent == 0)
+			spark->poe2.pierceLessPercent = static_cast<int8_t>(100 - PierceDamagePercent);
+		thrown++;
+	}
+	return thrown;
+}
+
+MissileID FireWallMissile(Point hero, Point target)
+{
+	if (gbIsPoe2 && hero.WalkingDistance(target) <= FireWallRingTiles)
+		return MissileID::RingOfFire;
+	return MissileID::FireWallControl;
 }
 
 void OnFireballDetonated(Missile &missile, Point position)
@@ -1371,6 +1472,9 @@ void PlaySkillEffects(const Player &player, WeaponSkill skill, Point target)
 	}
 	case WeaponSkill::LeapSlam:
 		vfx::Slam(tile, 2, vfx::Element::Fire);
+		// The ground cracks open round where he lands (Curtis 2026-11-07, Q39).
+		for (const Direction crack : { dir, Left(Left(dir)), Right(Right(dir)), Opposite(dir) })
+			vfx::Fissure(tile, tile + Displacement { crack } * 2, vfx::Element::Physical);
 		// A fiery crater where the player lands, and the shockwave rolling out of it.
 		AddVisualEffect(tile, MissileGraphicID::BigExplosion, 0, 10);
 		EffectRing(tile, 1, MissileGraphicID::StoneCurseShatter, 2);

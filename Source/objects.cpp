@@ -11,6 +11,8 @@
 #include <string>
 
 #include <algorithm>
+#include <array>
+#include <vector>
 
 #include "DiabloUI/ui_flags.hpp"
 #include "automap.h"
@@ -50,12 +52,15 @@
 #include "poe2/floor_packs.hpp"
 #include "poe2/hd.hpp"
 #include "poe2/shrines.hpp"
+#include "poe2/table_skills.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/tears.hpp"
 #include "qol/stash.h"
 #include "stores.h"
 #include "tables/objdat.h"
 #include "towners.h"
 #include "track.h"
+#include "engine/render/text_render.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/endian_swap.hpp"
 #include "utils/format.hpp"
@@ -63,6 +68,7 @@
 #include "utils/language.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
+#include "utils/str_split.hpp"
 
 namespace devilution {
 
@@ -282,15 +288,37 @@ bool CanPlaceWallTrap(Point pos)
 	return TileHasAny(pos, TileProperties::Trap);
 }
 
+/**
+ * POE2 Mashup: a random chest, barrel or prop must not close a passage (Curtis 2026-11-07: a chest kept him out of a
+ * room in the Caves). Gives up on the check after many tries, so a crowded floor still gets its objects.
+ */
+bool RndLocBlocksPassage(Point tile, bool big, int tries)
+{
+	constexpr int MaxPassageTries = 4000;
+	if (!gbIsPoe2 || tries > MaxPassageTries)
+		return false;
+	return ObjectWouldBlockPassage(tile) || (big && ObjectWouldBlockPassage(tile + Displacement { 0, -1 }));
+}
+
+/**
+ * POE2 Mashup: how many random spots a chest, sarcophagus or barrel tries before the floor goes without it. The original
+ * loops never gave up, which never mattered on its open floors. On a new Cathedral floor the designed rooms bring their
+ * own props, so only the passages and plain rooms take random objects, and once their few open spots were used up the
+ * loading screen hung for good (a new hero's first Cathedral floor, 2026-11-08).
+ */
+constexpr int MaxRandomSpotTries = 20000;
+
 void InitRndLocObj(int min, int max, _object_id objtype)
 {
 	const int numobjs = GenerateRnd(max - min) + min;
 
 	for (int i = 0; i < numobjs; i++) {
-		while (true) {
+		for (int tries = 0;; tries++) {
+			if (tries > MaxRandomSpotTries)
+				return;
 			const int xp = GenerateRnd(80) + 16;
 			const int yp = GenerateRnd(80) + 16;
-			if (IsAreaOk(Rectangle { { xp - 1, yp - 1 }, { 3, 3 } })) {
+			if (IsAreaOk(Rectangle { { xp - 1, yp - 1 }, { 3, 3 } }) && !RndLocBlocksPassage({ xp, yp }, false, tries)) {
 				AddObject(objtype, { xp, yp });
 				break;
 			}
@@ -302,10 +330,12 @@ void InitRndLocBigObj(int min, int max, _object_id objtype)
 {
 	const int numobjs = GenerateRnd(max - min) + min;
 	for (int i = 0; i < numobjs; i++) {
-		while (true) {
+		for (int tries = 0;; tries++) {
+			if (tries > MaxRandomSpotTries)
+				return;
 			const int xp = GenerateRnd(80) + 16;
 			const int yp = GenerateRnd(80) + 16;
-			if (IsAreaOk(Rectangle { { xp - 1, yp - 2 }, { 3, 4 } })) {
+			if (IsAreaOk(Rectangle { { xp - 1, yp - 2 }, { 3, 4 } }) && !RndLocBlocksPassage({ xp, yp }, true, tries)) {
 				AddObject(objtype, { xp, yp });
 				break;
 			}
@@ -323,7 +353,7 @@ std::optional<Point> GetRandomObjectPosition(Displacement standoff)
 {
 	for (int i = 0; i <= 20000; i++) {
 		Point position = Point { GenerateRnd(80), GenerateRnd(80) } + Displacement { 16, 16 };
-		if (CanPlaceRandomObject(position, standoff))
+		if (CanPlaceRandomObject(position, standoff) && !RndLocBlocksPassage(position, false, i))
 			return position;
 	}
 	return {};
@@ -429,7 +459,10 @@ void InitRndBarrels()
 	for (int i = 0; i < numobjs; i++) {
 		int xp;
 		int yp;
+		int tries = 0;
 		do {
+			if (tries++ > MaxRandomSpotTries)
+				return;
 			xp = GenerateRnd(80) + 16;
 			yp = GenerateRnd(80) + 16;
 		} while (!RndLocOk({ xp, yp }));
@@ -765,6 +798,11 @@ void AddCryptBook(_object_id ot, int v2, Point position)
 
 void AddCryptStoryBook(int s)
 {
+	// POE2: on the new Crypt floors the book goes on the Reading chapel's or the Archive's stand when there is one.
+	if (const std::optional<Point> stand = CathedralStoryBookSpot()) {
+		AddCryptBook(OBJ_L5BOOKS, s, *stand);
+		return;
+	}
 	std::optional<Point> position = GetRandomObjectPosition({ 3, 2 });
 	if (!position)
 		return;
@@ -2801,6 +2839,7 @@ void OperateShrineGlimmering(Player &player)
 	for (Item &item : PlayerItemsRange { player }) {
 		if (item._iMagical != ITEM_QUALITY_NORMAL && !item._iIdentified) {
 			item._iIdentified = true;
+			TelemetryItemAction(player, "identify", item, "Glimmering shrine");
 		}
 	}
 
@@ -3773,6 +3812,37 @@ Object *FindObjectAtPosition(Point position, bool considerLargeObjects)
 	return nullptr;
 }
 
+bool ObjectWouldBlockPassage(Point tile)
+{
+	constexpr int Reach = 3;
+	constexpr int Size = (2 * Reach) + 1;
+	const auto walkable = [tile](Point p) {
+		return p != tile && InDungeonBounds(p) && !IsTileSolid(p) && !IsObjectAtPosition(p);
+	};
+	std::vector<Point> around;
+	for (const Direction d : { Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest }) {
+		if (walkable(tile + d))
+			around.push_back(tile + d);
+	}
+	if (around.size() < 2)
+		return false;
+	// A walk from the first floor tile beside it, staying near it, must reach the others.
+	std::array<bool, Size * Size> seen {};
+	const auto cell = [tile](Point p) { return ((p.y - tile.y + Reach) * Size) + (p.x - tile.x + Reach); };
+	std::vector<Point> queue { around.front() };
+	seen[cell(around.front())] = true;
+	for (size_t i = 0; i < queue.size(); i++) {
+		for (const Direction d : { Direction::NorthEast, Direction::SouthEast, Direction::SouthWest, Direction::NorthWest }) {
+			const Point next = queue[i] + d;
+			if (std::abs(next.x - tile.x) > Reach || std::abs(next.y - tile.y) > Reach || seen[cell(next)] || !walkable(next))
+				continue;
+			seen[cell(next)] = true;
+			queue.push_back(next);
+		}
+	}
+	return std::any_of(around.begin(), around.end(), [&](Point p) { return !seen[cell(p)]; });
+}
+
 bool IsItemBlockingObjectAtPosition(Point position)
 {
 	Object *object = FindObjectAtPosition(position);
@@ -3879,6 +3949,13 @@ void FreeObjectGFX()
 		pObjCels[i] = std::nullopt;
 	}
 	numobjfiles = 0;
+}
+
+void ClearObjectsForTown()
+{
+	// Town has no objects. The last dungeon's stay in the list with their graphics already freed, so anything that
+	// walks the list in town (flame effects, HD lights, map marks) would read a freed sprite: drop them.
+	ClrAllObjects();
 }
 
 void AddL1Objs(int x1, int y1, int x2, int y2)
@@ -4098,7 +4175,10 @@ void InitObjects()
 			InitRndBarrels();
 		}
 		if (leveltype == DTYPE_CRYPT) {
-			InitRndLocBigObj(10, 15, OBJ_L5SARC);
+			// POE2: the designed rooms' props go first here too, and their sarcophagi come out of the usual 10 to 15.
+			AddCathedralRoomObjects();
+			const int designedSarcophagi = CathedralDesignedSarcophagi();
+			InitRndLocBigObj(std::max(0, 10 - designedSarcophagi), std::max(1, 15 - designedSarcophagi), OBJ_L5SARC);
 			AddCryptObjects(0, 0, MAXDUNX, MAXDUNY);
 			InitRndBarrels();
 		}
@@ -5104,9 +5184,15 @@ void GetObjectStr(const Object &object)
 		InfoColor = UiFlags::ColorRed;
 	}
 	if (gbIsPoe2 && object.IsShrine() && object.canInteractWith() && object._oVar1 != ShrineTown) {
-		std::string effect = ShrineHoverText(static_cast<ShrineKind>(object._oVar1));
-		if (!effect.empty())
-			AddInfoBoxString(std::move(effect));
+		auto [power, text] = ShrineHoverLines(static_cast<ShrineKind>(object._oVar1));
+		if (!power.empty())
+			AddInfoBoxString(std::move(power));
+		// Wrapped to the info box's width: it squeezes a line that doesn't fit until the letters overlap.
+		if (!text.empty()) {
+			const std::string wrapped = WordWrapString(text, InfoBoxRect.size.width - 8, GameFont12, 2);
+			for (const std::string_view line : SplitByChar(wrapped, '\n'))
+				AddInfoBoxString(line);
+		}
 	}
 }
 

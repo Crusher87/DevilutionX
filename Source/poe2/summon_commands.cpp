@@ -16,6 +16,7 @@
 #include "monster.h"
 #include "player.h"
 #include "poe2/camera_shake.hpp"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
@@ -945,7 +946,7 @@ CommandResult IssueSummonCommand(Player &player, const SummonCommandRequest &req
 	default:
 		break;
 	}
-	state.cooldowns[Index(command)] = static_cast<uint16_t>(SummonCommandCooldownTicks(command));
+	state.cooldowns[Index(command)] = static_cast<uint16_t>(CooldownTicks(player, SummonCommandCooldownTicks(command)));
 	TelemetryLog("command", SummonCommandName(command));
 	return CommandResult::Used;
 }

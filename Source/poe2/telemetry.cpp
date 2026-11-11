@@ -25,6 +25,7 @@
 #include "appfat.h"
 #include "diablo.h"
 #include "game_mode.hpp"
+#include "gmenu.h"
 #include "items.h"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
@@ -35,6 +36,7 @@
 #include "player.h"
 #include "poe2/area_levels.hpp"
 #include "poe2/currency.hpp"
+#include "poe2/default_attack.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/level_census.hpp"
@@ -42,10 +44,14 @@
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_gems.hpp"
 #include "poe2/spirit.hpp"
+#include "poe2/stacking.hpp"
+#include "poe2/regen.hpp"
+#include "poe2/stash_layouts.hpp"
 #include "poe2/support_gems.hpp"
 #include "poe2/telemetry_events.hpp"
 #include "poe2/tree_telemetry.hpp"
 #include "poe2/waystones.hpp"
+#include "qol/stash.h"
 #include "tables/misdat.h"
 #include "utils/file_util.h"
 #include "utils/format.hpp"
@@ -195,6 +201,11 @@ uint32_t FrameGapSinceTick = 0;
 uint32_t LastFrameMs = 0;
 /** Time each part of drawing took since the last counted frame, in nanoseconds. */
 std::array<uint64_t, NumFrameParts> PendingFrameParts {};
+/** Time each part of drawing took in the frames since the last game tick, in nanoseconds, for the stall line. */
+std::array<uint64_t, NumFrameParts> FramePartsSinceTick {};
+/** Slow work since the last game tick (TelemetrySlowWorkDone): how often and how long, in nanoseconds, for the stall line. */
+std::array<uint64_t, NumSlowWorks> SlowWorkNsSinceTick {};
+std::array<int, NumSlowWorks> SlowWorkCountSinceTick {};
 
 /** @brief A steady clock in nanoseconds for timing the parts of a frame (SDL 1 has no performance counter). */
 uint64_t FrameClockNs()
@@ -206,6 +217,10 @@ std::string LoadingWhat;
 uint32_t LoadingStartMs = 0;
 uint32_t LoadingFadedOutMs = 0;
 uint32_t LoadingFadingInMs = 0;
+/** Whether the game is paused (the pause key, the window losing focus, or the game menu in a game of one), since when and why. */
+bool GamePaused = false;
+uint32_t PauseStartMs = 0;
+std::string PauseReason;
 
 std::string PendingAttacker;
 /** Energy shield soaked from the hit being applied (raw), added to it when it's counted. */
@@ -256,7 +271,7 @@ uint32_t LastSwarmLogMs = 0;
 std::string LastBuild;
 uint32_t LastBuildCheckMs = 0;
 uint32_t LastExperience = 0;
-int LastGold = 0;
+int64_t LastGold = 0;
 
 /** @brief An event kept in memory: written ones were in the readable log already, the rest only go out on a crash. */
 struct RecentEvent {
@@ -1231,6 +1246,18 @@ void WriteBuildEvent(const Player &player, LogLevel level)
 		StrAppend(skill, ",\"supports\":", supports.str(), ",\"inside\":", inside.str(), "}");
 		skills.addRaw(skill);
 	}
+	// The weapon's default attack takes supports too (Curtis, Monk run 2: his rage support sat there, so the log missed it).
+	{
+		std::string skill = "{\"name\":";
+		AppendJsonString(skill, DefaultAttackNameForSet(player, player.poe2.weaponSet));
+		JsonArray supports;
+		for (const SupportGem support : player.poe2.defaultSupports) {
+			if (support != SupportGem::None)
+				supports.add(SupportGemName(support));
+		}
+		StrAppend(skill, ",\"gem\":0,\"default\":true,\"supports\":", supports.str(), ",\"inside\":[]}");
+		skills.addRaw(skill);
+	}
 	JsonArray belt;
 	for (const Item &item : player.SpdList) {
 		if (!item.isEmpty())
@@ -1276,6 +1303,19 @@ void TrackBuild(const Player &player, uint32_t now)
 	WriteBuildEvent(player, LogLevel::Normal);
 }
 
+/**
+ * @brief The hero's gold. In POE2 gold isn't an item: what's picked up or sold for goes to the league's purse, kept with
+ * the stash (AddGoldToInventory), so that counts too: counting the bag alone read "gold 0" in every session of Curtis's
+ * play logs from 2026-10-20 on.
+ */
+int64_t HeroGold(const Player &player)
+{
+	int64_t gold = player._pGold;
+	if (gbIsPoe2 && &player == MyPlayer)
+		gold += Stash.gold;
+	return gold;
+}
+
 void TrackGains(const Player &player)
 {
 	if (player._pExperience > LastExperience) {
@@ -1283,22 +1323,48 @@ void TrackGains(const Player &player)
 		Count([&](TelemetryCounts &counts) { counts.experience += gained; });
 	}
 	LastExperience = player._pExperience;
-	if (player._pGold > LastGold) {
-		const int gained = player._pGold - LastGold;
+	const int64_t gold = HeroGold(player);
+	if (gold > LastGold) {
+		const int gained = static_cast<int>(gold - LastGold);
 		Count([&](TelemetryCounts &counts) { counts.gold += gained; });
-	} else if (player._pGold < LastGold) {
-		// Spent in a shop, or put in the stash.
-		const int spent = LastGold - player._pGold;
+	} else if (gold < LastGold) {
+		// Spent in a shop (or, outside POE2, put in the stash).
+		const int spent = static_cast<int>(LastGold - gold);
 		Count([&](TelemetryCounts &counts) { counts.goldSpent += spent; });
-		Event(LogChannel::Loot, LogLevel::Normal, "gold_out").add("p", player.getId()).add("amount", spent).add("left", player._pGold);
+		Event(LogChannel::Loot, LogLevel::Normal, "gold_out").add("p", player.getId()).add("amount", spent).add("left", gold);
 	}
-	LastGold = player._pGold;
+	LastGold = gold;
+}
+
+/**
+ * @brief Where a freeze's time went: drawing (and the HD world's part of it), the game's own logic (the rest), and the
+ * slow work timed on its own. Curtis 2026-11-07: "game froze for 1004 ms (72 monsters, 0 missiles)" said nothing more.
+ */
+std::string StallBreakdown(uint32_t gap, const std::array<uint64_t, NumFrameParts> &parts, const std::array<uint64_t, NumSlowWorks> &workNs, const std::array<int, NumSlowWorks> &workCount)
+{
+	const auto ms = [](uint64_t ns) { return static_cast<int>(ns / 1000000); };
+	const auto part = [&](FramePart which) { return parts[static_cast<size_t>(which)]; };
+	// World is part of Drawing; the rest are timed apart from it.
+	const uint64_t drawingNs = part(FramePart::Drawing) + part(FramePart::WorldUpload) + part(FramePart::Hd) + part(FramePart::Effects) + part(FramePart::UiLayer) + part(FramePart::Present);
+	const int drawing = ms(drawingNs);
+	std::string text = std::format(": drawing {:d} ms (hd {:d}, present {:d}), game logic {:d} ms", drawing, ms(part(FramePart::Hd)), ms(part(FramePart::Present)), std::max(static_cast<int>(gap) - drawing, 0));
+	const auto work = [&](SlowWork which) { return static_cast<size_t>(which); };
+	if (workCount[work(SlowWork::Saving)] > 0)
+		StrAppend(text, ", saving ", ms(workNs[work(SlowWork::Saving)]), " ms");
+	if (workCount[work(SlowWork::HdArt)] > 0)
+		StrAppend(text, ", ", workCount[work(SlowWork::HdArt)], " new HD pictures (loaded or looked for) in ", ms(workNs[work(SlowWork::HdArt)]), " ms");
+	if (workCount[work(SlowWork::HdRaster)] > 0)
+		StrAppend(text, ", ", workCount[work(SlowWork::HdRaster)], " classic pictures made for HD in ", ms(workNs[work(SlowWork::HdRaster)]), " ms");
+	return text;
 }
 
 void TrackStalls(uint32_t now)
 {
 	const uint32_t gap = now - LastTickMs;
 	LastTickMs = now;
+	const std::array<uint64_t, NumFrameParts> parts = std::exchange(FramePartsSinceTick, {});
+	const std::array<uint64_t, NumSlowWorks> workNs = std::exchange(SlowWorkNsSinceTick, {});
+	const std::array<int, NumSlowWorks> workCount = std::exchange(SlowWorkCountSinceTick, {});
 	// A freeze in the game logic can be followed by a catch-up tick before any frame is drawn, so the time since the
 	// last frame counts too.
 	const uint32_t frameGap = std::max(std::exchange(FrameGapSinceTick, 0), now - LastFrameMs);
@@ -1312,8 +1378,21 @@ void TrackStalls(uint32_t now)
 	if (now - LastStallLogMs < 10000)
 		return;
 	LastStallLogMs = now;
-	WriteText("stall", std::format("game froze for {:d} ms ({:d} monsters, {:d} missiles)", gap, static_cast<int>(ActiveMonsterCount), static_cast<int>(Missiles.size())));
-	Event(LogChannel::Perf, LogLevel::Normal, "stall").add("ms", gap).add("monsters", static_cast<int>(ActiveMonsterCount)).add("missiles", static_cast<int>(Missiles.size()));
+	// The report script reads the start of this line: new parts go at the end.
+	WriteText("stall", std::format("game froze for {:d} ms ({:d} monsters, {:d} missiles)", gap, static_cast<int>(ActiveMonsterCount), static_cast<int>(Missiles.size())) + StallBreakdown(gap, parts, workNs, workCount));
+	const auto ms = [](uint64_t ns) { return static_cast<int>(ns / 1000000); };
+	Event(LogChannel::Perf, LogLevel::Normal, "stall")
+	    .add("ms", gap)
+	    .add("monsters", static_cast<int>(ActiveMonsterCount))
+	    .add("missiles", static_cast<int>(Missiles.size()))
+	    .add("drawingMs", ms(parts[static_cast<size_t>(FramePart::Drawing)]))
+	    .add("hdMs", ms(parts[static_cast<size_t>(FramePart::Hd)]))
+	    .add("presentMs", ms(parts[static_cast<size_t>(FramePart::Present)]))
+	    .add("savingMs", ms(workNs[static_cast<size_t>(SlowWork::Saving)]))
+	    .add("hdArtLoads", workCount[static_cast<size_t>(SlowWork::HdArt)])
+	    .add("hdArtMs", ms(workNs[static_cast<size_t>(SlowWork::HdArt)]))
+	    .add("hdRasters", workCount[static_cast<size_t>(SlowWork::HdRaster)])
+	    .add("hdRasterMs", ms(workNs[static_cast<size_t>(SlowWork::HdRaster)]));
 }
 
 } // namespace
@@ -1667,9 +1746,13 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	PendingDamageSource.clear();
 	LastBuild.clear();
 	GameStartMs = WindowStartMs = LastKillMs = LastTickMs = LastAreaMs = Now();
+	GamePaused = false;
+	PauseStartMs = 0;
 	LastBuildCheckMs = 0;
+	// The first freeze is always written (one every 10 s after that), even in the game's first 10 s.
+	LastStallLogMs = Now() - 10000;
 	LastExperience = player._pExperience;
-	LastGold = player._pGold;
+	LastGold = HeroGold(player);
 	StartOfGame = { player._pName, std::string(player.getClassName()), player.getCharacterLevel(), loaded };
 	const std::string_view mode = gbIsPoe2 ? "POE2" : (gbIsHellfire ? "Hellfire" : "Diablo");
 	WriteText("game", std::format("{:s} {:s}: level {:d} {:s}, life {:d}/{:d}, mana {:d}/{:d}, mode {:s}", loaded ? "loaded" : "new game", player._pName, player.getCharacterLevel(), player.getClassName(), player._pHitPoints.whole(), player._pMaxHP.whole(), player._pMana.whole(), player._pMaxMana.whole(), mode), true);
@@ -1802,6 +1885,12 @@ void WriteSummaryEvents(double minutes)
 }
 
 } // namespace
+
+void TelemetryStashLoaded()
+{
+	if (MyPlayer != nullptr)
+		LastGold = HeroGold(*MyPlayer);
+}
 
 void TelemetryGameEnded()
 {
@@ -2403,6 +2492,83 @@ void TelemetryCrafted(const Player &player, std::string_view currency, const Ite
 	AddItemFields(event, item);
 }
 
+void TelemetryItemAction(const Player &player, std::string_view action, const Item &item, std::string_view detail, int gold)
+{
+	if (&player != MyPlayer || item.isEmpty())
+		return;
+	const bool isGold = item._itype == ItemType::Gold;
+	if (isGold && gold == 0)
+		gold = item._ivalue;
+	const int count = IsStackable(item) ? StoredStackCount(item) : 1;
+	std::string text = isGold ? std::string("gold") : std::format("{:s} ({:s})", item._iIName, RarityNames[ItemRarityIndex(item)]);
+	if (count > 1)
+		StrAppend(text, " x", count);
+	if (!detail.empty())
+		StrAppend(text, ", ", detail);
+	if (gold != 0)
+		StrAppend(text, ", ", gold, " gold");
+	WriteText(action, text);
+	TelemetryEvent event = Event(LogChannel::Loot, LogLevel::Normal, action);
+	if (!event)
+		return;
+	event.add("p", player.getId());
+	AddItemFields(event, item);
+	if (count > 1)
+		event.add("count", count);
+	if (!detail.empty())
+		event.add("detail", detail);
+	if (gold != 0)
+		event.add("gold", gold);
+}
+
+void TelemetrySupportGem(const Player &player, bool socketed, SupportGem gem, int tier, size_t row)
+{
+	if (&player != MyPlayer || gem == SupportGem::None)
+		return;
+	const std::string name = SupportGemTierName(gem, tier);
+	const std::string_view skill = SkillName(RowSkill(player, row));
+	const bool defaultAttack = row == DefaultAttackRow;
+	WriteText(socketed ? "support in" : "support out", std::format("{:s} {:s} {:s}{:s}", name, socketed ? "into" : "out of", skill, defaultAttack ? " (default attack)" : ""));
+	Event(LogChannel::Skills, LogLevel::Normal, socketed ? "support_in" : "support_out")
+	    .add("p", player.getId())
+	    .add("support", SupportGemName(gem))
+	    .add("tier", tier)
+	    .add("skill", skill)
+	    .add("row", static_cast<int>(row))
+	    .add("defaultAttack", defaultAttack);
+}
+
+void TelemetryPauseChanged(std::string_view reason)
+{
+	const bool paused = PauseMode != 0 || (!gbIsMultiplayer && gmenu_is_active());
+	if (paused == GamePaused)
+		return;
+	GamePaused = paused;
+	if (LogFile == nullptr || GameStartMs == 0) {
+		PauseStartMs = 0;
+		return;
+	}
+	const uint32_t now = Now();
+	if (paused) {
+		PauseStartMs = now;
+		PauseReason = reason;
+		WriteText("pause", StrCat("game paused (", reason, ")"));
+		Event(LogChannel::Session, LogLevel::Normal, "pause").add("reason", reason);
+		return;
+	}
+	if (PauseStartMs == 0)
+		return;
+	const uint32_t ms = now - std::exchange(PauseStartMs, 0);
+	// The game didn't tick while paused: the stall clock starts again from here.
+	LastTickMs = LastFrameMs = now;
+	FrameGapSinceTick = 0;
+	FramePartsSinceTick = {};
+	SlowWorkNsSinceTick = {};
+	SlowWorkCountSinceTick = {};
+	WriteText("resume", std::format("game resumed after {:.1f} s paused ({:s})", ms / 1000.0, PauseReason));
+	Event(LogChannel::Session, LogLevel::Normal, "resume").add("ms", ms).add("reason", PauseReason);
+}
+
 void TelemetryMark(std::string_view text)
 {
 	WriteText("mark", text, true);
@@ -2433,12 +2599,41 @@ void TelemetryFramePartDone(FramePart part, uint64_t start)
 	PendingFrameParts[static_cast<size_t>(part)] += FrameClockNs() - start;
 }
 
+void TelemetrySlowWorkDone(SlowWork work, uint64_t start)
+{
+	if (start == 0)
+		return;
+	SlowWorkNsSinceTick[static_cast<size_t>(work)] += FrameClockNs() - start;
+	SlowWorkCountSinceTick[static_cast<size_t>(work)]++;
+}
+
+void TelemetryGameSaved(std::string_view why, uint64_t start)
+{
+	if (start == 0 || LogFile == nullptr)
+		return;
+	const uint64_t ns = FrameClockNs() - start;
+	TelemetrySlowWorkDone(SlowWork::Saving, start);
+	const int ms = static_cast<int>(ns / 1000000);
+	WriteText("save", std::format("autosave ({:s}) took {:d} ms", why, ms));
+	Event(LogChannel::Perf, LogLevel::Normal, "autosave").add("why", why).add("ms", ms);
+}
+
+void TelemetryHdCacheDropped(size_t pictures)
+{
+	if (LogFile == nullptr || GameStartMs == 0)
+		return;
+	WriteText("hd", std::format("picture cache full: {:d} classic pictures dropped, to be made again as they show", pictures));
+	Event(LogChannel::Perf, LogLevel::Normal, "hd_cache_dropped").add("pictures", static_cast<int>(pictures));
+}
+
 void TelemetryFrameDrawn()
 {
 	DrawStep = nullptr;
 	// The parts timed since the last frame belong to this one (showing the last frame comes after it's counted).
 	const std::array<uint64_t, NumFrameParts> parts = PendingFrameParts;
 	PendingFrameParts = {};
+	for (size_t i = 0; i < NumFrameParts; i++)
+		FramePartsSinceTick[i] += parts[i];
 	if (LogFile == nullptr || GameStartMs == 0)
 		return;
 	const uint32_t now = Now();
@@ -2490,6 +2685,9 @@ void TelemetryLoadingDone()
 	// The game didn't tick or draw while loading: the stall clock starts again from here.
 	LastTickMs = LastFrameMs = now;
 	FrameGapSinceTick = 0;
+	FramePartsSinceTick = {};
+	SlowWorkNsSinceTick = {};
+	SlowWorkCountSinceTick = {};
 	const uint32_t fadeOut = LoadingFadedOutMs - start;
 	const uint32_t loading = LoadingFadingInMs - LoadingFadedOutMs;
 	const uint32_t fadeIn = now - LoadingFadingInMs;
@@ -2604,10 +2802,25 @@ std::string TelemetryBuildText(const Player &player)
 		}
 		StrAppend(text, ";");
 	}
+	StrAppend(text, " ", DefaultAttackNameForSet(player, player.poe2.weaponSet), " (default attack)");
+	for (const SupportGem support : player.poe2.defaultSupports) {
+		if (support != SupportGem::None)
+			StrAppend(text, " +", SupportGemName(support));
+	}
+	StrAppend(text, ";");
 	StrAppend(text, " | passives ", player.poe2.passives.count());
 	StrAppend(text, std::format(" | defences: armour {:d}, evasion {:d}, energy shield {:d}, block {:d}%, resist fire {:d}% lightning {:d}% cold {:d}% chaos {:d}% (max {:d}%), spirit {:d}/{:d}",
 	                    ArmourRating(player, false), EvasionRating(player, false), player.poe2.maxEnergyShield, LoggedBlockChance(player),
 	                    player._pFireResist, player._pLghtResist, Poe2ColdResistance(player), player.poe2.chaosResistance, player.poe2.maxChaosResistance, ReservedSpirit(player), MaxSpirit(player)));
+	// Regeneration a second and the worn items that give life regeneration (Curtis 2026-11-07: 4-5 a second from a +1 helm).
+	const int lifeRegen = LifeRegenTenthsPerSecond(player);
+	const int manaRegen = ManaRegenTenthsPerSecond(player);
+	StrAppend(text, std::format(" | regen: life {:d}.{:d}/s (flat {:d}, per mille {:d}), mana {:d}.{:d}/s", lifeRegen / 10, lifeRegen % 10, player.poe2.lifeRegen,
+	                    player.poe2.lifeRegenPerMille, manaRegen / 10, manaRegen % 10));
+	for (const Item &item : player.InvBody) {
+		if (!item.isEmpty() && item._iStatFlag && item._iPLLifeRegen != 0)
+			StrAppend(text, std::format("; {:s} {:+d}", item._iIName, item._iPLLifeRegen));
+	}
 	StrAppend(text, " | belt:");
 	for (const Item &item : player.SpdList) {
 		if (!item.isEmpty())

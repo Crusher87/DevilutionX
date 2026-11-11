@@ -47,6 +47,7 @@ constexpr int GoldPerClick = 10000;
 
 void AdminMain(bool bActivate);
 void AdminItemsOpen(bool bActivate);
+void AdminMonstersOpen(bool bActivate);
 void AdminCharacterOpen(bool bActivate);
 void AdminWorldOpen(bool bActivate);
 void AdminLevelUp(bool bActivate);
@@ -63,6 +64,7 @@ TMenuItem AdminMainMenu[] = {
 	// clang-format off
 	// dwFlags,      pszStr,                 fnMenu
 	{ GMENU_ENABLED, N_("Spawn Items"),      &AdminItemsOpen      },
+	{ GMENU_ENABLED, N_("Spawn Monsters"),   &AdminMonstersOpen   },
 	{ GMENU_ENABLED, N_("Character"),        &AdminCharacterOpen  },
 	{ GMENU_ENABLED, N_("World"),            &AdminWorldOpen      },
 	{ GMENU_ENABLED, N_("Previous Menu"),    &AdminBackToGameMenu },
@@ -141,7 +143,13 @@ void AdminBackToGameMenu(bool /*bActivate*/)
 void AdminItemsOpen(bool /*bActivate*/)
 {
 	gamemenu_off();
-	OpenItemSpawner();
+	OpenSpawnerTab(false);
+}
+
+void AdminMonstersOpen(bool /*bActivate*/)
+{
+	gamemenu_off();
+	OpenSpawnerTab(true);
 }
 
 void AdminCharacterOpen(bool /*bActivate*/)

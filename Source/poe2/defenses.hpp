@@ -87,6 +87,11 @@ struct DefensePoints {
  * @param bonus What the item's quality and % increases add to it: POE2 multiplies the two, (1 + increased) x (1 + quality).
  */
 void SplitItemDefense(const Item &item, DefensePoints &base, DefensePoints &bonus);
+/**
+ * @brief The defence an item's tooltip shows: all of it once identified, but before that only its base and quality,
+ * as POE2 shows an unidentified item (Curtis 2026-11-07). Its modifiers still count when it's worn.
+ */
+void SplitShownItemDefense(const Item &item, DefensePoints &base, DefensePoints &bonus);
 
 /** @brief Armour from gear and class bonuses, and Barkskin's unless it's left out (the build log leaves it out). */
 int ArmourRating(const Player &player, bool withSpiritBuffs = true);

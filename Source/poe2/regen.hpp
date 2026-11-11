@@ -42,4 +42,9 @@ int ManaFromItemMagic(const Player &player, int magic);
 /** @brief Applies one game tick of life and mana regeneration (POE2 mode only). */
 void ApplyRegen(Player &player);
 
+/** @brief Life the hero regenerates a second right now, in tenths, worked out like ApplyRegen (0 outside POE2 mode). */
+int LifeRegenTenthsPerSecond(const Player &player);
+/** @brief Mana the hero regenerates a second right now, in tenths, worked out like ApplyRegen (0 outside POE2 mode). */
+int ManaRegenTenthsPerSecond(const Player &player);
+
 } // namespace devilution

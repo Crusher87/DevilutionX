@@ -1,0 +1,41 @@
+key	text	border	background	big	beam	beamTemp	sound	iconSize	iconColour	iconShape	hideFrom
+currency_s	red	255 0 0	255 255 255	1	255 40 40	0	QuestDone	0	255 40 40	star	never
+currency_a	white	255 255 255	245 105 90	1	255 40 40	0	OperateShrine	0	255 40 40	circle	never
+currency_b	black	0 0 0	245 105 90	0	255 220 60	0	ItemRing	1	255 220 60	circle	never
+currency_c	black	0 0 0	245 139 87	0	250 250 250	0	ItemRing	1	255 220 60	circle	never
+currency_d	black	0 0 0	240 180 100	0	250 250 250	0	ItemRing	2	250 250 250	circle	uberplusstrict
+currency_e	gold	240 207 132	-	0	250 250 250	1	-	2	150 150 150	circle	verystrict
+currency_supplymagic	gold	220 175 132	-	0	-	0	-	-	-	-	strict
+currency_supplylow	whitegold	-	-	0	-	0	-	-	-	-	semistrict
+omen	white	255 255 255	245 105 90	1	255 40 40	0	OperateShrine	0	255 40 40	circle	never
+essence_b	black	0 0 0	245 105 90	0	255 220 60	0	ItemRing	1	255 220 60	circle	never
+essence_c	black	0 0 0	245 139 87	0	250 250 250	0	ItemRing	1	255 220 60	circle	never
+essence_d	black	0 0 0	240 180 100	0	250 250 250	0	ItemRing	2	250 250 250	circle	uberplusstrict
+essence_e	gold	240 207 132	-	0	250 250 250	1	-	2	150 150 150	circle	uberstrict
+socket_a	white	255 255 255	245 105 90	1	255 40 40	0	OperateShrine	0	255 40 40	circle	never
+socket_b	black	0 0 0	245 105 90	0	255 220 60	0	ItemRing	1	255 220 60	circle	never
+socket_d	black	0 0 0	240 180 100	0	250 250 250	0	ItemRing	2	250 250 250	circle	uberplusstrict
+socket_e	gold	240 207 132	-	0	250 250 250	1	-	2	150 150 150	circle	uberstrict
+socket_supplylow	gold	240 207 132	-	0	-	0	-	-	-	-	verystrict
+unique_t1	red	255 0 0	255 255 255	1	255 40 40	0	QuestDone	0	255 40 40	star	never
+unique_t2	white	255 255 255	188 96 37	1	255 40 40	0	OperateShrine	0	255 220 60	star	never
+unique_t3	orange	188 96 37	53 13 13	0	170 100 50	0	ItemBloodStone	1	170 100 50	star	uberplusstrict
+unique_low	orange	-	-	0	170 100 50	0	ItemBloodStone	2	170 100 50	star	uberstrict
+rare_jewellery	yellow	-	75 75 0	0	255 220 60	0	-	1	250 250 250	diamond	uberstrict
+rare	yellow	-	20 20 0	0	-	0	-	-	-	-	verystrict
+magic_jewellery	blue	-	30 0 70	0	-	0	-	-	-	-	verystrict
+magic	blue	-	-	0	-	0	-	-	-	-	strict
+normal	white	-	-	0	-	0	-	-	-	-	regular
+exceptional	green	0 240 190	0 75 30	0	70 120 255	0	ItemBloodStone	0	70 120 255	diamond	never
+gem_top	red	255 0 0	255 255 255	1	255 40 40	0	QuestDone	0	255 40 40	star	never
+gem_high	blue	20 240 240	6 0 60	0	40 230 230	0	ItemRing	1	40 230 230	triangle	never
+gem	blue	20 240 240	-	0	40 230 230	1	-	1	40 230 230	triangle	uberplusstrict
+jewel_rare	yellow	220 220 0	75 75 0	0	255 220 60	0	ItemRing	1	255 220 60	diamond	never
+jewel_magic	blue	0 70 255	30 0 70	0	70 120 255	0	ItemRing	1	70 120 255	diamond	uberplusstrict
+waystone	white	200 200 200	20 20 0	0	-	0	-	2	250 250 250	square	uberplusstrict
+flask	white	100 100 100	10 60 40	0	-	0	-	-	-	-	verystrict
+charm	white	100 100 100	10 60 40	0	-	0	-	-	-	-	strict
+misc	whitegold	-	-	0	-	0	-	-	-	-	verystrict
+gold	gold	-	-	0	-	0	-	-	-	-	never
+quest	orange	255 165 0	53 13 13	1	255 140 30	0	ItemBloodStone	0	255 140 30	star	never
+unknown	blue	0 255 255	255 0 255	1	255 80 220	0	ItemBloodStone	0	255 80 220	pentagon	never

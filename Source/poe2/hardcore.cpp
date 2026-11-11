@@ -67,6 +67,7 @@ void FinishHardcoreFall()
 	gbIsHellfireSaveGame = gbIsHellfire;
 	LoadStash();
 	gbIsHellfireSaveGame = isHellfireSaveGame;
+	TelemetryStashLoaded();
 	SaveGame();
 	EventPlrMsg(_("Your hero fell in Hardcore. They live on in Softcore with what they wore and carried."), UiFlags::ColorWhitegold);
 }

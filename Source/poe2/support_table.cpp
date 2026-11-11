@@ -20,6 +20,7 @@
 #include "monster.h"
 #include "objects.h"
 #include "player.h"
+#include "poe2/attack_speed.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/default_attack.hpp"
 #include "poe2/effect_primitives.hpp"
@@ -222,6 +223,8 @@ struct GroundBurst {
 	DamageType type;
 	MissileGraphicID effect;
 	Fixed26_6 damage;
+	/** The Hellfire Roar use it is the fire of, which hits a monster once (HellfireUse), or 0. */
+	uint16_t hellfireUse = 0;
 };
 
 /** @brief A skill that goes off again: a repeat, an echo, a strike of Multistrike or a trigger. */
@@ -257,6 +260,8 @@ struct SporePod {
 };
 
 std::vector<GroundBurst> Bursts;
+/** @brief The last use Hellfire Roar empowered: its bursts hit each monster once (audit-drafts-bow.md 8.2). */
+uint16_t HellfireUse = 0;
 std::vector<PendingUse> Pending;
 std::vector<Stand> Stands;
 std::vector<SporePod> SporePods;
@@ -536,11 +541,13 @@ void InflictSupportBleed(const Player &player, Monster &monster, int32_t physica
 {
 	Poe2MonsterState &state = monster.poe2;
 	constexpr int Ticks = 4 * 20;
-	const int32_t perTick = std::max<int32_t>(physical * 70 / 100 / Ticks, 1);
+	const int32_t perTick = std::max<int32_t>(static_cast<int32_t>(static_cast<int64_t>(physical) * 70 / 100 * BleedMagnitudePercent(player) / 100 / Ticks), 1);
 	if (state.bleedTicks == 0 || perTick >= state.bleedDamagePerTick) {
 		state.bleedDamagePerTick = perTick;
 		state.bleedSource = static_cast<int8_t>(player.getId());
 		state.bleedSkill = WeaponSkill::None;
+		// Bloodletting's own hit's bleed, which its next stab doesn't consume (Q48).
+		state.bleedFromBloodletting = Hit.skill == SkillSlot::ForAttack(WeaponSkill::Bloodletting);
 	}
 	state.bleedTicks = static_cast<uint8_t>(std::max<int>(state.bleedTicks, Ticks));
 	NoteSupportedBleed(player, monster);
@@ -662,6 +669,8 @@ void FinishHit()
 		player._pManaBase = std::min(player._pManaBase + mana, player._pMaxManaBase);
 		RedrawComponent(PanelDrawComponent::Mana);
 	}
+	// The gear's leech (runes), on attack hits.
+	LeechFromHit(player, skill, total);
 
 	const bool alive = CanHit(monster);
 	if (alive) {
@@ -674,6 +683,8 @@ void FinishHit()
 		// POE2's poison: 20% of the hit's physical and chaos damage a second for 2 seconds, the strongest only.
 		if (Has(player, skill, SG::Envenom) && poisonBase > 0 && GenerateRnd(100) < Value(player, skill, SG::Envenom, 0))
 			InflictPoison(player, monster, static_cast<int32_t>(static_cast<int64_t>(poisonBase) * PoisonPercentPerSecond * PoisonTicks / 20 / 100), PoisonTicks);
+		// The gear's own chance to poison (the Essence of Anguish), on attack hits.
+		PoisonFromGear(player, monster, skill, poisonBase);
 		// Anguish is a lineage's own poison, and says it stacks: up to 5.
 		if (Has(player, skill, SG::AndarielsAnguish))
 			InflictPoison(player, monster, totalBase * 10 / 100 * 4, 80, 5);
@@ -778,10 +789,16 @@ void PassDamageOverTime(const Player &player, const Monster &from)
 	for (Monster *other : NearestMonsters(from.position.tile, 4, 2, &from)) {
 		Poe2MonsterState &target = other->poe2;
 		if (state.bleedTicks > 0) {
+			// Whose bleed it is goes with the bleed that lands: a neighbour keeping its stronger bleed keeps its mark
+			// (audit-drafts-dagger.md 6.4).
+			const int32_t passed = state.bleedDamagePerTick * 4 / 5;
+			if (target.bleedTicks == 0 || passed >= target.bleedDamagePerTick) {
+				target.bleedSkill = state.bleedSkill;
+				target.bleedFromBloodletting = state.bleedFromBloodletting;
+			}
 			target.bleedTicks = std::max(target.bleedTicks, state.bleedTicks);
-			target.bleedDamagePerTick = std::max(target.bleedDamagePerTick, state.bleedDamagePerTick * 4 / 5);
+			target.bleedDamagePerTick = std::max(target.bleedDamagePerTick, passed);
 			target.bleedSource = static_cast<int8_t>(player.getId());
-			target.bleedSkill = state.bleedSkill;
 		}
 		if (state.poisonTicks > 0) {
 			target.poisonTicks = std::max(target.poisonTicks, state.poisonTicks);
@@ -837,8 +854,14 @@ void ProcessBursts(Player &player)
 		BreakObjectsInArea(player, copy.center, copy.radius);
 		std::vector<Monster *> targets;
 		ForEachMonsterNear(copy.center, copy.radius, [&](Monster &monster) { targets.push_back(&monster); });
-		for (Monster *monster : targets)
+		for (Monster *monster : targets) {
+			if (copy.hellfireUse != 0) {
+				if (monster->poe2.hellfireUseHit == copy.hellfireUse)
+					continue;
+				monster->poe2.hellfireUseHit = copy.hellfireUse;
+			}
 			DealExtra(player, *monster, copy.type, copy.damage);
+		}
 		Bursts[i].pulsesLeft--;
 		if (Bursts[i].pulsesLeft <= 0) {
 			Bursts.erase(Bursts.begin() + static_cast<std::ptrdiff_t>(i));
@@ -977,13 +1000,15 @@ bool AddPoison(Monster &monster, int32_t perTick, int ticks, int maxStacks)
 		state.poisonDamagePerTick = std::min<int32_t>(state.poisonTicks > 0 ? state.poisonDamagePerTick + perTick : perTick, std::max<int32_t>(cap, state.poisonDamagePerTick));
 		state.poisonTicks = static_cast<uint8_t>(std::max<int>(state.poisonTicks, ticks));
 	}
+	// Another poison landed, which Cobra Strike may consume (Q42); the strike marks its own after this.
+	state.poisonFromCobra = false;
 	return true;
 }
 
-void InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks, bool fromHit)
+bool InflictPoison(const Player &player, Monster &monster, int32_t total, int ticks, int maxStacks, bool fromHit)
 {
 	if (!AilmentAllowed(player, HitSource()))
-		return;
+		return false;
 	// The supports of the hit in progress: Deadly Venom's stronger poison (only a hit's: a pool or a curse has none to
 	// lessen, the poison skills plan), Twin Fangs' extra stack and shorter poisons (POE2's Deadly Poison and Escalating
 	// Poison), and Lingering Venom's longer, weaker ones.
@@ -1003,11 +1028,13 @@ void InflictPoison(const Player &player, Monster &monster, int32_t total, int ti
 			maxStacks += Value(player, Hit.skill, SG::TwinFangs, 0);
 		}
 	}
+	// Plaguewrath: stronger poisons from the gear.
+	total = Percent(total, PoisonMagnitudePercent(player));
 	Poe2MonsterState &state = monster.poe2;
 	const int32_t perTick = std::max<int32_t>(total / std::max(ticks, 1), 1);
 	const bool stacked = state.poisonTicks > 0 && maxStacks > 1;
 	if (!AddPoison(monster, perTick, ticks, maxStacks))
-		return;
+		return false;
 	state.poisonSource = static_cast<int8_t>(player.getId());
 	const bool supported = Hit.player == &player && !Hit.skill.isEmpty();
 	// Plague Burst: the poison builds plague; a stack added to it keeps the plague it had (POE2's Bursting Plague).
@@ -1018,6 +1045,7 @@ void InflictPoison(const Player &player, Monster &monster, int32_t total, int ti
 		BreakMonsterArmour(monster, &player);
 	// Blood and Venom: this poison deals more while the monster bleeds.
 	state.poisonVsBleed = supported && Has(player, Hit.skill, SG::BloodAndVenom);
+	return true;
 }
 
 void NoteSupportedBleed(const Player &player, Monster &monster)
@@ -1216,6 +1244,9 @@ uint32_t SkillTags(SkillSlot skill)
 	uint32_t tags = 0;
 	const bool spell = table->weapon == TableWeapon::None && (table->flags & TF_Spell) != 0;
 	tags |= spell ? ST_Spell : ST_Attack;
+	// Condemn, the shield's holy fire, is a spell and pays a spell's mana (Curtis 2026-11-07, Q41).
+	if (table->skill == WeaponSkill::Condemn)
+		tags = ST_Spell;
 	if (table->weapon == TableWeapon::None && table->shape == TableShape::Curse)
 		tags = ST_Spell;
 	if (IsTableMeleeSkill(*table))
@@ -1255,6 +1286,9 @@ uint32_t SkillTags(SkillSlot skill)
 		tags |= ST_Duration;
 		if (table->buff == TableBuff::WarCry)
 			tags = (tags & ~(ST_Attack | ST_Spell)) | ST_Warcry | ST_Area;
+		else
+			// Frozen Armor, Holy Shield and Shield Wall are buffs, not attacks; Frozen Armor is cold (Q41).
+			tags = (tags & ~(ST_Attack | ST_Spell)) | ST_Buff | (table->buff == TableBuff::FrozenArmor ? ST_Frost : 0);
 		break;
 	default:
 		break;
@@ -1263,6 +1297,106 @@ uint32_t SkillTags(SkillSlot skill)
 		tags |= ST_Slam;
 	if (table->skill == WeaponSkill::FallingSword)
 		tags |= ST_Slam;
+	// The draft Staff gems' tags, as the Tree Workshop gives them (drafts-2026-11-06).
+	switch (table->skill) {
+	case WeaponSkill::WrathOfTheSkies:
+		tags |= ST_Melee | ST_Slam;
+		break;
+	case WeaponSkill::FrostveinRupture:
+	case WeaponSkill::ThunderFurrow:
+		tags |= ST_Slam;
+		break;
+	case WeaponSkill::RimeStrikes:
+	case WeaponSkill::Shatterpalm:
+	case WeaponSkill::DervishAdvance:
+	case WeaponSkill::StormSiphon:
+	case WeaponSkill::TempestSweep:
+		tags |= ST_Strike;
+		break;
+	case WeaponSkill::PhantomStep:
+		tags |= ST_Movement;
+		break;
+	case WeaponSkill::SkylordsStorm:
+		// A blink and a burst, not a lasting zone.
+		tags = (tags & ~(ST_Duration | ST_Placed)) | ST_Melee | ST_Movement;
+		break;
+	// The draft Mace, Axe and Sword gems' (Q48). The thrown rock, hammer and axe are no melee: they pay full mana.
+	case WeaponSkill::HellfireRoar:
+		// Its hits are fire, though a warcry has none of its own.
+		tags |= ST_Fire;
+		break;
+	case WeaponSkill::FrostforgedHammer:
+	case WeaponSkill::PlateBreaker:
+		// Blows, not slams, though they are a mace's sweeps.
+		tags = (tags & ~ST_Slam) | ST_Strike;
+		break;
+	case WeaponSkill::MagmaHurl:
+	case WeaponSkill::HephastosHammer:
+		tags |= ST_Area;
+		break;
+	case WeaponSkill::ArreatCrash:
+		tags |= ST_Melee | ST_Slam;
+		break;
+	case WeaponSkill::MountainsFall:
+		tags |= ST_Melee;
+		break;
+	case WeaponSkill::HammerOfZakarum:
+		// A falling hammer, not a lasting zone.
+		tags = (tags & ~ST_Duration) | ST_Melee | ST_Slam;
+		break;
+	case WeaponSkill::AncestorTotem:
+		tags |= ST_Melee | ST_Placed;
+		break;
+	case WeaponSkill::BrimstoneRift:
+		tags |= ST_Duration;
+		break;
+	case WeaponSkill::SteelTempest:
+		tags |= ST_Strike | ST_Duration;
+		break;
+	case WeaponSkill::BloodHarvest:
+	case WeaponSkill::PyreBlow:
+		tags |= ST_Strike;
+		break;
+	case WeaponSkill::MammothCharge:
+		tags |= ST_Slam;
+		break;
+	// The draft Sword and Shield gems'. The ghost sword is thrown: no melee, full mana.
+	case WeaponSkill::TollingShield:
+		tags |= ST_Strike;
+		break;
+	case WeaponSkill::ZakarumsJudgement:
+		tags |= ST_Slam;
+		break;
+	// The draft Bow gems' (Q48). Spark and Kindling's arrows burst; Whirling Volley's ring is arrows, not an area; Swamp
+	// Gas Arrow's cloud poisons and bursts in fire.
+	case WeaponSkill::SparkArrow:
+	case WeaponSkill::KindlingArrow:
+		tags |= ST_Area;
+		break;
+	case WeaponSkill::WhirlingVolley:
+		tags = (tags & ~ST_Area) | ST_Projectile;
+		break;
+	case WeaponSkill::SwampGasArrow:
+		tags |= ST_Chaos | ST_Fire;
+		break;
+	// The draft Dagger gems' (Q48). The bomb bursts and is gone; the sentry is set down; Phoenix Strike's thirds are of
+	// all three elements and burst; Viz-Jaq'taar Strike blinks. Bloodletting deals no damage over time of its own, so it
+	// takes no DoT tag (audit-drafts-dagger.md 6.5).
+	case WeaponSkill::FireBlast:
+		tags &= ~ST_Duration;
+		break;
+	case WeaponSkill::DeathSentry:
+		tags |= ST_Placed;
+		break;
+	case WeaponSkill::PhoenixStrike:
+		tags |= ST_Fire | ST_Frost | ST_Lightning | ST_Area;
+		break;
+	case WeaponSkill::VizJaqtaarStrike:
+		tags |= ST_Movement;
+		break;
+	default:
+		break;
+	}
 	// Thornvine Arrow's vine and Poison Explosion's cloud last.
 	if (table->zone == TableZone::PoisonGround)
 		tags |= ST_Duration;
@@ -1289,9 +1423,15 @@ uint32_t SkillTags(SkillSlot skill)
 		}
 		if ((table->flags & TF_Elements) != 0)
 			tags |= ST_Elemental;
+		// Horadric Sundering's pulse is all elements and no physical.
+		if (table->skill == WeaponSkill::HoradricSundering)
+			tags &= ~ST_Physical;
 		if ((table->flags & (TF_Bleed | TF_Poison | TF_PoisonBurst)) != 0 || table->shape == TableShape::Curse || table->zone == TableZone::PoisonGround)
 			tags |= ST_DamageOverTime;
 	}
+	// The poison skills show it, Witch's Bog too, whose arrows poison (Q41).
+	if ((table->flags & (TF_Poison | TF_PoisonBurst)) != 0 || IsAnyOf(table->zone, TableZone::PoisonGround, TableZone::Pod, TableZone::GasTrap, TableZone::Bog))
+		tags |= ST_Poison;
 	return tags;
 }
 
@@ -1355,6 +1495,21 @@ bool TableSupportFits(const SupportData &data, SkillSlot skill)
 	case SG::DeadlyVenom:
 		// Its more poison is a hit's: Locust Swarm and Thornvine Arrow poison with none (the poison skills plan).
 		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::LocustSwarm, WeaponSkill::ThornvineArrow);
+	case SG::Volley:
+	case SG::StoredVolley:
+		// Phantom Blade throws one ghost sword out and back: more projectiles would do nothing (balance re-score,
+		// batch2-fixes.md 8).
+		// Nor would they for the Dagger throws: one bomb, one spark (Q48).
+		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::PhantomBlade, WeaponSkill::FireBlast, WeaponSkill::ShockWeb);
+	case SG::NovaProjectiles:
+		// Nor a ring of them; Whirling Volley's ring never asks for one either (audit-drafts-bow.md 7.3).
+		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::PhantomBlade, WeaponSkill::FireBlast, WeaponSkill::ShockWeb, WeaponSkill::WhirlingVolley);
+	case SG::Ricochet:
+		// A lobbed bomb or spark never meets a wall.
+		return skill.kind != SkillKind::Attack || IsNoneOf(skill.attack(), WeaponSkill::FireBlast, WeaponSkill::ShockWeb);
+	case SG::Multistrike:
+		// Viz-Jaq'taar Strike is four heavy stabs already (drafts-61-priced.json: should not take Flurry of Blows).
+		return skill.kind != SkillKind::Attack || skill.attack() != WeaponSkill::VizJaqtaarStrike;
 	default:
 		return true;
 	}
@@ -1688,6 +1843,9 @@ int SupportAilmentChancePercent(DamageType type)
 	}
 	if (type == DamageType::Fire && (HitHas(SG::FuelThePyre) || HitHas(SG::AndarielsAnguish)))
 		return 0;
+	// The skill's own ailment build-up (Thunder Furrow's doubled shock chance, Northwind Wave's doubled freeze).
+	if (const TableSkillData *table = FindTableSkill(Hit.skill.attack()); table != nullptr)
+		percent = percent * TableAilmentPercent(*table) / 100;
 	return percent;
 }
 
@@ -1730,6 +1888,11 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 		AddVisualEffect(player.position.tile + Left(Left(player._pdir)), MissileGraphicID::Etherealize, 0, 2);
 		// It stays there a while, for the Switch Command.
 		OnShadowAppeared(player, player.position.tile + Left(Left(player._pdir)));
+	}
+	// Bulwark Roar (Q48): the hero's next shield attacks each send out a shield wave.
+	if (uint8_t &waves = player.poe2.cryHits[BulwarkRoarCry]; waves > 0 && IsShieldAttack(skill)) {
+		waves--;
+		SendBulwarkWave(player, target);
 	}
 	SupportRuntime &state = player.poe2.supportState;
 	const uint32_t tags = SkillTags(skill);
@@ -1785,6 +1948,9 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 			}
 			break;
 		case SG::Aftershock:
+			// Quaking Roar's aftershocks don't stack with it on the same slam.
+			if ((tags & ST_Slam) != 0 && player.poe2.cryHits[static_cast<size_t>(EmpoweringCry::Quaking)] > 0)
+				break;
 			if (GenerateRnd(100) < Value(player, skill, gem, 0))
 				AddBurst(target, 2, 12, DamageType::Physical, MissileGraphicID::StoneCurseShatter, SkillBaseDamage(player, skill, 100));
 			break;
@@ -1798,6 +1964,10 @@ void OnSkillUsed(Player &player, SkillSlot skill, Point target)
 			AddBurst(tile, 3, 0, DamageType::Physical, MissileGraphicID::MetalHit, SkillBaseDamage(player, SkillSlot::ForAttack(WeaponSkill::Cleave), 150));
 			break;
 		case SG::BlinkStrike:
+			// Skylord's Storm, Phantom Step and Viz-Jaq'taar Strike blink as they go off: theirs bursts where they land
+			// (OnSkillBlinked).
+			if (skill.kind == SkillKind::Attack && IsAnyOf(skill.attack(), WeaponSkill::SkylordsStorm, WeaponSkill::PhantomStep, WeaponSkill::VizJaqtaarStrike))
+				break;
 			AddBurst(skill.kind == SkillKind::Spell ? target : tile, 2, 2, DamageType::Physical, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 120));
 			break;
 		case SG::Sanctify:
@@ -2103,6 +2273,81 @@ Point NearestMonsterTarget(const Player &player, Point from, int range)
 	return NearestTarget(player, from, range);
 }
 
+void OnSkillBlinked(Player &player, SkillSlot skill, Point landing)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || skill.isEmpty() || Repeating || IsCastingRepeat(player) || !Has(player, skill, SG::BlinkStrike))
+		return;
+	AddBurst(landing, 2, 2, DamageType::Physical, MissileGraphicID::HolyBoltExplosion, SkillBaseDamage(player, skill, 120));
+}
+
+bool IsSupportRepeat()
+{
+	return Repeating;
+}
+
+int CrySwingsOfUse(const Player &player, SkillSlot skill)
+{
+	// The use's time in the hero's own free attacks, to the nearest; a quick use is still one.
+	const uint64_t swing = AttackTime(player, AttackSkillSlot(player, WeaponSkill::None));
+	const uint64_t use = SkillUseTime(player, skill, false);
+	if (swing == 0)
+		return 1;
+	return static_cast<int>(std::clamp<uint64_t>((use + (swing / 2)) / swing, 1, UINT8_MAX));
+}
+
+void OnEmpoweredMeleeHit(Player &player, SkillSlot skill, Monster &monster, Fixed26_6 dealt)
+{
+	if (!gbIsPoe2 || &player != MyPlayer || Repeating || skill.isEmpty() || dealt <= 0)
+		return;
+	const uint32_t tags = SkillTags(skill);
+	if ((tags & (ST_Attack | ST_Melee)) != (ST_Attack | ST_Melee))
+		return;
+	Poe2PlayerData &state = player.poe2;
+	// A use spends one of the cry's hits, however many monsters it hits (each of them is empowered). Hellfire Roar's and
+	// Quaking Roar's spend one for each swing the use's time is worth, so a slow slam pays for its weight (balance
+	// re-score, batch2-fixes.md 5). A use that finds fewer left than its swings is empowered for the share it pays
+	// (audit-drafts-bow.md 7.4): the percent of its bonus it gets, 0 for none.
+	const auto spend = [&](EmpoweringCry cry) -> int {
+		const auto index = static_cast<size_t>(cry);
+		if (state.cryUsedThisTick[index])
+			return state.cryShareThisTick[index];
+		if (state.cryHits[index] == 0)
+			return 0;
+		const int swings = IsAnyOf(cry, EmpoweringCry::Hellfire, EmpoweringCry::Quaking) ? CrySwingsOfUse(player, skill) : 1;
+		const int paid = std::min<int>(state.cryHits[index], swings);
+		state.cryHits[index] = static_cast<uint8_t>(state.cryHits[index] - paid);
+		state.cryUsedThisTick[index] = true;
+		state.cryShareThisTick[index] = static_cast<uint8_t>(paid * 100 / std::max(swings, 1));
+		if (cry == EmpoweringCry::Hellfire && ++HellfireUse == 0)
+			HellfireUse = 1;
+		return static_cast<int>(state.cryShareThisTick[index]);
+	};
+	const auto percentOf = [](WeaponSkill cry) {
+		const TableSkillData *data = FindTableSkill(cry);
+		return data != nullptr ? static_cast<int>(data->damagePercent) : 0;
+	};
+	const Point tile = monster.position.tile;
+	// Each monster takes one of a use's fire bursts, however many monsters round it the use hit (audit-drafts-bow.md 8.2).
+	if (const int share = spend(EmpoweringCry::Hellfire); share > 0) {
+		AddBurst(tile, HellfireBurstRadius, 0, DamageType::Fire, MissileGraphicID::MagmaBallExplosion, Fixed26_6::fromRaw(std::max(Percent(Percent(dealt.raw(), percentOf(WeaponSkill::HellfireRoar)), share), 1)));
+		Bursts.back().hellfireUse = HellfireUse;
+	}
+	if ((tags & ST_Slam) != 0) {
+		if (const int share = spend(EmpoweringCry::Quaking); share > 0) {
+			const TableSkillData *slam = skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
+			AddBurst(tile, 0, QuakingAftershockTicks, slam != nullptr ? slam->type : DamageType::Physical, MissileGraphicID::StoneCurseShatter,
+			    Fixed26_6::fromRaw(std::max(Percent(Percent(dealt.raw(), QuakingAftershockPercent), share), 1)));
+		}
+	}
+	// The strike strikes again a moment later: its share of the hit it dealt, on where it struck, as Quaking's aftershock
+	// (balance re-score, batch2-fixes.md 2: the old repeat was a share of a plain weapon hit). It sets off nothing more.
+	if ((tags & ST_Strike) != 0 && !monster.hasNoLife() && spend(EmpoweringCry::BulKathos) > 0) {
+		const TableSkillData *strike = skill.kind == SkillKind::Attack ? FindTableSkill(skill.attack()) : nullptr;
+		AddBurst(tile, 0, BulKathosRepeatTicks, strike != nullptr ? strike->type : DamageType::Physical, MissileGraphicID::MetalHit,
+		    Fixed26_6::fromRaw(std::max(Percent(dealt.raw(), percentOf(WeaponSkill::CryOfBulKathos)), 1)));
+	}
+}
+
 void AddPlayerBurst(Point center, int radius, int delay, DamageType type, MissileGraphicID effect, Fixed26_6 damage)
 {
 	if (!gbIsPoe2 || damage <= 0)
@@ -2267,6 +2512,12 @@ bool HasBartucsHunger(const Player &player)
 	return gbIsPoe2 && PassiveTotal(player, PassiveStat::BartucsHunger) > 0;
 }
 
+/** @brief The share of mana costs paid in life without a life-cost support: Bartuc's Hunger's and the gear's. */
+int GearAndHungerLifePercent(const Player &player)
+{
+	return std::min((HasBartucsHunger(player) ? HungerLifePercent : 0) + GearManaCostAsLifePercent(player), 100);
+}
+
 /** @brief Takes life paid as a cost: it stops at 1 life, bypasses energy shield and isn't a hit. @return the life taken. */
 Fixed26_6 PayLife(Player &player, Fixed26_6 life)
 {
@@ -2289,9 +2540,8 @@ int SupportLifeManaPercent(const Player &player, SkillSlot skill)
 		return 0;
 	if (Has(player, skill, SG::BartucsBloodletting))
 		return 50;
-	if (HasBartucsHunger(player))
-		return 100 - HungerLifePercent;
-	return 100;
+	// Bartuc's Hunger and the gear's share (Tir runes bonded) add up.
+	return 100 - GearAndHungerLifePercent(player);
 }
 
 void PaySupportLifeCost(Player &player, SkillSlot skill, int manaCost)
@@ -2303,8 +2553,8 @@ void PaySupportLifeCost(Player &player, SkillSlot skill, int manaCost)
 		life = manaCost * 120 / 100;
 	else if (Has(player, skill, SG::BartucsBloodletting))
 		life = manaCost / 2;
-	else if (HasBartucsHunger(player))
-		life = std::max(manaCost * HungerLifePercent / 100, 1);
+	else if (const int percent = GearAndHungerLifePercent(player); percent > 0)
+		life = std::max(manaCost * percent / 100, 1);
 	if (life <= 0)
 		return;
 	const Fixed26_6 cost = PayLife(player, Fixed26_6::fromInt(life));

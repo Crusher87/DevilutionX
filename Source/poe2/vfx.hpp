@@ -10,6 +10,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <vector>
 
 #include "engine/displacement.hpp"
 #include "engine/point.hpp"
@@ -28,6 +29,7 @@
 #include "engine/clx_sprite.hpp"
 
 namespace devilution {
+struct Monster;
 struct Object;
 } // namespace devilution
 
@@ -56,11 +58,16 @@ enum class MiasmaKind : uint8_t {
 	Bog,
 };
 
-/** @brief What a lobbed throw looks like in the air: a glass flask, a seed pod, or an iron gas canister. */
+/**
+ * @brief What a lobbed throw looks like in the air: a glass flask, a seed pod, an iron gas canister, a fire bomb with a
+ * burning fuse, or a crackling ball of lightning.
+ */
 enum class LobKind : uint8_t {
 	Flask,
 	Seed,
 	Canister,
+	Bomb,
+	Spark,
 };
 
 /** @brief How a weapon moves through the air, to match the hero's attack animation. Every hero swings right-handed. */
@@ -105,6 +112,12 @@ void BoneCage(Point tile, int delayMs, float size, int standMs);
 void Miasma(Point tile, int radiusTiles, int durationMs, MiasmaKind kind, uint32_t key = 0);
 /** @brief Thorny vines burst up round a tile and stand for the given time before they wither (Thornvine Arrow). */
 void Thorns(Point tile, int radiusTiles, int durationMs, uint32_t key = 0);
+/** @brief A slab of rock thrust up out of the floor, standing for the given time or until EndKeyed breaks it (Shield Wall). */
+void EarthWall(Point tile, int lifeMs, uint32_t key);
+/** @brief Wave of Light's great bell of light, standing for the given time or until EndKeyed takes it (Q38). */
+void Bell(Point tile, int lifeMs, uint32_t key);
+/** @brief The bell tolls: a ring of holy light rolls out over the radius. */
+void BellToll(Point tile, int radiusTiles);
 /** @brief A swollen seed pod on the ground, throbbing, until its time runs out or EndKeyed bursts it (Bloated Pods). */
 void Pod(Point tile, int lifeMs, uint32_t key);
 /** @brief A gnarled effigy stake with glowing green eyes, standing for the given time (Plague Effigy). */
@@ -140,6 +153,14 @@ void Volley(Point from, Point toward, int arrows, bool feathers);
  * only a faint touch on it: a dim glow and a few small sparks of that element.
  */
 void Cut(Point tile, Element element);
+/**
+ * @brief Thorns striking back at a monster that hit the hero (the gear's thorns, Iron Maiden, Reflect, Scavenged
+ * Plating, a Thorned shrine): dark red spikes stab out of its body all round and draw back in, as POE2 shows thorns.
+ * One monster shows it at most once every ThornsCueGapMs, and only a few show at once, so a crowd stays readable.
+ */
+void ThornsHit(const Monster &monster);
+/** @brief The least time between two thorns bursts on the same monster, in ms. */
+constexpr int ThornsCueGapMs = 450;
 /** @brief Lightning arcing between two tiles. */
 void Arc(Point from, Point to, Element element);
 /**
@@ -180,8 +201,14 @@ void SetCamera(Point viewTile, Displacement offset, bool zoom);
 void ScanMissiles();
 /** @brief Whether the effects draw this missile themselves this frame, so its classic sprite is left out. */
 bool ReplacesSprite(const Missile &missile);
+/** @brief Whether the missile is a blow of steel (MetalHit): a pale flash and sparks, never Charged Bolt's blue crackle. */
+bool IsSteelHit(const Missile &missile);
 /** @brief Whether the missile is drawn as Arcing Sparks' small sparks rather than Charged Bolt's bolts: both fly the same missile. */
 bool IsArcingSpark(const Missile &missile);
+/** @brief Poe2MissileData::look for an arcing spark another skill throws (Charged Bolt's, Q34). */
+constexpr uint8_t ArcingSparkLook = 3;
+/** @brief Poe2MissileData::look for a thrown blade or axe that spins as it flies (Q39). */
+constexpr uint8_t SpinningBladeLook = 4;
 /** @brief The colour a missile's light shines in with HD Lighting: its effects' own colour (portals blue or red), 0-255. */
 std::array<uint8_t, 3> LightColourOf(const Missile &missile);
 /**
@@ -189,6 +216,11 @@ std::array<uint8_t, 3> LightColourOf(const Missile &missile);
  * their own pace and phase, so no two flames flicker in step. Other objects draw their current frame.
  */
 ClxSprite ObjectSprite(const Object &object);
+/**
+ * @brief Where the small flames hug the burning cross (burncros), in pixels from its sprite's top left: along its upright
+ * and its bar.
+ */
+const std::vector<Point> &BurningCrossFlames();
 /**
  * @brief Finds what the dungeon itself gives off this frame: the flames of torches, candles, fires and fire traps, and
  * the lava and water on screen (the palette-animated colours of the frame just drawn).
@@ -229,14 +261,62 @@ void Advance(float ms);
 
 /** @brief How many particles are alive (tests). */
 size_t ParticleCount();
+/** @brief How far the farthest particle is from a flying missile's head (an arrow's tip), in pixels (tests). */
+float FarthestParticleFrom(const Missile &missile);
 /** @brief How many rings, sigils, bolts, cracks and glows are alive (tests). */
 size_t ShapeCount();
 /** @brief How many flames, lava and water patches the last ScanWorld found (tests). */
 size_t AmbientCount();
 /** @brief How many town portals are standing or folding shut (tests). */
 size_t PortalCount();
+/** @brief How many thorns bursts are showing (tests). */
+size_t ThornsCueCount();
 /** @brief How many raindrops and snowflakes are falling (tests). */
 size_t DropCount();
+
+/** @brief What a piece of physics debris is: a chip of stone, a spark off steel, or a drop of blood. */
+enum class DebrisKind : uint8_t {
+	/** @brief A dark chip of stone knocked out of the floor (slams, the end of a fissure): blended, not glowing. */
+	Rubble,
+	/** @brief A bright spark off an armoured monster's steel: glowing, gone after a bounce or two. */
+	Spark,
+	/** @brief A dark drop of blood: blended, it barely bounces and lies a moment where it stops. */
+	Droplet,
+};
+
+/** @brief The most pieces of debris at once; a new piece past it takes the place of the oldest. */
+constexpr size_t MaxDebris = 400;
+
+/** @brief Whether hits throw physics debris: the effects are drawn and the Physics Debris option is on. */
+bool DebrisEnabled();
+
+/**
+ * @brief Tests' window on the physics debris. A piece lies on the floor in tile units (whole numbers are tile centres,
+ * fractions in between), with its height above the floor in pixels.
+ */
+namespace debris_test {
+
+struct Piece {
+	DebrisKind kind;
+	float x, y, z;
+	/** @brief Its speed over the floor in tiles a second, and upward in pixels a second. */
+	float vx, vy, vz;
+	int bounces;
+	int wallHits;
+	/** @brief Stopped and lying still, fading out. */
+	bool resting;
+	float alpha;
+	std::array<uint8_t, 3> colour;
+};
+
+/** @brief Throws one piece from a point, whatever the options say (the hits go through DebrisEnabled). */
+void Throw(DebrisKind kind, float x, float y, float z, float vx, float vy, float vz);
+/** @brief How many pieces there are. */
+size_t Count();
+/** @brief The piece at an index, oldest first. */
+Piece At(size_t index);
+
+} // namespace debris_test
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 /**

@@ -59,7 +59,8 @@ using namespace poe2ui;
 constexpr int Padding = 12;
 constexpr int HeaderHeight = 40;
 constexpr int FooterHeight = 36;
-constexpr int TabWidth = 118;
+// Wide enough for two-word skill names like "Sweeping Wind" on one line; the gem grid keeps its 3 columns.
+constexpr int TabWidth = 150;
 constexpr int TabHeight = 24;
 constexpr int TabGap = 3;
 constexpr int TierLabelWidth = 34;
@@ -150,13 +151,14 @@ bool IsCuttingSupport()
 std::vector<SkillSlot> SupportableSkills(const Player &player)
 {
 	std::vector<SkillSlot> skills;
+	// Curtis 2026-10-20: the weapon's own attack (Bow Shot and the like) takes supports too, in its own Skills panel row.
+	// It comes first, as it does in the Skills panel (Curtis 2026-11-06).
+	if (const SkillSlot weaponAttack = DefaultSkillSlot(player); !weaponAttack.isEmpty() && SkillTakesSupports(weaponAttack))
+		skills.push_back(weaponAttack);
 	for (const SkillSlot &skill : player.poe2.skillSlots) {
 		if (!skill.isEmpty() && SkillTakesSupports(skill) && std::find(skills.begin(), skills.end(), skill) == skills.end())
 			skills.push_back(skill);
 	}
-	// Curtis 2026-10-20: the weapon's own attack (Bow Shot and the like) takes supports too, in its own Skills panel row.
-	if (const SkillSlot weaponAttack = DefaultSkillSlot(player); !weaponAttack.isEmpty() && SkillTakesSupports(weaponAttack))
-		skills.push_back(weaponAttack);
 	return skills;
 }
 
@@ -228,10 +230,15 @@ Layout ComputeLayout(const Surface &out)
 	} else {
 		// Only the tabs of what the uncut gem can become, e.g. no Support or Spirit tab for a skill gem (Curtis 2026-10-22).
 		const Item *uncut = UncutItem();
+		const std::vector<GemCategory> categories = GemcuttingTabs(uncut != nullptr ? std::optional<UncutKind>(UncutGemKind(*uncut)) : std::nullopt);
+		// With the Dagger and Arcane tabs they get shorter on a small screen, so they all fit above the footer.
+		const int room = height - HeaderHeight - FooterHeight;
+		const int step = categories.empty() ? TabHeight + TabGap : std::clamp(room / static_cast<int>(categories.size()), 16, TabHeight + TabGap);
+		const int tabHeight = std::min(TabHeight, step - 2);
 		int y = origin.y + HeaderHeight;
-		for (const GemCategory category : GemcuttingTabs(uncut != nullptr ? std::optional<UncutKind>(UncutGemKind(*uncut)) : std::nullopt)) {
-			layout.tabs.push_back({ category, { { origin.x + Padding, y }, { TabWidth, TabHeight } } });
-			y += TabHeight + TabGap;
+		for (const GemCategory category : categories) {
+			layout.tabs.push_back({ category, { { origin.x + Padding, y }, { TabWidth, tabHeight } } });
+			y += step;
 		}
 	}
 
@@ -462,7 +469,7 @@ void DrawGemTooltip(const Surface &out, const Player &player, const GemEntry &ge
 	} else if (UncutGemKind(*uncut) != GemUncutKind(gem)) {
 		lines.emplace_back(FormatRuntime(_("Your uncut gem makes {:s} gems; this needs an uncut {:s} gem"), UncutKindName(UncutGemKind(*uncut)), UncutKindName(GemUncutKind(gem))), UiFlags::ColorRed);
 	} else {
-		lines.emplace_back(FormatRuntime(_("Needs an uncut {:s} gem of level {:d}"), UncutKindName(GemUncutKind(gem)), gem.level), UiFlags::ColorRed);
+		lines.emplace_back(FormatRuntime(_("Needs an uncut {:s} gem of level {:d}"), UncutKindName(GemUncutKind(gem)), UncutLevelToCut(gem)), UiFlags::ColorRed);
 	}
 
 	const Rectangle bounds { { 0, 0 }, { out.w(), out.h() } };
@@ -493,6 +500,7 @@ void CutGem(const GemEntry &gem)
 			return;
 		}
 		const SfxID sound = ItemInvSnds[ItemCAnimTbl[uncut->_iCurs]];
+		TelemetryItemAction(player, "gem_cut", *uncut, StrCat("raised ", GemName(gem), " from level ", current, " to ", level));
 		UseUpUncut(player);
 		SetSocketedGemLevel(player, gem, level);
 		PlaySFX(sound);
@@ -510,10 +518,12 @@ void CutGem(const GemEntry &gem)
 	if (gem.support != SupportGem::None && SupportedSkill) {
 		const std::optional<size_t> slot = SupportedSkill->kind == SkillKind::Default ? std::optional<size_t>(DefaultAttackRow) : FindSkillSlot(player, *SupportedSkill);
 		if (slot) {
+			const Item uncutGem = *uncut;
 			SupportGem replaced = SupportGem::None;
 			const SupportSocketResult result = SocketSupportGem(player, *slot, std::nullopt, gem.support, replaced, gem.tier);
 			if (result == SupportSocketResult::Socketed) {
 				const SfxID sound = ItemInvSnds[ItemCAnimTbl[uncut->_iCurs]];
+				TelemetryItemAction(player, "gem_cut", uncutGem, StrCat("cut ", GemName(gem), ", socketed into ", SkillName(RowSkill(player, *slot))));
 				UseUpUncut(player);
 				PlaySFX(sound);
 				EventPlrMsg(SupportSocketMessage(result, player, *slot, gem.support));
@@ -525,6 +535,7 @@ void CutGem(const GemEntry &gem)
 	Item cut;
 	if (!CreateGemItem(cut, gem, level))
 		return;
+	TelemetryItemAction(player, "gem_cut", *uncut, gem.support != SupportGem::None ? StrCat("cut ", cut._iIName) : StrCat("cut ", cut._iIName, " level ", level));
 	UseUpUncut(player);
 	PlaySFX(ItemInvSnds[ItemCAnimTbl[cut._iCurs]]);
 	if (!MeetsRequirements(player, gem, level))
@@ -620,7 +631,8 @@ GemCategory DefaultSkillCategory(const Player &player)
 		case ItemType::Axe:
 			return GemCategory::Axe;
 		case ItemType::Sword:
-			return GemCategory::Sword;
+			// A dagger opens on its own tab (Shadow Lunge takes only a dagger).
+			return ItemAllowsWeaponSkill(item, WeaponSkill::ShadowStep) ? GemCategory::Dagger : GemCategory::Sword;
 		case ItemType::Mace:
 			return GemCategory::Mace;
 		case ItemType::Bow:
@@ -762,7 +774,7 @@ void DrawGemcutting(const Surface &out)
 		UiFlags color = active ? UiFlags::ColorWhitegold : UiFlags::ColorWhite;
 		if (!active && tab.skill && tab.skill->kind == SkillKind::Spell)
 			color = UiFlags::ColorBlue;
-		DrawString(out, name, { tab.rect.position + Displacement { 8, 0 }, { tab.rect.size.width - 12, tab.rect.size.height } }, { .flags = color | UiFlags::VerticalCenter });
+		DrawString(out, name, { tab.rect.position + Displacement { 8, 0 }, { tab.rect.size.width - 12, tab.rect.size.height } }, { .flags = color | UiFlags::VerticalCenter | UiFlags::KerningFitSpacing });
 	}
 	// Only cutting a support lists skill tabs; the hint drew over the gem categories when cutting a skill gem (Curtis 2026-10-21).
 	if (IsCuttingSupport() && std::none_of(layout.skillTabs.begin(), layout.skillTabs.end(), [](const SkillTab &tab) { return tab.skill && tab.skill->kind != SkillKind::Default; }))

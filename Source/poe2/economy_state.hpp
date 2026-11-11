@@ -43,11 +43,17 @@ struct EconomyState {
 	bool supportGemDropped = false;
 	/** @brief Kills on dungeon levels 1 and 2 without the first support gem; its chance climbs with each. */
 	uint8_t supportDroughtKills = 0;
+	/** @brief POE2 Mashup: whether an uncut skill gem has dropped for the hero yet (Curtis, Monk run 2: none in 54 minutes). */
+	bool skillGemDropped = false;
+	/** @brief Kills on dungeon levels 1 and 2 without the first uncut skill gem; its chance climbs with each. */
+	uint8_t skillDroughtKills = 0;
 };
 
 /** @brief Bytes the shards and the gambler's charges take in the save (version 17). */
 constexpr size_t EconomySaveSize = ShardKindCount + 1;
 /** @brief Bytes the first support gem's flag and drought take in the save (version 26). */
 constexpr size_t SupportDropSaveSize = 2;
+/** @brief Bytes the first uncut skill gem's flag and drought take in the save (version 28). */
+constexpr size_t SkillGemDropSaveSize = 2;
 
 } // namespace devilution

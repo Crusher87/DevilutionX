@@ -16,6 +16,7 @@
 #include "monster.h"
 #include "panels/poe2_widgets.hpp"
 #include "panels/spell_icons.hpp"
+#include "poe2/bound_demons.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/map_play.hpp"
 #include "poe2/monster_armour.hpp"
@@ -26,6 +27,7 @@
 #include "poe2/table_skills.hpp"
 #include "poe2/unique_effects.hpp"
 #include "tables/misdat.h"
+#include "utils/format.hpp"
 #include "utils/language.h"
 #include "utils/str_cat.hpp"
 
@@ -119,7 +121,7 @@ std::vector<Debuff> MonsterDebuffs(const Monster &monster)
 	else if (state.chillTicks > 0)
 		add(SpellIcon::Nova, SpellType::Spell, Cold, PercentText(state.chillPercent * 10));
 	if (state.shockTicks > 0)
-		add(SpellIcon::ChargedBolt, SpellType::Skill, Lightning, PercentText(ShockDamagePercent * MapExposurePercent() / 10));
+		add(SpellIcon::ChargedBolt, SpellType::Skill, Lightning, PercentText(ShockedDamagePercent(monster) * MapExposurePercent() / 10));
 	if (state.electrocuteTicks > 0)
 		add(SpellIcon::Lightning, SpellType::Skill, Lightning, SecondsText(state.electrocuteTicks));
 	if (state.poisonTicks > 0)
@@ -148,7 +150,7 @@ std::vector<Debuff> MonsterDebuffs(const Monster &monster)
 	if (const int weaken = TableCurseShownPercent(monster, TableCurse::Weaken); weaken > 0)
 		add(SpellIcon::LongHorn, SpellType::Skill, Curse, PercentText(-weaken * 10));
 	if (const int decrepify = TableCurseShownPercent(monster, TableCurse::Decrepify); decrepify > 0)
-		add(SpellIcon::RedSkull, SpellType::Skill, Curse, PercentText(decrepify * 10));
+		add(SpellIcon::RedSkull, SpellType::Skill, Curse, PercentText(-decrepify * 10));
 	if (const int deathMark = TableCurseShownPercent(monster, TableCurse::DeathMark); deathMark > 0)
 		add(SpellIcon::BoneSpirit, SpellType::Skill, Curse, PercentText(deathMark * 10));
 	if (const int ironMaiden = TableCurseShownPercent(monster, TableCurse::IronMaiden); ironMaiden > 0)
@@ -351,6 +353,10 @@ void DrawMonsterBanner(const Surface &out)
 
 	const std::vector<Debuff> debuffs = MonsterDebuffs(monster);
 	const std::string resistances = ResistanceText(monster);
+	// A bound demon says which essences it holds, in its crystal and out of it.
+	std::string held = BoundDemonEssenceText(monster);
+	if (!held.empty())
+		held = FormatRuntime(IsBoundDemon(monster) ? _("Bound in crystal. Holds {:s}") : _("Holds {:s}"), held);
 
 	const int width = std::min(MaxWidth, out.w() - 60);
 	int x = (out.w() - width) / 2;
@@ -365,6 +371,7 @@ void DrawMonsterBanner(const Surface &out)
 	lines += subtitle.empty() ? 0 : 1;
 	lines += mods.empty() ? 0 : 1;
 	lines += resistances.empty() ? 0 : 1;
+	lines += held.empty() ? 0 : 1;
 	const int iconsHeight = debuffs.empty() ? 0 : IconHeight + IconNumberHeight + 8;
 	const int height = 6 + NameHeight + barHeight + 10 + (lines * LineHeight) + iconsHeight;
 
@@ -378,6 +385,10 @@ void DrawMonsterBanner(const Surface &out)
 	y += barHeight + 6;
 	if (!subtitle.empty()) {
 		DrawShadowedText(out, subtitle, { { x, y }, { width, LineHeight } }, UiFlags::ColorWhite | UiFlags::FontSize12 | UiFlags::AlignCenter);
+		y += LineHeight;
+	}
+	if (!held.empty()) {
+		DrawShadowedText(out, held, { { x, y }, { width, LineHeight } }, UiFlags::ColorRed | UiFlags::FontSize12 | UiFlags::AlignCenter);
 		y += LineHeight;
 	}
 	if (!mods.empty()) {

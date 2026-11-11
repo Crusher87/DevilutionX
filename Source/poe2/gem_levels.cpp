@@ -130,7 +130,8 @@ GemCurve AttackCurve(WeaponSkill skill)
 		return { &Boneshatter, 100, UtilitySpellManaAt20, false, "curses: +1% physical damage taken a level" };
 	default:
 		if (const TableSkillData *table = FindTableSkill(skill); table != nullptr) {
-			const bool utility = IsAnyOf(table->shape, TableShape::Curse, TableShape::Buff);
+			// Haunt and Locust Swarm deal damage: their mana grows like the other damaging spells' (Q41).
+			const bool utility = IsAnyOf(table->shape, TableShape::Curse, TableShape::Buff) && IsNoneOf(table->curse, TableCurse::Haunt, TableCurse::Locust);
 			return { TableCurveGem(table->curve), table->curveEnd, utility ? UtilitySpellManaAt20 : ManaAt20, false, "from the skill table: a POE2 gem's steps" };
 		}
 		return { &Boneshatter, 100, 100, false, {} };
@@ -199,8 +200,12 @@ std::string DamageText(SkillSlot skill, int gemLevel)
 		if (skill.attack() == WeaponSkill::AmplifyDamage)
 			return std::format("+{:d}% physical damage taken", AmplifyDamagePercent + (AmplifyDamagePercentPerLevel * (gemLevel - 1)));
 		if (const TableSkillData *table = FindTableSkill(skill.attack()); table != nullptr) {
-			if (table->buff == TableBuff::WarCry)
+			if (table->buff == TableBuff::WarCry) {
+				// Only War Cry stuns; the other cries say what they do (balance re-score, batch2-fixes.md 7).
+				if (std::string note = table->skill == WeaponSkill::WarCry ? std::string() : TableSkillExtraNote(table->skill); !note.empty())
+					return note;
 				return "stuns all around";
+			}
 			if (table->shape == TableShape::Buff)
 				return std::format("buff, {:d}s", table->duration / 20);
 			if (table->shape == TableShape::Curse && table->curse != TableCurse::Haunt && table->curse != TableCurse::Locust)

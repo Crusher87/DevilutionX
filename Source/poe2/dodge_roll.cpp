@@ -16,6 +16,7 @@
 #include "msg.h"
 #include "multi.h"
 #include "player.h"
+#include "poe2/effect_primitives.hpp"
 #include "poe2/minion_gems.hpp"
 #include "poe2/spirit_buffs.hpp"
 #include "poe2/support_table.hpp"
@@ -96,7 +97,7 @@ bool Blink(Player &player, Direction dir)
 	AddVisualEffect(player.position.tile, MissileGraphicID::BlueFlareExplosion2);
 	AddVisualEffect(to, MissileGraphicID::BlueFlareExplosion2, 1);
 	AddMissile(player.position.tile, to, dir, MissileID::Teleport, TARGET_MONSTERS, player, 0, 0);
-	player.poe2.dodgeCooldown = static_cast<uint8_t>(std::clamp(BlinkCooldownTicks(gemLevel), 1, 255));
+	player.poe2.dodgeCooldown = static_cast<uint8_t>(std::clamp(CooldownTicks(player, BlinkCooldownTicks(gemLevel)), 1, 255));
 	TelemetryLog("spirit", "Blink");
 	return true;
 }
