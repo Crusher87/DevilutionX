@@ -114,6 +114,8 @@ struct Draw {
 	bool outlined = false;
 	/** @brief For an outline: how it shows in HD. */
 	OutlineLook outlineLook {};
+	/** @brief A unique monster's colour table it is drawn in (RegisterRecolour), whose HD art it shows; else null. */
+	const std::string *recolour = nullptr;
 };
 
 /** @brief The part of a shadow picture that isn't empty, in texture coordinates (0 to 1): across from u0 to u1, down from vTop. */
@@ -293,12 +295,14 @@ struct ArtChoice {
 struct ArtChoiceKey {
 	const uint8_t *data;
 	uint64_t shape;
+	const std::string *recolour;
 	bool operator==(const ArtChoiceKey &other) const = default;
 };
 struct ArtChoiceKeyHash {
 	size_t operator()(const ArtChoiceKey &key) const noexcept
 	{
-		return std::hash<const void *> {}(key.data) ^ std::hash<uint64_t> {}(key.shape * 0x9E3779B97F4A7C15ULL);
+		return std::hash<const void *> {}(key.data) ^ std::hash<uint64_t> {}(key.shape * 0x9E3779B97F4A7C15ULL)
+		    ^ (std::hash<const void *> {}(key.recolour) << 1);
 	}
 };
 /**
@@ -1244,6 +1248,15 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 	const std::string *name = ArtName(draw);
 	if (name == nullptr)
 		return choice;
+	// A unique monster's colours: its own art, beside the sprite's (monsters/sking/skinga@skelaxe/white+genrl/d3_f05).
+	std::string uniqueName;
+	if (draw.recolour != nullptr) {
+		const size_t slash = name->rfind('/');
+		if (slash == std::string::npos)
+			return choice;
+		uniqueName = name->substr(0, slash) + "+" + *draw.recolour + name->substr(slash);
+		name = &uniqueName;
+	}
 	// Wall tiles cut away near the hero keep the game's own cut-out shape.
 	const bool masked = draw.kind == DrawKind::Tile && draw.mask != MaskType::Solid;
 	SDL_Texture *texture = nullptr;
@@ -1297,7 +1310,7 @@ ArtChoice CachedArt(SDL_Renderer *renderer, const Draw &draw)
 	const uint64_t shape = static_cast<uint64_t>(draw.kind) | (static_cast<uint64_t>(draw.style) << 8) | (static_cast<uint64_t>(draw.mask) << 16)
 	    | (static_cast<uint64_t>(draw.tile) << 24) | (static_cast<uint64_t>(draw.inBetween) << 32) | (static_cast<uint64_t>(PaletteVariant & 0xFF) << 40)
 	    | (static_cast<uint64_t>(draw.height & 0x7FFF) << 48) | (static_cast<uint64_t>(FrameLit && draw.caster != Caster::None ? 1 : 0) << 63);
-	auto [it, inserted] = ArtChoices.try_emplace(ArtChoiceKey { data, shape });
+	auto [it, inserted] = ArtChoices.try_emplace(ArtChoiceKey { data, shape, draw.recolour });
 	if (inserted)
 		it->second = ChooseArt(renderer, draw);
 	return it->second;
@@ -1357,7 +1370,7 @@ bool MayMakeOutline()
 const Outline *SmoothOutline(SDL_Renderer *renderer, const Draw &sprite, OutlineCut cut)
 {
 	const auto index = static_cast<size_t>(cut);
-	if (sprite.light >= 0) {
+	if (sprite.light >= 0 || sprite.recolour != nullptr) {
 		const ArtChoice choice = CachedArt(renderer, sprite);
 		if (choice.art != nullptr) {
 			Outline &outline = choice.art->outlines[index];
@@ -1630,7 +1643,7 @@ DrawTexture TextureFor(SDL_Renderer *renderer, const Draw &draw, bool paintedSha
 {
 	DrawTexture out;
 	ArtChoice art;
-	if (draw.light >= 0)
+	if (draw.light >= 0 || draw.recolour != nullptr)
 		art = CachedArt(renderer, draw);
 	if (art.flowing != nullptr)
 		RefreshFlow(*art.flowing);
@@ -3296,6 +3309,18 @@ uint8_t InBetween()
 	return static_cast<uint8_t>(step != 0 && SubFrameBackward ? step + 2 : step);
 }
 
+/** @brief Unique monsters' colour tables by address, with their names (RegisterRecolour). */
+std::unordered_map<const uint8_t *, std::string> Recolours;
+
+/** @brief The name of the unique monster's colour table a sprite is drawn in, or null. */
+const std::string *RecolourOf(const uint8_t *trn)
+{
+	if (trn == nullptr)
+		return nullptr;
+	const auto it = Recolours.find(trn);
+	return it != Recolours.end() ? &it->second : nullptr;
+}
+
 } // namespace
 
 void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor, const Lightmap *lightmap)
@@ -3340,6 +3365,7 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 	    .outlined = outlined,
 	    // A sprite with an outline keeps its outline's look, so its art's outlines are made in that cut as it loads.
 	    .outlineLook = IsOutline(style) ? CurrentOutlineLook : (outlined ? PendingOutlineLook : OutlineLook {}),
+	    .recolour = IsOutline(style) ? nullptr : RecolourOf(trn),
 	});
 }
 
@@ -3372,6 +3398,17 @@ void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites)
 	} else {
 		registerList(sprites.list(), 0);
 	}
+}
+
+void RegisterRecolour(const uint8_t *trn, std::string_view name)
+{
+	if (trn == nullptr)
+		return;
+	std::string lower(name);
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	// A freed table's address is reused by the next one loaded, which names it again here.
+	ArtChoices.clear();
+	Recolours[trn] = std::move(lower);
 }
 
 namespace {
@@ -3644,6 +3681,7 @@ void SetViewOrigin(Point, Point) { }
 void EndFloor() { }
 uint16_t PieceToDraw(Point tile) { return dPiece[tile.x][tile.y]; }
 void RegisterSprites(std::string_view, ClxSpriteListOrSheet) { }
+void RegisterRecolour(const uint8_t *, std::string_view) { }
 void ClearCaches() { }
 void Render(SDL_Renderer *, Size, Size) { }
 bool CoversView(Size) { return false; }
