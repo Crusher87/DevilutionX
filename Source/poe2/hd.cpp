@@ -114,7 +114,7 @@ struct Draw {
 	bool outlined = false;
 	/** @brief For an outline: how it shows in HD. */
 	OutlineLook outlineLook {};
-	/** @brief A unique monster's colour table it is drawn in (RegisterRecolour), whose HD art it shows; else null. */
+	/** @brief A unique monster's colour table it is drawn in (RegisterRecolour), whose HD art it shows (its type's when empty); else null. */
 	const std::string *recolour = nullptr;
 };
 
@@ -1250,7 +1250,7 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 		return choice;
 	// A unique monster's colours: its own art, beside the sprite's (monsters/sking/skinga@skelaxe/white+genrl/d3_f05).
 	std::string uniqueName;
-	if (draw.recolour != nullptr) {
+	if (draw.recolour != nullptr && !draw.recolour->empty()) {
 		const size_t slash = name->rfind('/');
 		if (slash == std::string::npos)
 			return choice;
@@ -3406,6 +3406,12 @@ void RegisterRecolour(const uint8_t *trn, std::string_view name)
 		return;
 	std::string lower(name);
 	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	// A table that changes no colour (Genrl: the Skeleton King, the Butcher, Na-Krul) shows its type's own art.
+	bool changesNothing = true;
+	for (int i = 0; i < 256 && changesNothing; i++)
+		changesNothing = trn[i] == i;
+	if (changesNothing)
+		lower.clear();
 	// A freed table's address is reused by the next one loaded, which names it again here.
 	ArtChoices.clear();
 	Recolours[trn] = std::move(lower);
