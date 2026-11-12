@@ -505,6 +505,9 @@ void IndexTiles()
 	}
 }
 
+/** @brief HD art over the game's painted shadow counts as that shadow up to this bright; brighter there is the sprite's own edge. */
+constexpr uint8_t ShadowBrightest = 56;
+
 /**
  * @brief Leaves out the soft shadow the HD maker paints under a hero (near-black and see-through), for HD Lighting's
  * own shadows that move with the light.
@@ -553,7 +556,16 @@ Outline MakeOutline(SDL_Renderer *renderer, const std::vector<uint8_t> &body, co
 	return outline;
 }
 
-/** @brief An outline round a sprite's HD art, from its picture's edge, without the shadow the maker painted. */
+Raster PlainRaster(const Draw &draw, Point position);
+void SplitShadow(Raster &raster, const Draw &draw, Point position, bool plainColours);
+
+/**
+ * @brief An outline round a sprite's HD art, from its picture's edge, without the shadow painted under it.
+ *
+ * As the game's, it goes round the sprite's colours only: where the game's own sprite has its painted shadow (palette
+ * colour 0, SplitShadow), the HD art's dark pixels are shadow too, and they hide the outline there as the game's
+ * shadow does (it is drawn over the outline).
+ */
 Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const Draw &sprite, OutlineCut cut)
 {
 	Outline none;
@@ -565,6 +577,16 @@ Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const D
 		return none;
 	const int width = rgba->w;
 	const int height = rgba->h;
+	const Point position { 0, sprite.height - 1 };
+	Raster game = PlainRaster(sprite, position);
+	SplitShadow(game, sprite, position, true);
+	const auto gameShadow = [&](int x, int y) {
+		if (game.shadow.empty())
+			return false;
+		const int gx = std::min(x * sprite.width / width, game.width - 1);
+		const int gy = std::min(y * sprite.height / height, game.height - 1);
+		return game.shadow[static_cast<size_t>(gy) * game.width + gx] != 0;
+	};
 	std::vector<uint8_t> body(static_cast<size_t>(width) * height, 0);
 	std::vector<uint8_t> cover(body.size(), 0);
 	const bool locked = SDL_LockSurface(rgba) == 0;
@@ -574,10 +596,16 @@ Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const D
 			for (int x = 0; x < width; x++) {
 				const uint8_t *pixel = row + static_cast<ptrdiff_t>(x) * 4;
 				uint8_t alpha = pixel[3];
-				// The painted shadow: near-black and see-through, as WithoutPaintedShadow finds it.
-				if (alpha < 160 && std::max({ pixel[0], pixel[1], pixel[2] }) < 24)
-					alpha = 0;
+				const uint8_t brightest = std::max({ pixel[0], pixel[1], pixel[2] });
 				const size_t i = static_cast<size_t>(y) * width + x;
+				if (alpha != 0 && brightest < ShadowBrightest && gameShadow(x, y)) {
+					// The game's painted shadow, in the HD art: it covers the outline, and the outline doesn't go round it.
+					cover[i] = 255;
+					continue;
+				}
+				// The soft shadow the maker paints: near-black and see-through, as WithoutPaintedShadow finds it.
+				if (alpha < 160 && brightest < 24)
+					alpha = 0;
 				cover[i] = alpha;
 				body[i] = alpha >= 128 ? 1 : 0;
 			}
