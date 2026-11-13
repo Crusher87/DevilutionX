@@ -88,6 +88,8 @@ extern const Rectangle InvRect[NUM_XY_SLOTS];
 
 /** @brief The rarity an item's slot is coloured for: its own, except waystones in POE2 mode, which get no colour. */
 item_quality SlotBackQuality(const Item &item);
+/** @brief POE2 Mashup: whether an item's outline glows in HD: uniques and quest items, on the ground and in the UI. */
+bool ItemOutlineGlows(const Item &item);
 void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_quality itemQuality);
 /**
  * @brief Checks whether the given item can be placed on the belt. Takes item size as well as characteristics into account. Items

@@ -76,9 +76,23 @@ enum class Caster : uint8_t {
 	Hero,
 	/** @brief The hero being played, drawn bright whatever the light (the game's rule), still in its colour. */
 	MyHero,
+	/**
+	 * @brief A solid thing standing on the floor (a barrel, fountain, cross): with HD Lighting it takes the light on the
+	 * sides turned to it, going round it smoothly, and casts its own shadow away from each light, in place of the one
+	 * painted under it.
+	 */
+	Object,
+	/** @brief The same, for a thing with flat sides that meet at a corner in front (a sarcophagus, a chest): each side takes its own light. */
+	ObjectBlock,
 };
 
-/** @brief Set while a hero or monster is drawn. */
+/** @brief A solid object, of either kind. */
+constexpr bool IsObject(Caster caster)
+{
+	return caster == Caster::Object || caster == Caster::ObjectBlock;
+}
+
+/** @brief Set while a hero, monster or solid object is drawn. */
 extern Caster CurrentCaster;
 
 struct CasterScope {
@@ -97,7 +111,10 @@ struct OutlineLook {
 	bool glow = false;
 	/** @brief It marks the thing under the cursor, so it fades in. */
 	bool hovered = false;
-	/** @brief The thing it goes round (OutlineThing), so the cursor's outline fades in from the one it had; 0 for none. */
+	/**
+	 * @brief The thing it goes round (OutlineThing), so the cursor's outline fades in from the one it had; 0 for none.
+	 * In the UI an item picture's outline is told apart by its picture and where it is, so it can be left 0.
+	 */
 	uint32_t thing = 0;
 };
 
@@ -199,6 +216,15 @@ using RecordUiSpriteFn = void (*)(const Surface &out, Point position, ClxSprite 
  */
 extern RecordUiSpriteFn RecordUiSpriteHook;
 
+using RecordUiOutlineFn = void (*)(const Surface &out, Point position, ClxSprite clx, uint8_t colour);
+
+/**
+ * @brief Notes an outline drawn in the UI (set by the HD renderer; null without it). An outline round an item picture
+ * that shows its HD art shows smooth round that art instead, in its colour, with the look CurrentOutlineLook gives it
+ * (fading in under the cursor, glowing round a unique); the game's own outline is left out under it.
+ */
+extern RecordUiOutlineFn RecordUiOutlineHook;
+
 /** @brief An item picture frame (data/inv/objcurs) and its HD art's name. */
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height);
 
@@ -217,6 +243,13 @@ void RenderUiSprites(SDL_Renderer *renderer);
 
 /** @brief Names every frame of a loaded sprite file, so its HD art can be found. */
 void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);
+
+/**
+ * @brief Names a unique monster's colour table (monsters\\monsters\\<name>.trn), so its sprites drawn in it find their
+ * own HD art: <sprite's art name>+<name>, e.g. monsters/skelaxe/sklaxa@skelaxe/white+br/d3_f05. A table that changes
+ * no colour (Genrl) shows the sprite's own art.
+ */
+void RegisterRecolour(const uint8_t *trn, std::string_view name);
 
 /** @brief Forgets the names of a sprite file's frames, before its pixels are freed (so other pictures don't take its art). */
 void ForgetSprites(ClxSpriteListOrSheet sprites);

@@ -1101,6 +1101,44 @@ void ClickPopup(Player &player, const PopupHit &hit, const std::vector<OwnedSupp
 	}
 }
 
+/**
+ * @brief Whether the bag has room for the gems that come out when the slot changes to the skill.
+ * Curtis 2026-11-11 lost two supports taking Cleave out: with a full bag they went to the floor unseen.
+ */
+bool BagHasRoomForReturnedGems(const Player &player, size_t slot, SkillSlot skill)
+{
+	int needed = 0;
+	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+		const SupportGem gem = player.poe2.slotSupports[slot][socket];
+		if (gem != SupportGem::None && !SupportGemCanSupport(gem, skill))
+			needed++;
+	}
+	if (IsMetaGem(player.poe2.skillSlots[slot]) && player.poe2.skillSlots[slot] != skill) {
+		for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
+			if (!player.poe2.metaSkills[slot][socket].isEmpty())
+				needed++;
+		}
+	}
+	if (needed == 0)
+		return true;
+	// Support and skill gems take one cell each.
+	int freeCells = 0;
+	for (const int8_t cell : player.InvGrid) {
+		if (cell == 0)
+			freeCells++;
+	}
+	return freeCells >= needed;
+}
+
+/** @brief Says the bag is too full for the gems that would come out; false if there's room. */
+bool RefuseForFullBag(const Player &player, size_t slot, SkillSlot skill)
+{
+	if (BagHasRoomForReturnedGems(player, slot, skill))
+		return false;
+	EventPlrMsg(FormatRuntime(_("No room in your bag for the gems socketed in {:s}."), SkillName(player.poe2.skillSlots[slot])), UiFlags::ColorRed);
+	return true;
+}
+
 /** @brief A gem dropped on a tray slot: a skill gem is socketed and put on the slot, a support goes into the slot's skill. */
 void DropOnTraySlot(Player &player, TraySlot traySlot)
 {
@@ -1121,6 +1159,8 @@ void DropOnTraySlot(Player &player, TraySlot traySlot)
 			EventPlrMsg(_("The Skills panel is full. Open it (K) to swap a gem out."), UiFlags::ColorRed);
 			return;
 		}
+		if (RefuseForFullBag(player, *socket, skill))
+			return;
 		PlayGemSound(player.HoldItem);
 		const int previousLevel = player.poe2.gemLevel(*socket);
 		const SkillSlot previous = ChangeSlotSkill(player, *socket, skill, SkillGemItemLevel(player.HoldItem));
@@ -1158,6 +1198,8 @@ void SocketHeldSkillGem(Player &player, size_t slot)
 		return;
 	}
 
+	if (RefuseForFullBag(player, slot, skill))
+		return;
 	PlayGemSound(player.HoldItem);
 	const int previousLevel = player.poe2.gemLevel(slot);
 	const SkillSlot previous = ChangeSlotSkill(player, slot, skill, SkillGemItemLevel(player.HoldItem));
@@ -1539,6 +1581,8 @@ void ClickSkillSlot(Player &player, size_t slot, bool canTakeOut)
 
 	const SkillSlot skill = player.poe2.skillSlots[slot];
 	if (canTakeOut && !skill.isEmpty()) {
+		if (RefuseForFullBag(player, slot, {}))
+			return;
 		Item gem;
 		if (CreateSkillGemItem(gem, skill, player.poe2.gemLevel(slot))) {
 			ChangeSlotSkill(player, slot, {});

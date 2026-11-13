@@ -1,0 +1,136 @@
+area	knob	first	last	note
+town	edges	0.12		Town: the screen's corners a touch darker (idea 6). 0 none, 0.5 half dark in the corners.
+town	flicker	1		How much the forge, lamps and lit windows flicker (idea 1): 0 steady, 1 normal, 2 double.
+town	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+cathedral	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+cathedral	warm	1.12 0.95 0.76	1.16 0.90 0.68	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+cathedral	cool	0.74 0.84 1.08	0.68 0.78 1.02	The shadows' colour, first floor to last: deeper further down (idea 4).
+cathedral	edges	0.20	0.26	How dark the screen's corners get, first floor to last (idea 6).
+cathedral	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+cathedral	stairs_down	0.30	0.36	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+cathedral	stairs_down_colour	1.00 0.48 0.24	1.00 0.42 0.20	Its colour, red green blue: redder further down.
+cathedral	stairs_down_radius	4		How far it reaches, in tiles.
+cathedral	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+cathedral	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+cathedral	stairs_up_radius	3		How far it reaches, in tiles.
+cathedral	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+cathedral	dust	30	40	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+cathedral	dust_colour	1.00 0.92 0.80		The dust's colour, red green blue, before the light's colour.
+cathedral	drips	1.05		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+cathedral	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before the light's colour.
+cathedral	mist	18	24	How many slow puffs of haze hang in view, first floor to last (idea 3). They glow round the flames and are gone in the dark.
+cathedral	mist_colour	1.00 0.90 0.78		The haze's colour, red green blue, before the light's colour.
+cathedral	mist_alpha	0.06		How thick each puff of haze is: 0.05 is faint, 0.15 is thick.
+cathedral	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+cathedral	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+cathedral	daylight	1.3		How bright the cold daylight down the stairs from town is, on the first floor only (idea 24). A torch is 2. 0 none.
+cathedral	daylight_colour	0.80 0.88 1.00		Its colour, red green blue.
+cathedral	daylight_radius	6		How far it reaches, in tiles.
+cathedral	daylight_dust	14		How many extra specks of dust drift in it.
+cathedral	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+catacombs	warm	1.00 0.97 0.93	1.04 0.92 0.85	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+catacombs	cool	0.68 0.82 1.14	0.62 0.76 1.08	The shadows' colour, first floor to last: deeper further down (idea 4).
+catacombs	edges	0.24	0.30	How dark the screen's corners get, first floor to last (idea 6).
+catacombs	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+catacombs	stairs_down	0.42	0.48	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+catacombs	stairs_down_colour	1.00 0.42 0.20	1.00 0.38 0.18	Its colour, red green blue: redder further down.
+catacombs	stairs_down_radius	4		How far it reaches, in tiles.
+catacombs	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+catacombs	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+catacombs	stairs_up_radius	3		How far it reaches, in tiles.
+catacombs	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+catacombs	dust	28	35	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+catacombs	dust_colour	0.90 0.95 1.00		The dust's colour, red green blue, before the light's colour.
+catacombs	drips	2.4		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+catacombs	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before the light's colour.
+catacombs	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+catacombs	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+catacombs	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+caves	falloff	1.50	1.65	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+caves	warm	1.16 0.90 0.66	1.20 0.85 0.58	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+caves	cool	0.84 0.76 0.74	0.78 0.70 0.68	The shadows' colour, first floor to last: deeper further down (idea 4).
+caves	edges	0.24	0.30	How dark the screen's corners get, first floor to last (idea 6).
+caves	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+caves	stairs_down	0.55	0.62	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+caves	stairs_down_colour	1.00 0.38 0.16	1.00 0.34 0.14	Its colour, red green blue: redder further down.
+caves	stairs_down_radius	4		How far it reaches, in tiles.
+caves	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+caves	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+caves	stairs_up_radius	3		How far it reaches, in tiles.
+caves	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+caves	dust	22	30	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+caves	dust_colour	1.00 0.85 0.70		The dust's colour, red green blue, before the light's colour.
+caves	drips	1.8		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+caves	drip_colour	0.80 0.85 0.95		The drops' colour, red green blue, before the light's colour.
+caves	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+caves	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+caves	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+caves	lava_breath	0.12		How much of the lava's light comes and goes as it swells and fades (idea 30): 0 steady, 0.12 an eighth of it.
+caves	lava_breath_s	6		How many seconds one swell takes.
+caves	lava_edge	1		How strong the orange edge is on heroes and monsters standing by the lava, on the side turned to it (idea 30). 0 none.
+caves	haze	1.5		How far the lava sways in its heat, in game pixels (idea 31). 0 none.
+caves	lava_far	0.010	0.014	How bright the dim orange glow is that fills a cavern with lava in it, first floor to last (idea 32). 0 none; 0.02 is plain to see.
+caves	lava_far_reach	10		How many tiles round a spot count as its cavern.
+caves	lava_far_full	0.06		The share of those tiles that is lava for all of the glow.
+hell	falloff	1.40	1.55	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+hell	warm	1.18 0.86 0.64	1.22 0.81 0.56	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+hell	cool	1.00 0.60 0.56	0.94 0.54 0.50	The shadows' colour, first floor to last: deeper further down (idea 4).
+hell	edges	0.28	0.34	How dark the screen's corners get, first floor to last (idea 6).
+hell	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+hell	stairs_down	0.75	0.90	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+hell	stairs_down_colour	1.00 0.28 0.14	1.00 0.22 0.12	Its colour, red green blue: redder further down.
+hell	stairs_down_radius	4		How far it reaches, in tiles.
+hell	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+hell	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+hell	stairs_up_radius	3		How far it reaches, in tiles.
+hell	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+hell	dust	15	20	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+hell	dust_colour	1.00 0.80 0.70		The dust's colour, red green blue, before the light's colour.
+hell	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+hell	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+hell	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+hive	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+hive	warm	1.08 1.02 0.70	1.12 0.97 0.62	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+hive	cool	0.80 0.94 0.62	0.74 0.88 0.56	The shadows' colour, first floor to last: deeper further down (idea 4).
+hive	edges	0.26	0.32	How dark the screen's corners get, first floor to last (idea 6).
+hive	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+hive	stairs_down	0.50	0.56	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+hive	stairs_down_colour	1.00 0.50 0.20	1.00 0.44 0.18	Its colour, red green blue: redder further down.
+hive	stairs_down_radius	4		How far it reaches, in tiles.
+hive	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+hive	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+hive	stairs_up_radius	3		How far it reaches, in tiles.
+hive	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+hive	dust	18	22	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+hive	dust_colour	0.95 1.00 0.80		The dust's colour, red green blue, before the light's colour.
+hive	drips	2.1		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+hive	drip_colour	0.85 1.00 0.70		The drops' colour, red green blue, before the light's colour.
+hive	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+hive	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+hive	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+crypt	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+crypt	warm	0.98 1.04 0.90	1.02 0.99 0.82	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+crypt	cool	0.72 0.98 0.80	0.66 0.92 0.74	The shadows' colour, first floor to last: deeper further down (idea 4).
+crypt	edges	0.26	0.32	How dark the screen's corners get, first floor to last (idea 6).
+crypt	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+crypt	stairs_down	0.50	0.56	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+crypt	stairs_down_colour	0.90 0.50 0.30	0.95 0.40 0.24	Its colour, red green blue: redder further down.
+crypt	stairs_down_radius	4		How far it reaches, in tiles.
+crypt	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+crypt	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+crypt	stairs_up_radius	3		How far it reaches, in tiles.
+crypt	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+crypt	dust	35	45	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+crypt	dust_colour	0.92 1.00 0.92		The dust's colour, red green blue, before the light's colour.
+crypt	drips	1.5		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+crypt	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before the light's colour.
+crypt	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+crypt	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+crypt	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+butcher	light	1.4		The Butcher's room (idea 46): how bright the red light inside is. A torch is 2. It spills out when his door opens.
+butcher	light_colour	1.00 0.18 0.10		Its colour, red green blue.
+butcher	light_radius	6		How far it reaches, in tiles.
+butcher	door_light	0.45		How bright the dull red glow under his closed door is.
+butcher	drips	1.5		How many drops of blood fall in his room a second.
+butcher	drip_colour	0.45 0.03 0.04		The blood's colour, red green blue.

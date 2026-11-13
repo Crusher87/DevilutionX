@@ -716,6 +716,17 @@ void DrawItem(const Item &item, const Surface &out, Point position, ClxSprite cl
 	}
 }
 
+void DrawItemOutline(const Item &item, const Surface &out, uint8_t color, Point position, ClxSprite clx)
+{
+	if (IsDrawnRuneItem(item)) {
+		// POE2 Mashup: round the stone DrawItem draws, not round the picture it stands in for.
+		const int height = static_cast<int>(clx.height());
+		DrawRuneOutline(out, { position - Displacement { 0, height - 1 }, { static_cast<int>(clx.width()), height } }, GetAugmentId(item), color);
+		return;
+	}
+	ClxDrawOutline(out, color, position, clx);
+}
+
 void ResetCursor()
 {
 	NewCursor(pcurs);
@@ -764,7 +775,7 @@ void DrawSoftwareCursor(const Surface &out, Point position, int cursId)
 	const ClxSprite sprite = GetInvItemSprite(cursId);
 	if (cursId >= CURSOR_FIRSTITEM && !MyPlayer->HoldItem.isEmpty()) {
 		const auto &heldItem = MyPlayer->HoldItem;
-		ClxDrawOutline(out, GetOutlineColor(heldItem, true), position, sprite);
+		DrawItemOutline(heldItem, out, GetOutlineColor(heldItem, true), position, sprite);
 		DrawItem(heldItem, out, position, sprite);
 	} else {
 		ClxDraw(out, position, sprite);

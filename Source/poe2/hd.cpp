@@ -38,8 +38,11 @@
 #include "levels/reencode_dun_cels.hpp"
 #include "utils/file_util.h"
 #include "options.h"
+#include "poe2/atmosphere.hpp"
 #include "poe2/hd_light.hpp"
+#include "poe2/hd_outline.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/vfx.hpp"
 #include "utils/is_of.hpp"
 #include "utils/png.h"
 #include "utils/sdl_wrap.h"
@@ -115,6 +118,8 @@ struct Draw {
 	bool outlined = false;
 	/** @brief For an outline: how it shows in HD. */
 	OutlineLook outlineLook {};
+	/** @brief A unique monster's colour table it is drawn in (RegisterRecolour), whose HD art it shows (its type's when empty); else null. */
+	const std::string *recolour = nullptr;
 };
 
 /** @brief The part of a shadow picture that isn't empty, in texture coordinates (0 to 1): across from u0 to u1, down from vTop. */
@@ -123,17 +128,6 @@ struct CastPart {
 	float u1 = 1;
 	float vTop = 0;
 };
-
-/** @brief The kinds of smooth outline made round a sprite. */
-enum class OutlineCut : uint8_t {
-	/** @brief As thick as the game's: one game pixel. */
-	Line,
-	/** @brief Round rare and unique monsters. */
-	Thick,
-	/** @brief A soft glow that fades out away from the sprite, adding light to what is under it. */
-	Glow,
-};
-constexpr size_t NumOutlineCuts = 3;
 
 /** @brief A smooth outline made for a sprite: white, with its shape in the alpha, and where it sits over the sprite. */
 struct Outline {
@@ -168,6 +162,13 @@ struct Raster {
 	std::array<Outline, NumOutlineCuts> outlines;
 	/** @brief The first row of the sprite's body, for how far its shadow reaches. */
 	int bodyTop = 0;
+	/** @brief The sprite's body within its picture (BodyBounds), for the light on an object's sides; a negative left until worked out. */
+	int boundLeft = -1;
+	int boundRight = 0;
+	int boundTop = 0;
+	int boundBottom = 0;
+	/** @brief The middle of the body's lowest row: the corner nearest the eye of a thing with flat sides. */
+	int boundCorner = 0;
 };
 
 void FreeRasterTextures(Raster &raster)
@@ -204,9 +205,18 @@ struct Flow {
 	uint32_t paletteVersion = 0;
 };
 
+/** @brief The ways a shape map sorts an object's surface by how it faces: +x, -x, +y, -y and up. */
+constexpr size_t NumShapeAxes = 5;
+
 struct HdArt {
 	SDL_Texture *texture = nullptr;
 	bool missing = false;
+	/**
+	 * @brief An object's art split by the way each part of it faces, from the shape map beside it (MakeShape): one
+	 * picture per ShapeAxes entry, null where nothing faces that way. All null without a shape map.
+	 */
+	std::array<SDL_Texture *, NumShapeAxes> shape {};
+	bool shaped = false;
 	/** @brief The picture's name, for sprite art (its outlines are made from the picture). */
 	std::string name;
 	/** @brief Its smooth outlines, by OutlineCut. */
@@ -250,6 +260,8 @@ Size FieldTextureSize;
 bool FieldMultiplies = false;
 /** @brief A soft round dark spot, for the shadow round a hero's feet from the light they carry. */
 SDL_Texture *BlobTexture = nullptr;
+/** @brief Dark towards the screen's edges and corners, clear in the middle (the Atmosphere option's edges, idea 6). */
+SDL_Texture *EdgesTexture = nullptr;
 
 SDL_Renderer *CacheRenderer = nullptr;
 const std::byte *CacheCels = nullptr;
@@ -306,12 +318,14 @@ struct ArtChoice {
 struct ArtChoiceKey {
 	const uint8_t *data;
 	uint64_t shape;
+	const std::string *recolour;
 	bool operator==(const ArtChoiceKey &other) const = default;
 };
 struct ArtChoiceKeyHash {
 	size_t operator()(const ArtChoiceKey &key) const noexcept
 	{
-		return std::hash<const void *> {}(key.data) ^ std::hash<uint64_t> {}(key.shape * 0x9E3779B97F4A7C15ULL);
+		return std::hash<const void *> {}(key.data) ^ std::hash<uint64_t> {}(key.shape * 0x9E3779B97F4A7C15ULL)
+		    ^ (std::hash<const void *> {}(key.recolour) << 1);
 	}
 };
 /**
@@ -341,7 +355,7 @@ constexpr Mood TownEvening { 1.15F, { 1.06F, 0.95F, 0.82F }, { 0.84F, 0.92F, 1.0
 bool LightingWanted();
 
 /** @brief With HD Stronger Mood, firelight is warmer and dark corners darker, in a mood of its own for each part of the dungeon. */
-const Mood &CurrentMood()
+const Mood &AreaMood()
 {
 	static constexpr Mood Cathedral { 1.35F, { 1.12F, 0.95F, 0.76F }, { 0.74F, 0.84F, 1.08F } };
 	static constexpr Mood Catacombs { 1.45F, { 1.00F, 0.97F, 0.93F }, { 0.68F, 0.82F, 1.14F } };
@@ -362,6 +376,33 @@ const Mood &CurrentMood()
 	case DTYPE_CRYPT: return Crypt;
 	default: return GentleMood;
 	}
+}
+
+/**
+ * @brief The area's mood on this floor. With the Atmosphere option each floor of an area is grimmer than the one above
+ * (idea 4): a smaller pool of light round each flame, redder fires and deeper shadows. The first floor keeps the area's
+ * mood; the table (atmosphere.tsv: falloff, warm, cool) says how far it has gone by the last.
+ */
+Mood CurrentMood()
+{
+	const Mood &area = AreaMood();
+	if (leveltype == DTYPE_TOWN || &area == &GentleMood)
+		return area;
+	const float grim = atmosphere::Strength(atmosphere::Knob::Grimmer);
+	if (grim <= 0)
+		return area;
+	const float depth = atmosphere::Depth() * grim;
+	Mood mood = area;
+	mood.falloff += atmosphere::Value("falloff", 0, depth) - atmosphere::Value("falloff", 0, 0);
+	const std::array<float, 3> warm = atmosphere::Colour("warm", {}, depth);
+	const std::array<float, 3> warmFirst = atmosphere::Colour("warm", {}, 0);
+	const std::array<float, 3> cool = atmosphere::Colour("cool", {}, depth);
+	const std::array<float, 3> coolFirst = atmosphere::Colour("cool", {}, 0);
+	for (size_t c = 0; c < 3; c++) {
+		mood.warm[c] += warm[c] - warmFirst[c];
+		mood.cool[c] += cool[c] - coolFirst[c];
+	}
+	return mood;
 }
 
 /** @brief The level's palette against the one the HD tiles were made in: Cathedral levels pick one of four. */
@@ -441,6 +482,10 @@ void DestroyTextures()
 		for (auto &[name, art] : Art) {
 			if (art.texture != nullptr)
 				SDL_DestroyTexture(art.texture);
+			for (SDL_Texture *shape : art.shape) {
+				if (shape != nullptr)
+					SDL_DestroyTexture(shape);
+			}
 			for (const Outline &outline : art.outlines) {
 				if (outline.texture != nullptr)
 					SDL_DestroyTexture(outline.texture);
@@ -462,6 +507,9 @@ void DestroyTextures()
 	if (BlobTexture != nullptr && CacheRenderer != nullptr)
 		SDL_DestroyTexture(BlobTexture);
 	BlobTexture = nullptr;
+	if (EdgesTexture != nullptr && CacheRenderer != nullptr)
+		SDL_DestroyTexture(EdgesTexture);
+	EdgesTexture = nullptr;
 	light::Reset();
 }
 
@@ -511,6 +559,9 @@ void IndexTiles()
 	}
 }
 
+/** @brief HD art over the game's painted shadow counts as that shadow up to this bright; brighter there is the sprite's own edge. */
+constexpr uint8_t ShadowBrightest = 56;
+
 /**
  * @brief Leaves out the soft shadow the HD maker paints under a hero (near-black and see-through), for HD Lighting's
  * own shadows that move with the light.
@@ -535,132 +586,18 @@ SDL_Surface *WithoutPaintedShadow(SDL_Surface *surface)
 	return rgba;
 }
 
-/** @brief The cut an outline is drawn in: thick round rares and bosses, else the game's width. Glows are drawn under it. */
-OutlineCut OutlineCutFor(const OutlineLook &look)
-{
-	return look.thick ? OutlineCut::Thick : OutlineCut::Line;
-}
-
-/** @brief How far each cut of outline reaches past the sprite, in game pixels. */
-float OutlineReach(OutlineCut cut)
-{
-	switch (cut) {
-	case OutlineCut::Thick:
-		return 1.75F;
-	case OutlineCut::Glow:
-		return 4.5F;
-	default:
-		return 1.F;
-	}
-}
-
-/**
- * @brief Makes a smooth outline: a band OutlineReach(cut) game pixels wide round the `body` pixels, its outer edge
- * anti-aliased (a glow fades out across all of it), and left off where the sprite covers (`cover`, 0 to 255), since
- * outlines are drawn over their sprite.
- *
- * Both are width x height, at scaleX x scaleY pixels to the game pixel. The band reaches as far as the nearest body
- * pixel is, so it goes round in curves instead of the stair steps of the pixels it goes round.
- */
+/** @brief Makes a smooth outline (MakeOutlineShape) as a white texture, with its shape in the alpha. */
 Outline MakeOutline(SDL_Renderer *renderer, const std::vector<uint8_t> &body, const std::vector<uint8_t> &cover, int width, int height, float scaleX, float scaleY, OutlineCut cut)
 {
 	Outline outline;
 	outline.tried = true;
-	// Only the body and the band round it are worked on.
-	int bodyLeft = width;
-	int bodyTop = height;
-	int bodyRight = -1;
-	int bodyBottom = -1;
-	for (int y = 0; y < height; y++) {
-		for (int x = 0; x < width; x++) {
-			if (body[static_cast<size_t>(y) * width + x] == 0)
-				continue;
-			bodyLeft = std::min(bodyLeft, x);
-			bodyTop = std::min(bodyTop, y);
-			bodyRight = std::max(bodyRight, x);
-			bodyBottom = std::max(bodyBottom, y);
-		}
-	}
-	if (bodyRight < 0)
+	const OutlineShape shape = MakeOutlineShape(body, cover, width, height, scaleX, scaleY, cut);
+	if (shape.empty())
 		return outline;
-	const float radius = OutlineReach(cut) * scaleX;
-	const int pad = static_cast<int>(std::ceil(radius)) + 1;
-	const int reach = pad + 1;
-	// The area worked on, from (x0, y0) in the picture, pad pixels round the body.
-	const int x0 = bodyLeft - pad;
-	const int y0 = bodyTop - pad;
-	const int w = bodyRight - bodyLeft + 1 + pad * 2;
-	const int h = bodyBottom - bodyTop + 1 + pad * 2;
-	const auto isBody = [&](int x, int y) {
-		const int px = x0 + x;
-		const int py = y0 + y;
-		return px >= 0 && py >= 0 && px < width && py < height && body[static_cast<size_t>(py) * width + px] != 0;
-	};
-	constexpr int Far = 1 << 14;
-	// How far each pixel is from the nearest body pixel in its own row; then the nearest one within `reach` rows.
-	std::vector<int> along(static_cast<size_t>(w) * h, Far);
-	for (int y = pad; y < h - pad; y++) {
-		int *row = &along[static_cast<size_t>(y) * w];
-		int last = -Far;
-		for (int x = 0; x < w; x++) {
-			if (isBody(x, y))
-				last = x;
-			row[x] = std::min(x - last, Far);
-		}
-		int next = Far * 2;
-		for (int x = w - 1; x >= 0; x--) {
-			if (isBody(x, y))
-				next = x;
-			row[x] = std::min(row[x], next - x);
-		}
-	}
-	std::vector<uint8_t> alpha(static_cast<size_t>(w) * h, 0);
-	int left = w;
-	int top = h;
-	int right = -1;
-	int bottom = -1;
-	for (int y = 0; y < h; y++) {
-		for (int x = 0; x < w; x++) {
-			int nearest = Far;
-			for (int dy = std::max(-reach, -y); dy <= std::min(reach, h - 1 - y); dy++) {
-				const int across = along[static_cast<size_t>(y + dy) * w + x];
-				if (across <= reach)
-					nearest = std::min(nearest, across * across + dy * dy);
-			}
-			if (nearest >= Far)
-				continue;
-			const float distance = std::sqrt(static_cast<float>(nearest));
-			float ring = std::clamp(radius + 1.F - distance, 0.F, 1.F);
-			if (cut == OutlineCut::Glow) {
-				// Full under the line, then fading out softly to nothing at its reach.
-				const float line = OutlineReach(OutlineCut::Line) * scaleX;
-				const float fade = std::clamp(1.F - (distance - line) / (radius + 1.F - line), 0.F, 1.F);
-				ring = fade * fade;
-			}
-			const int px = x0 + x;
-			const int py = y0 + y;
-			const float covered = px >= 0 && py >= 0 && px < width && py < height ? cover[static_cast<size_t>(py) * width + px] / 255.F : 0.F;
-			// Squared, so where the sprite's own edge is soft the band mostly goes over it and little shows between.
-			const auto value = static_cast<uint8_t>(ring * (1 - covered * covered) * 255.F + 0.5F);
-			if (value == 0)
-				continue;
-			alpha[static_cast<size_t>(y) * w + x] = value;
-			left = std::min(left, x);
-			top = std::min(top, y);
-			right = std::max(right, x);
-			bottom = std::max(bottom, y);
-		}
-	}
-	if (right < 0)
-		return outline;
-	const int cutWidth = right - left + 1;
-	const int cutHeight = bottom - top + 1;
-	std::vector<uint8_t> rgba(static_cast<size_t>(cutWidth) * cutHeight * 4, 255);
-	for (int y = 0; y < cutHeight; y++) {
-		for (int x = 0; x < cutWidth; x++)
-			rgba[(static_cast<size_t>(y) * cutWidth + x) * 4 + 3] = alpha[static_cast<size_t>(top + y) * w + left + x];
-	}
-	outline.texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, cutWidth, cutHeight);
+	std::vector<uint8_t> rgba(shape.alpha.size() * 4, 255);
+	for (size_t i = 0; i < shape.alpha.size(); i++)
+		rgba[i * 4 + 3] = shape.alpha[i];
+	outline.texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, shape.width, shape.height);
 	if (outline.texture == nullptr)
 		return outline;
 	// A glow adds light to what is under it; an outline covers it.
@@ -668,18 +605,100 @@ Outline MakeOutline(SDL_Renderer *renderer, const std::vector<uint8_t> &body, co
 #if SDL_VERSION_ATLEAST(2, 0, 12)
 	SDL_SetTextureScaleMode(outline.texture, SDL_ScaleModeLinear);
 #endif
-	SDL_UpdateTexture(outline.texture, nullptr, rgba.data(), cutWidth * 4);
-	outline.place = SDL_FRect {
-		static_cast<float>(x0 + left) / scaleX,
-		static_cast<float>(y0 + top) / scaleY,
-		static_cast<float>(cutWidth) / scaleX,
-		static_cast<float>(cutHeight) / scaleY,
-	};
+	SDL_UpdateTexture(outline.texture, nullptr, rgba.data(), shape.width * 4);
+	outline.place = SDL_FRect { shape.x, shape.y, shape.w, shape.h };
 	return outline;
 }
 
-/** @brief An outline round a sprite's HD art, from its picture's edge, without the shadow the maker painted. */
-Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const Draw &sprite, OutlineCut cut)
+Raster PlainRaster(const Draw &draw, Point position);
+void SplitShadow(Raster &raster, const Draw &draw, Point position, bool plainColours);
+
+/**
+ * @brief Leaves out the floor shadow painted into an object's HD art, for HD Lighting's own shadows that fall away from
+ * each light: the art's dark pixels where the game's own sprite has its painted shadow (palette colour 0, SplitShadow)
+ * and just outside it (the art's shadow has a soft edge), and the soft see-through kind (WithoutPaintedShadow).
+ */
+SDL_Surface *WithoutObjectShadow(SDL_Surface *surface, const Draw &sprite)
+{
+	SDL_Surface *rgba = WithoutPaintedShadow(surface);
+	if (rgba->format->format != SDL_PIXELFORMAT_RGBA32 || sprite.width <= 0 || sprite.height <= 0)
+		return rgba;
+	const Point position { 0, sprite.height - 1 };
+	Raster game = PlainRaster(sprite, position);
+	SplitShadow(game, sprite, position, true);
+	if (game.shadow.empty())
+		return rgba;
+	const int gw = game.width;
+	const int gh = game.height;
+	// The shadow and the empty pixels right beside it: not the body's own pixels.
+	std::vector<uint8_t> mask(game.shadow.size(), 0);
+	for (int y = 0; y < gh; y++) {
+		for (int x = 0; x < gw; x++) {
+			const size_t i = static_cast<size_t>(y) * gw + x;
+			if (game.shadow[i] != 0) {
+				mask[i] = 1;
+				continue;
+			}
+			if (game.alpha[i] != 0)
+				continue;
+			for (int ny = std::max(y - 1, 0); ny <= std::min(y + 1, gh - 1) && mask[i] == 0; ny++) {
+				for (int nx = std::max(x - 1, 0); nx <= std::min(x + 1, gw - 1); nx++) {
+					if (game.shadow[static_cast<size_t>(ny) * gw + nx] != 0) {
+						mask[i] = 1;
+						break;
+					}
+				}
+			}
+		}
+	}
+	// How much a point of the art lies in the game's shadow, 0 to 1, smooth between the game's pixels.
+	const auto shadowAt = [&](float x, float y) {
+		const float fx = std::clamp(x, 0.F, static_cast<float>(gw - 1));
+		const float fy = std::clamp(y, 0.F, static_cast<float>(gh - 1));
+		const int x0 = std::min(static_cast<int>(fx), gw - 1);
+		const int y0 = std::min(static_cast<int>(fy), gh - 1);
+		const int x1 = std::min(x0 + 1, gw - 1);
+		const int y1 = std::min(y0 + 1, gh - 1);
+		const float u = fx - static_cast<float>(x0);
+		const float v = fy - static_cast<float>(y0);
+		const auto at = [&](int mx, int my) { return static_cast<float>(mask[static_cast<size_t>(my) * gw + mx]); };
+		return (at(x0, y0) * (1 - u) + at(x1, y0) * u) * (1 - v) + (at(x0, y1) * (1 - u) + at(x1, y1) * u) * v;
+	};
+	const auto ramp = [](float from, float to, float value) {
+		const float t = std::clamp((value - from) / (to - from), 0.F, 1.F);
+		return t * t * (3 - 2 * t);
+	};
+	if (SDL_LockSurface(rgba) != 0)
+		return rgba;
+	const float perX = static_cast<float>(gw) / static_cast<float>(rgba->w);
+	const float perY = static_cast<float>(gh) / static_cast<float>(rgba->h);
+	for (int y = 0; y < rgba->h; y++) {
+		auto *row = static_cast<uint8_t *>(rgba->pixels) + static_cast<ptrdiff_t>(y) * rgba->pitch;
+		for (int x = 0; x < rgba->w; x++) {
+			uint8_t *pixel = row + static_cast<ptrdiff_t>(x) * 4;
+			const uint8_t brightest = std::max({ pixel[0], pixel[1], pixel[2] });
+			if (pixel[3] == 0 || brightest >= ShadowBrightest + 16)
+				continue;
+			const float in = ramp(0.25F, 0.75F, shadowAt((static_cast<float>(x) + 0.5F) * perX - 0.5F, (static_cast<float>(y) + 0.5F) * perY - 0.5F));
+			if (in <= 0)
+				continue;
+			const float dark = 1 - ramp(static_cast<float>(ShadowBrightest - 16), static_cast<float>(ShadowBrightest + 16), static_cast<float>(brightest));
+			pixel[3] = static_cast<uint8_t>(static_cast<float>(pixel[3]) * (1 - in * dark) + 0.5F);
+		}
+	}
+	SDL_UnlockSurface(rgba);
+	return rgba;
+}
+
+/**
+ * @brief An outline round a sprite's HD art, from its picture's edge, without the shadow painted under it.
+ *
+ * Round an object it goes round the object's colours only: where the game's own sprite has its painted floor shadow
+ * (palette colour 0, SplitShadow), the HD art's dark pixels are shadow too, and they hide the outline there as the
+ * game's shadow does (it is drawn over the outline). Items, monsters and heroes keep it all the way round, and so does
+ * an object whose painted shadow isn't drawn (`shadowShown` false: HD Lighting casts its own).
+ */
+Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const Draw &sprite, OutlineCut cut, bool shadowShown = true)
 {
 	Outline none;
 	none.tried = true;
@@ -690,6 +709,20 @@ Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const D
 		return none;
 	const int width = rgba->w;
 	const int height = rgba->h;
+	// Only objects stand on a painted floor shadow; an item's or a monster's black edge is part of it.
+	Raster game;
+	if (static_cast<ThingKind>(sprite.outlineLook.thing >> 24) == ThingKind::Object) {
+		const Point position { 0, sprite.height - 1 };
+		game = PlainRaster(sprite, position);
+		SplitShadow(game, sprite, position, true);
+	}
+	const auto gameShadow = [&](int x, int y) {
+		if (game.shadow.empty())
+			return false;
+		const int gx = std::min(x * sprite.width / width, game.width - 1);
+		const int gy = std::min(y * sprite.height / height, game.height - 1);
+		return game.shadow[static_cast<size_t>(gy) * game.width + gx] != 0;
+	};
 	std::vector<uint8_t> body(static_cast<size_t>(width) * height, 0);
 	std::vector<uint8_t> cover(body.size(), 0);
 	const bool locked = SDL_LockSurface(rgba) == 0;
@@ -699,10 +732,17 @@ Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const D
 			for (int x = 0; x < width; x++) {
 				const uint8_t *pixel = row + static_cast<ptrdiff_t>(x) * 4;
 				uint8_t alpha = pixel[3];
-				// The painted shadow: near-black and see-through, as WithoutPaintedShadow finds it.
-				if (alpha < 160 && std::max({ pixel[0], pixel[1], pixel[2] }) < 24)
-					alpha = 0;
+				const uint8_t brightest = std::max({ pixel[0], pixel[1], pixel[2] });
 				const size_t i = static_cast<size_t>(y) * width + x;
+				if (alpha != 0 && brightest < ShadowBrightest && gameShadow(x, y)) {
+					// The game's painted shadow, in the HD art: it covers the outline, and the outline doesn't go round it.
+					// With HD Lighting the object casts its own shadow and this one isn't drawn: nothing is there.
+					cover[i] = shadowShown ? 255 : 0;
+					continue;
+				}
+				// The soft shadow the maker paints: near-black and see-through, as WithoutPaintedShadow finds it.
+				if (alpha < 160 && brightest < 24)
+					alpha = 0;
 				cover[i] = alpha;
 				body[i] = alpha >= 128 ? 1 : 0;
 			}
@@ -716,11 +756,118 @@ Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const D
 	return MakeOutline(renderer, body, cover, width, height, static_cast<float>(width) / static_cast<float>(sprite.width), static_cast<float>(height) / static_cast<float>(sprite.height), cut);
 }
 
+/** @brief A shape map's tilt: the game looks down on the floor at 30 degrees (a tile is twice as wide as it is high). */
+constexpr float ViewSin = 0.5F;
+constexpr float ViewCos = 0.8660254F;
+/** @brief A way of facing gets its own picture only if this much of the object faces it. */
+constexpr float ShapeLeastShare = 0.004F;
+
+/**
+ * @brief Splits an object's HD art by the way each part of it faces, from its shape map: the picture beside it named
+ * with _n (a normal map as the eye sees it: red is right, green is up, blue is towards the eye).
+ *
+ * The renderer has no shaders, so light by shape is drawn as a few pictures added together, each lit as one way of
+ * facing is (see DrawShapedObject). Each pixel's facing is turned from the eye's view to the world's (x right and down
+ * the screen, y left and down, z up) and shared out among the axes it leans to by the square of its lean, which adds up
+ * to one: its colour goes into each axis's picture at that share of its alpha.
+ */
+void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name)
+{
+	if (picture->format->format != SDL_PIXELFORMAT_RGBA32)
+		return;
+	std::string path = "hd\\" + name + "_n.png";
+	std::replace(path.begin(), path.end(), '/', '\\');
+	if (!FindAsset(path).ok())
+		return;
+	SDL_Surface *loaded = LoadPNG(path.c_str());
+	if (loaded == nullptr)
+		return;
+	SDL_Surface *map = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
+	SDL_FreeSurface(loaded);
+	if (map == nullptr)
+		return;
+	const int width = picture->w;
+	const int height = picture->h;
+	if (width <= 0 || height <= 0 || SDL_LockSurface(picture) != 0) {
+		SDL_FreeSurface(map);
+		return;
+	}
+	if (SDL_LockSurface(map) != 0) {
+		SDL_UnlockSurface(picture);
+		SDL_FreeSurface(map);
+		return;
+	}
+	std::array<std::vector<uint8_t>, NumShapeAxes> pixels;
+	for (std::vector<uint8_t> &axis : pixels)
+		axis.assign(static_cast<size_t>(width) * height * 4, 0);
+	std::array<uint64_t, NumShapeAxes> faces {};
+	uint64_t body = 0;
+	constexpr float Root2 = 1.41421356F;
+	for (int y = 0; y < height; y++) {
+		const uint8_t *row = static_cast<const uint8_t *>(picture->pixels) + static_cast<ptrdiff_t>(y) * picture->pitch;
+		const uint8_t *mapRow = static_cast<const uint8_t *>(map->pixels) + static_cast<ptrdiff_t>(std::min(y * map->h / height, map->h - 1)) * map->pitch;
+		for (int x = 0; x < width; x++) {
+			const uint8_t *pixel = row + static_cast<ptrdiff_t>(x) * 4;
+			if (pixel[3] == 0)
+				continue;
+			const uint8_t *facing = mapRow + static_cast<ptrdiff_t>(std::min(x * map->w / width, map->w - 1)) * 4;
+			float right = static_cast<float>(facing[0]) / 127.5F - 1;
+			float up = static_cast<float>(facing[1]) / 127.5F - 1;
+			float toEye = static_cast<float>(facing[2]) / 127.5F - 1;
+			// Nothing mapped here: taken as facing the eye.
+			if (facing[3] == 0 || right * right + up * up + toEye * toEye < 0.04F) {
+				right = 0;
+				up = 0;
+				toEye = 1;
+			}
+			float nx = (right - up * ViewSin + toEye * ViewCos) / Root2;
+			float ny = (-right - up * ViewSin + toEye * ViewCos) / Root2;
+			float nz = up * ViewCos + toEye * ViewSin;
+			const float length = std::sqrt(nx * nx + ny * ny + nz * nz);
+			nx /= length;
+			ny /= length;
+			nz /= length;
+			const std::array<float, NumShapeAxes> share { nx > 0 ? nx * nx : 0, nx < 0 ? nx * nx : 0, ny > 0 ? ny * ny : 0, ny < 0 ? ny * ny : 0, nz > 0 ? nz * nz : 0 };
+			body += pixel[3];
+			const size_t at = (static_cast<size_t>(y) * width + x) * 4;
+			for (size_t k = 0; k < NumShapeAxes; k++) {
+				// The colour goes in even where none of it shows, so a smoothed edge between two facings keeps it.
+				const auto alpha = static_cast<uint8_t>(static_cast<float>(pixel[3]) * share[k] + 0.5F);
+				pixels[k][at] = pixel[0];
+				pixels[k][at + 1] = pixel[1];
+				pixels[k][at + 2] = pixel[2];
+				pixels[k][at + 3] = alpha;
+				faces[k] += alpha;
+			}
+		}
+	}
+	SDL_UnlockSurface(map);
+	SDL_UnlockSurface(picture);
+	SDL_FreeSurface(map);
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		if (static_cast<float>(faces[k]) <= static_cast<float>(body) * ShapeLeastShare)
+			continue;
+		SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, width, height);
+		if (texture == nullptr)
+			continue;
+		SDL_UpdateTexture(texture, nullptr, pixels[k].data(), width * 4);
+		// Added on top of the art drawn in the least light any of its sides takes.
+		SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_ADD);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+		SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
+#endif
+		art.shape[k] = texture;
+		art.shaped = true;
+	}
+}
+
 /**
  * @brief A sprite's HD art, loaded the first time it is asked for (its texture is null when there is none). A sprite
  * drawn with an outline (`outlined`) gets its smooth outline made at the same time, from the picture just loaded.
+ * Without its painted shadow, an `object` loses the floor shadow the game painted into it (WithoutObjectShadow), and
+ * takes its shape map if it has one (MakeShape).
  */
-HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShadow, const Draw *outlined)
+HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShadow, const Draw *outlined, const Draw *object = nullptr)
 {
 	auto [it, inserted] = Art.try_emplace(withoutShadow ? name + "#lit" : name);
 	HdArt &art = it->second;
@@ -748,14 +895,16 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 		return art;
 	}
 	if (withoutShadow)
-		surface = WithoutPaintedShadow(surface);
+		surface = object != nullptr ? WithoutObjectShadow(surface, *object) : WithoutPaintedShadow(surface);
 	if (outlined != nullptr) {
 		const OutlineCut cut = OutlineCutFor(outlined->outlineLook);
-		art.outlines[static_cast<size_t>(cut)] = OutlineFromPicture(renderer, surface, *outlined, cut);
+		art.outlines[static_cast<size_t>(cut)] = OutlineFromPicture(renderer, surface, *outlined, cut, !withoutShadow);
 		if (outlined->outlineLook.glow)
-			art.outlines[static_cast<size_t>(OutlineCut::Glow)] = OutlineFromPicture(renderer, surface, *outlined, OutlineCut::Glow);
+			art.outlines[static_cast<size_t>(OutlineCut::Glow)] = OutlineFromPicture(renderer, surface, *outlined, OutlineCut::Glow, !withoutShadow);
 	}
 	art.texture = SDL_CreateTextureFromSurface(renderer, surface);
+	if (art.texture != nullptr && object != nullptr && withoutShadow)
+		MakeShape(renderer, art, surface, name);
 	SDL_FreeSurface(surface);
 	if (art.texture != nullptr) {
 		SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
@@ -1262,17 +1411,27 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 	const std::string *name = ArtName(draw);
 	if (name == nullptr)
 		return choice;
+	// A unique monster's colours: its own art, beside the sprite's (monsters/sking/skinga@skelaxe/white+genrl/d3_f05).
+	std::string uniqueName;
+	if (draw.recolour != nullptr && !draw.recolour->empty()) {
+		const size_t slash = name->rfind('/');
+		if (slash == std::string::npos)
+			return choice;
+		uniqueName = name->substr(0, slash) + "+" + *draw.recolour + name->substr(slash);
+		name = &uniqueName;
+	}
 	// Wall tiles cut away near the hero keep the game's own cut-out shape.
 	const bool masked = draw.kind == DrawKind::Tile && draw.mask != MaskType::Solid;
 	SDL_Texture *texture = nullptr;
 	HdArt *art = nullptr;
 	bool recoloured = false;
-	// With HD Lighting, heroes and monsters cast shadows of their own in place of the one the maker painted.
+	// With HD Lighting, heroes, monsters and solid objects cast shadows of their own in place of the one painted in.
 	const bool withoutShadow = FrameLit && draw.caster != Caster::None;
+	const Draw *object = IsObject(draw.caster) ? &draw : nullptr;
 	// In-betweens 1 and 2 lead to the next frame (_m1, _m2); 3 and 4 back to the frame before (_b1, _b2).
 	if (draw.inBetween != 0 && !masked) {
 		const bool back = draw.inBetween > 2;
-		art = &LoadArt(renderer, *name + (back ? "_b" : "_m") + std::to_string(back ? draw.inBetween - 2 : draw.inBetween), withoutShadow, draw.outlined ? &draw : nullptr);
+		art = &LoadArt(renderer, *name + (back ? "_b" : "_m") + std::to_string(back ? draw.inBetween - 2 : draw.inBetween), withoutShadow, draw.outlined ? &draw : nullptr, object);
 		texture = art->texture;
 	}
 	// Tiles recoloured for this level's palette, e.g. tiles/l1_p3/120, beat evening out the base ones.
@@ -1290,7 +1449,7 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 			tileArt = MaskedArt(renderer, *name, draw);
 			texture = tileArt != nullptr ? tileArt->texture : nullptr;
 		} else {
-			art = &LoadArt(renderer, *name, withoutShadow, draw.outlined ? &draw : nullptr);
+			art = &LoadArt(renderer, *name, withoutShadow, draw.outlined ? &draw : nullptr, object);
 			texture = art->texture;
 		}
 	}
@@ -1315,7 +1474,7 @@ ArtChoice CachedArt(SDL_Renderer *renderer, const Draw &draw)
 	const uint64_t shape = static_cast<uint64_t>(draw.kind) | (static_cast<uint64_t>(draw.style) << 8) | (static_cast<uint64_t>(draw.mask) << 16)
 	    | (static_cast<uint64_t>(draw.tile) << 24) | (static_cast<uint64_t>(draw.inBetween) << 32) | (static_cast<uint64_t>(PaletteVariant & 0xFF) << 40)
 	    | (static_cast<uint64_t>(draw.height & 0x7FFF) << 48) | (static_cast<uint64_t>(FrameLit && draw.caster != Caster::None ? 1 : 0) << 63);
-	auto [it, inserted] = ArtChoices.try_emplace(ArtChoiceKey { data, shape });
+	auto [it, inserted] = ArtChoices.try_emplace(ArtChoiceKey { data, shape, draw.recolour });
 	if (inserted)
 		it->second = ChooseArt(renderer, draw);
 	return it->second;
@@ -1337,7 +1496,7 @@ Outline MakeArtOutline(SDL_Renderer *renderer, const HdArt &art, const Draw &spr
 	SDL_Surface *picture = LoadPNG(path.c_str());
 	if (picture == nullptr)
 		return none;
-	Outline outline = OutlineFromPicture(renderer, picture, sprite, cut);
+	Outline outline = OutlineFromPicture(renderer, picture, sprite, cut, !(FrameLit && sprite.caster != Caster::None));
 	SDL_FreeSurface(picture);
 	return outline;
 }
@@ -1351,6 +1510,7 @@ Outline MakeRasterOutline(SDL_Renderer *renderer, const Draw &sprite, OutlineCut
 	const Point position { 0, sprite.height - 1 };
 	Raster plain = PlainRaster(sprite, position);
 	SplitShadow(plain, sprite, position, true);
+	const bool shadowShown = !(FrameLit && sprite.caster != Caster::None);
 	const int width = plain.width * Scale;
 	const int height = plain.height * Scale;
 	std::vector<uint8_t> body(static_cast<size_t>(width) * height, 0);
@@ -1359,8 +1519,9 @@ Outline MakeRasterOutline(SDL_Renderer *renderer, const Draw &sprite, OutlineCut
 		for (int x = 0; x < width; x++) {
 			const size_t from = static_cast<size_t>(y / Scale) * plain.width + x / Scale;
 			const size_t i = static_cast<size_t>(y) * width + x;
-			cover[i] = plain.alpha[from];
 			body[i] = plain.alpha[from] != 0 && plain.index[from] != 0 ? 1 : 0;
+			// The painted shadow covers the outline only where it is drawn (HD Lighting casts its own instead).
+			cover[i] = shadowShown || body[i] != 0 ? plain.alpha[from] : 0;
 		}
 	}
 	return MakeOutline(renderer, body, cover, width, height, static_cast<float>(Scale), static_cast<float>(Scale), cut);
@@ -1376,7 +1537,7 @@ bool MayMakeOutline()
 const Outline *SmoothOutline(SDL_Renderer *renderer, const Draw &sprite, OutlineCut cut)
 {
 	const auto index = static_cast<size_t>(cut);
-	if (sprite.light >= 0) {
+	if (sprite.light >= 0 || sprite.recolour != nullptr) {
 		const ArtChoice choice = CachedArt(renderer, sprite);
 		if (choice.art != nullptr) {
 			Outline &outline = choice.art->outlines[index];
@@ -1494,7 +1655,7 @@ bool IsArchPiece(const Draw &draw)
 
 /**
  * @brief The walls show HD art made in the level type's first palette, evened out to this level's palette by
- * TileGain. Arches have no HD art, so they take the same colours, or they stand out in the walls' old colours.
+ * TileGain. Arches without HD art take the same colours, or they stand out in the walls' old colours.
  */
 bool ArchesTakeTileColours()
 {
@@ -1563,7 +1724,7 @@ void BuildLightBuffer(Size size)
 /** @brief The shade the old light layer gives one of the game's light levels: its brightness, warm or cool, and the screen's fade. */
 std::array<float, 3> LevelShade(int level, const std::array<float, 3> &tint)
 {
-	const Mood &mood = CurrentMood();
+	const Mood mood = CurrentMood();
 	level = std::clamp(level, 0, static_cast<int>(NumLightingLevels) - 1);
 	const float warmth = std::clamp(1.F - static_cast<float>(level) / 10.F, 0.F, 1.F);
 	std::array<float, 3> shade;
@@ -1576,15 +1737,15 @@ std::array<float, 3> LevelShade(int level, const std::array<float, 3> &tint)
 
 using Colour3 = std::array<float, 3>;
 
-/** @brief How a draw is lit: one colour, or colours that change from its left edge to its right, at up to three stops. */
+/** @brief How a draw is lit: one colour, or colours that change from its left edge to its right, at up to four stops. */
 struct Shading {
-	std::array<Colour3, 3> colours {};
+	std::array<Colour3, 4> colours {};
 	/** @brief Where each colour is, as a fraction of the draw's width. */
-	std::array<float, 3> stops { 0.F, 0.5F, 1.F };
+	std::array<float, 4> stops { 0.F, 0.5F, 1.F, 1.F };
 	int count = 1;
 	/** @brief The colours along the draw's top edge, where they differ from those along its bottom (see FireLightUp). */
 	bool fades = false;
-	std::array<Colour3, 3> top {};
+	std::array<Colour3, 4> top {};
 };
 
 Shading Uniform(const Colour3 &colour)
@@ -1597,8 +1758,8 @@ Shading Uniform(const Colour3 &colour)
 Shading Gradient(const Colour3 &left, const Colour3 &right)
 {
 	Shading shading;
-	shading.colours = { left, right, right };
-	shading.stops = { 0.F, 1.F, 1.F };
+	shading.colours = { left, right, right, right };
+	shading.stops = { 0.F, 1.F, 1.F, 1.F };
 	shading.count = 2;
 	return shading;
 }
@@ -1649,13 +1810,16 @@ DrawTexture TextureFor(SDL_Renderer *renderer, const Draw &draw, bool paintedSha
 {
 	DrawTexture out;
 	ArtChoice art;
-	if (draw.light >= 0)
+	if (draw.light >= 0 || draw.recolour != nullptr)
 		art = CachedArt(renderer, draw);
 	if (art.flowing != nullptr)
 		RefreshFlow(*art.flowing);
 	out.texture = art.texture;
 	out.hdArt = art.hdArt;
 	out.tileColours = art.tileArt;
+	// HD arches are made in the HD walls' palette, so they are evened out to this level's palette like the walls.
+	if (art.hdArt && leveltype != DTYPE_TOWN && IsArchPiece(draw))
+		out.tileColours = true;
 	// Recolours other than light (stone curse, infravision, unique monsters) are drawn by the game itself.
 	if (out.texture == nullptr) {
 		Raster &raster = FallbackRaster(draw, draw.light < 0);
@@ -1742,8 +1906,8 @@ void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading
 	// A colour at each stop along the bottom edge, and along the top edge too where the light fades up the draw (one
 	// colour fading up it is drawn as two stops, at its left and right edges).
 	const int stops = std::max(shading.count, 2);
-	std::array<SDL_Vertex, 6> vertices;
-	std::array<Colour3, 6> colours;
+	std::array<SDL_Vertex, 8> vertices;
+	std::array<Colour3, 8> colours;
 	bool aboveFull = false;
 	for (int s = 0; s < stops; s++) {
 		const int from = std::min(s, shading.count - 1);
@@ -1757,7 +1921,7 @@ void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading
 			vertices[s * 2 + edge] = SDL_Vertex { { dest.x + fx * dest.w, dest.y + static_cast<float>(edge) * dest.h }, vertexColour, { fx, static_cast<float>(edge) } };
 		}
 	}
-	std::array<int, 12> indices;
+	std::array<int, 18> indices;
 	int count = 0;
 	for (int s = 0; s + 1 < stops; s++) {
 		for (const int corner : { 0, 2, 3, 0, 3, 1 })
@@ -1789,58 +1953,8 @@ const Draw *OutlinedSprite(size_t index)
 	return nullptr;
 }
 
-/** @brief How long the outline of the thing under the cursor takes to fade in, in ms (so it doesn't pop on). */
-constexpr float HoverFadeMs = 140.F;
-/** @brief How long a glow takes to swell and settle again, in ms: slow, like breathing. */
-constexpr uint32_t GlowBreathMs = 2400;
-/** @brief How much of a glow shows, settled and swollen. */
-constexpr float GlowLow = 0.35F;
-constexpr float GlowHigh = 0.8F;
-/** @brief An outline not drawn for this long (ms) is gone, and the cursor coming back to its thing fades it in again. */
-constexpr uint32_t OutlineGoneMs = 150;
-
-/** @brief How a thing's outline was last drawn, and for the cursor's: since when it fades in, and from what. */
-struct ShownOutline {
-	/** @brief Its colour (lit) and how much of it showed, when (ms), and whether it was the cursor's. */
-	Colour3 colour {};
-	float alpha = 0;
-	uint32_t at = 0;
-	bool seen = false;
-	bool hovered = false;
-	uint32_t hoverSince = 0;
-	Colour3 fromColour {};
-	float fromAlpha = 0;
-};
-
-/** @brief Each thing's outline as last drawn, by OutlineThing. */
-std::unordered_map<uint32_t, ShownOutline> ShownOutlines;
-
-/**
- * @brief The outline of a thing as it shows now. The cursor's fades in over HoverFadeMs: from the outline that thing
- * had (a rank's or a ground item's, in its colour), or from nothing.
- */
-void FadeOutline(const OutlineLook &look, uint32_t now, Colour3 &colour, float &alpha)
-{
-	ShownOutline &shown = ShownOutlines[look.thing];
-	const bool showing = shown.seen && now - shown.at <= OutlineGoneMs;
-	if (look.hovered) {
-		if (!showing || !shown.hovered) {
-			shown.hoverSince = now;
-			shown.fromColour = showing ? shown.colour : colour;
-			shown.fromAlpha = showing ? shown.alpha : 0.F;
-		}
-		const float t = std::clamp(static_cast<float>(now - shown.hoverSince) / HoverFadeMs, 0.F, 1.F);
-		const float eased = t * t * (3 - 2 * t);
-		for (int c = 0; c < 3; c++)
-			colour[c] = shown.fromColour[c] + (colour[c] - shown.fromColour[c]) * eased;
-		alpha = shown.fromAlpha + (alpha - shown.fromAlpha) * eased;
-	}
-	shown.colour = colour;
-	shown.alpha = alpha;
-	shown.at = now;
-	shown.seen = true;
-	shown.hovered = look.hovered;
-}
+/** @brief Each thing's outline as last drawn, by OutlineThing, so the cursor's fades in. */
+OutlineFader ShownOutlines;
 
 /**
  * @brief Draws an outline of an item, monster or townsperson smooth, round the HD art its sprite shows or round the
@@ -1863,7 +1977,7 @@ void DrawOutline(SDL_Renderer *renderer, size_t index, const Shading &glow, floa
 	float alpha = 1.F;
 	const uint32_t now = SDL_GetTicks();
 	if (look.thing != 0)
-		FadeOutline(look, now, colour, alpha);
+		ShownOutlines.Fade(look, now, colour, alpha);
 	const SDL_FRect at = DestOf(*sprite, toLogical);
 	const float unit = static_cast<float>(Scale) * toLogical;
 	const auto drawCut = [&](const Outline &cut, float strength) {
@@ -1877,11 +1991,8 @@ void DrawOutline(SDL_Renderer *renderer, size_t index, const Shading &glow, floa
 	if (look.glow) {
 		// The glow is made when there is time for it, like the outline; until then the outline shows alone.
 		const Outline *halo = SmoothOutline(renderer, *sprite, OutlineCut::Glow);
-		if (halo != nullptr && halo->texture != nullptr) {
-			constexpr float TwoPi = 6.2831853F;
-			const float breath = 0.5F - 0.5F * std::cos(TwoPi * static_cast<float>(now % GlowBreathMs) / static_cast<float>(GlowBreathMs));
-			drawCut(*halo, alpha * (GlowLow + (GlowHigh - GlowLow) * breath));
-		}
+		if (halo != nullptr && halo->texture != nullptr)
+			drawCut(*halo, alpha * GlowStrength(now));
 	}
 	drawCut(*outline, alpha);
 }
@@ -1907,6 +2018,31 @@ constexpr std::array<int, 6> QuadIndices { 0, 1, 2, 0, 2, 3 };
 constexpr float ViewLean = 0.866F;
 /** @brief How wide a hero's or monster's body is, in tiles, for how much of a wide light gets round it. */
 constexpr float BodyWidth = 0.45F;
+/** @brief How much of an object's width in its picture counts as its body across a light (the picture shows its depth too), and the most. */
+constexpr float ObjectWidthShare = 0.75F;
+constexpr float MaxObjectWidth = 1.6F;
+/** @brief How much of an object's height in its picture is height (the rest is its top, seen from above). */
+constexpr float ObjectHeightShare = 0.65F;
+/**
+ * @brief How far into a round object's footprint its shadow starts, as a share of the way from its middle to its side
+ * away from the light: a little inside, so the shadow meets the object's base with no gap (the object hides the rest).
+ */
+constexpr float ObjectTuck = 0.8F;
+/** @brief How far out round a block's base the floor is darker where the block keeps the room's bounced light off it (tiles). */
+constexpr float BlockSkirt = 0.22F;
+/** @brief The soft edge of a block's shadow at its base, and the least and most at its far end (tiles). */
+constexpr float BlockEdge = 0.03F;
+constexpr float BlockLeastSoft = 0.06F;
+constexpr float BlockMostSoft = 0.55F;
+/**
+ * @brief A light this near a block's base (tiles) starts to count as over it; one over it is this far above its top,
+ * and the shadow it leaves round the base has an edge at least this soft.
+ */
+constexpr float BlockOverEdge = 0.5F;
+constexpr float BlockOverRise = 1.2F;
+constexpr float BlockOverSoft = 0.4F;
+/** @brief The smallest side of an object's footprint, in tiles. */
+constexpr float ObjectLeastSide = 0.3F;
 /** @brief Pieces a shadow is drawn in along its length, as its light and stretch change along it. */
 constexpr int CastBands = 12;
 /** @brief The room round the body in its shadow pictures, and how soft the sharp and soft pictures are (game pixels). */
@@ -1947,9 +2083,19 @@ constexpr float FireLightFade = 1.6F;
  * real fire or spell would outshine such a glow many times over, so inside the shadow of a light at least StrongLight
  * bright a glow fills in only this much of its light, and inside a dimmer light's shadow more, up to all of it.
  */
-constexpr float GlowFill = 0.2F;
+constexpr float GlowFill = 0.06F;
 /** @brief A light at least this bright where its shadow falls (linear light, 1 is full) outshines the glows (GlowFill). */
-constexpr float StrongLight = 0.4F;
+constexpr float StrongLight = 0.2F;
+/** @brief The widest a cast shadow fans out past the body's own width (a flame near head height would spread it to nothing). */
+constexpr float MaxSpread = 1.6F;
+/** @brief The view's across direction on the floor (screen right is +x, -y), per tile of length. */
+constexpr float ViewAcross = 0.70710678F;
+/** @brief Up to this height (tiles) a body's shadow turns from where the view draws its feet to the light's layout. */
+constexpr float FeetBlend = 0.45F;
+/** @brief How near a light is to passing right beside a body (cosine) for its shadow's two layouts to cross-fade. */
+constexpr float TurnBand = 0.2F;
+/** @brief The most of a cast shadow drawn with the soft picture, so some of the body's shape always shows in it. */
+constexpr float MaxSoftness = 0.7F;
 /** @brief How dark a shadow is where its light is all the light there (less the light's own bounce fill). */
 constexpr float CastStrength = 0.85F;
 
@@ -2038,8 +2184,21 @@ bool CrossesWall(Point from, Point to)
 	return false;
 }
 
-/** @brief How far (in tiles) a shadow can lie on the floor from a point in a direction before a wall stops it. */
-float RoomFor(float x, float y, float dx, float dy, float limit)
+/**
+ * @brief The wall a shadow runs into (RoomFor), where the wall's face is turned to the view: it stands on the back edge
+ * of the tile the shadow comes over, along x = `at` (facing +x) or along y = `at` (facing +y).
+ */
+struct WallHit {
+	bool found = false;
+	bool facesX = false;
+	float at = 0;
+};
+
+/**
+ * @brief How far (in tiles) a shadow can lie on the floor from a point in a direction before a wall stops it.
+ * @param hit Told which wall that is, where its face is turned to the view (the shadow goes on up it, see WallShade).
+ */
+float RoomFor(float x, float y, float dx, float dy, float limit, WallHit *hit = nullptr)
 {
 	constexpr float Step = 1.F / 16;
 	Point previous { static_cast<int>(std::floor(x + 0.5F)), static_cast<int>(std::floor(y + 0.5F)) };
@@ -2047,8 +2206,16 @@ float RoomFor(float x, float y, float dx, float dy, float limit)
 		const Point current { static_cast<int>(std::floor(x + dx * t + 0.5F)), static_cast<int>(std::floor(y + dy * t + 0.5F)) };
 		if (current == previous)
 			continue;
-		if (CrossesWall(previous, current))
+		if (CrossesWall(previous, current)) {
+			if (hit != nullptr) {
+				const BackWalls walls = BackWallsOf(previous);
+				if (current.x < previous.x && walls.left && (current.y == previous.y || !(current.y < previous.y && walls.right && std::abs(dy) > std::abs(dx))))
+					*hit = WallHit { true, true, static_cast<float>(previous.x) - 0.5F };
+				else if (current.y < previous.y && walls.right)
+					*hit = WallHit { true, false, static_cast<float>(previous.y) - 0.5F };
+			}
 			return t;
+		}
 		previous = current;
 	}
 	return limit;
@@ -2539,10 +2706,13 @@ std::vector<float> Halved(const std::vector<float> &cover, int width, int height
 	return half;
 }
 
-/** @brief A black shape from a coverage mask (0 to 1 per pixel), for drawing shadows with. */
+/**
+ * @brief A shape from a coverage mask (0 to 1 per pixel), for drawing shadows with: white, so it draws black as a shadow
+ * (in a black colour) or adds up as cover (JoinedShadows).
+ */
 SDL_Texture *ShapeTexture(SDL_Renderer *renderer, const std::vector<float> &cover, int width, int height)
 {
-	std::vector<uint8_t> rgba(static_cast<size_t>(width) * height * 4, 0);
+	std::vector<uint8_t> rgba(static_cast<size_t>(width) * height * 4, 255);
 	for (size_t k = 0; k < cover.size(); k++)
 		rgba[k * 4 + 3] = static_cast<uint8_t>(std::clamp(cover[k], 0.F, 1.F) * 255.F + 0.5F);
 	SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, width, height);
@@ -2671,40 +2841,484 @@ float ShadowAlpha(float total, float removed)
  * @param glows The part of it from the heroes' own glows.
  * @param own The part of it from the shadow's light (one of the glows when `glow`).
  * @param kept How much of the light the body keeps off there (a wide light gets round it further out).
+ * @param atBody The shadow's light where the body stands.
  */
-float CastAlpha(float total, float glows, float own, bool glow, float fill, float kept)
+float CastAlpha(float total, float glows, float own, bool glow, float fill, float kept, float atBody)
 {
 	if (glow)
 		return ShadowAlpha(total, (1 - fill) * own * kept);
 	if (own <= 0)
 		return 0;
-	const float outshines = std::min(own / StrongLight, 1.F);
+	// A body standing in a flame's strong light casts that flame's shadow all the way out, though the light has
+	// thinned where the shadow lands and the hero's own glow is most of the light there.
+	const float outshines = std::min(std::max(own, atBody) / StrongLight, 1.F);
 	const float glowsLeft = glows * (1 - outshines * (1 - GlowFill));
 	const float others = std::max(total - glows - own, 0.F);
 	return std::clamp(CastStrength * (1 - fill) * kept * own / (own + glowsLeft + others), 0.F, 1.F);
 }
 
 /**
- * @brief The shadows a hero or monster casts on the floor: one away from each of the strongest lights on it, its body
+ * @brief How much one light's cast shadow darkens a point of the floor (CastAlpha). A wall's own tile has floor in front
+ * of the wall, where the game's light doesn't go (the tile is solid): a point there takes the light of the open floor
+ * next to it on the light's side, so a shadow doesn't fade out just before a wall's foot.
+ */
+float CastAlphaAt(const light::ShadowLight &source, float x, float y, float kept, float atBody)
+{
+	float dx = source.x - x;
+	float dy = source.y - y;
+	const float away = std::sqrt(dx * dx + dy * dy);
+	if (away > 1e-3F) {
+		dx /= away;
+		dy /= away;
+		for (int step = 0; step < 3 && light::Blocks(static_cast<int>(std::floor(x + 0.5F)), static_cast<int>(std::floor(y + 0.5F))); step++) {
+			x += dx * 0.55F;
+			y += dy * 0.55F;
+		}
+	}
+	return CastAlpha(light::LinearAt(x, y), light::GlowAt(x, y), light::LinearOf(source, x, y), source.glow, source.fill, kept, atBody);
+}
+
+/** @brief The strongest lights on a world point (light::ShadowLights), for a body's shadows and an object's sides. */
+struct LightsOn {
+	bool known = false;
+	float x = 0;
+	float y = 0;
+	int count = 0;
+	std::array<light::ShadowLight, 3> lights;
+	light::ShadowLight overhead;
+};
+
+/** @brief The last point asked for this frame: an object asks twice, for its shadows and then for its sides. */
+LightsOn LastLightsOn;
+
+const LightsOn &LightsOnPoint(float wx, float wy)
+{
+	LightsOn &on = LastLightsOn;
+	if (on.known && on.x == wx && on.y == wy)
+		return on;
+	on.known = true;
+	on.x = wx;
+	on.y = wy;
+	on.count = light::ShadowLights(wx, wy, on.lights.data(), static_cast<int>(on.lights.size()), on.overhead);
+	return on;
+}
+
+/** @brief Where a sprite's body lies in its picture, in game pixels, worked out once (a row or column of nothing but its painted shadow is not body). */
+void BodyBounds(Raster &raster)
+{
+	if (raster.boundLeft >= 0)
+		return;
+	int left = raster.width;
+	int right = -1;
+	int top = raster.height;
+	int bottom = -1;
+	for (int y = 0; y < raster.height; y++) {
+		for (int x = 0; x < raster.width; x++) {
+			if (raster.alpha[static_cast<size_t>(y) * raster.width + x] < 128)
+				continue;
+			left = std::min(left, x);
+			right = std::max(right, x);
+			top = std::min(top, y);
+			bottom = std::max(bottom, y);
+		}
+	}
+	if (right < 0) {
+		left = 0;
+		right = std::max(raster.width - 1, 0);
+		top = 0;
+		bottom = std::max(raster.height - 1, 0);
+	}
+	int cornerSum = 0;
+	int cornerCount = 0;
+	for (int x = left; x <= right && bottom >= 0; x++) {
+		if (raster.alpha[static_cast<size_t>(bottom) * raster.width + x] >= 128) {
+			cornerSum += x;
+			cornerCount++;
+		}
+	}
+	raster.boundLeft = left;
+	raster.boundRight = right;
+	raster.boundTop = top;
+	raster.boundBottom = bottom;
+	raster.boundCorner = cornerCount > 0 ? cornerSum / cornerCount : (left + right) / 2;
+}
+
+/**
+ * @brief A solid object's place on the floor, read from its picture: the lowest point of its outline is its front corner,
+ * the width to the left of that its length along x and to the right its length along y (a tile's side is half a tile's
+ * width in the picture). Its middle can lie off the tile it stands on (a sarcophagus covers the tile behind it too).
+ */
+struct Footprint {
+	/** @brief How wide the body is across a light, in tiles (a barrel's is about a hero's, a sarcophagus's three times it). */
+	float bodyWidth = BodyWidth;
+	/** @brief The middle of its base from the point it stands on, in tiles. */
+	float middleX = 0;
+	float middleY = 0;
+	/** @brief Half its base's sides, in tiles. */
+	float halfX = 0;
+	float halfY = 0;
+	/** @brief How tall it is as a block, in tiles. */
+	float boxTall = 0;
+};
+
+Footprint FootprintOf(Raster &raster)
+{
+	BodyBounds(raster);
+	const float w = static_cast<float>(raster.width);
+	const float feet = static_cast<float>(raster.height) - 1 - HalfTileHeight;
+	Footprint foot;
+	const float pictureWidth = static_cast<float>(raster.boundRight - raster.boundLeft + 1) / TileAcross;
+	foot.bodyWidth = std::clamp(pictureWidth * ObjectWidthShare, BodyWidth, MaxObjectWidth);
+	const float lengthX = std::max(static_cast<float>(raster.boundCorner - raster.boundLeft) / HalfTileWidth, ObjectLeastSide);
+	const float lengthY = std::max(static_cast<float>(raster.boundRight - raster.boundCorner) / HalfTileWidth, ObjectLeastSide);
+	const float cornerAcross = (static_cast<float>(raster.boundCorner) - w / 2) / HalfTileWidth;
+	const float cornerDown = std::max(static_cast<float>(raster.boundBottom) - feet, 0.F) / (HalfTileWidth / 2);
+	const float cornerX = (cornerAcross + cornerDown) / 2;
+	const float cornerY = (cornerDown - cornerAcross) / 2;
+	foot.halfX = lengthX / 2;
+	foot.halfY = lengthY / 2;
+	foot.middleX = cornerX - foot.halfX;
+	foot.middleY = cornerY - foot.halfY;
+	// The picture is as high as the footprint's far corner lies up the screen from its near one, and the block's own
+	// height on top of that.
+	const float footprintRise = (lengthX + lengthY) * HalfTileHeight;
+	foot.boxTall = std::max((static_cast<float>(raster.boundBottom - raster.boundTop) - footprintRise) * RisePerPixel, ObjectLeastSide);
+	return foot;
+}
+
+/** @brief The most corners a shape on the floor has (DrawFloorShade): a block's base and its top as a light throws it. */
+constexpr int MaxShadeCorners = 8;
+
+/** @brief The middle of a shape's corners on the floor. */
+SDL_FPoint FloorMiddle(const SDL_FPoint *corners, int count)
+{
+	SDL_FPoint middle { 0, 0 };
+	for (int i = 0; i < count; i++) {
+		middle.x += corners[i].x / static_cast<float>(count);
+		middle.y += corners[i].y / static_cast<float>(count);
+	}
+	return middle;
+}
+
+/**
+ * @brief Darkens a shape on the floor: `count` corners in order round it (world tiles), each as dark as its `alphas`
+ * and fading to nothing `feathers` tiles outside it, and its middle (FloorMiddle) as dark as `middle`. As `cover` it is
+ * added up in white instead, for a light's joined shadows (JoinedShadows).
+ */
+void DrawFloorShade(SDL_Renderer *renderer, const SDL_FPoint *corners, const float *alphas, const float *feathers, int count, float middle, float toLogical, bool cover = false)
+{
+	if (count < 3 || count > MaxShadeCorners)
+		return;
+	float most = middle;
+	for (int i = 0; i < count; i++)
+		most = std::max(most, alphas[i]);
+	if (most <= 0.004F)
+		return;
+	const SDL_FPoint centre = FloorMiddle(corners, count);
+	const float cx = centre.x;
+	const float cy = centre.y;
+	const auto placed = [&](float x, float y) {
+		float bx;
+		float by;
+		BufferOf(x, y, bx, by);
+		return OnScreenAt(bx, by, toLogical);
+	};
+	// The middle, the corners, then the corners moved out by their soft edge.
+	std::array<SDL_Vertex, 1 + MaxShadeCorners * 2> vertices;
+	std::array<int, MaxShadeCorners * 9> indices;
+	const Uint8 shade = cover ? 255 : 0;
+	vertices[0] = SDL_Vertex { placed(cx, cy), { shade, shade, shade, ColourByte(middle) }, { 0, 0 } };
+	for (int i = 0; i < count; i++) {
+		const float ox = corners[i].x - cx;
+		const float oy = corners[i].y - cy;
+		const float out = std::sqrt(ox * ox + oy * oy);
+		const float grow = out > 1e-4F ? feathers[i] / out : 0.F;
+		vertices[static_cast<size_t>(1 + i)] = SDL_Vertex { placed(corners[i].x, corners[i].y), { shade, shade, shade, ColourByte(alphas[i]) }, { 0, 0 } };
+		vertices[static_cast<size_t>(1 + count + i)] = SDL_Vertex { placed(corners[i].x + ox * grow, corners[i].y + oy * grow), { shade, shade, shade, 0 }, { 0, 0 } };
+	}
+	int used = 0;
+	for (int i = 0; i < count; i++) {
+		const int a = 1 + i;
+		const int b = 1 + (i + 1) % count;
+		for (const int v : { 0, a, b, a, a + count, b + count, a, b + count, b })
+			indices[static_cast<size_t>(used++)] = v;
+	}
+	SDL_BlendMode before = SDL_BLENDMODE_NONE;
+	SDL_GetRenderDrawBlendMode(renderer, &before);
+	SDL_SetRenderDrawBlendMode(renderer, cover ? SDL_BLENDMODE_ADD : SDL_BLENDMODE_BLEND);
+	SDL_RenderGeometry(renderer, nullptr, vertices.data(), 1 + count * 2, indices.data(), used);
+	SDL_SetRenderDrawBlendMode(renderer, before);
+}
+
+/** @brief The corners of the smallest shape with no dents round some points on the floor, in order round it; returns how many. */
+int FloorHull(const SDL_FPoint *points, int count, int *hull)
+{
+	std::array<int, MaxShadeCorners> order;
+	if (count > MaxShadeCorners)
+		return 0;
+	for (int i = 0; i < count; i++)
+		order[static_cast<size_t>(i)] = i;
+	std::sort(order.begin(), order.begin() + count, [&](int a, int b) {
+		return points[a].x < points[b].x || (points[a].x == points[b].x && points[a].y < points[b].y);
+	});
+	const auto turn = [&](int o, int a, int b) {
+		return (points[a].x - points[o].x) * (points[b].y - points[o].y) - (points[a].y - points[o].y) * (points[b].x - points[o].x);
+	};
+	std::array<int, MaxShadeCorners * 2 + 2> chain;
+	int n = 0;
+	for (int i = 0; i < count; i++) {
+		while (n >= 2 && turn(chain[static_cast<size_t>(n - 2)], chain[static_cast<size_t>(n - 1)], order[static_cast<size_t>(i)]) <= 1e-7F)
+			n--;
+		chain[static_cast<size_t>(n++)] = order[static_cast<size_t>(i)];
+	}
+	const int lower = n + 1;
+	for (int i = count - 2; i >= 0; i--) {
+		while (n >= lower && turn(chain[static_cast<size_t>(n - 2)], chain[static_cast<size_t>(n - 1)], order[static_cast<size_t>(i)]) <= 1e-7F)
+			n--;
+		chain[static_cast<size_t>(n++)] = order[static_cast<size_t>(i)];
+	}
+	n--;
+	for (int i = 0; i < n && i < MaxShadeCorners; i++)
+		hull[i] = chain[static_cast<size_t>(i)];
+	return std::min(n, MaxShadeCorners);
+}
+
+/** @brief The rows a shadow is drawn in up a wall. */
+constexpr int WallRows = 4;
+/**
+ * @brief A shadow goes no higher up a wall than its face stands, fading out over the last part of that. The face is as
+ * high as the wall tile's pictures reach up the screen from its foot, less the wall's top, which the pictures show too.
+ */
+constexpr float WallLedge = 0.8F;
+constexpr float WallFade = 0.5F;
+constexpr float WallLeastTall = 0.5F;
+constexpr float WallMostTall = 3.5F;
+/** @brief The most wall tiles side by side one shadow goes up. */
+constexpr int WallSpan = 5;
+/** @brief A wall's face stands a little in front of its tile's edge: the shadow starts this far (tiles) below the edge. */
+constexpr float WallFootDrop = 0.03F;
+
+/**
+ * @brief The part of a body's shadow that falls on a wall: where the floor ends at a wall turned to the view, the rest
+ * of the shadow goes on up the wall's face instead of stopping at its foot. It is cut into the part on each wall tile,
+ * drawn right after that tile's own pictures (so behind everything standing in front of the wall).
+ */
+struct WallShade {
+	/** @brief The last of the wall tile's draws. */
+	size_t after;
+	SDL_Texture *texture;
+	/** @brief Its rows of corners up the wall, the left and the right of each. */
+	std::array<SDL_Vertex, WallRows * 2> at;
+};
+
+/** @brief A shadow's part on a wall before it is cut up: it lies over the wall's line from `from` to `to` (tiles along it). */
+struct WallStrip {
+	float from = 0;
+	float to = 0;
+	SDL_Texture *texture = nullptr;
+	std::array<SDL_Vertex, WallRows * 2> at;
+};
+
+std::vector<WallShade> WallShades;
+/** @brief The draw the next of them goes after. */
+size_t NextWallShade = std::numeric_limits<size_t>::max();
+/** @brief The draw the world's drawing has got to (0 before it starts): a wall drawn before that is on screen already. */
+size_t DrawingAt = 0;
+/** @brief The last draw of each dungeon tile's own pictures this frame, made when the first shadow meets a wall. */
+std::vector<int> LastTileDraw;
+/** @brief The top of each dungeon tile's own pictures this frame, in the world buffer. */
+std::vector<int> TileTop;
+bool LastTileDrawKnown = false;
+
+int LastDrawOfTile(Point tile)
+{
+	if (!LastTileDrawKnown) {
+		LastTileDraw.assign(static_cast<size_t>(MAXDUNX) * MAXDUNY, -1);
+		TileTop.assign(static_cast<size_t>(MAXDUNX) * MAXDUNY, std::numeric_limits<int>::max());
+		for (size_t i = FloorEnd; i < Draws.size(); i++) {
+			const Draw &draw = Draws[i];
+			if (draw.kind != DrawKind::Tile || !draw.hasTile || !InDungeonBounds(draw.cell))
+				continue;
+			const size_t cell = static_cast<size_t>(draw.cell.x) * MAXDUNY + draw.cell.y;
+			LastTileDraw[cell] = static_cast<int>(i);
+			TileTop[cell] = std::min(TileTop[cell], draw.y);
+		}
+		LastTileDrawKnown = true;
+	}
+	return InDungeonBounds(tile) ? LastTileDraw[static_cast<size_t>(tile.x) * MAXDUNY + tile.y] : -1;
+}
+
+/** @brief How high a wall tile's face stands, in tiles (see WallLedge); 0 where the tile isn't drawn. */
+float WallTallOf(Point tile, bool facesX)
+{
+	if (LastDrawOfTile(tile) < 0)
+		return 0;
+	// The middle of the wall's foot.
+	float bx;
+	float by;
+	BufferOf(static_cast<float>(tile.x) - (facesX ? 0.5F : 0.F), static_cast<float>(tile.y) - (facesX ? 0.F : 0.5F), bx, by);
+	const float top = static_cast<float>(TileTop[static_cast<size_t>(tile.x) * MAXDUNY + tile.y]);
+	return std::clamp((by - top) * RisePerPixel - WallLedge, WallLeastTall, WallMostTall);
+}
+
+void DrawWallShade(SDL_Renderer *renderer, const WallShade &shade)
+{
+	std::array<int, (WallRows - 1) * 6> indices;
+	int used = 0;
+	for (int r = 0; r + 1 < WallRows; r++) {
+		const int corner = r * 2;
+		for (const int v : { corner, corner + 1, corner + 3, corner, corner + 3, corner + 2 })
+			indices[static_cast<size_t>(used++)] = v;
+	}
+	SDL_RenderGeometry(renderer, shade.texture, shade.at.data(), static_cast<int>(shade.at.size()), indices.data(), used);
+}
+
+/** @brief Draws the shadows on walls that go after a draw (WallShade::after). */
+void DrawWallShadesAfter(SDL_Renderer *renderer, size_t index)
+{
+	if (index != NextWallShade)
+		return;
+	NextWallShade = std::numeric_limits<size_t>::max();
+	for (size_t i = 0; i < WallShades.size();) {
+		if (WallShades[i].after == index) {
+			DrawWallShade(renderer, WallShades[i]);
+			WallShades[i] = WallShades.back();
+			WallShades.pop_back();
+			continue;
+		}
+		NextWallShade = std::min(NextWallShade, WallShades[i].after);
+		i++;
+	}
+}
+
+/**
+ * @brief Hands a shadow's part on a wall to each wall tile it lies on, cut at the tiles' ends, to be drawn with that
+ * tile. (Cut as shapes, not with a clip: the parts on tiles side by side then meet without a seam.)
+ */
+void AddWallShade(SDL_Renderer *renderer, const WallHit &hit, const WallStrip &strip)
+{
+	const float span = strip.to - strip.from;
+	if (strip.texture == nullptr || std::abs(span) < 1e-3F)
+		return;
+	const int first = static_cast<int>(std::floor(std::min(strip.from, strip.to) + 0.5F));
+	const int last = std::min(static_cast<int>(std::floor(std::max(strip.from, strip.to) + 0.5F)), first + WallSpan - 1);
+	const int across = static_cast<int>(std::floor(hit.at + 1.F));
+	for (int along = first; along <= last; along++) {
+		const Point tile = hit.facesX ? Point { across, along } : Point { along, across };
+		const BackWalls walls = BackWallsOf(tile);
+		if (!(hit.facesX ? walls.left : walls.right))
+			continue;
+		const int after = LastDrawOfTile(tile);
+		if (after < 0)
+			continue;
+		// The share of the way across the strip at which the tile starts and ends.
+		float a = std::clamp((static_cast<float>(along) - 0.5F - strip.from) / span, 0.F, 1.F);
+		float b = std::clamp((static_cast<float>(along) + 0.5F - strip.from) / span, 0.F, 1.F);
+		if (a > b)
+			std::swap(a, b);
+		if (b - a < 1e-4F)
+			continue;
+		WallShade shade;
+		shade.after = static_cast<size_t>(after);
+		shade.texture = strip.texture;
+		for (size_t r = 0; r < WallRows; r++) {
+			const SDL_Vertex &left = strip.at[r * 2];
+			const SDL_Vertex &right = strip.at[r * 2 + 1];
+			const auto between = [&](float t) {
+				return SDL_Vertex {
+					{ left.position.x + (right.position.x - left.position.x) * t, left.position.y + (right.position.y - left.position.y) * t },
+					{ 0, 0, 0, static_cast<Uint8>(static_cast<float>(left.color.a) + (static_cast<float>(right.color.a) - static_cast<float>(left.color.a)) * t + 0.5F) },
+					{ left.tex_coord.x + (right.tex_coord.x - left.tex_coord.x) * t, left.tex_coord.y + (right.tex_coord.y - left.tex_coord.y) * t },
+				};
+			};
+			shade.at[r * 2] = between(a);
+			shade.at[r * 2 + 1] = between(b);
+		}
+		if (shade.after < DrawingAt) {
+			DrawWallShade(renderer, shade);
+			continue;
+		}
+		WallShades.push_back(shade);
+		NextWallShade = std::min(NextWallShade, shade.after);
+	}
+}
+
+/** @brief Which of a body's shadows a call draws (DrawCasterShadows). */
+enum class CastWhat : uint8_t {
+	/** All of them, straight onto the floor. */
+	All,
+	/** The shade at its feet, and the shadows of the lights whose shadows aren't joined (Joins). */
+	Feet,
+	/** One light's shadow, as cover: white added up on that light's picture of the floor it can't reach (JoinedShadows). */
+	Cover,
+};
+
+/** @brief What a call of DrawCasterShadows draws, and for cover, where on the floor it drew. */
+struct CastPass {
+	CastWhat what = CastWhat::All;
+	/** The light whose shadow is drawn as cover (light::ShadowLight::source). */
+	int source = -1;
+	/** The lights on the body, where they are known already. */
+	const LightsOn *on = nullptr;
+	/** The floor the cover drawn so far lies on, in tiles. */
+	float x0 = std::numeric_limits<float>::max();
+	float y0 = std::numeric_limits<float>::max();
+	float x1 = std::numeric_limits<float>::lowest();
+	float y1 = std::numeric_limits<float>::lowest();
+
+	void grow(float x, float y)
+	{
+		x0 = std::min(x0, x);
+		y0 = std::min(y0, y);
+		x1 = std::max(x1, x);
+		y1 = std::max(y1, y);
+	}
+};
+
+/**
+ * @brief Whether a light's shadows are joined into one: two things in one light's way don't make the floor behind both
+ * darker than one does. The lava's and the sky's light stand for many lights, placed for each body by itself.
+ */
+bool Joins(const light::ShadowLight &source)
+{
+	return source.source >= 0;
+}
+
+/** @brief Whether a body casts shadows where it stands (`wx`, `wy`). */
+bool CastsShadows(const Draw &draw, float &wx, float &wy)
+{
+	float gx;
+	float gy;
+	GroundOf(draw, gx, gy);
+	WorldOf(gx, gy, wx, wy);
+	// As the game hides a light inside a wall, a monster inside one doesn't give itself away by its shadow. (In town
+	// Griswold stands behind his counter, on a solid tile.)
+	const Point tile { static_cast<int>(std::floor(wx + 0.5F)), static_cast<int>(std::floor(wy + 0.5F)) };
+	return InDungeonBounds(tile) && (leveltype == DTYPE_TOWN || !TileHasAny(tile, TileProperties::Solid));
+}
+
+/**
+ * @brief The shadows a hero, monster or solid object casts on the floor: one away from each of the strongest lights on it, its body
  * as that light sees it laid on the floor (see ViewLean and the notes before it), and the spot under its feet from a
  * light hanging right over it (its own) and from the light bouncing in under it.
  */
-void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical)
+void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical, CastPass *pass = nullptr)
 {
+	const CastWhat what = pass != nullptr ? pass->what : CastWhat::All;
+	const bool cover = what == CastWhat::Cover;
+	// Cover is drawn on a picture the size of the world's, not on the screen.
+	const float placing = cover ? 1.F : toLogical;
 	float gx;
 	float gy;
 	GroundOf(draw, gx, gy);
 	float wx;
 	float wy;
-	WorldOf(gx, gy, wx, wy);
-	// As the game hides a light inside a wall, a monster inside one doesn't give itself away by its shadow. (In town
-	// Griswold stands behind his counter, on a solid tile.)
-	const Point tile { static_cast<int>(std::floor(wx + 0.5F)), static_cast<int>(std::floor(wy + 0.5F)) };
-	if (!InDungeonBounds(tile) || (leveltype != DTYPE_TOWN && TileHasAny(tile, TileProperties::Solid)))
+	if (!CastsShadows(draw, wx, wy))
 		return;
-	std::array<light::ShadowLight, 3> lights;
-	light::ShadowLight overhead;
-	const int count = light::ShadowLights(wx, wy, lights.data(), static_cast<int>(lights.size()), overhead);
+	const LightsOn &on = pass != nullptr && pass->on != nullptr ? *pass->on : LightsOnPoint(wx, wy);
+	const std::array<light::ShadowLight, 3> &lights = on.lights;
+	const light::ShadowLight &overhead = on.overhead;
+	const int count = on.count;
 	const float here = light::LinearAt(wx, wy);
 	if (here <= 1e-4F)
 		return;
@@ -2719,20 +3333,50 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 	const float pad = static_cast<float>(CastPad);
 	const float feet = h - 1 - HalfTileHeight;
 	// Heights in the picture, in tiles per game pixel.
-	constexpr float HeightPerPixel = 1.F / (ViewLean * TileAcross);
+	// A hero or monster is drawn as a flat figure standing at its feet. An object is a block seen from above: its
+	// picture shows its top as well as its sides, so it is lower and narrower than its picture, and the side of it away
+	// from a light, where its shadow starts, lies behind its middle.
+	const bool object = IsObject(draw.caster);
+	const float HeightPerPixel = (object ? ObjectHeightShare : 1.F) / (ViewLean * TileAcross);
 	const float tall = std::max(feet - static_cast<float>(raster.bodyTop), 1.F) * HeightPerPixel;
+	// How wide the body is across the light, and for an object where its base lies (FootprintOf).
+	const Footprint foot = object ? FootprintOf(raster) : Footprint {};
+	const float bodyWidth = foot.bodyWidth;
+	const float middleX = foot.middleX;
+	const float middleY = foot.middleY;
+	const float halfX = foot.halfX;
+	const float halfY = foot.halfY;
+	const float boxTall = foot.boxTall;
+	const bool block = draw.caster == Caster::ObjectBlock;
+	// A block's base on the floor, corner by corner.
+	const float baseX = wx + middleX;
+	const float baseY = wy + middleY;
+	const std::array<SDL_FPoint, 4> base { { { baseX - halfX, baseY - halfY }, { baseX + halfX, baseY - halfY }, { baseX + halfX, baseY + halfY }, { baseX - halfX, baseY + halfY } } };
+	const float acrossShare = object ? ObjectWidthShare : 1.F;
 
-	if (BlobTexture != nullptr) {
+	if (cover) {
+		// Only the light's own shadow.
+	} else if (block) {
+		// Round a block's base: the bounced light it keeps off the floor beside it, on every side, and some of a light
+		// right overhead.
+		float removed = FootShade * (leveltype == DTYPE_TOWN ? SkyShade : BounceShare) * here;
+		if (overhead.strength > 0)
+			removed += (1 - overhead.fill) * light::ToLinear(overhead.strength) * 0.5F;
+		const float alpha = ShadowAlpha(here, removed);
+		const std::array<float, 4> alphas { alpha, alpha, alpha, alpha };
+		const std::array<float, 4> feathers { BlockSkirt, BlockSkirt, BlockSkirt, BlockSkirt };
+		DrawFloorShade(renderer, base.data(), alphas.data(), feathers.data(), 4, alpha, toLogical);
+	} else if (BlobTexture != nullptr) {
 		// Under the feet: the bounced light the body keeps off the floor, and the shadow of a light right overhead, its
 		// body laid straight down (wider the nearer the light) with an edge as soft as the light is wide.
 		float removed = FootShade * (leveltype == DTYPE_TOWN ? SkyShade : BounceShare) * here;
-		float across = BodyWidth * 2;
+		float across = bodyWidth * 2;
 		if (overhead.strength > 0) {
 			const float lightHeight = std::max(overhead.height, 0.1F);
 			const float middle = std::min(tall / 2, lightHeight * 0.8F);
-			const float core = BodyWidth * lightHeight / (lightHeight - middle);
+			const float core = bodyWidth * lightHeight / (lightHeight - middle);
 			const float edge = overhead.size * middle / (lightHeight - middle);
-			across = std::max(core + edge, BodyWidth * 2);
+			across = std::max(core + edge, bodyWidth * 2);
 			removed += (1 - overhead.fill) * light::ToLinear(overhead.strength) * core / across;
 		}
 		const float alpha = ShadowAlpha(here, removed);
@@ -2755,18 +3399,90 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 	constexpr int Rows = CastBands + 2;
 	for (int n = 0; n < count; n++) {
 		const light::ShadowLight &source = lights[n];
-		float dx = wx - source.x;
-		float dy = wy - source.y;
-		const float distance = std::sqrt(dx * dx + dy * dy);
-		if (distance < 1e-3F)
+		if ((cover && source.source != pass->source) || (what == CastWhat::Feet && Joins(source)))
 			continue;
-		dx /= distance;
-		dy /= distance;
+		const float mx = wx + middleX;
+		const float my = wy + middleY;
+		float dx = mx - source.x;
+		float dy = my - source.y;
+		const float toMiddle = std::sqrt(dx * dx + dy * dy);
+		if (toMiddle < 1e-3F)
+			continue;
+		dx /= toMiddle;
+		dy /= toMiddle;
+		if (block) {
+			// A block's shadow is the floor its base and its top hide from the light: the base itself, the top as the
+			// light throws it on the floor (each corner of the base moved straight away from the light, the further the
+			// lower the light), and all between. So it starts exactly at the base's edges, whichever way the light lies.
+			// A light over the block (a fireball flying across a sarcophagus) is above its top, whatever height it is given:
+			// it can't be inside it. It rises to there as it comes over the base's edge, so the shadow never jumps.
+			const float outsideX = std::max(std::abs(source.x - baseX) - halfX, 0.F);
+			const float outsideY = std::max(std::abs(source.y - baseY) - halfY, 0.F);
+			const float over = 1 - std::min(std::sqrt(outsideX * outsideX + outsideY * outsideY) / BlockOverEdge, 1.F);
+			const float lightHeight = std::max({ source.height, 0.05F, (boxTall + BlockOverRise) * over });
+			const float limit = RoomFor(mx, my, dx, dy, std::clamp(source.reach - toMiddle, 0.F, CastReach));
+			if (limit < 0.05F)
+				continue;
+			const float atBody = light::LinearOf(source, wx, wy);
+			const float narrow = 2 * std::min(halfX, halfY);
+			std::array<SDL_FPoint, MaxShadeCorners> points;
+			std::array<float, MaxShadeCorners> alphas;
+			std::array<float, MaxShadeCorners> feathers;
+			const auto darkAt = [&](const SDL_FPoint &at, float kept) {
+				return CastAlphaAt(source, at.x, at.y, kept, atBody);
+			};
+			for (size_t i = 0; i < 4; i++) {
+				const float ex = base[i].x - source.x;
+				const float ey = base[i].y - source.y;
+				const float away = std::sqrt(ex * ex + ey * ey);
+				// A light no higher than the block throws its top as far as the light reaches.
+				float thrown = lightHeight > boxTall * 1.02F ? away * boxTall / (lightHeight - boxTall) : limit;
+				thrown = std::min(thrown, limit);
+				points[i] = base[i];
+				alphas[i] = cover ? 1.F : darkAt(base[i], 1.F);
+				feathers[i] = BlockEdge;
+				points[i + 4] = away > 1e-3F ? SDL_FPoint { base[i].x + ex / away * thrown, base[i].y + ey / away * thrown } : base[i];
+				// The light's width seen past the block's top edge: the soft edge, and a light wider than the block
+				// gets round it.
+				const float toTop = std::sqrt(away * away + (lightHeight - boxTall) * (lightHeight - boxTall));
+				const float pastTop = std::sqrt(thrown * thrown + boxTall * boxTall);
+				const float penumbra = source.size * pastTop / std::max(toTop, 0.05F);
+				const float kept = penumbra > narrow ? narrow / penumbra : 1.F;
+				alphas[i + 4] = cover ? kept : darkAt(points[i + 4], kept);
+				feathers[i + 4] = std::clamp(std::max(penumbra, BlockOverSoft * over), BlockLeastSoft, BlockMostSoft);
+			}
+			std::array<int, MaxShadeCorners> hull;
+			const int corners = FloorHull(points.data(), MaxShadeCorners, hull.data());
+			std::array<SDL_FPoint, MaxShadeCorners> shape;
+			std::array<float, MaxShadeCorners> shapeAlphas;
+			std::array<float, MaxShadeCorners> shapeFeathers;
+			for (int i = 0; i < corners; i++) {
+				const auto from = static_cast<size_t>(hull[static_cast<size_t>(i)]);
+				shape[static_cast<size_t>(i)] = points[from];
+				shapeAlphas[static_cast<size_t>(i)] = alphas[from];
+				shapeFeathers[static_cast<size_t>(i)] = feathers[from];
+			}
+			const float middle = cover ? 1.F : darkAt(FloorMiddle(shape.data(), corners), 1.F);
+			DrawFloorShade(renderer, shape.data(), shapeAlphas.data(), shapeFeathers.data(), corners, middle, placing, cover);
+			if (cover) {
+				for (int i = 0; i < corners; i++)
+					pass->grow(shape[static_cast<size_t>(i)].x, shape[static_cast<size_t>(i)].y);
+			}
+			continue;
+		}
+		// Where the shadow starts: under the feet, or just inside a round object's edge away from the light.
+		const float behind = object ? (halfX + halfY) / 2 * ObjectTuck : 0.F;
+		const float distance = toMiddle + behind;
+		const float sx = mx + dx * behind;
+		const float sy = my + dy * behind;
 		const float lightHeight = std::max(source.height, 0.05F);
+		const float atBody = light::LinearOf(source, wx, wy);
 		// As far as the floor goes before a wall, and the light reaches past the body.
-		const float limit = RoomFor(wx, wy, dx, dy, std::clamp(source.reach - distance, 0.F, CastReach));
-		if (limit < 0.05F)
+		WallHit wall;
+		const float limit = RoomFor(sx, sy, dx, dy, std::clamp(source.reach - distance, 0.F, CastReach), &wall);
+		if (limit < 0.05F && !wall.found)
 			continue;
+		const bool upWall = wall.found && atmosphere::Setting(atmosphere::Knob::Walls) > 0;
 		// Each height of the body lands this far out behind the feet. The picture below the floor point the art stands
 		// on is what touches the floor in front of the feet: it stays near them (cast like the body, it would reach far
 		// towards a low light such as lava).
@@ -2786,60 +3502,539 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			const float along = farthest * static_cast<float>(r - 1) / static_cast<float>(CastBands);
 			rowZ[r] = lightHeight * along / (distance + along);
 		}
+		// A hero or monster is a flat picture facing the view. Its shadow is laid out across the light (the body as the
+		// light sees it), but at the floor it has to lie where the picture's own feet are drawn, or it starts beside
+		// them. So the lowest part of the body (up to FeetBlend) is cast from where the view shows it, and turns to the
+		// light's layout above that. The layout keeps the picture's left and right as the view has them, so it mirrors as
+		// a light passes right beside the body: there the two layouts are drawn together, one fading into the other.
+		const float facing = -(dx + dy) * ViewAcross;
+		std::array<float, 2> turns { 1.F, -1.F };
+		std::array<float, 2> weights { 1.F, 0.F };
+		if (!object) {
+			weights[0] = std::clamp(0.5F + facing / (2 * TurnBand), 0.F, 1.F);
+			weights[1] = 1 - weights[0];
+		}
 		std::array<SDL_Vertex, Rows * 2> sharp;
 		std::array<SDL_Vertex, Rows * 2> soft;
-		for (int r = 0; r < Rows; r++) {
-			const float z = rowZ[r];
-			const float along = landsAt(z);
-			const float fx = wx + dx * along;
-			const float fy = wy + dy * along;
-			const float raised = std::max(z, 0.F);
-			// The body as the light sees it: the nearer the light, the wider each height's shadow.
-			const float spread = raised > 0 ? lightHeight / (lightHeight - raised) : 1.F;
-			// The light's width seen past this height of the body, laid on the floor: the soft edge.
-			const float toBody = std::sqrt(distance * distance + (lightHeight - raised) * (lightHeight - raised));
-			const float pastBody = std::sqrt(along * along + raised * raised);
-			const float penumbra = source.size * pastBody / std::max(toBody, 0.05F);
-			// A light wider than the body seen from the floor gets round it, and no spot is wholly out of it.
-			const float kept = penumbra > BodyWidth * spread ? BodyWidth * spread / penumbra : 1.F;
-			const float alpha = CastAlpha(light::LinearAt(fx, fy), light::GlowAt(fx, fy), light::LinearOf(source, fx, fy), source.glow, source.fill, kept);
-			// The soft picture's edge is stretched with the shadow, so it stands for a wider soft edge the more it spreads.
-			const float softness = std::clamp(penumbra / (SoftWidth * spread), 0.F, 1.F);
-			const Uint8 sharpAlpha = ColourByte(alpha * (1 - softness));
-			const Uint8 softAlpha = ColourByte(alpha * softness);
-			const float v = std::clamp((feet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
-			// Across the shadow, square to it on the floor, at a point u (0 to 1) across the pictures.
-			const auto placed = [&](float u) {
-				const float across = (u * texWidth - pad - w / 2) / TileAcross * spread;
-				float bx;
-				float by;
-				BufferOf(fx - dy * across, fy + dx * across, bx, by);
-				return OnScreenAt(bx, by, toLogical);
+		for (size_t layout = 0; layout < turns.size(); layout++) {
+			const float turn = turns[layout];
+			const float weight = weights[layout];
+			if (weight <= 0.004F)
+				continue;
+			for (int r = 0; r < Rows; r++) {
+				const float z = rowZ[r];
+				const float along = landsAt(z);
+				const float fx = sx + dx * along;
+				const float fy = sy + dy * along;
+				const float raised = std::max(z, 0.F);
+				// The body as the light sees it: the nearer the light, the wider each height's shadow.
+				// (Held to MaxSpread: under a flame hardly taller than the body, its head and shoulders would fan out so wide
+				// and thin that no shadow shows at all.)
+				const float spread = raised > 0 ? std::min(lightHeight / (lightHeight - raised), MaxSpread) : 1.F;
+				// The light's width seen past this height of the body, laid on the floor: the soft edge.
+				const float toBody = std::sqrt(distance * distance + (lightHeight - raised) * (lightHeight - raised));
+				const float pastBody = std::sqrt(along * along + raised * raised);
+				const float penumbra = source.size * pastBody / std::max(toBody, 0.05F);
+				// A light wider than the body seen from the floor gets round it, and no spot is wholly out of it.
+				const float kept = penumbra > bodyWidth * spread ? bodyWidth * spread / penumbra : 1.F;
+				const float alpha = weight * (cover ? kept : CastAlphaAt(source, fx, fy, kept, atBody));
+				// The soft picture's edge is stretched with the shadow, so it stands for a wider soft edge the more it spreads.
+				const float softness = std::clamp(penumbra / (SoftWidth * spread), 0.F, MaxSoftness);
+				const Uint8 sharpAlpha = ColourByte(alpha * (1 - softness));
+				const Uint8 softAlpha = ColourByte(alpha * softness);
+				const float v = std::clamp((feet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
+				// Across the shadow, square to it on the floor, at a point u (0 to 1) across the pictures.
+				// How far this height has turned from the view's layout to the light's.
+				const float rise = std::clamp(z / FeetBlend, 0.F, 1.F);
+				const float turned = object ? 1.F : rise * rise * (3 - 2 * rise);
+				// The picture below the feet lies on the floor towards the view, as it is drawn.
+				const float below = z < 0 ? -z / HeightPerPixel / static_cast<float>(TILE_HEIGHT) : 0.F;
+				const auto placed = [&](float u) {
+					const float fromMiddle = (u * texWidth - pad - w / 2) / TileAcross;
+					const float across = fromMiddle * spread * acrossShare * turn;
+					float x = fx - dy * across;
+					float y = fy + dx * across;
+					if (turned < 1) {
+						const float out = z > 0 ? along : 0.F;
+						const float viewX = wx + fromMiddle * ViewAcross + dx * out + below;
+						const float viewY = wy - fromMiddle * ViewAcross + dy * out + below;
+						x = viewX + (x - viewX) * turned;
+						y = viewY + (y - viewY) * turned;
+					}
+					if (cover)
+						pass->grow(x, y);
+					float bx;
+					float by;
+					BufferOf(x, y, bx, by);
+					return OnScreenAt(bx, by, placing);
+				};
+				const Uint8 shade = cover ? 255 : 0;
+				for (int side = 0; side < 2; side++) {
+					const float sharpU = side == 0 ? sharpPart.u0 : sharpPart.u1;
+					const float softU = side == 0 ? softPart.u0 : softPart.u1;
+					sharp[static_cast<size_t>(r) * 2 + side] = SDL_Vertex { placed(sharpU), { shade, shade, shade, sharpAlpha }, { sharpU, v } };
+					soft[static_cast<size_t>(r) * 2 + side] = SDL_Vertex { placed(softU), { shade, shade, shade, softAlpha }, { softU, v } };
+				}
+			}
+			// Only the bands with some shadow at one end or the other: the rest would draw nothing.
+			const auto drawBands = [&](SDL_Texture *texture, const std::array<SDL_Vertex, Rows * 2> &vertices) {
+				std::array<int, (Rows - 1) * 6> indices;
+				int used = 0;
+				for (int r = 0; r + 1 < Rows; r++) {
+					const int corner = r * 2;
+					if (vertices[static_cast<size_t>(corner)].color.a == 0 && vertices[static_cast<size_t>(corner) + 2].color.a == 0)
+						continue;
+					for (const int v : { corner, corner + 1, corner + 3, corner, corner + 3, corner + 2 })
+						indices[static_cast<size_t>(used++)] = v;
+				}
+				if (used > 0)
+					SDL_RenderGeometry(renderer, texture, vertices.data(), static_cast<int>(vertices.size()), indices.data(), used);
 			};
-			for (int side = 0; side < 2; side++) {
-				const float sharpU = side == 0 ? sharpPart.u0 : sharpPart.u1;
-				const float softU = side == 0 ? softPart.u0 : softPart.u1;
-				sharp[static_cast<size_t>(r) * 2 + side] = SDL_Vertex { placed(sharpU), { 0, 0, 0, sharpAlpha }, { sharpU, v } };
-				soft[static_cast<size_t>(r) * 2 + side] = SDL_Vertex { placed(softU), { 0, 0, 0, softAlpha }, { softU, v } };
+			if (cover) {
+				SDL_SetTextureBlendMode(raster.castTexture, SDL_BLENDMODE_ADD);
+				SDL_SetTextureBlendMode(raster.castSoft, SDL_BLENDMODE_ADD);
+			}
+			drawBands(raster.castTexture, sharp);
+			drawBands(raster.castSoft, soft);
+			if (cover) {
+				SDL_SetTextureBlendMode(raster.castTexture, SDL_BLENDMODE_BLEND);
+				SDL_SetTextureBlendMode(raster.castSoft, SDL_BLENDMODE_BLEND);
+			}
+			if (!upWall)
+				continue;
+			// The rest of the shadow goes up the wall. Each side of the body, as the light sees it across the shadow's
+			// start, is thrown on to the wall's line: the part of it that would land past the wall's foot stands on the
+			// wall instead, as high as the light's ray over that height of the body meets it.
+			std::array<WallStrip, 2> strips;
+			strips[0].texture = raster.castTexture;
+			strips[1].texture = raster.castSoft;
+			// The wall's height where the middle of the shadow meets it.
+			const float toWall = wall.facesX ? wall.at - source.x : wall.at - source.y;
+			const float toStart = wall.facesX ? sx - source.x : sy - source.y;
+			float wallTall = 0;
+			if (toStart < -0.02F && toWall < -0.02F) {
+				const float times = std::max(toWall / toStart, 1.F);
+				const int along = static_cast<int>(std::floor((wall.facesX ? source.y + (sy - source.y) * times : source.x + (sx - source.x) * times) + 0.5F));
+				const int across = static_cast<int>(std::floor(wall.at + 1.F));
+				wallTall = WallTallOf(wall.facesX ? Point { across, along } : Point { along, across }, wall.facesX);
+			}
+			bool meets = wallTall > 0;
+			for (int side = 0; side < 2 && meets; side++) {
+				for (int strip = 0; strip < 2; strip++) {
+					const float u = strip == 0 ? (side == 0 ? sharpPart.u0 : sharpPart.u1) : (side == 0 ? softPart.u0 : softPart.u1);
+					const float across = (u * texWidth - pad - w / 2) / TileAcross * acrossShare * turn;
+					const float ex = sx - dy * across - source.x;
+					const float ey = sy + dx * across - source.y;
+					const float toSide = wall.facesX ? ex : ey;
+					if (toSide > -0.02F) {
+						meets = false;
+						break;
+					}
+					// How many times as far from the light as the body the wall is, along this ray.
+					const float times = std::max(toWall / toSide, 1.F);
+					const float qx = source.x + ex * times;
+					const float qy = source.y + ey * times;
+					(side == 0 ? strips[static_cast<size_t>(strip)].from : strips[static_cast<size_t>(strip)].to) = wall.facesX ? qy : qx;
+					float bx;
+					float by;
+					BufferOf(qx, qy, bx, by);
+					const SDL_FPoint foot = OnScreenAt(bx, by, toLogical);
+					// The light there, taken just in front of the wall.
+					const float lx = qx + (wall.facesX ? 0.15F : 0.F);
+					const float ly = qy + (wall.facesX ? 0.F : 0.15F);
+					const float penumbra = source.size * (times - 1);
+					const float kept = penumbra > bodyWidth * times ? bodyWidth * times / penumbra : 1.F;
+					const float dark = weight * CastAlphaAt(source, lx, ly, kept, atBody);
+					const float softness = std::clamp(penumbra / (SoftWidth * times), 0.F, MaxSoftness);
+					// From the height whose shadow lands at the wall's foot to the body's top (or as high as the wall's shadow goes).
+					const float lowZ = lightHeight * (1 - 1 / times);
+					const float topOnWall = lightHeight - (lightHeight - topZ) * times;
+					const float endZ = topOnWall > wallTall ? lightHeight - (lightHeight - wallTall) / times : topZ;
+					for (int r = 0; r < WallRows; r++) {
+						const float z = lowZ + std::max(endZ - lowZ, 0.F) * static_cast<float>(r) / static_cast<float>(WallRows - 1);
+						const float up = std::clamp(lightHeight - (lightHeight - z) * times, 0.F, wallTall);
+						const float fade = std::clamp((wallTall - up) / WallFade, 0.F, 1.F);
+						const float v = std::clamp((feet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
+						const SDL_FPoint at { foot.x, foot.y - (r == 0 ? -WallFootDrop : up) / RisePerPixel * Scale * toLogical };
+						const Uint8 alpha = ColourByte(dark * fade * (strip == 0 ? 1 - softness : softness));
+						strips[static_cast<size_t>(strip)].at[static_cast<size_t>(r) * 2 + side] = SDL_Vertex { at, { 0, 0, 0, alpha }, { u, v } };
+					}
+				}
+			}
+			if (meets) {
+				AddWallShade(renderer, wall, strips[0]);
+				AddWallShade(renderer, wall, strips[1]);
 			}
 		}
-		// Only the bands with some shadow at one end or the other: the rest would draw nothing.
-		const auto drawBands = [&](SDL_Texture *texture, const std::array<SDL_Vertex, Rows * 2> &vertices) {
-			std::array<int, (Rows - 1) * 6> indices;
-			int used = 0;
-			for (int r = 0; r + 1 < Rows; r++) {
-				const int corner = r * 2;
-				if (vertices[static_cast<size_t>(corner)].color.a == 0 && vertices[static_cast<size_t>(corner) + 2].color.a == 0)
-					continue;
-				for (const int v : { corner, corner + 1, corner + 3, corner, corner + 3, corner + 2 })
-					indices[static_cast<size_t>(used++)] = v;
-			}
-			if (used > 0)
-				SDL_RenderGeometry(renderer, texture, vertices.data(), static_cast<int>(vertices.size()), indices.data(), used);
-		};
-		drawBands(raster.castTexture, sharp);
-		drawBands(raster.castSoft, soft);
 	}
+}
+
+/** @brief One light's picture of the floor it can't reach (JoinedShadows), as big as the world's picture. */
+SDL_Texture *ShadeTexture = nullptr;
+Size ShadeTextureSize;
+bool ShadeFailed = false;
+/**
+ * @brief The part of the picture the last light's shadows were drawn on, wiped before the next light's (wiping the whole
+ * picture for every light costs more than drawing the shadows); all of it while `ShadeUsedAll`.
+ */
+SDL_FRect ShadeUsed { 0, 0, 0, 0 };
+bool ShadeUsedAll = true;
+
+/** @brief Makes the picture the joined shadows are added up on; false where the renderer can't draw to one or blend it on. */
+bool EnsureShade(SDL_Renderer *renderer, Size size)
+{
+	if (ShadeTextureSize == size && (ShadeTexture != nullptr || ShadeFailed))
+		return ShadeTexture != nullptr;
+	if (ShadeTexture != nullptr)
+		SDL_DestroyTexture(ShadeTexture);
+	ShadeTexture = nullptr;
+	ShadeTextureSize = size;
+	ShadeFailed = true;
+	if (size.width <= 0 || size.height <= 0 || !SDL_RenderTargetSupported(renderer))
+		return false;
+	// The floor keeps what the picture's white leaves of it.
+	static const SDL_BlendMode Darken = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_COLOR, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE_MINUS_SRC_COLOR, SDL_BLENDOPERATION_ADD);
+	SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, size.width, size.height);
+	if (texture == nullptr)
+		return false;
+	if (SDL_SetTextureBlendMode(texture, Darken) != 0) {
+		SDL_DestroyTexture(texture);
+		return false;
+	}
+	SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
+	ShadeTexture = texture;
+	ShadeFailed = false;
+	ShadeUsedAll = true;
+	return true;
+}
+
+/** @brief A body that casts shadows this frame, where it stands, and the lights on it. */
+struct CastJob {
+	size_t draw;
+	float x;
+	float y;
+	LightsOn on;
+};
+
+/** @brief A solid object in the lights' way this frame: its base's middle and half sides, and its height (tiles). */
+struct Blocker {
+	size_t draw;
+	float x;
+	float y;
+	float halfX;
+	float halfY;
+	float tall;
+};
+
+/** @brief How tall a hero or monster is taken to be where it stands in an object's shadow, in tiles. */
+constexpr float BodyTall = 1.4F;
+/** @brief The least of its light a body keeps in an object's shadow, and the hero being played (who must always be easy to see). */
+constexpr float LeastKept = 0.35F;
+constexpr float HeroLeastKept = 0.6F;
+
+/**
+ * @brief How much of each draw's light is left where it stands in an object's shadow (1 where it stands in none), at its
+ * foot and at its top, with this frame's joined shadows: a barrel behind a sarcophagus is as dark as the floor it
+ * stands on, and a hero behind one has his legs in its shadow and his head in the light.
+ */
+struct Kept {
+	float foot = 1;
+	float top = 1;
+};
+std::vector<Kept> ShadeKept;
+
+/** @brief How much of a body an object hides from a light: the share of its width, and how far up it the shadow reaches (0 to 1). */
+struct Hidden {
+	float across = 0;
+	float up = 0;
+};
+
+/**
+ * @brief How much of a body (at `cx`, `cy`, `width` across and `tall` high) an object hides from a light: the share of
+ * its width behind the object as the light sees it, and the share of its height below the line from the light over the
+ * object's top.
+ */
+Hidden HiddenBy(const light::ShadowLight &source, const Blocker &blocker, float cx, float cy, float width, float tall)
+{
+	// A light over the object lights all round it. A big object is drawn from each tile it covers: it doesn't hide itself.
+	if (std::abs(source.x - blocker.x) < blocker.halfX && std::abs(source.y - blocker.y) < blocker.halfY)
+		return {};
+	if (std::abs(cx - blocker.x) < blocker.halfX && std::abs(cy - blocker.y) < blocker.halfY)
+		return {};
+	float ux = cx - source.x;
+	float uy = cy - source.y;
+	const float away = std::sqrt(ux * ux + uy * uy);
+	if (away < 0.05F)
+		return {};
+	ux /= away;
+	uy /= away;
+	float nearest = std::numeric_limits<float>::max();
+	float farthest = std::numeric_limits<float>::lowest();
+	float low = std::numeric_limits<float>::max();
+	float high = std::numeric_limits<float>::lowest();
+	for (int corner = 0; corner < 4; corner++) {
+		const float ex = blocker.x + (corner == 1 || corner == 2 ? blocker.halfX : -blocker.halfX) - source.x;
+		const float ey = blocker.y + (corner >= 2 ? blocker.halfY : -blocker.halfY) - source.y;
+		const float along = ex * ux + ey * uy;
+		nearest = std::min(nearest, along);
+		farthest = std::max(farthest, along);
+		// Where the corner's edge of the shadow passes the body.
+		const float beside = (ey * ux - ex * uy) * away / std::max(along, 0.05F);
+		low = std::min(low, beside);
+		high = std::max(high, beside);
+	}
+	if (nearest >= away || farthest <= 0)
+		return {};
+	const float covered = std::clamp((std::min(high, width / 2) - std::max(low, -width / 2)) / width, 0.F, 1.F);
+	if (covered <= 0)
+		return {};
+	const float lightHeight = std::max(source.height, 0.05F);
+	const float top = lightHeight - (lightHeight - blocker.tall) * away / std::max(std::min(farthest, away), 0.05F);
+	return { covered, std::clamp(top / tall, 0.F, 1.F) };
+}
+
+/** @brief Dims a draw's light to what is left of it in another body's shadow (ShadeKept), from its foot to its top. */
+void Dim(Shading &shading, const Kept &kept)
+{
+	if (!shading.fades) {
+		shading.top = shading.colours;
+		shading.fades = true;
+	}
+	for (int s = 0; s < shading.count; s++) {
+		for (int c = 0; c < 3; c++) {
+			shading.colours[static_cast<size_t>(s)][static_cast<size_t>(c)] *= kept.foot;
+			shading.top[static_cast<size_t>(s)][static_cast<size_t>(c)] *= kept.top;
+		}
+	}
+}
+
+/** @brief A light and the bodies in its way this frame. */
+struct ShadeGroup {
+	light::ShadowLight light;
+	/** The light where the body it is strongest on stands (see CastAlpha). */
+	float atBody = 0;
+	std::vector<size_t> jobs;
+};
+
+/** @brief The most a joined shadow's picture is cut into across, where it takes the light's share of the floor's light. */
+constexpr int ShadeSteps = 16;
+
+/** @brief The part of the joined shadows' picture that the floor from `x0`, `y0` to `x1`, `y1` (tiles) lies on, kept inside the picture. */
+SDL_FRect ShadeRect(float x0, float y0, float x1, float y1)
+{
+	float left = std::numeric_limits<float>::max();
+	float top = std::numeric_limits<float>::max();
+	float right = std::numeric_limits<float>::lowest();
+	float bottom = std::numeric_limits<float>::lowest();
+	for (const SDL_FPoint corner : { SDL_FPoint { x0, y0 }, SDL_FPoint { x1, y0 }, SDL_FPoint { x1, y1 }, SDL_FPoint { x0, y1 } }) {
+		float bx;
+		float by;
+		BufferOf(corner.x, corner.y, bx, by);
+		const SDL_FPoint in = OnScreenAt(bx, by, 1.F);
+		left = std::min(left, in.x);
+		right = std::max(right, in.x);
+		top = std::min(top, in.y);
+		bottom = std::max(bottom, in.y);
+	}
+	left = std::max(std::floor(left), 0.F);
+	top = std::max(std::floor(top), 0.F);
+	right = std::min(std::ceil(right), static_cast<float>(ShadeTextureSize.width));
+	bottom = std::min(std::ceil(bottom), static_cast<float>(ShadeTextureSize.height));
+	return SDL_FRect { left, top, std::max(right - left, 0.F), std::max(bottom - top, 0.F) };
+}
+
+/**
+ * @brief Darkens the floor by one light's joined shadows: its picture of the floor it can't reach (white where a body
+ * is in its way), each point as dark as that light's share of the light there (CastAlphaAt), over the part `rect` of
+ * the picture (ShadeRect).
+ */
+void DrawShade(SDL_Renderer *renderer, const ShadeGroup &group, const SDL_FRect &rect, float toLogical)
+{
+	const float left = rect.x;
+	const float top = rect.y;
+	const float right = rect.x + rect.w;
+	const float bottom = rect.y + rect.h;
+	const float pictureWidth = static_cast<float>(ShadeTextureSize.width);
+	const float pictureHeight = static_cast<float>(ShadeTextureSize.height);
+	if (right - left < 1 || bottom - top < 1)
+		return;
+	const float least = HalfTileWidth * Scale;
+	const int across = std::clamp(static_cast<int>(std::ceil((right - left) / least)), 1, ShadeSteps);
+	const int down = std::clamp(static_cast<int>(std::ceil((bottom - top) / least)), 1, ShadeSteps);
+	std::array<SDL_Vertex, (ShadeSteps + 1) * (ShadeSteps + 1)> vertices;
+	std::array<int, ShadeSteps * ShadeSteps * 6> indices;
+	bool any = false;
+	for (int j = 0; j <= down; j++) {
+		for (int i = 0; i <= across; i++) {
+			const float px = left + (right - left) * static_cast<float>(i) / static_cast<float>(across);
+			const float py = top + (bottom - top) * static_cast<float>(j) / static_cast<float>(down);
+			float x;
+			float y;
+			WorldOf((px - ViewportOffsetX) / Scale, py / Scale, x, y);
+			const float dark = CastAlphaAt(group.light, x, y, 1.F, group.atBody);
+			any = any || dark > 0.004F;
+			const Uint8 shade = ColourByte(dark);
+			vertices[static_cast<size_t>(j * (across + 1) + i)] = SDL_Vertex { { px * toLogical, py * toLogical }, { shade, shade, shade, 255 },
+				{ px / pictureWidth, py / pictureHeight } };
+		}
+	}
+	if (!any)
+		return;
+	int used = 0;
+	for (int j = 0; j < down; j++) {
+		for (int i = 0; i < across; i++) {
+			const int corner = j * (across + 1) + i;
+			for (const int v : { corner, corner + 1, corner + across + 2, corner, corner + across + 2, corner + across + 1 })
+				indices[static_cast<size_t>(used++)] = v;
+		}
+	}
+	SDL_RenderGeometry(renderer, ShadeTexture, vertices.data(), (across + 1) * (down + 1), indices.data(), used);
+}
+
+/**
+ * @brief Draws every body's shadows on the floor, the shadows of one light joined into one.
+ *
+ * A shadow is the floor a light can't reach. Two bodies in one light's way don't make the floor behind both darker
+ * than one does, and a body standing in another's shadow adds none of its own from that light. Drawn one by one, each
+ * shadow darkened the floor again. So for each light the bodies in its way are added up in white on a picture of the
+ * floor (it can't get whiter than white), and that picture darkens the floor once, by that light's share of the light
+ * at each point.
+ * @return False where the renderer can't do that, or feel("joined") is off: each body then draws its own (DrawCasterShadows).
+ */
+bool DrawJoinedShadows(SDL_Renderer *renderer, Size worldSize, float toLogical)
+{
+	if (atmosphere::Setting(atmosphere::Knob::Joined) <= 0 || !EnsureShade(renderer, worldSize))
+		return false;
+	static std::vector<CastJob> jobs;
+	static std::vector<ShadeGroup> groups;
+	jobs.clear();
+	size_t groupCount = 0;
+	for (size_t i = FloorEnd; i < Draws.size(); i++) {
+		const Draw &draw = Draws[i];
+		if (IsOutline(draw.style) || draw.style != SpriteStyle::Normal || draw.caster == Caster::None)
+			continue;
+		float wx;
+		float wy;
+		if (!CastsShadows(draw, wx, wy))
+			continue;
+		jobs.push_back(CastJob { i, wx, wy, LightsOnPoint(wx, wy) });
+		const LightsOn &on = jobs.back().on;
+		for (int n = 0; n < on.count; n++) {
+			const light::ShadowLight &source = on.lights[static_cast<size_t>(n)];
+			if (!Joins(source))
+				continue;
+			size_t g = 0;
+			while (g < groupCount && groups[g].light.source != source.source)
+				g++;
+			if (g == groupCount) {
+				if (groups.size() == groupCount)
+					groups.emplace_back();
+				groups[g].light = source;
+				groups[g].atBody = 0;
+				groups[g].jobs.clear();
+				groupCount++;
+			}
+			groups[g].atBody = std::max(groups[g].atBody, light::LinearOf(source, wx, wy));
+			groups[g].jobs.push_back(jobs.size() - 1);
+		}
+	}
+	// A body standing in an object's shadow is as dark as the floor there.
+	static std::vector<Blocker> blockers;
+	blockers.clear();
+	ShadeKept.assign(Draws.size(), Kept {});
+	const float margin = static_cast<float>(TILE_WIDTH * 3 * Scale) * toLogical;
+	for (const CastJob &job : jobs) {
+		const Draw &draw = Draws[job.draw];
+		if (!IsObject(draw.caster) || !OnScreen(DestOf(draw, toLogical), margin))
+			continue;
+		const Footprint foot = FootprintOf(FallbackRaster(draw, false));
+		blockers.push_back(Blocker { job.draw, job.x + foot.middleX, job.y + foot.middleY, foot.halfX, foot.halfY, foot.boxTall });
+	}
+	for (const CastJob &job : jobs) {
+		if (blockers.empty())
+			break;
+		float cx = job.x;
+		float cy = job.y;
+		float width = BodyWidth;
+		float tall = BodyTall;
+		for (const Blocker &blocker : blockers) {
+			if (blocker.draw != job.draw)
+				continue;
+			cx = blocker.x;
+			cy = blocker.y;
+			width = blocker.halfX + blocker.halfY;
+			tall = blocker.tall;
+		}
+		const float total = light::LinearAt(job.x, job.y);
+		const float glows = light::GlowAt(job.x, job.y);
+		Kept kept;
+		for (int n = 0; n < job.on.count; n++) {
+			const light::ShadowLight &source = job.on.lights[static_cast<size_t>(n)];
+			if (!Joins(source))
+				continue;
+			Hidden hidden;
+			const Blocker *behind = nullptr;
+			for (const Blocker &blocker : blockers) {
+				const Hidden by = HiddenBy(source, blocker, cx, cy, width, tall);
+				if (by.across * by.up > hidden.across * hidden.up) {
+					hidden = by;
+					behind = &blocker;
+				}
+			}
+			if (hidden.across * hidden.up <= 0)
+				continue;
+			// The shadow reaches `up` of the way up the body: drawn as a fade from its foot to its top that hides as
+			// much of it.
+			// As dark as the floor it stands on, which that object's shadow darkens by the light where the object stands.
+			const float own = light::LinearOf(source, job.x, job.y);
+			const float atBody = std::max(own, light::LinearOf(source, behind->x, behind->y));
+			kept.foot *= 1 - CastAlpha(total, glows, own, source.glow, source.fill, hidden.across * std::min(hidden.up * 2, 1.F), atBody);
+			kept.top *= 1 - CastAlpha(total, glows, own, source.glow, source.fill, hidden.across * std::max(hidden.up * 2 - 1, 0.F), atBody);
+		}
+		const float least = Draws[job.draw].caster == Caster::MyHero ? HeroLeastKept : LeastKept;
+		kept.foot = std::max(kept.foot, least);
+		kept.top = std::max(kept.top, least);
+		ShadeKept[job.draw] = kept;
+	}
+	// The shade at each body's feet, and the shadows that aren't joined.
+	for (const CastJob &job : jobs) {
+		CastPass pass;
+		pass.what = CastWhat::Feet;
+		pass.on = &job.on;
+		DrawCasterShadows(renderer, Draws[job.draw], toLogical, &pass);
+	}
+	SDL_Texture *screen = SDL_GetRenderTarget(renderer);
+	for (size_t g = 0; g < groupCount; g++) {
+		const ShadeGroup &group = groups[g];
+		SDL_SetRenderTarget(renderer, ShadeTexture);
+		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+		if (ShadeUsedAll) {
+			SDL_RenderClear(renderer);
+		} else if (ShadeUsed.w > 0 && ShadeUsed.h > 0) {
+			SDL_BlendMode before = SDL_BLENDMODE_NONE;
+			SDL_GetRenderDrawBlendMode(renderer, &before);
+			SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+			SDL_RenderFillRectF(renderer, &ShadeUsed);
+			SDL_SetRenderDrawBlendMode(renderer, before);
+		}
+		ShadeUsedAll = false;
+		ShadeUsed = SDL_FRect { 0, 0, 0, 0 };
+		CastPass pass;
+		pass.what = CastWhat::Cover;
+		pass.source = group.light.source;
+		for (const size_t job : group.jobs) {
+			pass.on = &jobs[job].on;
+			DrawCasterShadows(renderer, Draws[jobs[job].draw], toLogical, &pass);
+		}
+		SDL_SetRenderTarget(renderer, screen);
+		// With room for the soft edges round the shapes drawn.
+		if (pass.x1 >= pass.x0) {
+			ShadeUsed = ShadeRect(pass.x0 - BlockMostSoft, pass.y0 - BlockMostSoft, pass.x1 + BlockMostSoft, pass.y1 + BlockMostSoft);
+			DrawShade(renderer, group, ShadeUsed, toLogical);
+		}
+	}
+	return true;
 }
 
 /**
@@ -2943,7 +4138,7 @@ Shading PieceLight(Point tile)
 	const Shading right = wall ? WallLight(tile, true) : OpenTileLight(tile, true);
 	Shading shading;
 	shading.count = 3;
-	shading.stops = { 0.F, 0.5F, 1.F };
+	shading.stops = { 0.F, 0.5F, 1.F, 1.F };
 	shading.colours[0] = left.colours[0];
 	for (int c = 0; c < 3; c++)
 		shading.colours[1][c] = (left.colours[1][c] + right.colours[0][c]) / 2;
@@ -3022,6 +4217,262 @@ void FireLightUp(Shading &shading, const Draw &draw, int back)
 	shading.fades = true;
 }
 
+/**
+ * @brief The most and the least of a light a side takes, against the floor beside the object (which the light's table
+ * is made for): a side turned to a low flame takes more of it than the floor it skims over, a side turned away only
+ * what gets round to it.
+ */
+constexpr float ObjectToward = 1.4F;
+constexpr float ObjectAway = 0.25F;
+/** @brief How far round a side a light still reaches (0 only the half turned to it, 1 all the way round). */
+constexpr float ObjectWrap = 0.2F;
+/** @brief How much of the top's light the top of a low object's picture takes; a tall one (a rack, a cross) shows less top. */
+constexpr float ObjectTop = 0.5F;
+constexpr float ObjectLowPixels = 50.F;
+constexpr float ObjectTallPixels = 110.F;
+constexpr float ObjectTallTop = 0.3F;
+/** @brief The height of the middle of an object's sides, in tiles. */
+constexpr float ObjectMiddle = 0.35F;
+/** @brief The body fills only part of its picture: the colours at the picture's edges reach at most this far past the body's. */
+constexpr float ObjectEdgeReach = 2.5F;
+/** @brief How far each way from a block's front corner its light turns from one side's to the other's, against its width. */
+constexpr float ObjectCornerTurn = 0.04F;
+/**
+ * @brief The way each part faces: the left side, the middle (the corner between), the right side, the top. A round
+ * thing's left and right edges are turned further round than a block's sides.
+ */
+using ObjectFacing = std::array<std::array<float, 3>, 4>;
+/** @brief The most ways of facing FacingShades works out at once. */
+constexpr size_t MaxFacings = 6;
+constexpr ObjectFacing RoundFaces { { { -0.38F, 0.92F, 0.F }, { 0.707F, 0.707F, 0.F }, { 0.92F, -0.38F, 0.F }, { 0.F, 0.F, 1.F } } };
+constexpr ObjectFacing BlockFaces { { { 0.F, 1.F, 0.F }, { 0.707F, 0.707F, 0.F }, { 1.F, 0.F, 0.F }, { 0.F, 0.F, 1.F } } };
+
+/**
+ * @brief How much of the light where an object stands each of some ways of facing takes, against the one light the game
+ * gives the whole object (1 is as that; the floor beside it is what the light's table is made for).
+ *
+ * Each of the strongest lights there gives a face more of its light the more the face is turned to it, measured against
+ * the floor under the same light; its bounce and the rest of the room's light fall on every face alike.
+ * @return False where no light with a direction falls on it (or feel("objects") is off): one light for all of it.
+ */
+bool FacingShades(float wx, float wy, const std::array<float, 3> *faces, size_t count, float *shade)
+{
+	const float strength = std::clamp(atmosphere::Setting(atmosphere::Knob::Objects), 0.F, 2.F);
+	const float total = light::LinearAt(wx, wy);
+	const float drawnTotal = light::Drawn(total);
+	if (strength <= 0 || total <= 1e-4F || drawnTotal <= 1e-4F || count > MaxFacings)
+		return false;
+	const LightsOn &on = LightsOnPoint(wx, wy);
+	std::array<float, MaxFacings> taken {};
+	float direct = 0;
+	const auto shine = [&](const light::ShadowLight &source) {
+		// Its bounce (fill) lights every side alike, with the rest of the room's light.
+		const float own = (1 - source.fill) * light::LinearOf(source, wx, wy);
+		if (own <= 0)
+			return;
+		const float dx = source.x - wx;
+		const float dy = source.y - wy;
+		const float dz = std::max(source.height, 0.05F) - ObjectMiddle;
+		const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
+		if (length < 1e-3F)
+			return;
+		direct += own;
+		// How much a face turned this way to the light takes of it, and the floor (which faces up, under the whole
+		// height of the light).
+		const auto takes = [](float facing) { return std::clamp((facing + ObjectWrap) / (1 + ObjectWrap), 0.F, 1.F); };
+		const float floorTakes = std::max(takes(std::max(source.height, 0.05F) / std::sqrt(dx * dx + dy * dy + source.height * source.height + 1e-4F)), 0.1F);
+		for (size_t f = 0; f < count; f++) {
+			const float facing = (dx * faces[f][0] + dy * faces[f][1] + dz * faces[f][2]) / length;
+			taken[f] += own * std::clamp(takes(facing) / floorTakes, ObjectAway, ObjectToward);
+		}
+	};
+	for (int n = 0; n < on.count; n++)
+		shine(on.lights[static_cast<size_t>(n)]);
+	if (on.overhead.strength > 0)
+		shine(on.overhead);
+	if (direct <= 0)
+		return false;
+	// The lights' shares are worked out one by one and the light there all together: they can differ a little.
+	const float fits = direct > total ? total / direct : 1.F;
+	const float others = std::max(total - direct, 0.F);
+	for (size_t f = 0; f < count; f++) {
+		const float against = light::Drawn(others + taken[f] * fits) / drawnTotal;
+		shade[f] = std::max(1 + (against - 1) * strength, 0.05F);
+	}
+	return true;
+}
+
+/**
+ * @brief The light on a solid object's sides. The game gives a whole object the one light of its tile, so it looks cut out and
+ * laid on the lit floor. Here each side takes more of a light the more it is turned to it and less turned away, as a
+ * real thing does, with the light bouncing round the room on every side.
+ *
+ * The picture has no shape to read (that takes a shape map per object, the next step), so the object is taken as one of
+ * two simple shapes, as most of them are drawn. A block (a sarcophagus, a chest) is seen corner-on: its left side faces
+ * +y, its right side +x, they meet at the corner nearest the eye, and each takes its own light. Anything else is taken
+ * as round: the light goes smoothly from its left edge by its middle to its right edge. Both fade to the top's light up
+ * the picture (the lid, the rim).
+ */
+Shading ObjectLight(const Draw &draw, const Colour3 &flat, float wx, float wy)
+{
+	std::array<float, 4> shade;
+	if (!FacingShades(wx, wy, (draw.caster == Caster::ObjectBlock ? BlockFaces : RoundFaces).data(), shade.size(), shade.data()))
+		return Uniform(flat);
+	Raster &raster = FallbackRaster(draw, false);
+	BodyBounds(raster);
+	const float width = static_cast<float>(std::max(raster.width, 1));
+	const float height = static_cast<float>(std::max(raster.height, 1));
+	const float bodyLeft = static_cast<float>(raster.boundLeft) / width;
+	const float bodyRight = static_cast<float>(raster.boundRight + 1) / width;
+	// The corner nearest the eye, where the left side ends and the right one starts.
+	const float middle = std::clamp((static_cast<float>(raster.boundCorner) + 0.5F) / width, 0.05F, 0.95F);
+	std::array<float, 4> stops;
+	std::array<float, 4> bottom;
+	int count;
+	if (draw.caster == Caster::ObjectBlock) {
+		// Flat sides: each its own light, turning from one to the other over a little way at the corner.
+		const float turn = std::max((bodyRight - bodyLeft) * ObjectCornerTurn, 1 / width);
+		const float before = std::clamp(middle - turn, 0.01F, 0.98F);
+		stops = { 0.F, before, std::clamp(middle + turn, before + 0.005F, 0.99F), 1.F };
+		bottom = { shade[0], shade[0], shade[2], shade[2] };
+		count = 4;
+	} else {
+		// Round: the light goes smoothly from the left edge by the middle to the right edge. The picture's own edges lie
+		// past the body's: the colours there carry on the line from the middle through the body's edge.
+		const auto pastEdge = [](float edge, float span) { return span > 1e-3F ? std::min(edge / span, ObjectEdgeReach) : 1.F; };
+		stops = { 0.F, std::clamp(middle, 0.05F, 0.95F), 1.F, 1.F };
+		bottom = {
+			std::max(shade[1] + (shade[0] - shade[1]) * pastEdge(middle, middle - bodyLeft), 0.F),
+			shade[1],
+			std::max(shade[1] + (shade[2] - shade[1]) * pastEdge(1 - middle, bodyRight - middle), 0.F),
+			0.F,
+		};
+		count = 3;
+	}
+	const float bodyPixels = static_cast<float>(raster.boundBottom - raster.boundTop + 1);
+	const float low = std::clamp((ObjectTallPixels - bodyPixels) / (ObjectTallPixels - ObjectLowPixels), 0.F, 1.F);
+	const float topShare = ObjectTop * (ObjectTallTop + (1 - ObjectTallTop) * low);
+	const float bodyTop = static_cast<float>(raster.boundTop) / height;
+	const float pastTop = std::min(1 / std::max(1 - bodyTop, 0.2F), ObjectEdgeReach);
+	Shading shading;
+	shading.count = count;
+	shading.stops = stops;
+	shading.fades = true;
+	for (size_t s = 0; s < static_cast<size_t>(count); s++) {
+		const float top = std::max(bottom[s] + (shade[3] - bottom[s]) * topShare * pastTop, 0.F);
+		for (size_t c = 0; c < 3; c++) {
+			shading.colours[s][c] = flat[c] * bottom[s];
+			shading.top[s][c] = flat[c] * top;
+		}
+	}
+	return shading;
+}
+
+/** @brief The way each of a shape map's pictures faces (HdArt::shape), in the world: +x, -x, +y, -y, up. */
+constexpr std::array<std::array<float, 3>, NumShapeAxes> ShapeAxes { { { 1.F, 0.F, 0.F }, { -1.F, 0.F, 0.F }, { 0.F, 1.F, 0.F }, { 0.F, -1.F, 0.F }, { 0.F, 0.F, 1.F } } };
+
+/**
+ * @brief Draws a solid object whose HD art has a shape map, lit by its shape: every part of it takes each light by the
+ * way that part faces, so a lid, a rim, a carved edge each catch the light as they would.
+ *
+ * Without shaders this is the art drawn once in the least light any of its ways of facing takes, then each way's
+ * picture (MakeShape) added on top in the light that way takes over that. A part leaning two ways gets some of both.
+ * @param kept How much of its light is left where it stands in another body's shadow (ShadeKept).
+ * @return False if the draw isn't one (no shape map, or feel("shapes") is off): it is drawn lit by its sides.
+ */
+bool DrawShapedObject(SDL_Renderer *renderer, const Draw &draw, float toLogical, float kept)
+{
+	if (!IsObject(draw.caster) || draw.style != SpriteStyle::Normal || draw.light < 0 || (!draw.lightmapped && draw.tbl == nullptr))
+		return false;
+	if (atmosphere::Setting(atmosphere::Knob::Shapes) <= 0)
+		return false;
+	const ArtChoice art = CachedArt(renderer, draw);
+	if (art.art == nullptr || !art.art->shaped)
+		return false;
+	const SDL_FRect dest = DestOf(draw, toLogical);
+	if (!OnScreen(dest, 0))
+		return true;
+	float wx;
+	float wy;
+	StandsAt(draw, wx, wy);
+	Colour3 flat = draw.hasTile ? LightAt(static_cast<float>(draw.cell.x), static_cast<float>(draw.cell.y)) : LightAt(wx, wy);
+	for (float &part : flat)
+		part *= kept;
+	std::array<float, NumShapeAxes> shade;
+	if (!FacingShades(wx, wy, ShapeAxes.data(), shade.size(), shade.data()))
+		shade.fill(1.F);
+	float least = std::numeric_limits<float>::max();
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		if (art.art->shape[k] != nullptr)
+			least = std::min(least, shade[k]);
+	}
+	DrawShaded(renderer, draw, Uniform({ flat[0] * least, flat[1] * least, flat[2] * least }), toLogical, false);
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		SDL_Texture *texture = art.art->shape[k];
+		if (texture == nullptr)
+			continue;
+		Colour3 more { flat[0] * (shade[k] - least), flat[1] * (shade[k] - least), flat[2] * (shade[k] - least) };
+		// A colour mod stops at full: light over that is added again.
+		for (int pass = 0; pass < 2 && std::max({ more[0], more[1], more[2] }) > 1.F / 255; pass++) {
+			SDL_SetTextureColorMod(texture, ColourByte(more[0]), ColourByte(more[1]), ColourByte(more[2]));
+			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+			more = AboveFull(more);
+		}
+	}
+	return true;
+}
+
+/** @brief The colour of the edge the lava gives a body standing by it (LavaEdge). */
+constexpr Colour3 LavaEdgeColour { 1.F, 0.5F, 0.2F };
+
+/**
+ * @brief A hero or monster standing by lava takes an orange edge on the side turned to it (the Atmosphere option's idea
+ * 30): that side of its picture a little brighter and more orange, the other a little darker, by the lava's share of
+ * the light there (lava_edge in atmosphere.tsv is how strong).
+ */
+Shading LavaEdge(const Colour3 &flat, float wx, float wy)
+{
+	if (!light::HasLava())
+		return Uniform(flat);
+	const float edge = atmosphere::Strength(atmosphere::Knob::Lava) * atmosphere::Value("lava_edge", 0);
+	const float total = light::LinearAt(wx, wy);
+	if (edge <= 0 || total <= 1e-4F)
+		return Uniform(flat);
+	const LightsOn &on = LightsOnPoint(wx, wy);
+	for (int n = 0; n < on.count; n++) {
+		const light::ShadowLight &lava = on.lights[static_cast<size_t>(n)];
+		if (lava.source != light::LavaLight)
+			continue;
+		const float dx = lava.x - wx;
+		const float dy = lava.y - wy;
+		const float away = std::sqrt(dx * dx + dy * dy);
+		if (away < 1e-3F)
+			break;
+		const float share = std::clamp((1 - lava.fill) * light::LinearOf(lava, wx, wy) / total, 0.F, 1.F);
+		// To the right on screen is +x, -y.
+		const float side = (dx - dy) / away * ViewAcross;
+		const float more = std::min(edge * share * std::abs(side), 0.8F);
+		if (more < 0.02F)
+			break;
+		const float bright = std::max({ flat[0], flat[1], flat[2] });
+		Colour3 toward;
+		Colour3 turned;
+		for (size_t c = 0; c < 3; c++) {
+			toward[c] = flat[c] + LavaEdgeColour[c] * bright * more;
+			turned[c] = flat[c] * (1 - 0.4F * more);
+		}
+		// The body fills the middle of its picture: the light turns from one side to the other across it.
+		Shading shading;
+		shading.count = 4;
+		shading.stops = { 0.F, 0.38F, 0.62F, 1.F };
+		const Colour3 &left = side < 0 ? toward : turned;
+		const Colour3 &right = side < 0 ? turned : toward;
+		shading.colours = { left, left, right, right };
+		return shading;
+	}
+	return Uniform(flat);
+}
+
 /** @brief How a draw that stands on the floor is lit. */
 Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 {
@@ -3056,18 +4507,20 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 		const light::Rgb at = light::At(wx, wy);
 		const light::Rgb full = light::Full();
 		const float least = leveltype == DTYPE_TOWN ? 0.F : HeroLightFloor;
-		return Uniform({ std::max(at.r, full.r * least), std::max(at.g, full.g * least), std::max(at.b, full.b * least) });
+		return LavaEdge({ std::max(at.r, full.r * least), std::max(at.g, full.g * least), std::max(at.b, full.b * least) }, wx, wy);
 	}
 	case Caster::Hero:
 		// Other heroes are drawn 5 light levels brighter than where they stand.
-		return Uniform(draw.light >= 0 ? ToColour(light::Boost(light::At(wx, wy), 5)) : ToColour(light::Full()));
+		return draw.light >= 0 ? LavaEdge(ToColour(light::Boost(light::At(wx, wy), 5)), wx, wy) : Uniform(ToColour(light::Full()));
 	case Caster::Monster:
-		return Uniform(draw.light >= 0 ? LightAt(wx, wy) : ToColour(light::Full()));
+		return draw.light >= 0 ? LavaEdge(LightAt(wx, wy), wx, wy) : Uniform(ToColour(light::Full()));
 	case Caster::MonsterRecoloured:
-		return Uniform(LightAt(wx, wy));
+		return LavaEdge(LightAt(wx, wy), wx, wy);
 	case Caster::MonsterUnlit:
 		return Uniform(ToColour(light::Full()));
 	case Caster::None:
+	case Caster::Object:
+	case Caster::ObjectBlock:
 		break;
 	}
 	if (draw.light < 0)
@@ -3091,26 +4544,93 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 		const Shading right = WallLight(draw.cell, true);
 		Shading shading;
 		shading.count = 3;
-		shading.stops = { 0.F, 0.5F, 1.F };
+		shading.stops = { 0.F, 0.5F, 1.F, 1.F };
 		shading.colours[0] = left.colours[0];
 		for (int c = 0; c < 3; c++)
 			shading.colours[1][c] = (left.colours[1][c] + right.colours[0][c]) / 2;
 		shading.colours[2] = right.colours[1];
 		return shading;
 	}
-	if (draw.hasTile)
-		return Uniform(LightAt(static_cast<float>(draw.cell.x), static_cast<float>(draw.cell.y)));
-	return Uniform(LightAt(wx, wy));
+	const Colour3 flat = draw.hasTile ? LightAt(static_cast<float>(draw.cell.x), static_cast<float>(draw.cell.y)) : LightAt(wx, wy);
+	// A solid object takes the light by its sides (unless it is see-through: a fading ghost of one keeps its one light).
+	if (IsObject(draw.caster) && draw.style == SpriteStyle::Normal)
+		return ObjectLight(draw, flat, wx, wy);
+	return Uniform(flat);
+}
+
+/** @brief The most pieces of lava floor the heat haze is drawn over in a frame, and the bands each is drawn in. */
+constexpr int MaxHazePieces = 500;
+constexpr int HazeBands = 8;
+
+/**
+ * @brief The lava wavers in its heat (the Atmosphere option's idea 31): each piece of lava floor is drawn again over
+ * itself, half see-through and pushed a little left and right in bands that run up the screen, so its surface swims.
+ * Drawn before the light, so it is lit as the floor is and lies under everything standing on it. (`haze` in
+ * atmosphere.tsv is how far it sways, in game pixels.)
+ */
+void DrawHeatHaze(SDL_Renderer *renderer, float toLogical)
+{
+	if (!light::HasLava())
+		return;
+	const float sway = std::min(atmosphere::Value("haze", 0) * atmosphere::Strength(atmosphere::Knob::Haze), 6.F);
+	if (sway <= 0)
+		return;
+	const float time = vfx::Clock();
+	std::array<SDL_Vertex, (HazeBands + 1) * 2> vertices;
+	std::array<int, HazeBands * 6> indices;
+	int used = 0;
+	for (int r = 0; r < HazeBands; r++) {
+		const int corner = r * 2;
+		for (const int v : { corner, corner + 1, corner + 3, corner, corner + 3, corner + 2 })
+			indices[static_cast<size_t>(used++)] = v;
+	}
+	int pieces = 0;
+	for (size_t i = 0; i < FloorEnd && i < Draws.size() && pieces < MaxHazePieces; i++) {
+		const Draw &draw = Draws[i];
+		if (IsOutline(draw.style) || draw.kind != DrawKind::Tile)
+			continue;
+		// The floor's pieces don't carry their tile: it is the one under the middle of the piece's half of the diamond.
+		float tileX;
+		float tileY;
+		WorldOf(static_cast<float>(draw.x) + static_cast<float>(draw.width) / 2, static_cast<float>(draw.y + draw.height) - HalfTileHeight, tileX, tileY);
+		if (!light::IsLava(static_cast<int>(std::floor(tileX + 0.5F)), static_cast<int>(std::floor(tileY + 0.5F))))
+			continue;
+		const SDL_FRect dest = DestOf(draw, toLogical);
+		if (!OnScreen(dest, 0))
+			continue;
+		const DrawTexture art = TextureFor(renderer, draw, false);
+		if (art.texture == nullptr)
+			continue;
+		const Colour3 colour = ArtColour({ 1.F, 1.F, 1.F }, art);
+		const SDL_Color shade { ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), 140 };
+		SDL_SetTextureColorMod(art.texture, 255, 255, 255);
+		SDL_SetTextureAlphaMod(art.texture, 255);
+		for (int r = 0; r <= HazeBands; r++) {
+			const float v = static_cast<float>(r) / HazeBands;
+			// The waves run up the screen, fixed to the world so they don't swim when the view moves.
+			float wx;
+			float wy;
+			WorldOf(static_cast<float>(draw.x), static_cast<float>(draw.y) + v * static_cast<float>(draw.height), wx, wy);
+			const float down = (wx + wy) * HalfTileHeight;
+			const float wave = 0.65F * std::sin(down * 0.21F + time * 0.0075F) + 0.35F * std::sin(down * 0.47F + time * 0.0131F + 1.3F);
+			const float dx = wave * sway * Scale * toLogical;
+			const float y = dest.y + v * dest.h;
+			vertices[static_cast<size_t>(r) * 2] = SDL_Vertex { { dest.x + dx, y }, shade, { 0.F, v } };
+			vertices[static_cast<size_t>(r) * 2 + 1] = SDL_Vertex { { dest.x + dest.w + dx, y }, shade, { 1.F, v } };
+		}
+		SDL_RenderGeometry(renderer, art.texture, vertices.data(), static_cast<int>(vertices.size()), indices.data(), used);
+		pieces++;
+	}
 }
 
 /**
  * @brief Draws the recorded world with HD Lighting.
  *
- * The floor is drawn fully lit and darkened by the light over it. The floor in front of each wall follows, then
- * everything standing on the floor, back to front, each hero and monster just after the shadows it casts.
+ * The floor is drawn fully lit and darkened by the light over it. The floor in front of each wall follows, then the
+ * shadows on the floor (DrawJoinedShadows), then everything standing on the floor, back to front.
  * @return False where HD Lighting isn't used, and nothing was drawn.
  */
-bool RenderLit(SDL_Renderer *renderer, float toLogical, const std::array<float, 3> &tint)
+bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const std::array<float, 3> &tint)
 {
 	// The world on screen, in tiles: the view's corners, with room for the walls that stand up into it from below.
 	const float left = -static_cast<float>(TILE_WIDTH);
@@ -3141,7 +4661,7 @@ bool RenderLit(SDL_Renderer *renderer, float toLogical, const std::array<float, 
 	}
 	LitHeroX = heroX;
 	LitHeroY = heroY;
-	const Mood &mood = CurrentMood();
+	const Mood mood = CurrentMood();
 	light::Look look;
 	look.levelBrightness = LightLevel;
 	look.falloff = mood.falloff;
@@ -3153,6 +4673,7 @@ bool RenderLit(SDL_Renderer *renderer, float toLogical, const std::array<float, 
 	if (!light::Update(look, x0, y0, x1, y1, heroX, heroY))
 		return false;
 	FrameLit = true;
+	LastLightsOn.known = false;
 	MakeBlobTexture(renderer);
 
 	const Shading unlit = Uniform({ 1.F, 1.F, 1.F });
@@ -3160,29 +4681,50 @@ bool RenderLit(SDL_Renderer *renderer, float toLogical, const std::array<float, 
 		if (!IsOutline(Draws[i].style))
 			DrawShaded(renderer, Draws[i], unlit, toLogical, true);
 	}
+	{
+		const FramePartScope part(FramePart::Atmosphere);
+		DrawHeatHaze(renderer, toLogical);
+	}
 	DrawFloorLight(renderer, toLogical);
 	for (size_t i = FloorEnd; i < Draws.size(); i++) {
 		if (IsTileBase(Draws[i]))
 			DrawTileFloor(renderer, Draws[i], toLogical);
 	}
+	// The shadows lie on the floor, under everything that stands on it.
+	WallShades.clear();
+	NextWallShade = std::numeric_limits<size_t>::max();
+	LastTileDrawKnown = false;
+	DrawingAt = 0;
+	const bool joined = DrawJoinedShadows(renderer, worldSize, toLogical);
 	for (size_t i = FloorEnd; i < Draws.size(); i++) {
 		const Draw &draw = Draws[i];
+		DrawingAt = i;
+		if (i > 0)
+			DrawWallShadesAfter(renderer, i - 1);
 		if (IsOutline(draw.style))
 			continue;
-		if (draw.style == SpriteStyle::Normal && draw.caster != Caster::None)
+		if (!joined && draw.style == SpriteStyle::Normal && draw.caster != Caster::None)
 			DrawCasterShadows(renderer, draw, toLogical);
+		const Kept kept = joined ? ShadeKept[i] : Kept {};
+		if (DrawShapedObject(renderer, draw, toLogical, (kept.foot + kept.top) / 2))
+			continue;
 		if (draw.kind == DrawKind::Tile && draw.hasTile && draw.light >= 0 && !IsTileBase(draw) && IsDirt(draw.cell)) {
 			DrawGroundLit(renderer, draw, toLogical);
 			continue;
 		}
-		const Shading shading = LightFor(draw, tint);
+		Shading shading = LightFor(draw, tint);
+		if (kept.foot < 1 || kept.top < 1)
+			Dim(shading, kept);
 		if (IsTileBase(draw)) {
 			DrawTileWall(renderer, draw, shading, toLogical);
 			continue;
 		}
-		// Heroes and monsters cast shadows of their own, in place of the one painted under them.
+		// Heroes, monsters and solid objects cast shadows of their own, in place of the one painted under them.
 		DrawShaded(renderer, draw, shading, toLogical, draw.caster == Caster::None);
 	}
+	if (!Draws.empty())
+		DrawWallShadesAfter(renderer, Draws.size() - 1);
+	WallShades.clear();
 	// Item and monster outlines glow on top of the light.
 	const Shading glow = Uniform(tint);
 	for (size_t i = 0; i < Draws.size(); i++) {
@@ -3312,6 +4854,26 @@ uint8_t InBetween()
 	return static_cast<uint8_t>(step != 0 && SubFrameBackward ? step + 2 : step);
 }
 
+/** @brief Unique monsters' colour tables by address, with their names (RegisterRecolour). */
+std::unordered_map<const uint8_t *, std::string> Recolours;
+
+/** @brief The name of the unique monster's colour table a sprite is drawn in, or null. */
+const std::string *RecolourOf(const uint8_t *trn)
+{
+	if (trn == nullptr)
+		return nullptr;
+	const auto it = Recolours.find(trn);
+	return it != Recolours.end() ? &it->second : nullptr;
+}
+
+/** @brief What the sprite being recorded is, for its light and shadows: an object only while feel("objects") is on. */
+Caster RecordedCaster()
+{
+	if (IsObject(CurrentCaster) && atmosphere::Setting(atmosphere::Knob::Objects) <= 0)
+		return Caster::None;
+	return CurrentCaster;
+}
+
 } // namespace
 
 void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor, const Lightmap *lightmap)
@@ -3347,7 +4909,7 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 	    .lightOffset = perPixel ? CaptureLight(out, *lightmap, { position.x, position.y - clx.height() + 1 }, clx.width(), clx.height(), trn) : 0,
 	    // Two in-betweens per frame split it in thirds; played backwards they are 3 and 4.
 	    .inBetween = InBetween(),
-	    .caster = IsOutline(style) ? Caster::None : CurrentCaster,
+	    .caster = IsOutline(style) ? Caster::None : RecordedCaster(),
 	    .floor = !FloorDone,
 	    .hasTile = HaveTile,
 	    .cell = CurrentTile,
@@ -3356,6 +4918,7 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 	    .outlined = outlined,
 	    // A sprite with an outline keeps its outline's look, so its art's outlines are made in that cut as it loads.
 	    .outlineLook = IsOutline(style) ? CurrentOutlineLook : (outlined ? PendingOutlineLook : OutlineLook {}),
+	    .recolour = IsOutline(style) ? nullptr : RecolourOf(trn),
 	});
 }
 
@@ -3388,6 +4951,23 @@ void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites)
 	} else {
 		registerList(sprites.list(), 0);
 	}
+}
+
+void RegisterRecolour(const uint8_t *trn, std::string_view name)
+{
+	if (trn == nullptr)
+		return;
+	std::string lower(name);
+	std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	// A table that changes no colour (Genrl: the Skeleton King, the Butcher, Na-Krul) shows its type's own art.
+	bool changesNothing = true;
+	for (int i = 0; i < 256 && changesNothing; i++)
+		changesNothing = trn[i] == i;
+	if (changesNothing)
+		lower.clear();
+	// A freed table's address is reused by the next one loaded, which names it again here.
+	ArtChoices.clear();
+	Recolours[trn] = std::move(lower);
 }
 
 void ForgetSprites(ClxSpriteListOrSheet sprites)
@@ -3589,6 +5169,46 @@ void LiftDarkShades(SDL_Renderer *renderer, const SDL_Rect &clip, const std::arr
 	SDL_SetRenderDrawBlendMode(renderer, before);
 }
 
+/**
+ * @brief The Atmosphere option's darker screen edges (idea 6): the corners and edges of the view a touch darker, more so
+ * deeper down, so the eye stays on the hero. It darkens what is there by a share, so the dark stays dark and the
+ * spells drawn after it still shine at the edges.
+ */
+void DrawEdges(SDL_Renderer *renderer, const SDL_Rect &clip)
+{
+	const float strength = atmosphere::Strength(atmosphere::Knob::Edges);
+	if (strength <= 0)
+		return;
+	const FramePartScope part(FramePart::Atmosphere);
+	const float darken = std::clamp(atmosphere::Value("edges", 0.22F) * strength, 0.F, 0.9F);
+	if (darken <= 0.005F)
+		return;
+	if (EdgesTexture == nullptr) {
+		constexpr int Size = 256;
+		std::vector<uint8_t> rgba(static_cast<size_t>(Size) * Size * 4, 0);
+		for (int y = 0; y < Size; y++) {
+			for (int x = 0; x < Size; x++) {
+				const float u = (static_cast<float>(x) + 0.5F) / (Size / 2.F) - 1.F;
+				const float v = (static_cast<float>(y) + 0.5F) / (Size / 2.F) - 1.F;
+				// Clear round the middle, darkening smoothly from about halfway out, darkest in the corners.
+				const float d = std::sqrt(u * u + v * v);
+				const float t = std::clamp((d - 0.55F) / (1.42F - 0.55F), 0.F, 1.F);
+				const float shape = t * t * (3 - 2 * t);
+				rgba[(static_cast<size_t>(y) * Size + x) * 4 + 3] = static_cast<uint8_t>(shape * 255.F + 0.5F);
+			}
+		}
+		EdgesTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, Size, Size);
+		if (EdgesTexture == nullptr)
+			return;
+		SDL_SetTextureBlendMode(EdgesTexture, SDL_BLENDMODE_BLEND);
+		SDL_SetTextureScaleMode(EdgesTexture, SDL_ScaleModeLinear);
+		SDL_UpdateTexture(EdgesTexture, nullptr, rgba.data(), Size * 4);
+	}
+	SDL_SetTextureAlphaMod(EdgesTexture, ColourByte(darken));
+	const SDL_Rect dest = clip;
+	SDL_RenderCopy(renderer, EdgesTexture, nullptr, &dest);
+}
+
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
@@ -3601,6 +5221,10 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		LightTexture = nullptr;
 		FieldTexture = nullptr;
 		BlobTexture = nullptr;
+		EdgesTexture = nullptr;
+		ShadeTexture = nullptr;
+		ShadeTextureSize = {};
+		ShadeFailed = false;
 		CacheRenderer = renderer;
 	}
 	CheckPalette();
@@ -3628,14 +5252,12 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 
 	FrameLit = false;
 	OutlineMadeThisFrame = false;
-	if (ShownOutlines.size() > 256) {
-		const uint32_t now = SDL_GetTicks();
-		std::erase_if(ShownOutlines, [now](const auto &shown) { return now - shown.second.at > 1000; });
-	}
+	ShownOutlines.Prune(SDL_GetTicks());
 	OutlineBudgetEnd = SDL_GetPerformanceCounter() + static_cast<uint64_t>(static_cast<double>(SDL_GetPerformanceFrequency()) * OutlineBudgetMs / 1000);
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 	// HD Lighting works out its own light, in colour and stopped by walls.
-	if (RecordingLit && HaveViewOrigin && FloorDone && RenderLit(renderer, toLogical, tint)) {
+	if (RecordingLit && HaveViewOrigin && FloorDone && RenderLit(renderer, worldSize, toLogical, tint)) {
+		DrawEdges(renderer, clip);
 		LiftDarkShades(renderer, clip, tint);
 		SDL_RenderSetClipRect(renderer, nullptr);
 		WorldRecorded = false;
@@ -3725,6 +5347,7 @@ void SetViewOrigin(Point, Point) { }
 void EndFloor() { }
 uint16_t PieceToDraw(Point tile) { return dPiece[tile.x][tile.y]; }
 void RegisterSprites(std::string_view, ClxSpriteListOrSheet) { }
+void RegisterRecolour(const uint8_t *, std::string_view) { }
 void ForgetSprites(ClxSpriteListOrSheet) { }
 bool HasArt(std::string_view) { return false; }
 bool DrawUiSprite(ClxSprite, Rectangle, float) { return false; }

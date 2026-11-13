@@ -19,7 +19,10 @@
 #include "missiles.h"
 #include "monster.h"
 #include "objects.h"
+#include "levels/trigs.h"
 #include "player.h"
+#include "poe2/atmosphere.hpp"
+#include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
 #include "utils/endian_swap.hpp"
 #include "utils/is_of.hpp"
@@ -94,7 +97,18 @@ struct Source {
 	/** @brief The open side a light shines out of (a doorway), as a direction in tiles; 0, 0 for all round (ConeOf). */
 	float coneX = 0;
 	float coneY = 0;
+	/** @brief How its flame moves its light (the Atmosphere option's flicker, idea 1), and its brightness this frame against steady (1). */
+	uint8_t flickerKind = 0;
+	uint32_t flickerSeed = 0;
+	float flicker = 1;
 };
+
+/** @brief Source::flickerKind: a steady light, a torch, a candle, a fire or brazier, stairs down breathing slowly. */
+constexpr uint8_t SteadyLight = 0;
+constexpr uint8_t TorchFlicker = 1;
+constexpr uint8_t CandleFlicker = 2;
+constexpr uint8_t FireFlicker = 3;
+constexpr uint8_t StairsBreath = 4;
 
 // The colours of the lights, before they're evened out.
 constexpr Colour TorchColour { 1.00F, 0.60F, 0.28F };
@@ -215,6 +229,21 @@ uint32_t SpillVersion = 0;
 
 std::vector<Source> StaticSources;
 std::vector<Source> DynamicSources;
+/**
+ * @brief What each static light that flickers adds to the level's light, sample by sample (as ShineStatic adds it), so
+ * its light can move with its flame every frame without the level's light being worked out again.
+ */
+struct Patch {
+	int i0 = 0;
+	int j0 = 0;
+	int w = 0;
+	int h = 0;
+	std::vector<float> linear;
+};
+std::vector<Patch> StaticPatches;
+
+/** @brief How many times the light has been worked out, for UpdateCount. */
+uint32_t Updates = 0;
 /** @brief What the static light was worked out for: the level, its walls and the game's own baked light. */
 struct StaticKey {
 	int levelType = -1;
@@ -224,6 +253,8 @@ struct StaticKey {
 	uint32_t blockVersion = UINT32_MAX;
 	/** @brief The lit objects and where they stand (a lever can light braziers without touching the baked light). */
 	uint32_t objects = 0;
+	/** @brief The Atmosphere option and its switches (the stairs' light is baked in). */
+	uint32_t atmosphere = 0;
 	bool operator==(const StaticKey &other) const = default;
 };
 StaticKey BuiltStatics;
@@ -237,6 +268,17 @@ std::vector<std::array<float, 4>> StaticHue;
  */
 std::vector<float> StaticTopBright;
 std::vector<std::array<float, 4>> StaticTopHue;
+/**
+ * @brief The lava's own light at every sample (it is in StaticBright too), kept by itself so it can swell and fade each
+ * frame (the Atmosphere option's idea 30).
+ */
+std::vector<float> StaticLava;
+bool StaticHasLava = false;
+/** @brief The daylight down the first floor's stairs (idea 24), where there is one. */
+bool HaveDaylight = false;
+float DaylightX = 0;
+float DaylightY = 0;
+float DaylightReach = 0;
 
 /** @brief Which samples of the lattice a moving light reaches, kept while it doesn't move. */
 struct Reach {
@@ -818,6 +860,7 @@ bool ObjectLight(const Object &object, Source &source)
 		source.colour = CandleColour;
 		source.height = 1.15F;
 		source.size = 0.08F;
+		source.flickerKind = CandleFlicker;
 		return true;
 	case OBJ_L1LIGHT:
 		// A brazier on its stand.
@@ -826,6 +869,7 @@ bool ObjectLight(const Object &object, Source &source)
 		source.height = 1.6F;
 		source.size = 0.3F;
 		source.power = FlamePower;
+		source.flickerKind = FireFlicker;
 		return true;
 	case OBJ_SKFIRE:
 		// A fire on the floor.
@@ -835,6 +879,7 @@ bool ObjectLight(const Object &object, Source &source)
 		source.size = 0.6F;
 		source.fill = 0.2F;
 		source.power = FlamePower;
+		source.flickerKind = FireFlicker;
 		return true;
 	case OBJ_CANDLE1:
 	case OBJ_CANDLE2:
@@ -843,6 +888,7 @@ bool ObjectLight(const Object &object, Source &source)
 		source.colour = CandleColour;
 		source.height = 1.15F;
 		source.size = 0.08F;
+		source.flickerKind = CandleFlicker;
 		return true;
 	case OBJ_BCROSS:
 	case OBJ_TBCROSS:
@@ -852,6 +898,7 @@ bool ObjectLight(const Object &object, Source &source)
 		source.size = 0.6F;
 		source.fill = 0.2F;
 		source.power = FlamePower;
+		source.flickerKind = FireFlicker;
 		return true;
 	case OBJ_TORCHL2:
 	case OBJ_TORCHR:
@@ -863,6 +910,7 @@ bool ObjectLight(const Object &object, Source &source)
 		source.height = 1.45F;
 		source.size = 0.2F;
 		source.power = FlamePower;
+		source.flickerKind = TorchFlicker;
 		// Each torch hangs on its own wall tile, facing the way its picture does.
 		if (IsAnyOf(object._otype, OBJ_TORCHL2, OBJ_TORCHR))
 			source.faceX = 1;
@@ -905,7 +953,7 @@ int LavaRadius(int piece)
  * its tiles, as the game draws it: every lava tile is a light as strong as a torch, so added up a stream of it would
  * shine about ten times as bright as the game shows it.
  */
-void ShineStatic(const Source &source, std::vector<float> &lava)
+void ShineStatic(const Source &source, std::vector<float> &lava, Patch *patch)
 {
 	const float reach = static_cast<float>(source.radius + 1);
 	const int i0 = std::max(0, SampleBefore(source.x - reach));
@@ -914,6 +962,13 @@ void ShineStatic(const Source &source, std::vector<float> &lava)
 	const int j1 = std::min(LatticeH - 1, SampleBefore(source.y + reach) + 1);
 	const int w = i1 - i0 + 1;
 	const int h = j1 - j0 + 1;
+	if (patch != nullptr) {
+		patch->i0 = i0;
+		patch->j0 = j0;
+		patch->w = w;
+		patch->h = h;
+		patch->linear.assign(static_cast<size_t>(std::max(w, 0)) * std::max(h, 0), 0.F);
+	}
 	static std::vector<float> paths;
 	PathsFrom(source, i0, j0, w, h, paths);
 	// How much of the light each open sample sees, for the rock lit through the floors' edges (EdgesInBox). An edge comes
@@ -957,6 +1012,8 @@ void ShineStatic(const Source &source, std::vector<float> &lava)
 			for (int c = 0; c < 3; c++)
 				StaticHue[k][c] += source.colour[c] * linear;
 			StaticHue[k][3] += linear;
+			if (patch != nullptr)
+				patch->linear[b] = linear;
 		}
 	}
 }
@@ -1024,9 +1081,295 @@ uint32_t ObjectsSignature()
 	return hash;
 }
 
+/**
+ * @brief The Atmosphere option's stairs (idea 48): stairs down glow dully from below, redder and stronger in each area
+ * further down, breathing slowly; stairs up take a faint cold light from above. Their numbers are the area's in
+ * atmosphere.tsv (stairs_down, stairs_down_colour, stairs_down_radius, stairs_up, stairs_up_colour).
+ */
+void AddStairsLights()
+{
+	HaveDaylight = false;
+	const float strength = atmosphere::Strength(atmosphere::Knob::Stairs);
+	// Idea 24: on the Cathedral's first floor the stairs up lead out to town, and cold grey daylight falls down them.
+	const bool firstFloor = leveltype == DTYPE_CATHEDRAL && currlevel == 1 && !setlevel;
+	const float daylight = firstFloor ? atmosphere::Value("daylight", 0) * atmosphere::Strength(atmosphere::Knob::Daylight) : 0.F;
+	if ((strength <= 0 && daylight <= 0.01F) || leveltype == DTYPE_TOWN)
+		return;
+	const float down = atmosphere::Value("stairs_down", 0.35F) * strength;
+	const float up = atmosphere::Value("stairs_up", 0.4F) * strength;
+	const Colour downColour = Even(atmosphere::Colour("stairs_down_colour", { 1.F, 0.42F, 0.2F }));
+	const Colour upColour = Even(atmosphere::Colour("stairs_up_colour", { 0.75F, 0.85F, 1.F }));
+	const int downRadius = std::clamp(static_cast<int>(std::lround(atmosphere::Value("stairs_down_radius", 4))), 1, static_cast<int>(NumLightRadiuses) - 1);
+	const int upRadius = std::clamp(static_cast<int>(std::lround(atmosphere::Value("stairs_up_radius", 3))), 1, static_cast<int>(NumLightRadiuses) - 1);
+	for (int i = 0; i < numtrigs; i++) {
+		const TriggerStruct &trigger = trigs[i];
+		const bool goesDown = trigger._tmsg == WM_DIABNEXTLVL;
+		const bool goesUp = IsAnyOf(trigger._tmsg, WM_DIABPREVLVL, WM_DIABTWARPUP, WM_DIABRTNLVL);
+		if (!goesDown && !goesUp)
+			continue;
+		if (trigger._tmsg == WM_DIABPREVLVL && daylight > 0.01F) {
+			// Hung high and wide, so it falls from above and its shadows are soft.
+			Source source;
+			source.x = static_cast<float>(trigger.position.x);
+			source.y = static_cast<float>(trigger.position.y);
+			source.power = daylight;
+			source.radius = std::clamp(static_cast<int>(std::lround(atmosphere::Value("daylight_radius", 6))), 1, static_cast<int>(NumLightRadiuses) - 1);
+			source.colour = Even(atmosphere::Colour("daylight_colour", { 0.8F, 0.88F, 1.F }));
+			source.height = 3.F;
+			source.size = 1.6F;
+			source.fill = 0.45F;
+			PlaceRays(source);
+			StaticSources.push_back(source);
+			HaveDaylight = true;
+			DaylightX = source.x;
+			DaylightY = source.y;
+			DaylightReach = static_cast<float>(source.radius);
+			continue;
+		}
+		const float power = goesDown ? down : up;
+		if (power <= 0.01F)
+			continue;
+		Source source;
+		source.x = static_cast<float>(trigger.position.x);
+		source.y = static_cast<float>(trigger.position.y);
+		source.power = power;
+		source.castsShadows = false;
+		if (goesDown) {
+			// From below the floor, wide and soft.
+			source.radius = downRadius;
+			source.colour = downColour;
+			source.height = 0.1F;
+			source.size = 1.F;
+			source.fill = 0.4F;
+			source.flickerKind = StairsBreath;
+			source.flickerSeed = (static_cast<uint32_t>(trigger.position.x) * 73856093U) ^ (static_cast<uint32_t>(trigger.position.y) * 19349663U);
+		} else {
+			// From the floor above, down the stairwell.
+			source.radius = upRadius;
+			source.colour = upColour;
+			source.height = 2.F;
+			source.size = 1.2F;
+			source.fill = 0.4F;
+		}
+		PlaceRays(source);
+		StaticSources.push_back(source);
+	}
+}
+
+/**
+ * @brief The famous rooms' own light (idea 46), the Butcher's for now: a dull red light inside his room that the walls
+ * and his closed door hold in, so it spills out when the door opens, and a faint red glow just outside each closed door.
+ */
+void AddRoomLights()
+{
+	const float strength = atmosphere::Strength(atmosphere::Knob::Rooms);
+	const std::optional<WorldTileRectangle> butcher = atmosphere::ButcherRoom();
+	if (strength <= 0 || !butcher)
+		return;
+	const WorldTileRectangle room = *butcher;
+	const WorldTilePosition corner = room.position;
+	const float width = static_cast<float>(room.size.width);
+	const float height = static_cast<float>(room.size.height);
+	const float cx = static_cast<float>(corner.x) + width / 2 - 0.5F;
+	const float cy = static_cast<float>(corner.y) + height / 2 - 0.5F;
+	const Colour colour = Even(atmosphere::RoomColour("butcher", "light_colour", { 1.F, 0.18F, 0.1F }));
+	const float power = atmosphere::RoomValue("butcher", "light", 1.4F) * strength;
+	if (power > 0.01F) {
+		Source source;
+		source.x = cx;
+		source.y = cy;
+		source.power = power;
+		source.colour = colour;
+		source.radius = std::clamp(static_cast<int>(std::lround(atmosphere::RoomValue("butcher", "light_radius", 6))), 1, static_cast<int>(NumLightRadiuses) - 1);
+		source.height = 1.2F;
+		source.size = 0.8F;
+		source.fill = 0.3F;
+		source.flickerKind = FireFlicker;
+		source.flickerSeed = (static_cast<uint32_t>(corner.x) * 73856093U) ^ (static_cast<uint32_t>(corner.y) * 19349663U);
+		PlaceRays(source);
+		StaticSources.push_back(source);
+	}
+	const float door = atmosphere::RoomValue("butcher", "door_light", 0.45F) * strength;
+	if (door <= 0.01F)
+		return;
+	for (int i = 0; i < ActiveObjectCount; i++) {
+		const Object &object = Objects[ActiveObjects[i]];
+		if (!object.isDoor() || object._oVar4 != 0 /* closed */ || !room.contains(WorldTilePosition(object.position)))
+			continue;
+		// Just outside the door: away from the room's middle along the axis the door faces.
+		const float dx = static_cast<float>(object.position.x) - cx;
+		const float dy = static_cast<float>(object.position.y) - cy;
+		Source source;
+		source.x = static_cast<float>(object.position.x) + (std::abs(dx) >= std::abs(dy) ? (dx > 0 ? 0.6F : -0.6F) : 0.F);
+		source.y = static_cast<float>(object.position.y) + (std::abs(dx) >= std::abs(dy) ? 0.F : (dy > 0 ? 0.6F : -0.6F));
+		source.power = door;
+		source.colour = colour;
+		source.radius = 2;
+		source.height = 0.05F;
+		source.size = 0.8F;
+		source.fill = 0.2F;
+		source.castsShadows = false;
+		source.flickerKind = FireFlicker;
+		source.flickerSeed = (static_cast<uint32_t>(object.position.x) * 73856093U) ^ (static_cast<uint32_t>(object.position.y) * 19349663U);
+		PlaceRays(source);
+		StaticSources.push_back(source);
+	}
+}
+
+/**
+ * @brief How bright a flickering light is this frame against steady (1).
+ * @param flutter How much its flame flutters as someone hurries past (idea 25, 0 to 1 and a little over): its flicker
+ * is some three times as strong, and its light dips and shivers.
+ */
+float FlickerOf(const Source &source, float flicker, float stairs, float flutter)
+{
+	const float shiver = flutter > 0 ? flutter * (0.12F * std::sin(vfx::Clock() * 0.047F + static_cast<float>(source.flickerSeed % 628) / 100.F) - 0.08F) : 0.F;
+	flicker += 2 * flutter;
+	switch (source.flickerKind) {
+	case TorchFlicker: return 1 + 0.55F * flicker * (vfx::FlameFlicker(source.flickerSeed, false) - 1) + shiver;
+	case CandleFlicker: return 1 + 1.F * flicker * (vfx::FlameFlicker(source.flickerSeed, true) - 1) + 1.5F * shiver;
+	case FireFlicker: return 1 + 0.45F * flicker * (vfx::FlameFlicker(source.flickerSeed, false) - 1) + shiver;
+	case StairsBreath: {
+		// A slow swell, about once every four seconds, never in step with other stairs.
+		const float phase = static_cast<float>(source.flickerSeed % 628) / 100.F;
+		return 1 + 0.18F * std::min(stairs, 1.F) * std::sin(vfx::Clock() * 0.0016F + phase);
+	}
+	default: return 1;
+	}
+}
+
+/**
+ * @brief The lava's glow swells and fades slowly (the Atmosphere option's idea 30): its own light in the window, more
+ * and less of it in a slow wave that travels across the cavern. Its numbers are the area's in atmosphere.tsv
+ * (lava_breath, how much of its light comes and goes, and lava_breath_s, how many seconds a swell takes).
+ */
+void ApplyLavaBreath()
+{
+	if (!StaticHasLava)
+		return;
+	const float depth = std::min(atmosphere::Value("lava_breath", 0) * atmosphere::Strength(atmosphere::Knob::Lava), 0.8F);
+	if (depth <= 0)
+		return;
+	const float time = vfx::Clock() * 0.001F * 6.2831853F / std::max(atmosphere::Value("lava_breath_s", 6), 0.5F);
+	const Colour colour = Even(LavaColour);
+	for (int j = 0; j < WinH; j++) {
+		const size_t from = static_cast<size_t>(WinJ0 + j) * LatticeW + WinI0;
+		const size_t out = static_cast<size_t>(j) * WinW;
+		for (int i = 0; i < WinW; i++) {
+			const float lava = StaticLava[from + static_cast<size_t>(i)];
+			if (lava <= 0)
+				continue;
+			const auto across = static_cast<float>(WinI0 + i);
+			const auto down = static_cast<float>(WinJ0 + j);
+			const float wave = 0.7F * std::sin(time + (across + down) * 0.09F) + 0.3F * std::sin(time * 1.7F + (across - down) * 0.13F);
+			const float add = lava * depth * wave;
+			const size_t k = out + static_cast<size_t>(i);
+			WinBright[k] = std::max(WinBright[k] + add, 0.F);
+			for (int c = 0; c < 3; c++)
+				WinHue[k][c] = std::max(WinHue[k][c] + colour[c] * add, 0.F);
+			WinHue[k][3] = std::max(WinHue[k][3] + add, 0.F);
+		}
+	}
+}
+
+/**
+ * @brief A cavern with lava in it is dim orange in the distance, not black (the Atmosphere option's idea 32): the lava's
+ * glow fills the air of the whole cavern a little, the more the more lava lies round a spot, walls or no walls. Its
+ * numbers are the area's in atmosphere.tsv (lava_far, how bright; lava_far_reach, how many tiles round a spot count;
+ * lava_far_full, the share of them that is lava for all of the glow).
+ */
+void AddFarGlow()
+{
+	if (!StaticHasLava)
+		return;
+	const float glow = atmosphere::Value("lava_far", 0) * atmosphere::Strength(atmosphere::Knob::FarGlow);
+	if (glow <= 0)
+		return;
+	const int reach = std::clamp(static_cast<int>(std::lround(atmosphere::Value("lava_far_reach", 10))), 1, 24);
+	const float full = std::max(atmosphere::Value("lava_far_full", 0.06F), 0.005F);
+	// How many lava tiles lie in the box from the map's corner to each tile.
+	constexpr int Wide = MAXDUNY + 1;
+	static std::vector<int> sums;
+	sums.assign(static_cast<size_t>(MAXDUNX + 1) * Wide, 0);
+	for (int x = 0; x < MAXDUNX; x++) {
+		for (int y = 0; y < MAXDUNY; y++) {
+			sums[static_cast<size_t>(x + 1) * Wide + y + 1] = (LavaRadius(dPiece[x][y]) != 0 ? 1 : 0)
+			    + sums[static_cast<size_t>(x) * Wide + y + 1] + sums[static_cast<size_t>(x + 1) * Wide + y] - sums[static_cast<size_t>(x) * Wide + y];
+		}
+	}
+	const Colour colour = Even(LavaColour);
+	for (int j = 0; j < LatticeH; j++) {
+		const int y = std::clamp(static_cast<int>(std::floor(SampleAt(j) + 0.5F)), 0, MAXDUNY - 1);
+		const int y0 = std::max(y - reach, 0);
+		const int y1 = std::min(y + reach, MAXDUNY - 1) + 1;
+		for (int i = 0; i < LatticeW; i++) {
+			const int x = std::clamp(static_cast<int>(std::floor(SampleAt(i) + 0.5F)), 0, MAXDUNX - 1);
+			const int x0 = std::max(x - reach, 0);
+			const int x1 = std::min(x + reach, MAXDUNX - 1) + 1;
+			const int lava = sums[static_cast<size_t>(x1) * Wide + y1] - sums[static_cast<size_t>(x0) * Wide + y1] - sums[static_cast<size_t>(x1) * Wide + y0] + sums[static_cast<size_t>(x0) * Wide + y0];
+			if (lava == 0)
+				continue;
+			const float share = static_cast<float>(lava) / static_cast<float>((2 * reach + 1) * (2 * reach + 1));
+			const float add = glow * std::min(share / full, 1.F);
+			const size_t k = static_cast<size_t>(j) * LatticeW + i;
+			StaticBright[k] += add;
+			for (int c = 0; c < 3; c++)
+				StaticHue[k][c] += colour[c] * add;
+			StaticHue[k][3] += add;
+		}
+	}
+}
+
+/**
+ * @brief Moves each flickering static light's light with its flame this frame (the Atmosphere option's flicker, idea 1):
+ * what it adds to the window's light, scaled by how bright its flame is now against steady. Its shadows read the same
+ * brightness (Source::flicker), so they sway with it.
+ */
+void ApplyFlicker()
+{
+	const float flicker = atmosphere::Strength(atmosphere::Knob::Flicker) * atmosphere::Value("flicker", 1);
+	const float stairs = atmosphere::Strength(atmosphere::Knob::Stairs);
+	const bool flutters = atmosphere::Strength(atmosphere::Knob::Flutter) > 0;
+	if (flicker <= 0 && stairs <= 0 && !flutters) {
+		for (Source &source : StaticSources)
+			source.flicker = 1;
+		return;
+	}
+	for (size_t s = 0; s < StaticSources.size() && s < StaticPatches.size(); s++) {
+		Source &source = StaticSources[s];
+		const bool flame = IsAnyOf(source.flickerKind, TorchFlicker, CandleFlicker, FireFlicker);
+		const float flutter = flutters && flame ? vfx::FlameFlutter(Point { static_cast<int>(std::lround(source.x)), static_cast<int>(std::lround(source.y)) }) : 0.F;
+		const float factor = FlickerOf(source, flicker, stairs, flutter);
+		source.flicker = factor;
+		const Patch &patch = StaticPatches[s];
+		if (std::abs(factor - 1) < 1e-3F || patch.linear.empty())
+			continue;
+		const float change = factor - 1;
+		const int a0 = std::max(0, WinI0 - patch.i0);
+		const int a1 = std::min(patch.w, WinI0 + WinW - patch.i0);
+		const int b0 = std::max(0, WinJ0 - patch.j0);
+		const int b1 = std::min(patch.h, WinJ0 + WinH - patch.j0);
+		for (int b = b0; b < b1; b++) {
+			const size_t row = static_cast<size_t>(b) * patch.w;
+			const size_t out = static_cast<size_t>(patch.j0 + b - WinJ0) * WinW;
+			for (int a = a0; a < a1; a++) {
+				const float linear = patch.linear[row + a];
+				if (linear <= 0)
+					continue;
+				const float add = change * linear;
+				const size_t k = out + static_cast<size_t>(patch.i0 + a - WinI0);
+				WinBright[k] = std::max(WinBright[k] + add, 0.F);
+				for (int c = 0; c < 3; c++)
+					WinHue[k][c] = std::max(WinHue[k][c] + source.colour[c] * add, 0.F);
+				WinHue[k][3] = std::max(WinHue[k][3] + add, 0.F);
+			}
+		}
+	}
+}
+
 void UpdateStatics()
 {
-	const StaticKey key { static_cast<int>(leveltype), static_cast<int>(currlevel), setlevel, static_cast<int>(setlvlnum), BlockVersion, ObjectsSignature() };
+	const StaticKey key { static_cast<int>(leveltype), static_cast<int>(currlevel), setlevel, static_cast<int>(setlvlnum), BlockVersion, ObjectsSignature(), atmosphere::Version() };
 	if (key == BuiltStatics && std::memcmp(BuiltPreLight.data(), dPreLight, sizeof(dPreLight)) == 0)
 		return;
 	BuiltStatics = key;
@@ -1047,6 +1390,14 @@ void UpdateStatics()
 			source.power = fire.power;
 			source.coneX = fire.coneX;
 			source.coneY = fire.coneY;
+			// The forge's coals glow like a fire, the lamps like torches, a lit window like a candle behind glass.
+			if (fire.colour == FireColour)
+				source.flickerKind = FireFlicker;
+			else if (fire.colour == TorchColour)
+				source.flickerKind = TorchFlicker;
+			else if (fire.colour == CandleColour)
+				source.flickerKind = CandleFlicker;
+			source.flickerSeed = (static_cast<uint32_t>(fire.x * 8) * 73856093U) ^ (static_cast<uint32_t>(fire.y * 8) * 19349663U);
 			PlaceRays(source);
 			StaticSources.push_back(source);
 		}
@@ -1059,9 +1410,12 @@ void UpdateStatics()
 		source.x = static_cast<float>(object.position.x);
 		source.y = static_cast<float>(object.position.y);
 		source.colour = Even(source.colour);
+		source.flickerSeed = vfx::FlameSeed(object.position);
 		PlaceRays(source);
 		StaticSources.push_back(source);
 	}
+	AddStairsLights();
+	AddRoomLights();
 	for (int x = 0; x < MAXDUNX; x++) {
 		for (int y = 0; y < MAXDUNY; y++) {
 			const int radius = LavaRadius(dPiece[x][y]);
@@ -1086,18 +1440,25 @@ void UpdateStatics()
 	const Colour sky = Even(TownSkyColour);
 	StaticHue.assign(static_cast<size_t>(LatticeW) * LatticeH, town ? std::array<float, 4> { sky[0] * ambient, sky[1] * ambient, sky[2] * ambient, ambient } : std::array<float, 4> { 0.F, 0.F, 0.F, 0.F });
 	// Lava shines as one light: its brightest tile at each sample, added to the other lights.
-	std::vector<float> lava(StaticBright.size(), 0.F);
-	for (const Source &source : StaticSources)
-		ShineStatic(source, lava);
+	std::vector<float> &lava = StaticLava;
+	lava.assign(StaticBright.size(), 0.F);
+	StaticHasLava = false;
+	StaticPatches.assign(StaticSources.size(), {});
+	for (size_t s = 0; s < StaticSources.size(); s++) {
+		const Source &source = StaticSources[s];
+		ShineStatic(source, lava, source.flickerKind != SteadyLight && !source.lava ? &StaticPatches[s] : nullptr);
+	}
 	const Colour lavaColour = Even(LavaColour);
 	for (size_t k = 0; k < lava.size(); k++) {
 		if (lava[k] <= 0)
 			continue;
+		StaticHasLava = true;
 		StaticBright[k] += lava[k];
 		for (int c = 0; c < 3; c++)
 			StaticHue[k][c] += lavaColour[c] * lava[k];
 		StaticHue[k][3] += lava[k];
 	}
+	AddFarGlow();
 	// The tops of the rock round the rooms, in the dungeon's dark and lit by the lights round them. The lava lies on the
 	// floor, below them.
 	StaticTopBright.clear();
@@ -1158,6 +1519,117 @@ void UpdateStatics()
 	}
 }
 
+/** @brief Adds a moving light's light to this frame's window, from what it sees (its Reach). */
+void ShineMoving(const Source &source, const Reach &reach, bool tops)
+{
+	const float range = static_cast<float>(source.radius + 1);
+	const int a0 = std::max(0, WinI0 - reach.i0);
+	const int a1 = std::min(reach.w, WinI0 + WinW - reach.i0);
+	const int b0 = std::max(0, WinJ0 - reach.j0);
+	const int b1 = std::min(reach.h, WinJ0 + WinH - reach.j0);
+	for (int b = b0; b < b1; b++) {
+		const int j = reach.j0 + b;
+		const float sy = SampleAt(j);
+		for (int a = a0; a < a1; a++) {
+			const size_t r = static_cast<size_t>(b) * reach.w + a;
+			const float seen = static_cast<float>(reach.seen[r]) / 255.F;
+			const float path = reach.paths[r];
+			const int i = reach.i0 + a;
+			const float distance = Length(SampleAt(i) - source.x, sy - source.y);
+			if (tops && distance < range && !SampleOpen(i, j)) {
+				const float top = TopLinear(source, distance);
+				if (top > 1e-5F) {
+					const size_t k = static_cast<size_t>(j - WinJ0) * WinW + (i - WinI0);
+					WinTopBright[k] += top;
+					for (int c = 0; c < 3; c++)
+						WinTopHue[k][c] += source.colour[c] * top;
+					WinTopHue[k][3] += top;
+				}
+			}
+			float linear = 0;
+			if (distance < range || path <= range)
+				linear = SampleLinear(source, distance, seen, path);
+			if (seen < 1 && path > range) {
+				// Rock in front of the floors' edges sees what they see (UpdateSpill): as much light as the edge that
+				// lets the most through.
+				std::array<int, SpillWays> edges;
+				std::array<float, SpillWays> extras;
+				const int count = EdgesInBox(i, j, reach.i0, reach.j0, reach.w, reach.h, edges, extras);
+				for (int e = 0; e < count; e++) {
+					const auto edge = static_cast<size_t>(edges[static_cast<size_t>(e)]);
+					const float edgeSeen = static_cast<float>(reach.seen[edge]) / 255.F;
+					const float edgePath = reach.paths[edge] + extras[static_cast<size_t>(e)];
+					if ((edgeSeen <= 0 || distance >= range) && edgePath > range)
+						continue;
+					linear = std::max(linear, SampleLinear(source, distance, edgeSeen, edgePath));
+				}
+			}
+			if (linear <= 1e-5F)
+				continue;
+			const size_t k = static_cast<size_t>(j - WinJ0) * WinW + (i - WinI0);
+			WinBright[k] += linear;
+			for (int c = 0; c < 3; c++)
+				WinHue[k][c] += source.colour[c] * linear;
+			WinHue[k][3] += linear;
+		}
+	}
+}
+
+/**
+ * @brief A spell's light kept on after the spell is gone, fading out (the Atmosphere option's linger, idea 10, a maybe):
+ * a firebolt's glow on the walls fades over a third of a second instead of going at once.
+ */
+struct Lingering {
+	Source source;
+	Reach reach;
+	float born = 0;
+	float power = 0;
+};
+std::vector<Lingering> Lingerings;
+/** @brief Each light id's spell light last frame, to see which went out this frame. */
+std::array<bool, MAXLIGHTS> WasSpell {};
+std::array<Source, MAXLIGHTS> LastSpell {};
+int LingerLevel = -1;
+
+/** @brief Starts the lingering of the spell lights that went out this frame, and adds those still fading to the window. */
+void Linger(const std::array<bool, MAXLIGHTS> &isSpell, bool tops)
+{
+	const float strength = atmosphere::Strength(atmosphere::Knob::Linger);
+	const int level = static_cast<int>(currlevel) * 2 + (setlevel ? 1 : 0);
+	if (strength <= 0 || level != LingerLevel) {
+		Lingerings.clear();
+		LingerLevel = level;
+		WasSpell = isSpell;
+		if (strength <= 0)
+			return;
+	}
+	const FramePartScope part(FramePart::Atmosphere);
+	const float now = vfx::Clock();
+	const float fadeMs = std::max(atmosphere::Value("linger_ms", 330) * strength, 1.F);
+	for (int id = 0; id < MAXLIGHTS; id++) {
+		if (!WasSpell[static_cast<size_t>(id)] || isSpell[static_cast<size_t>(id)] || Lingerings.size() >= 24)
+			continue;
+		const Reach &reach = Reaches[static_cast<size_t>(id)];
+		if (reach.radius < 0 || reach.seen.empty())
+			continue;
+		Lingering lingering;
+		lingering.source = LastSpell[static_cast<size_t>(id)];
+		lingering.reach = reach;
+		lingering.born = now;
+		lingering.power = lingering.source.power;
+		Lingerings.push_back(std::move(lingering));
+	}
+	WasSpell = isSpell;
+	std::erase_if(Lingerings, [&](const Lingering &lingering) { return now - lingering.born >= fadeMs || now < lingering.born; });
+	for (Lingering &lingering : Lingerings) {
+		const float left = 1 - (now - lingering.born) / fadeMs;
+		// Quick at first, then trailing off, as a glow on stone cools.
+		lingering.source.power = lingering.power * left * left;
+		DynamicSources.push_back(lingering.source);
+		ShineMoving(lingering.source, lingering.reach, tops);
+	}
+}
+
 void GatherDynamic(float heroX, float heroY)
 {
 	// What each moving light is: its colour, how high it hangs, how wide it glows, how much of it bounces and how bright it is.
@@ -1202,6 +1674,7 @@ void GatherDynamic(float heroX, float heroY)
 
 	const bool tops = !WinTopBright.empty();
 	DynamicSources.clear();
+	std::array<bool, MAXLIGHTS> isSpell {};
 	for (int i = 0; i < ActiveLightCount; i++) {
 		const int id = ActiveLights[i];
 		const Light &light = Lights[id];
@@ -1261,58 +1734,13 @@ void GatherDynamic(float heroX, float heroY)
 		}
 		DynamicSources.push_back(source);
 		// Light it into this frame's window.
-		const float range = static_cast<float>(source.radius + 1);
-		const int a0 = std::max(0, WinI0 - reach.i0);
-		const int a1 = std::min(reach.w, WinI0 + WinW - reach.i0);
-		const int b0 = std::max(0, WinJ0 - reach.j0);
-		const int b1 = std::min(reach.h, WinJ0 + WinH - reach.j0);
-		for (int b = b0; b < b1; b++) {
-			const int j = reach.j0 + b;
-			const float sy = SampleAt(j);
-			for (int a = a0; a < a1; a++) {
-				const size_t r = static_cast<size_t>(b) * reach.w + a;
-				const float seen = static_cast<float>(reach.seen[r]) / 255.F;
-				const float path = reach.paths[r];
-				const int i = reach.i0 + a;
-				const float distance = Length(SampleAt(i) - source.x, sy - source.y);
-				if (tops && distance < range && !SampleOpen(i, j)) {
-					const float top = TopLinear(source, distance);
-					if (top > 1e-5F) {
-						const size_t k = static_cast<size_t>(j - WinJ0) * WinW + (i - WinI0);
-						WinTopBright[k] += top;
-						for (int c = 0; c < 3; c++)
-							WinTopHue[k][c] += source.colour[c] * top;
-						WinTopHue[k][3] += top;
-					}
-				}
-				float linear = 0;
-				if (distance < range || path <= range)
-					linear = SampleLinear(source, distance, seen, path);
-				if (seen < 1 && path > range) {
-					// Rock in front of the floors' edges sees what they see (UpdateSpill): as much light as the edge that
-					// lets the most through.
-					std::array<int, SpillWays> edges;
-					std::array<float, SpillWays> extras;
-					const int count = EdgesInBox(i, j, reach.i0, reach.j0, reach.w, reach.h, edges, extras);
-					for (int e = 0; e < count; e++) {
-						const auto edge = static_cast<size_t>(edges[static_cast<size_t>(e)]);
-						const float edgeSeen = static_cast<float>(reach.seen[edge]) / 255.F;
-						const float edgePath = reach.paths[edge] + extras[static_cast<size_t>(e)];
-						if ((edgeSeen <= 0 || distance >= range) && edgePath > range)
-							continue;
-						linear = std::max(linear, SampleLinear(source, distance, edgeSeen, edgePath));
-					}
-				}
-				if (linear <= 1e-5F)
-					continue;
-				const size_t k = static_cast<size_t>(j - WinJ0) * WinW + (i - WinI0);
-				WinBright[k] += linear;
-				for (int c = 0; c < 3; c++)
-					WinHue[k][c] += source.colour[c] * linear;
-				WinHue[k][3] += linear;
-			}
+		ShineMoving(source, reach, tops);
+		if (kinds[id].spell) {
+			isSpell[static_cast<size_t>(id)] = true;
+			LastSpell[static_cast<size_t>(id)] = source;
 		}
 	}
+	Linger(isSpell, tops);
 }
 
 /**
@@ -1445,10 +1873,21 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 			std::copy_n(StaticTopHue.begin() + static_cast<ptrdiff_t>(from), WinW, WinTopHue.begin() + static_cast<ptrdiff_t>(j) * WinW);
 		}
 	}
+	{
+		const FramePartScope part(FramePart::Atmosphere);
+		ApplyFlicker();
+		ApplyLavaBreath();
+	}
 	GatherDynamic(heroX, heroY);
 	FillWalls();
 	Finish();
+	Updates++;
 	return true;
+}
+
+uint32_t UpdateCount()
+{
+	return Updates;
 }
 
 int FieldWidth()
@@ -1681,6 +2120,26 @@ bool Blocks(int x, int y)
 	return BlocksTile(x, y);
 }
 
+bool HasLava()
+{
+	return StaticHasLava;
+}
+
+bool IsLava(int x, int y)
+{
+	return StaticHasLava && x >= 0 && y >= 0 && x < MAXDUNX && y < MAXDUNY && LavaRadius(dPiece[x][y]) != 0;
+}
+
+bool Daylight(float &x, float &y, float &reach)
+{
+	if (!HaveDaylight)
+		return false;
+	x = DaylightX;
+	y = DaylightY;
+	reach = DaylightReach;
+	return true;
+}
+
 void SetOpenGround(bool (*isOpenGround)(int x, int y))
 {
 	OpenGround = isOpenGround;
@@ -1797,7 +2256,7 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 		}
 		if (!source.castsShadows)
 			return;
-		const float linear = LevelLinear(LevelAt(distance, source.radius)) * source.power * SeenFraction(source, x, y) * ConeOf(source, x, y);
+		const float linear = LevelLinear(LevelAt(distance, source.radius)) * source.power * source.flicker * SeenFraction(source, x, y) * ConeOf(source, x, y);
 		const float strength = ToBrightness(linear);
 		if (strength < 0.02F)
 			return;
@@ -1857,7 +2316,7 @@ float LinearOf(const ShadowLight &light, float x, float y)
 	const float distance = Length(x - source->x, y - source->y);
 	if (distance >= static_cast<float>(source->radius + 1) || !Clear(source->rayX, source->rayY, x, y))
 		return 0;
-	return LevelLinear(LevelAt(distance, source->radius)) * source->power * ConeOf(*source, x, y);
+	return LevelLinear(LevelAt(distance, source->radius)) * source->power * source->flicker * ConeOf(*source, x, y);
 }
 
 float GlowAt(float x, float y)

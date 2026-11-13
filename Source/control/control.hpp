@@ -81,7 +81,16 @@ enum class InfoLineStyle : uint8_t {
 	AugmentedProperty,
 	/** A modifier line that does nothing yet, like a bonded rune line whose sockets don't match, in grey. */
 	InactiveMod,
+	/** A Mod line crafting just added: it glows and fades back to a Mod line's colour (poe2/affix_glow.hpp). */
+	NewMod,
+	/** An Affix line crafting just added, glowing like NewMod. */
+	NewAffix,
 };
+/** @brief Whether the line is laid out as an Alt view modifier line. */
+inline bool IsAffixStyle(InfoLineStyle style)
+{
+	return style == InfoLineStyle::Affix || style == InfoLineStyle::NewAffix;
+}
 /** @brief The style given to the next floating info lines; reset to Default after each item. */
 extern InfoLineStyle CurrentInfoLineStyle;
 /** @brief The style of each floating info line after the title, cleared after each drawn frame. */

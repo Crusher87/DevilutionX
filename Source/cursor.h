@@ -54,6 +54,11 @@ bool IsCursorOverUi(Point position);
 void DrawSoftwareCursor(const Surface &out, Point position, int cursId);
 
 void DrawItem(const Item &item, const Surface &out, Point position, ClxSprite clx);
+/**
+ * @brief Draws the outline round an item DrawItem draws at the same place: round its picture, or round the stone of a
+ * rune drawn in code (POE2), whose picture isn't shown.
+ */
+void DrawItemOutline(const Item &item, const Surface &out, uint8_t color, Point position, ClxSprite clx);
 
 /** Returns the sprite for the given inventory index. */
 ClxSprite GetInvItemSprite(int cursId);
