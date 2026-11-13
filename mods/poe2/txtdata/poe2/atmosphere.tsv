@@ -14,13 +14,13 @@ cathedral	stairs_up	0.35		How bright the cold light down the stairs up is (idea 
 cathedral	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
 cathedral	stairs_up_radius	3		How far it reaches, in tiles.
 cathedral	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
-cathedral	dust	60	80	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+cathedral	dust	30	40	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
 cathedral	dust_colour	1.00 0.92 0.80		The dust's colour, red green blue, before the light's colour.
-cathedral	drips	0.35		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+cathedral	drips	1.05		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
 cathedral	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before the light's colour.
 cathedral	mist	18	24	How many slow puffs of haze hang in view, first floor to last (idea 3). They glow round the flames and are gone in the dark.
 cathedral	mist_colour	1.00 0.90 0.78		The haze's colour, red green blue, before the light's colour.
-cathedral	mist_alpha	0.09		How thick each puff of haze is: 0.05 is faint, 0.15 is thick.
+cathedral	mist_alpha	0.06		How thick each puff of haze is: 0.05 is faint, 0.15 is thick.
 cathedral	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
 cathedral	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
 catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
@@ -35,9 +35,9 @@ catacombs	stairs_up	0.35		How bright the cold light down the stairs up is (idea 
 catacombs	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
 catacombs	stairs_up_radius	3		How far it reaches, in tiles.
 catacombs	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
-catacombs	dust	55	70	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+catacombs	dust	28	35	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
 catacombs	dust_colour	0.90 0.95 1.00		The dust's colour, red green blue, before the light's colour.
-catacombs	drips	0.8		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+catacombs	drips	2.4		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
 catacombs	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before the light's colour.
 catacombs	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
 catacombs	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
@@ -53,9 +53,9 @@ caves	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
 caves	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
 caves	stairs_up_radius	3		How far it reaches, in tiles.
 caves	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
-caves	dust	45	60	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+caves	dust	22	30	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
 caves	dust_colour	1.00 0.85 0.70		The dust's colour, red green blue, before the light's colour.
-caves	drips	0.6		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+caves	drips	1.8		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
 caves	drip_colour	0.80 0.85 0.95		The drops' colour, red green blue, before the light's colour.
 caves	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
 caves	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
@@ -71,7 +71,7 @@ hell	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
 hell	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
 hell	stairs_up_radius	3		How far it reaches, in tiles.
 hell	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
-hell	dust	30	40	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+hell	dust	15	20	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
 hell	dust_colour	1.00 0.80 0.70		The dust's colour, red green blue, before the light's colour.
 hell	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
 hell	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
@@ -87,9 +87,9 @@ hive	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
 hive	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
 hive	stairs_up_radius	3		How far it reaches, in tiles.
 hive	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
-hive	dust	35	45	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+hive	dust	18	22	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
 hive	dust_colour	0.95 1.00 0.80		The dust's colour, red green blue, before the light's colour.
-hive	drips	0.7		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+hive	drips	2.1		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
 hive	drip_colour	0.85 1.00 0.70		The drops' colour, red green blue, before the light's colour.
 hive	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
 hive	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
@@ -105,9 +105,9 @@ crypt	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
 crypt	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
 crypt	stairs_up_radius	3		How far it reaches, in tiles.
 crypt	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
-crypt	dust	70	90	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+crypt	dust	35	45	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
 crypt	dust_colour	0.92 1.00 0.92		The dust's colour, red green blue, before the light's colour.
-crypt	drips	0.5		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+crypt	drips	1.5		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
 crypt	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before the light's colour.
 crypt	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
 crypt	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.

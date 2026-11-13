@@ -1846,9 +1846,13 @@ constexpr float FireLightFade = 1.6F;
  * real fire or spell would outshine such a glow many times over, so inside the shadow of a light at least StrongLight
  * bright a glow fills in only this much of its light, and inside a dimmer light's shadow more, up to all of it.
  */
-constexpr float GlowFill = 0.2F;
+constexpr float GlowFill = 0.06F;
 /** @brief A light at least this bright where its shadow falls (linear light, 1 is full) outshines the glows (GlowFill). */
-constexpr float StrongLight = 0.4F;
+constexpr float StrongLight = 0.2F;
+/** @brief The widest a cast shadow fans out past the body's own width (a flame near head height would spread it to nothing). */
+constexpr float MaxSpread = 1.6F;
+/** @brief The most of a cast shadow drawn with the soft picture, so some of the body's shape always shows in it. */
+constexpr float MaxSoftness = 0.7F;
 /** @brief How dark a shadow is where its light is all the light there (less the light's own bounce fill). */
 constexpr float CastStrength = 0.85F;
 
@@ -2570,14 +2574,17 @@ float ShadowAlpha(float total, float removed)
  * @param glows The part of it from the heroes' own glows.
  * @param own The part of it from the shadow's light (one of the glows when `glow`).
  * @param kept How much of the light the body keeps off there (a wide light gets round it further out).
+ * @param atBody The shadow's light where the body stands.
  */
-float CastAlpha(float total, float glows, float own, bool glow, float fill, float kept)
+float CastAlpha(float total, float glows, float own, bool glow, float fill, float kept, float atBody)
 {
 	if (glow)
 		return ShadowAlpha(total, (1 - fill) * own * kept);
 	if (own <= 0)
 		return 0;
-	const float outshines = std::min(own / StrongLight, 1.F);
+	// A body standing in a flame's strong light casts that flame's shadow all the way out, though the light has
+	// thinned where the shadow lands and the hero's own glow is most of the light there.
+	const float outshines = std::min(std::max(own, atBody) / StrongLight, 1.F);
 	const float glowsLeft = glows * (1 - outshines * (1 - GlowFill));
 	const float others = std::max(total - glows - own, 0.F);
 	return std::clamp(CastStrength * (1 - fill) * kept * own / (own + glowsLeft + others), 0.F, 1.F);
@@ -2662,6 +2669,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		dx /= distance;
 		dy /= distance;
 		const float lightHeight = std::max(source.height, 0.05F);
+		const float atBody = light::LinearOf(source, wx, wy);
 		// As far as the floor goes before a wall, and the light reaches past the body.
 		const float limit = RoomFor(wx, wy, dx, dy, std::clamp(source.reach - distance, 0.F, CastReach));
 		if (limit < 0.05F)
@@ -2694,16 +2702,18 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			const float fy = wy + dy * along;
 			const float raised = std::max(z, 0.F);
 			// The body as the light sees it: the nearer the light, the wider each height's shadow.
-			const float spread = raised > 0 ? lightHeight / (lightHeight - raised) : 1.F;
+			// (Held to MaxSpread: under a flame hardly taller than the body, its head and shoulders would fan out so wide
+			// and thin that no shadow shows at all.)
+			const float spread = raised > 0 ? std::min(lightHeight / (lightHeight - raised), MaxSpread) : 1.F;
 			// The light's width seen past this height of the body, laid on the floor: the soft edge.
 			const float toBody = std::sqrt(distance * distance + (lightHeight - raised) * (lightHeight - raised));
 			const float pastBody = std::sqrt(along * along + raised * raised);
 			const float penumbra = source.size * pastBody / std::max(toBody, 0.05F);
 			// A light wider than the body seen from the floor gets round it, and no spot is wholly out of it.
 			const float kept = penumbra > BodyWidth * spread ? BodyWidth * spread / penumbra : 1.F;
-			const float alpha = CastAlpha(light::LinearAt(fx, fy), light::GlowAt(fx, fy), light::LinearOf(source, fx, fy), source.glow, source.fill, kept);
+			const float alpha = CastAlpha(light::LinearAt(fx, fy), light::GlowAt(fx, fy), light::LinearOf(source, fx, fy), source.glow, source.fill, kept, atBody);
 			// The soft picture's edge is stretched with the shadow, so it stands for a wider soft edge the more it spreads.
-			const float softness = std::clamp(penumbra / (SoftWidth * spread), 0.F, 1.F);
+			const float softness = std::clamp(penumbra / (SoftWidth * spread), 0.F, MaxSoftness);
 			const Uint8 sharpAlpha = ColourByte(alpha * (1 - softness));
 			const Uint8 softAlpha = ColourByte(alpha * softness);
 			const float v = std::clamp((feet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);

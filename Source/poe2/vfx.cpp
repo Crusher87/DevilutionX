@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -23,6 +24,7 @@
 
 #include <magic_enum/magic_enum.hpp>
 
+#include "dead.h"
 #include "diablo.h"
 #include "engine/dx.h"
 #include "engine/palette.h"
@@ -3581,6 +3583,18 @@ std::optional<Vec> OpenSpotInView(float margin, int tries = 4)
 	return std::nullopt;
 }
 
+/** @brief How much of the light at a world point comes from flames and other lights, not the heroes' own glows (0 to 1). */
+float FlameShare(Vec pos)
+{
+	float x;
+	float y;
+	WorldToFloor(pos, x, y);
+	const float all = hd::light::LinearAt(x, y);
+	if (all <= 1e-4F)
+		return 0;
+	return std::clamp(1 - hd::light::GlowAt(x, y) / all, 0.F, 1.F);
+}
+
 /** @brief Like OpenSpotInView, but mostly where light falls, so what only shows in the light is not spent in the dark. */
 std::optional<Vec> LitSpotInView(float margin, float minBright)
 {
@@ -3690,7 +3704,8 @@ void AdvanceMist(float ms)
 	const float dt = ms / 1000.F;
 	auto spawn = [&](bool anyAge) {
 		const std::optional<Vec> pos = LitSpotInView(150, 0.25F);
-		if (!pos)
+		// Haze glows round the flames, not round a hero's own light.
+		if (!pos || FlameShare(*pos) < 0.6F)
 			return;
 		Wisp wisp;
 		wisp.pos = *pos;
@@ -3808,6 +3823,31 @@ bool IsGore(const Object &object)
 	return IsAnyOf(object._otype, OBJ_TORTURE1, OBJ_TORTURE2, OBJ_TORTURE3, OBJ_TORTURE4, OBJ_TORTURE5, OBJ_TNUDEM1, OBJ_TNUDEM2, OBJ_TNUDEM3, OBJ_TNUDEM4, OBJ_TNUDEW1, OBJ_TNUDEW2, OBJ_TNUDEW3, OBJ_DECAP);
 }
 
+/** @brief A body with no meat on it (a skeleton's bones, a stone-cursed body's shards): flies leave it be. */
+bool Fleshless(int8_t corpse)
+{
+	const int id = corpse & 0x1F;
+	if (id == 0)
+		return false;
+	if (id == stonendx)
+		return true;
+	const auto bones = [](const CMonster &type) {
+		std::string path = type.data().spritePath();
+		std::transform(path.begin(), path.end(), path.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+		return path.find("skel") != std::string::npos || path.find("bone") != std::string::npos;
+	};
+	for (size_t i = 0; i < LevelMonsterTypeCount; i++) {
+		if (LevelMonsterTypes[i].corpseId == id)
+			return bones(LevelMonsterTypes[i]);
+	}
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.isUnique() && monster.corpseId == id)
+			return bones(monster.type());
+	}
+	return false;
+}
+
 void AdvanceFlies(float ms)
 {
 	Swarms.clear();
@@ -3852,7 +3892,7 @@ void AdvanceFlies(float ms)
 	const int ty1 = std::clamp(static_cast<int>(std::max({ y0, y1, y2, y3 })) + 1, 0, MAXDUNY - 1);
 	for (int tx = tx0; tx <= tx1; tx++) {
 		for (int ty = ty0; ty <= ty1; ty++) {
-			if (dCorpse[tx][ty] == 0)
+			if (dCorpse[tx][ty] == 0 || Fleshless(dCorpse[tx][ty]))
 				continue;
 			const uint32_t key = static_cast<uint32_t>(tx) * MAXDUNY + static_cast<uint32_t>(ty);
 			const float seen = CorpseSeenAt.try_emplace(key, AmbientTime).first->second;
@@ -9123,7 +9163,7 @@ void DrawAir()
 			const hd::light::Rgb b = LightOf(wisp.pos + Vec { wisp.size * 0.5F, 0 });
 			const hd::light::Rgb c = LightOf(wisp.pos - Vec { wisp.size * 0.5F, 0 });
 			const hd::light::Rgb light { (a.r * 2 + b.r + c.r) / 4, (a.g * 2 + b.g + c.g) / 4, (a.b * 2 + b.b + c.b) / 4 };
-			const float bright = std::min(BrightnessOf(light), 1.2F);
+			const float bright = std::min(BrightnessOf(light), 1.2F) * SmoothStep(0.3F, 0.8F, FlameShare(wisp.pos));
 			if (bright < 0.03F)
 				continue;
 			const float t = wisp.age / wisp.life;
