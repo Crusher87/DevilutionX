@@ -58,8 +58,10 @@ enum class Knob : uint8_t {
 	 * HD Lighting itself, so it shows whatever the Atmosphere option says (see Setting).
 	 */
 	Objects,
+	/** Objects whose HD art has a shape map beside it are lit by their shape; at 0, by their sides as the rest are. */
+	Shapes,
 };
-inline constexpr size_t NumKnobs = 13;
+inline constexpr size_t NumKnobs = 14;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

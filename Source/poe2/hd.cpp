@@ -204,9 +204,18 @@ struct Flow {
 	uint32_t paletteVersion = 0;
 };
 
+/** @brief The ways a shape map sorts an object's surface by how it faces: +x, -x, +y, -y and up. */
+constexpr size_t NumShapeAxes = 5;
+
 struct HdArt {
 	SDL_Texture *texture = nullptr;
 	bool missing = false;
+	/**
+	 * @brief An object's art split by the way each part of it faces, from the shape map beside it (MakeShape): one
+	 * picture per ShapeAxes entry, null where nothing faces that way. All null without a shape map.
+	 */
+	std::array<SDL_Texture *, NumShapeAxes> shape {};
+	bool shaped = false;
 	/** @brief The picture's name, for sprite art (its outlines are made from the picture). */
 	std::string name;
 	/** @brief Its smooth outlines, by OutlineCut. */
@@ -472,6 +481,10 @@ void DestroyTextures()
 		for (auto &[name, art] : Art) {
 			if (art.texture != nullptr)
 				SDL_DestroyTexture(art.texture);
+			for (SDL_Texture *shape : art.shape) {
+				if (shape != nullptr)
+					SDL_DestroyTexture(shape);
+			}
 			for (const Outline &outline : art.outlines) {
 				if (outline.texture != nullptr)
 					SDL_DestroyTexture(outline.texture);
@@ -740,10 +753,116 @@ Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const D
 	return MakeOutline(renderer, body, cover, width, height, static_cast<float>(width) / static_cast<float>(sprite.width), static_cast<float>(height) / static_cast<float>(sprite.height), cut);
 }
 
+/** @brief A shape map's tilt: the game looks down on the floor at 30 degrees (a tile is twice as wide as it is high). */
+constexpr float ViewSin = 0.5F;
+constexpr float ViewCos = 0.8660254F;
+/** @brief A way of facing gets its own picture only if this much of the object faces it. */
+constexpr float ShapeLeastShare = 0.004F;
+
+/**
+ * @brief Splits an object's HD art by the way each part of it faces, from its shape map: the picture beside it named
+ * with _n (a normal map as the eye sees it: red is right, green is up, blue is towards the eye).
+ *
+ * The renderer has no shaders, so light by shape is drawn as a few pictures added together, each lit as one way of
+ * facing is (see DrawShapedObject). Each pixel's facing is turned from the eye's view to the world's (x right and down
+ * the screen, y left and down, z up) and shared out among the axes it leans to by the square of its lean, which adds up
+ * to one: its colour goes into each axis's picture at that share of its alpha.
+ */
+void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name)
+{
+	if (picture->format->format != SDL_PIXELFORMAT_RGBA32)
+		return;
+	std::string path = "hd\\" + name + "_n.png";
+	std::replace(path.begin(), path.end(), '/', '\\');
+	if (!FindAsset(path).ok())
+		return;
+	SDL_Surface *loaded = LoadPNG(path.c_str());
+	if (loaded == nullptr)
+		return;
+	SDL_Surface *map = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
+	SDL_FreeSurface(loaded);
+	if (map == nullptr)
+		return;
+	const int width = picture->w;
+	const int height = picture->h;
+	if (width <= 0 || height <= 0 || SDL_LockSurface(picture) != 0) {
+		SDL_FreeSurface(map);
+		return;
+	}
+	if (SDL_LockSurface(map) != 0) {
+		SDL_UnlockSurface(picture);
+		SDL_FreeSurface(map);
+		return;
+	}
+	std::array<std::vector<uint8_t>, NumShapeAxes> pixels;
+	for (std::vector<uint8_t> &axis : pixels)
+		axis.assign(static_cast<size_t>(width) * height * 4, 0);
+	std::array<uint64_t, NumShapeAxes> faces {};
+	uint64_t body = 0;
+	constexpr float Root2 = 1.41421356F;
+	for (int y = 0; y < height; y++) {
+		const uint8_t *row = static_cast<const uint8_t *>(picture->pixels) + static_cast<ptrdiff_t>(y) * picture->pitch;
+		const uint8_t *mapRow = static_cast<const uint8_t *>(map->pixels) + static_cast<ptrdiff_t>(std::min(y * map->h / height, map->h - 1)) * map->pitch;
+		for (int x = 0; x < width; x++) {
+			const uint8_t *pixel = row + static_cast<ptrdiff_t>(x) * 4;
+			if (pixel[3] == 0)
+				continue;
+			const uint8_t *facing = mapRow + static_cast<ptrdiff_t>(std::min(x * map->w / width, map->w - 1)) * 4;
+			float right = static_cast<float>(facing[0]) / 127.5F - 1;
+			float up = static_cast<float>(facing[1]) / 127.5F - 1;
+			float toEye = static_cast<float>(facing[2]) / 127.5F - 1;
+			// Nothing mapped here: taken as facing the eye.
+			if (facing[3] == 0 || right * right + up * up + toEye * toEye < 0.04F) {
+				right = 0;
+				up = 0;
+				toEye = 1;
+			}
+			float nx = (right - up * ViewSin + toEye * ViewCos) / Root2;
+			float ny = (-right - up * ViewSin + toEye * ViewCos) / Root2;
+			float nz = up * ViewCos + toEye * ViewSin;
+			const float length = std::sqrt(nx * nx + ny * ny + nz * nz);
+			nx /= length;
+			ny /= length;
+			nz /= length;
+			const std::array<float, NumShapeAxes> share { nx > 0 ? nx * nx : 0, nx < 0 ? nx * nx : 0, ny > 0 ? ny * ny : 0, ny < 0 ? ny * ny : 0, nz > 0 ? nz * nz : 0 };
+			body += pixel[3];
+			const size_t at = (static_cast<size_t>(y) * width + x) * 4;
+			for (size_t k = 0; k < NumShapeAxes; k++) {
+				// The colour goes in even where none of it shows, so a smoothed edge between two facings keeps it.
+				const auto alpha = static_cast<uint8_t>(static_cast<float>(pixel[3]) * share[k] + 0.5F);
+				pixels[k][at] = pixel[0];
+				pixels[k][at + 1] = pixel[1];
+				pixels[k][at + 2] = pixel[2];
+				pixels[k][at + 3] = alpha;
+				faces[k] += alpha;
+			}
+		}
+	}
+	SDL_UnlockSurface(map);
+	SDL_UnlockSurface(picture);
+	SDL_FreeSurface(map);
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		if (static_cast<float>(faces[k]) <= static_cast<float>(body) * ShapeLeastShare)
+			continue;
+		SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, width, height);
+		if (texture == nullptr)
+			continue;
+		SDL_UpdateTexture(texture, nullptr, pixels[k].data(), width * 4);
+		// Added on top of the art drawn in the least light any of its sides takes.
+		SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_ADD);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+		SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
+#endif
+		art.shape[k] = texture;
+		art.shaped = true;
+	}
+}
+
 /**
  * @brief A sprite's HD art, loaded the first time it is asked for (its texture is null when there is none). A sprite
  * drawn with an outline (`outlined`) gets its smooth outline made at the same time, from the picture just loaded.
- * Without its painted shadow, an `object` loses the floor shadow the game painted into it (WithoutObjectShadow).
+ * Without its painted shadow, an `object` loses the floor shadow the game painted into it (WithoutObjectShadow), and
+ * takes its shape map if it has one (MakeShape).
  */
 HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShadow, const Draw *outlined, const Draw *object = nullptr)
 {
@@ -781,6 +900,8 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 			art.outlines[static_cast<size_t>(OutlineCut::Glow)] = OutlineFromPicture(renderer, surface, *outlined, OutlineCut::Glow);
 	}
 	art.texture = SDL_CreateTextureFromSurface(renderer, surface);
+	if (art.texture != nullptr && object != nullptr && withoutShadow)
+		MakeShape(renderer, art, surface, name);
 	SDL_FreeSurface(surface);
 	if (art.texture != nullptr) {
 		SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
@@ -3134,30 +3255,28 @@ constexpr float ObjectCornerTurn = 0.04F;
  * thing's left and right edges are turned further round than a block's sides.
  */
 using ObjectFacing = std::array<std::array<float, 3>, 4>;
+/** @brief The most ways of facing FacingShades works out at once. */
+constexpr size_t MaxFacings = 6;
 constexpr ObjectFacing RoundFaces { { { -0.38F, 0.92F, 0.F }, { 0.707F, 0.707F, 0.F }, { 0.92F, -0.38F, 0.F }, { 0.F, 0.F, 1.F } } };
 constexpr ObjectFacing BlockFaces { { { 0.F, 1.F, 0.F }, { 0.707F, 0.707F, 0.F }, { 1.F, 0.F, 0.F }, { 0.F, 0.F, 1.F } } };
 
 /**
- * @brief The light on a solid object's sides. The game gives a whole object the one light of its tile, so it looks cut out and
- * laid on the lit floor. Here each side takes more of a light the more it is turned to it and less turned away, as a
- * real thing does, with the light bouncing round the room on every side.
+ * @brief How much of the light where an object stands each of some ways of facing takes, against the one light the game
+ * gives the whole object (1 is as that; the floor beside it is what the light's table is made for).
  *
- * The picture has no shape to read (that takes a shape map per object, the next step), so the object is taken as one of
- * two simple shapes, as most of them are drawn. A block (a sarcophagus, a chest) is seen corner-on: its left side faces
- * +y, its right side +x, they meet at the corner nearest the eye, and each takes its own light. Anything else is taken
- * as round: the light goes smoothly from its left edge by its middle to its right edge. Both fade to the top's light up
- * the picture (the lid, the rim).
+ * Each of the strongest lights there gives a face more of its light the more the face is turned to it, measured against
+ * the floor under the same light; its bounce and the rest of the room's light fall on every face alike.
+ * @return False where no light with a direction falls on it (or feel("objects") is off): one light for all of it.
  */
-Shading ObjectLight(const Draw &draw, const Colour3 &flat, float wx, float wy)
+bool FacingShades(float wx, float wy, const std::array<float, 3> *faces, size_t count, float *shade)
 {
 	const float strength = std::clamp(atmosphere::Setting(atmosphere::Knob::Objects), 0.F, 2.F);
 	const float total = light::LinearAt(wx, wy);
 	const float drawnTotal = light::Drawn(total);
-	if (strength <= 0 || total <= 1e-4F || drawnTotal <= 1e-4F)
-		return Uniform(flat);
+	if (strength <= 0 || total <= 1e-4F || drawnTotal <= 1e-4F || count > MaxFacings)
+		return false;
 	const LightsOn &on = LightsOnPoint(wx, wy);
-	const ObjectFacing &faces = draw.caster == Caster::ObjectBlock ? BlockFaces : RoundFaces;
-	std::array<float, 4> taken {};
+	std::array<float, MaxFacings> taken {};
 	float direct = 0;
 	const auto shine = [&](const light::ShadowLight &source) {
 		// Its bounce (fill) lights every side alike, with the rest of the room's light.
@@ -3175,7 +3294,7 @@ Shading ObjectLight(const Draw &draw, const Colour3 &flat, float wx, float wy)
 		// height of the light).
 		const auto takes = [](float facing) { return std::clamp((facing + ObjectWrap) / (1 + ObjectWrap), 0.F, 1.F); };
 		const float floorTakes = std::max(takes(std::max(source.height, 0.05F) / std::sqrt(dx * dx + dy * dy + source.height * source.height + 1e-4F)), 0.1F);
-		for (size_t f = 0; f < faces.size(); f++) {
+		for (size_t f = 0; f < count; f++) {
 			const float facing = (dx * faces[f][0] + dy * faces[f][1] + dz * faces[f][2]) / length;
 			taken[f] += own * std::clamp(takes(facing) / floorTakes, ObjectAway, ObjectToward);
 		}
@@ -3185,15 +3304,33 @@ Shading ObjectLight(const Draw &draw, const Colour3 &flat, float wx, float wy)
 	if (on.overhead.strength > 0)
 		shine(on.overhead);
 	if (direct <= 0)
-		return Uniform(flat);
+		return false;
 	// The lights' shares are worked out one by one and the light there all together: they can differ a little.
 	const float fits = direct > total ? total / direct : 1.F;
 	const float others = std::max(total - direct, 0.F);
-	std::array<float, 4> shade;
-	for (size_t f = 0; f < shade.size(); f++) {
+	for (size_t f = 0; f < count; f++) {
 		const float against = light::Drawn(others + taken[f] * fits) / drawnTotal;
 		shade[f] = std::max(1 + (against - 1) * strength, 0.05F);
 	}
+	return true;
+}
+
+/**
+ * @brief The light on a solid object's sides. The game gives a whole object the one light of its tile, so it looks cut out and
+ * laid on the lit floor. Here each side takes more of a light the more it is turned to it and less turned away, as a
+ * real thing does, with the light bouncing round the room on every side.
+ *
+ * The picture has no shape to read (that takes a shape map per object, the next step), so the object is taken as one of
+ * two simple shapes, as most of them are drawn. A block (a sarcophagus, a chest) is seen corner-on: its left side faces
+ * +y, its right side +x, they meet at the corner nearest the eye, and each takes its own light. Anything else is taken
+ * as round: the light goes smoothly from its left edge by its middle to its right edge. Both fade to the top's light up
+ * the picture (the lid, the rim).
+ */
+Shading ObjectLight(const Draw &draw, const Colour3 &flat, float wx, float wy)
+{
+	std::array<float, 4> shade;
+	if (!FacingShades(wx, wy, (draw.caster == Caster::ObjectBlock ? BlockFaces : RoundFaces).data(), shade.size(), shade.data()))
+		return Uniform(flat);
 	Raster &raster = FallbackRaster(draw, false);
 	BodyBounds(raster);
 	const float width = static_cast<float>(std::max(raster.width, 1));
@@ -3242,6 +3379,57 @@ Shading ObjectLight(const Draw &draw, const Colour3 &flat, float wx, float wy)
 		}
 	}
 	return shading;
+}
+
+/** @brief The way each of a shape map's pictures faces (HdArt::shape), in the world: +x, -x, +y, -y, up. */
+constexpr std::array<std::array<float, 3>, NumShapeAxes> ShapeAxes { { { 1.F, 0.F, 0.F }, { -1.F, 0.F, 0.F }, { 0.F, 1.F, 0.F }, { 0.F, -1.F, 0.F }, { 0.F, 0.F, 1.F } } };
+
+/**
+ * @brief Draws a solid object whose HD art has a shape map, lit by its shape: every part of it takes each light by the
+ * way that part faces, so a lid, a rim, a carved edge each catch the light as they would.
+ *
+ * Without shaders this is the art drawn once in the least light any of its ways of facing takes, then each way's
+ * picture (MakeShape) added on top in the light that way takes over that. A part leaning two ways gets some of both.
+ * @return False if the draw isn't one (no shape map, or feel("shapes") is off): it is drawn lit by its sides.
+ */
+bool DrawShapedObject(SDL_Renderer *renderer, const Draw &draw, float toLogical)
+{
+	if (!IsObject(draw.caster) || draw.style != SpriteStyle::Normal || draw.light < 0 || (!draw.lightmapped && draw.tbl == nullptr))
+		return false;
+	if (atmosphere::Setting(atmosphere::Knob::Shapes) <= 0)
+		return false;
+	const ArtChoice art = CachedArt(renderer, draw);
+	if (art.art == nullptr || !art.art->shaped)
+		return false;
+	const SDL_FRect dest = DestOf(draw, toLogical);
+	if (!OnScreen(dest, 0))
+		return true;
+	float wx;
+	float wy;
+	StandsAt(draw, wx, wy);
+	const Colour3 flat = draw.hasTile ? LightAt(static_cast<float>(draw.cell.x), static_cast<float>(draw.cell.y)) : LightAt(wx, wy);
+	std::array<float, NumShapeAxes> shade;
+	if (!FacingShades(wx, wy, ShapeAxes.data(), shade.size(), shade.data()))
+		shade.fill(1.F);
+	float least = std::numeric_limits<float>::max();
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		if (art.art->shape[k] != nullptr)
+			least = std::min(least, shade[k]);
+	}
+	DrawShaded(renderer, draw, Uniform({ flat[0] * least, flat[1] * least, flat[2] * least }), toLogical, false);
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		SDL_Texture *texture = art.art->shape[k];
+		if (texture == nullptr)
+			continue;
+		Colour3 more { flat[0] * (shade[k] - least), flat[1] * (shade[k] - least), flat[2] * (shade[k] - least) };
+		// A colour mod stops at full: light over that is added again.
+		for (int pass = 0; pass < 2 && std::max({ more[0], more[1], more[2] }) > 1.F / 255; pass++) {
+			SDL_SetTextureColorMod(texture, ColourByte(more[0]), ColourByte(more[1]), ColourByte(more[2]));
+			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+			more = AboveFull(more);
+		}
+	}
+	return true;
 }
 
 /** @brief How a draw that stands on the floor is lit. */
@@ -3398,6 +3586,8 @@ bool RenderLit(SDL_Renderer *renderer, float toLogical, const std::array<float, 
 			continue;
 		if (draw.style == SpriteStyle::Normal && draw.caster != Caster::None)
 			DrawCasterShadows(renderer, draw, toLogical);
+		if (DrawShapedObject(renderer, draw, toLogical))
+			continue;
 		if (draw.kind == DrawKind::Tile && draw.hasTile && draw.light >= 0 && !IsTileBase(draw) && IsDirt(draw.cell)) {
 			DrawGroundLit(renderer, draw, toLogical);
 			continue;

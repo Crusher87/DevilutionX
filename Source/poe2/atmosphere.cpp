@@ -60,6 +60,7 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "rooms", 1.F, "the Butcher's room: red light, flies and dripping blood (idea 46)" },
 	{ "marks", 1.F, "blood dries and stays, fire leaves soot, cold leaves frost (idea 12)" },
 	{ "objects", 1.F, "chests, coffins, barrels and fountains lit by their sides, with real shadows (works with Atmosphere off)" },
+	{ "shapes", 1.F, "objects that have a shape map are lit by their shape; 0 lights them by their sides like the rest" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
