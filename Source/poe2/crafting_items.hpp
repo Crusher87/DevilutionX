@@ -270,7 +270,8 @@ enum class AugmentId : uint8_t {
 	GuardianTalisman,
 	// The runes rework's ids. The ten above are legacy: a socket or an item that has one gets the id augments.tsv's
 	// becomes column names when it loads (ConvertLegacyCraftingIds). Until the rework gives these their own names and
-	// numbers, each has those of the legacy id that becomes it.
+	// numbers, each has those of the legacy id that becomes it. The Lesser runes but Shael are legacy since runes went
+	// to POE2's three strengths: each becomes its family's plain rune.
 	LesserRal,
 	LesserThul,
 	LesserOrt,
@@ -285,7 +286,7 @@ enum class AugmentId : uint8_t {
 	VenomRune,
 	// The full sets of the build spec's steps 5 and 6 (stash step 3). Until steps 5 and 6 give them their numbers, each
 	// row of augments.tsv copies those of the nearest older row and never drops (its drops column is 0).
-	// The rune families' other strengths: a family is Lesser, plain, Greater and Perfect (Ith has no Lesser).
+	// The rune families' other strengths: a family is plain, Greater and Perfect (the Lesser ids above become plain).
 	Ral,
 	GreaterRal,
 	PerfectRal,
@@ -427,7 +428,7 @@ struct Augment {
 	bool drops = false;
 	/**
 	 * @brief The hero level it needs to go in a socket, and the most a Zod Rune can raise a rune to: a rune's strength
-	 * band (Lesser 1, plain 15, Greater 30, Perfect 50), and 50 for Zod and the Runes of Legend. 0 for none.
+	 * band (plain 1, Greater 30, Perfect 50), and 50 for Zod and the Runes of Legend. 0 for none.
 	 */
 	int level = 0;
 	/** @brief Its weight among the augments a drop can be (dropLevel is the lowest area level it drops at). */
@@ -556,7 +557,10 @@ enum class RuneFamily : uint8_t {
 	Count,
 };
 
-/** @brief A rune's strength, the Runes tab's columns: Lesser, plain, Greater and Perfect, as essence tiers are. */
+/**
+ * @brief A rune's strength, as essence tiers are: plain, Greater and Perfect, POE2's three. Lesser is left only for
+ * the one-strength Shael and Venom runes; the Lesser runes of the families become plain.
+ */
 using RuneStrength = EssenceTier;
 
 struct RuneKind {
@@ -566,7 +570,7 @@ struct RuneKind {
 
 /** @brief The rune's family and strength; none for soul cores, soulstones, relics and Runes of Legend. */
 [[nodiscard]] std::optional<RuneKind> GetRuneKind(AugmentId id);
-/** @brief The rune of the family at the strength; None where the family has no such strength (Ith has no Lesser). */
+/** @brief The rune of the family at the strength; None where the family has no such strength (no family has a Lesser one). */
 [[nodiscard]] AugmentId RuneOf(RuneFamily family, RuneStrength strength);
 std::string_view RuneFamilyName(RuneFamily family);
 /** @brief Whether the id is a Rune of Legend. */

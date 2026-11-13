@@ -69,7 +69,10 @@ void SetStoredStackCount(Item &item, int count);
 
 /** @brief The Runes tab's pages; each owns a range of slots. */
 enum class RunePage : uint8_t {
-	/** A row of four slots for each rune family (RuneFamily order): Lesser, plain, Greater and Perfect. */
+	/**
+	 * A row of four slots for each rune family (RuneFamily order): plain, Greater and Perfect in the last three; the
+	 * first, once Lesser, holds only the one-strength Shael and Venom runes. The Runes tab shows three columns.
+	 */
 	Runes,
 	RunesOfLegend,
 	SoulstonesAndRelics,
