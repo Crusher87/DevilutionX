@@ -562,9 +562,9 @@ void SplitShadow(Raster &raster, const Draw &draw, Point position, bool plainCol
 /**
  * @brief An outline round a sprite's HD art, from its picture's edge, without the shadow painted under it.
  *
- * As the game's, it goes round the sprite's colours only: where the game's own sprite has its painted shadow (palette
- * colour 0, SplitShadow), the HD art's dark pixels are shadow too, and they hide the outline there as the game's
- * shadow does (it is drawn over the outline).
+ * Round an object it goes round the object's colours only: where the game's own sprite has its painted floor shadow
+ * (palette colour 0, SplitShadow), the HD art's dark pixels are shadow too, and they hide the outline there as the
+ * game's shadow does (it is drawn over the outline). Items, monsters and heroes keep it all the way round.
  */
 Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const Draw &sprite, OutlineCut cut)
 {
@@ -577,9 +577,13 @@ Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const D
 		return none;
 	const int width = rgba->w;
 	const int height = rgba->h;
-	const Point position { 0, sprite.height - 1 };
-	Raster game = PlainRaster(sprite, position);
-	SplitShadow(game, sprite, position, true);
+	// Only objects stand on a painted floor shadow; an item's or a monster's black edge is part of it.
+	Raster game;
+	if (static_cast<ThingKind>(sprite.outlineLook.thing >> 24) == ThingKind::Object) {
+		const Point position { 0, sprite.height - 1 };
+		game = PlainRaster(sprite, position);
+		SplitShadow(game, sprite, position, true);
+	}
 	const auto gameShadow = [&](int x, int y) {
 		if (game.shadow.empty())
 			return false;
