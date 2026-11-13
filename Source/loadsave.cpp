@@ -431,6 +431,10 @@ struct LevelConversionData {
 	// And one saved after that but before the soulstones and relics took theirs (step 6) gets what they do now.
 	else if (gbIsPoe2 && (item.dwBuff & CF_POE2) != 0 && SavedBeforeSoulstoneNumbers(craftBytes))
 		MigrateRuneNumbers(item, savedCraft, /*soulstonesOnly=*/true);
+	// And one saved since then whose sockets held an id that is legacy now (a Lesser rune, which became plain) gets
+	// what the new id does.
+	else if (gbIsPoe2 && (item.dwBuff & CF_POE2) != 0)
+		MigrateRenamedAugmentNumbers(item, savedCraft);
 	// POE2 Mashup: a caster weapon of the rework keeps the modifiers it rolled, written out, from now on.
 	LockCasterWeaponMods(item);
 	FinishFlask(item);

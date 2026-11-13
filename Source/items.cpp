@@ -3200,7 +3200,13 @@ void RestoreRareItemPowers(Item &item)
 	SetRndSeed(currentSeed);
 }
 
-bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved, bool soulstonesOnly)
+namespace {
+
+/**
+ * The socketed augments' share of the item's values moves from the numbers of the ids they had when it was saved
+ * (numbersThen of each saved id) to those of today. Saves of before the Zod Rune had no raised sockets.
+ */
+bool MigrateAugmentNumbers(Item &item, const Poe2Craft &saved, AugmentId (*numbersThen)(AugmentId), bool savedRaises)
 {
 	if (item.isEmpty() || (item.dwBuff & CF_POE2) == 0 || item._iPoe2Craft.sockets == 0 || Players.empty())
 		return false;
@@ -3208,12 +3214,11 @@ bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved, bool soulstonesOnly)
 	Poe2Craft before = item._iPoe2Craft;
 	bool differs = false;
 	for (size_t i = 0; i < before.augments.size() && i < before.sockets; i++) {
-		const AugmentId id = static_cast<AugmentId>(saved.augments[i]);
-		const auto old = static_cast<uint8_t>(soulstonesOnly ? AugmentBeforeSoulstoneNumbers(id) : AugmentBeforeRuneNumbers(id));
+		const auto old = static_cast<uint8_t>(numbersThen(static_cast<AugmentId>(saved.augments[i])));
 		differs = differs || old != before.augments[i];
 		before.augments[i] = old;
 	}
-	before.raised = 0;
+	before.raised = savedRaises ? saved.raised : 0;
 	if (!differs)
 		return false;
 	const uint32_t rngState = GetLCGEngineState();
@@ -3276,6 +3281,19 @@ bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved, bool soulstonesOnly)
 		changed = true;
 	}
 	return changed;
+}
+
+} // namespace
+
+bool MigrateRuneNumbers(Item &item, const Poe2Craft &saved, bool soulstonesOnly)
+{
+	return MigrateAugmentNumbers(item, saved, soulstonesOnly ? AugmentBeforeSoulstoneNumbers : AugmentBeforeRuneNumbers, /*savedRaises=*/false);
+}
+
+bool MigrateRenamedAugmentNumbers(Item &item, const Poe2Craft &saved)
+{
+	// Since step 6 every saved id had its own row's numbers.
+	return MigrateAugmentNumbers(item, saved, [](AugmentId id) { return id; }, /*savedRaises=*/true);
 }
 
 bool CreatePoe2Unique(const Player &player, Item &item, int uid, uint32_t seed, int quality)

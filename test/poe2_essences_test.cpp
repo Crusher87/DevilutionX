@@ -438,7 +438,7 @@ TEST_F(Poe2EssencesTest, HatredStrengthensSocketedAugmentsButNotResistances)
 	RecreateItem(*MyPlayer, without, plate.IDidx, plate._iCreateInfo, plate._iSeed, plate._ivalue, plate.dwBuff, plain);
 	without._iIdentified = true;
 	for (Item *item : { &plate, &without }) {
-		for (const AugmentId rune : { AugmentId::LesserShael, AugmentId::LesserRal }) {
+		for (const AugmentId rune : { AugmentId::LesserShael, AugmentId::Ral }) {
 			ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Artificer, *MyPlayer, *item));
 			ASSERT_TRUE(ApplyCurrencyOrb(CurrencyOrb::Augment, *MyPlayer, *item, static_cast<uint8_t>(rune)));
 		}

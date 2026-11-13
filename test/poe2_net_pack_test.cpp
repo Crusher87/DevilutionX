@@ -121,7 +121,7 @@ public:
 		EXPECT_TRUE(Essence(EssenceKind::Lies, plate));
 		EXPECT_TRUE(Orb(CurrencyOrb::Artificer, plate));
 		EXPECT_TRUE(Orb(CurrencyOrb::Artificer, plate));
-		EXPECT_TRUE(Orb(CurrencyOrb::Augment, plate, static_cast<uint8_t>(AugmentId::LesserOhm)));
+		EXPECT_TRUE(Orb(CurrencyOrb::Augment, plate, static_cast<uint8_t>(AugmentId::Ohm)));
 		EXPECT_TRUE(Orb(CurrencyOrb::Augment, plate, static_cast<uint8_t>(AugmentId::GreaterAmn)));
 		EXPECT_TRUE(Orb(CurrencyOrb::Augment, plate, static_cast<uint8_t>(AugmentId::Zod)));
 		return plate;
@@ -180,7 +180,7 @@ TEST_F(Poe2NetPackTest, AFullyCraftedItemCrossesTheNetworkWhole)
 {
 	const Item plate = CraftedPlate();
 	ASSERT_EQ(plate._iPoe2Craft.sockets, 2);
-	ASSERT_EQ(SocketAugment(plate._iPoe2Craft, 0), AugmentId::Ohm) << "Zod raised the Lesser Ohm Rune";
+	ASSERT_EQ(SocketAugment(plate._iPoe2Craft, 0), AugmentId::GreaterOhm) << "Zod raised the Ohm Rune";
 	ASSERT_TRUE(SocketRaised(plate._iPoe2Craft, 0));
 	ASSERT_EQ(SocketAugment(plate._iPoe2Craft, 1), AugmentId::GreaterAmn);
 	ASSERT_TRUE(HasHatredMark(plate._iPoe2Craft));

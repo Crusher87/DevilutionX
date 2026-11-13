@@ -613,26 +613,26 @@ namespace {
 using AI = AugmentId;
 
 /**
- * Each family's runes by strength; None where the family has no such strength. Runes come in POE2's three strengths
- * (Curtis 2026-11-13): the Perfect column is empty, and a Perfect rune of an older save becomes a Greater one
- * (augments.tsv).
+ * Each family's runes by strength; None where the family has no such strength. Runes come in POE2's three strengths,
+ * plain, Greater and Perfect (Curtis 2026-11-13). The first column, once Lesser, is empty but for the one-strength
+ * Shael and Venom runes, which keep it so their Runes tab slots don't move. Lesser runes from older saves become plain
+ * ones (augments.tsv becomes column).
  */
 constexpr std::array<std::array<AugmentId, 4>, static_cast<size_t>(RuneFamily::Count)> RuneTable { {
-	{ AI::LesserRal, AI::Ral, AI::GreaterRal, AI::None },
-	{ AI::LesserThul, AI::Thul, AI::GreaterThul, AI::None },
-	{ AI::LesserOrt, AI::Ort, AI::GreaterOrt, AI::None },
-	{ AI::LesserOhm, AI::Ohm, AI::GreaterOhm, AI::None },
-	{ AI::LesserAmn, AI::Amn, AI::GreaterAmn, AI::None },
-	{ AI::LesserVex, AI::Vex, AI::GreaterVex, AI::None },
-	{ AI::LesserIo, AI::Io, AI::GreaterIo, AI::None },
-	{ AI::LesserTir, AI::Tir, AI::GreaterTir, AI::None },
-	{ AI::LesserSol, AI::Sol, AI::GreaterSol, AI::None },
-	{ AI::LesserGul, AI::Gul, AI::GreaterGul, AI::None },
-	{ AI::LesserFal, AI::Fal, AI::GreaterFal, AI::None },
-	{ AI::LesserKo, AI::Ko, AI::GreaterKo, AI::None },
-	{ AI::LesserLum, AI::Lum, AI::GreaterLum, AI::None },
-	// Ith comes in two strengths, plain and Greater.
-	{ AI::None, AI::Ith, AI::GreaterIth, AI::None },
+	{ AI::None, AI::Ral, AI::GreaterRal, AI::PerfectRal },
+	{ AI::None, AI::Thul, AI::GreaterThul, AI::PerfectThul },
+	{ AI::None, AI::Ort, AI::GreaterOrt, AI::PerfectOrt },
+	{ AI::None, AI::Ohm, AI::GreaterOhm, AI::PerfectOhm },
+	{ AI::None, AI::Amn, AI::GreaterAmn, AI::PerfectAmn },
+	{ AI::None, AI::Vex, AI::GreaterVex, AI::PerfectVex },
+	{ AI::None, AI::Io, AI::GreaterIo, AI::PerfectIo },
+	{ AI::None, AI::Tir, AI::GreaterTir, AI::PerfectTir },
+	{ AI::None, AI::Sol, AI::GreaterSol, AI::PerfectSol },
+	{ AI::None, AI::Gul, AI::GreaterGul, AI::PerfectGul },
+	{ AI::None, AI::Fal, AI::GreaterFal, AI::PerfectFal },
+	{ AI::None, AI::Ko, AI::GreaterKo, AI::PerfectKo },
+	{ AI::None, AI::Lum, AI::GreaterLum, AI::PerfectLum },
+	{ AI::None, AI::Ith, AI::GreaterIth, AI::PerfectIth },
 	// Shael is the Wind Rune of today, which the build spec keeps in one strength.
 	{ AI::LesserShael, AI::None, AI::None, AI::None },
 	// Zod raises another rune a strength; it has one strength itself.
@@ -772,7 +772,7 @@ bool ConvertLegacyCraftingIds(Item &item)
 	if (renamed) {
 		FinishCraftingItem(item);
 	} else if (GetAugmentId(item) != AugmentId::None || GetEssenceKind(item) != EssenceKind::None) {
-		// The name of today, so a row the rework renamed (Ember Rune became Lesser Ral Rune) shows its new name. Not a
+		// The name of today, so a row the rework renamed (Ember Rune became Ral Rune) shows its new name. Not a
 		// change of the item's id, so not reported.
 		FinishCraftingItem(item);
 	}
@@ -790,10 +790,16 @@ bool ConvertLegacyCraftingIds(Item &item)
 
 AugmentId AugmentBeforeRuneNumbers(AugmentId id)
 {
-	if (id == AugmentId::None || CurrentAugmentId(id) != id)
+	if (id == AugmentId::None || static_cast<int>(id) <= LegacyAugmentCount)
+		return id;
+	const AugmentId current = CurrentAugmentId(id);
+	// The runes of the families had no step 2 id. The Lesser ones, legacy themselves since runes went to three
+	// strengths, did: the one that becomes the same plain rune now (Ember Rune and Lesser Ral Rune both become Ral Rune).
+	const std::optional<RuneKind> rune = GetRuneKind(id);
+	if (current == id && rune && rune->strength != RuneStrength::Lesser)
 		return id;
 	for (int legacy = 1; legacy <= LegacyAugmentCount; legacy++) {
-		if (CurrentAugmentId(static_cast<AugmentId>(legacy)) == id)
+		if (CurrentAugmentId(static_cast<AugmentId>(legacy)) == current)
 			return static_cast<AugmentId>(legacy);
 	}
 	return id;
@@ -984,7 +990,7 @@ std::vector<const RuneBond *> RuneBondsFor(RuneFamily family, AugmentKind kind)
 AugmentId NextRuneStrength(AugmentId id)
 {
 	const std::optional<RuneKind> rune = GetRuneKind(id);
-	if (!rune || rune->strength >= RuneStrength::Greater)
+	if (!rune || rune->strength == RuneStrength::Perfect)
 		return AugmentId::None;
 	return RuneOf(rune->family, static_cast<RuneStrength>(static_cast<int>(rune->strength) + 1));
 }

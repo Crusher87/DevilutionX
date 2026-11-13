@@ -920,12 +920,12 @@ void BuildCurrencyView(TabView &view, unsigned page)
 	view.labels.push_back({ At(10, 326, 300, 14), StashSlotFooter(), UiFlags::ColorButtonpushed | UiFlags::AlignCenter });
 }
 
-/** The column heads of a block of four strengths. */
-void AddStrengthHeads(TabView &view, int x, int y, int strengths = 4)
+/** The column heads of a block of strengths, from the first (0 Lesser) to Perfect. */
+void AddStrengthHeads(TabView &view, int x, int y, int first = 0)
 {
 	constexpr const char *Heads[] = { N_("L"), N_("N"), N_("G"), N_("P") };
-	for (int i = 0; i < strengths; i++)
-		view.labels.push_back({ At(x + (i * CellPitch), y, CellSize.width, 12), std::string(_(Heads[i])), UiFlags::ColorWhite | UiFlags::AlignCenter });
+	for (int i = first; i < 4; i++)
+		view.labels.push_back({ At(x + ((i - first) * CellPitch), y, CellSize.width, 12), std::string(_(Heads[i])), UiFlags::ColorWhite | UiFlags::AlignCenter });
 }
 
 void BuildRunesView(TabView &view, unsigned page)
@@ -952,8 +952,8 @@ void BuildRunesView(TabView &view, unsigned page)
 		constexpr int Top = 64;
 		for (int block = 0; block < 2; block++) {
 			const int left = block == 0 ? 10 : 164;
-			// Runes come in POE2's three strengths, essences in four.
-			AddStrengthHeads(view, left + 28, 50, 3);
+			// Runes come in POE2's three strengths, plain, Greater and Perfect; essences in four.
+			AddStrengthHeads(view, left + 28, 50, 1);
 			for (int row = 0; row < LeftRows; row++) {
 				const int family = (block * LeftRows) + row;
 				if (family >= Families)
@@ -963,7 +963,9 @@ void BuildRunesView(TabView &view, unsigned page)
 				for (unsigned strength = 0; strength < RuneRowSlots; strength++) {
 					if (RuneOf(static_cast<RuneFamily>(family), static_cast<RuneStrength>(strength)) == AugmentId::None)
 						continue;
-					addSlot(left + 28 + (static_cast<int>(strength) * CellPitch), y, range.first + (static_cast<unsigned>(family) * RuneRowSlots) + strength);
+					// The one-strength Shael and Venom runes keep the old Lesser slot and show in the first column.
+					const int column = std::max(static_cast<int>(strength) - 1, 0);
+					addSlot(left + 28 + (column * CellPitch), y, range.first + (static_cast<unsigned>(family) * RuneRowSlots) + strength);
 				}
 			}
 		}
