@@ -315,8 +315,8 @@ TEST_F(Poe2RunesTest, ZodRaisesARuneOnceAndNotPastTheHeroLevel)
 	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 1), AugmentId::Ort);
 	EXPECT_EQ(axe._iPoe2Craft.raised, 3);
 	EXPECT_EQ(UnpackCraftState(PackCraftState(axe._iPoe2Craft)), axe._iPoe2Craft);
-	// A Perfect rune goes no higher, and a full socket's replacement isn't raised.
-	EXPECT_EQ(NextRuneStrength(AugmentId::PerfectRal), AugmentId::None);
+	// A Greater rune goes no higher (runes have POE2's three strengths), and a full socket's replacement isn't raised.
+	EXPECT_EQ(NextRuneStrength(AugmentId::GreaterRal), AugmentId::None);
 	EXPECT_EQ(NextRuneStrength(AugmentId::LesserShael), AugmentId::None);
 }
 
@@ -386,8 +386,11 @@ TEST_F(Poe2RunesTest, DropsFollowAreaLevelAndAct)
 	EXPECT_EQ(act3.count(AugmentId::PerfectRal), 0u);
 	// Lesser runes stay the commonest.
 	EXPECT_GT(act3.at(AugmentId::LesserRal), act3.at(AugmentId::GreaterRal));
-	// Past the story, Perfect runes.
-	EXPECT_GT(counts(60, PastStoryAct).count(AugmentId::PerfectRal), 0u);
+	// Past the story, Greater runes, and never a Perfect one (runes have POE2's three strengths).
+	const std::map<AugmentId, int> late = counts(60, PastStoryAct);
+	EXPECT_GT(late.count(AugmentId::GreaterRal), 0u);
+	for (const auto &[id, count] : late)
+		EXPECT_EQ(id, CurrentAugmentId(id)) << GetAugment(id).name;
 }
 
 TEST_F(Poe2RunesTest, RunesStackToTen)
@@ -420,7 +423,6 @@ TEST_F(Poe2RunesTest, CainFusesRunes)
 	ASSERT_TRUE(fusion.has_value());
 	EXPECT_EQ(fusion->output, AugmentId::Ral);
 	EXPECT_EQ(RuneFusionText(*fusion), "3 Lesser Ral Runes: 1 Ral Rune");
-	EXPECT_EQ(RuneFusionText(*GetRuneFusion(RuneFamily::Ort, RuneStrength::Greater)), "5 Greater Ort Runes: 1 Perfect Ort Rune");
 	ASSERT_EQ(RuneFusionsToOffer(player).size(), 1u);
 	ASSERT_TRUE(FuseRunes(player, RuneFamily::Ral, RuneStrength::Lesser, 1234));
 	EXPECT_EQ(BagCount(AugmentId::LesserRal), 1);
@@ -445,22 +447,10 @@ TEST_F(Poe2RunesTest, CainFusesRunes)
 	EXPECT_EQ(BagCount(AugmentId::LesserThul), 0);
 	EXPECT_EQ(BagCount(AugmentId::Thul), 1);
 
-	// Five Greater and gold make a Perfect, once Diablo is dead.
+	// Greater is the strongest: Cain fuses nothing from it.
 	ASSERT_TRUE(AutoPlaceItemInInventory(player, Rune(AugmentId::GreaterOrt, 5)));
-	const std::optional<RuneFusion> perfect = GetRuneFusion(RuneFamily::Ort, RuneStrength::Greater);
-	ASSERT_TRUE(perfect.has_value());
-	EXPECT_EQ(perfect->count, 5);
-	EXPECT_EQ(perfect->gold, PerfectFusionGold);
-	Stash.gold = PerfectFusionGold;
-	EXPECT_FALSE(FuseRunes(player, RuneFamily::Ort, RuneStrength::Greater, 5)) << "Diablo lives";
-	Quests[Q_DIABLO]._qactive = QUEST_DONE;
-	Stash.gold = PerfectFusionGold - 1;
-	EXPECT_FALSE(FuseRunes(player, RuneFamily::Ort, RuneStrength::Greater, 5)) << "Not enough gold";
-	Stash.gold = PerfectFusionGold + 10;
-	ASSERT_TRUE(FuseRunes(player, RuneFamily::Ort, RuneStrength::Greater, 5));
-	EXPECT_EQ(BagCount(AugmentId::GreaterOrt), 0);
-	EXPECT_EQ(BagCount(AugmentId::PerfectOrt), 1);
-	EXPECT_EQ(Stash.gold, 10);
+	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ort, RuneStrength::Greater).has_value());
+	EXPECT_TRUE(RuneFusionsToOffer(player).empty());
 
 	// No fusing where a strength is missing.
 	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ith, RuneStrength::Lesser).has_value());
@@ -470,59 +460,28 @@ TEST_F(Poe2RunesTest, CainFusesRunes)
 	EXPECT_EQ(sizeof(TCmdFuseRunes), 7u);
 }
 
-TEST_F(Poe2RunesTest, PerfectFusingOpensPastTheStory)
+TEST_F(Poe2RunesTest, PerfectRunesOfOlderSavesBecomeGreater)
 {
-	Player &player = *MyPlayer;
-	const std::optional<RuneFusion> perfect = GetRuneFusion(RuneFamily::Ort, RuneStrength::Greater);
-	ASSERT_TRUE(perfect.has_value());
-	ASSERT_TRUE(perfect->needsActThreeBoss);
-	Item stored = Rune(AugmentId::GreaterOrt);
-	SetStoredStackCount(stored, RunesPerPerfectFusion);
-	Stash.stashList.push_back(stored);
-	Stash.gold = PerfectFusionGold;
-	const std::string_view locked = RuneFusionRefusal(player, *perfect);
-	const auto reset = [&player]() {
-		Quests[Q_DIABLO]._qactive = QUEST_ACTIVE;
-		player.pDiabloKillLevel = 0;
-		player.poe2.mapTier = 0;
-		sgGameInitInfo.nDifficulty = DIFF_NORMAL;
-	};
+	// Runes have POE2's three strengths (Curtis 2026-11-13): no Perfect column, and a Perfect rune becomes a Greater one.
+	for (int family = 0; family < static_cast<int>(RuneFamily::Count); family++)
+		EXPECT_EQ(RuneOf(static_cast<RuneFamily>(family), RuneStrength::Perfect), AugmentId::None) << family;
+	EXPECT_EQ(CurrentAugmentId(AugmentId::PerfectRal), AugmentId::GreaterRal);
+	EXPECT_EQ(CurrentAugmentId(AugmentId::PerfectIth), AugmentId::GreaterIth);
+	EXPECT_EQ(GetRuneKind(AugmentId::PerfectOrt)->strength, RuneStrength::Greater);
 
-	// A fresh hero on Normal who hasn't killed Diablo: closed.
-	reset();
-	EXPECT_FALSE(PerfectFusingOpen(player));
-	EXPECT_FALSE(RuneFusionRefusal(player, *perfect).empty());
-	EXPECT_EQ(locked, RuneFusionRefusal(player, *perfect));
+	// A loose one, as a save loads it.
+	Item loose = Rune(AugmentId::PerfectOrt, 3);
+	EXPECT_TRUE(ConvertLegacyCraftingIds(loose));
+	EXPECT_EQ(GetAugmentId(loose), AugmentId::GreaterOrt);
+	EXPECT_EQ(StackCount(loose), 3);
+	EXPECT_EQ(RuneTabSlot(loose), RuneTabSlot(Rune(AugmentId::GreaterOrt)));
 
-	// Diablo dead in this game.
-	Quests[Q_DIABLO]._qactive = QUEST_DONE;
-	EXPECT_TRUE(PerfectFusingOpen(player));
-	EXPECT_TRUE(RuneFusionRefusal(player, *perfect).empty());
-
-	// Killed on Normal before, in a new Normal game where Diablo lives again.
-	reset();
-	player.pDiabloKillLevel = DIFF_NORMAL + 1;
-	EXPECT_TRUE(PerfectFusingOpen(player));
-	EXPECT_TRUE(RuneFusionRefusal(player, *perfect).empty());
-
-	// On Nightmare and Hell, where Perfect runes drop, with Diablo alive there.
-	for (const _difficulty difficulty : { DIFF_NIGHTMARE, DIFF_HELL }) {
-		reset();
-		sgGameInitInfo.nDifficulty = difficulty;
-		EXPECT_TRUE(PerfectFusingOpen(player)) << static_cast<int>(difficulty);
-		EXPECT_TRUE(RuneFusionRefusal(player, *perfect).empty());
-	}
-
-	// With a map open.
-	reset();
-	player.poe2.mapTier = 1;
-	EXPECT_TRUE(PerfectFusingOpen(player));
-
-	// Plain and Greater fusing never waited.
-	reset();
-	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ort, RuneStrength::Lesser)->needsActThreeBoss);
-	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ort, RuneStrength::Normal)->needsActThreeBoss);
-	Quests[Q_DIABLO]._qactive = QUEST_NOTAVAIL;
+	// And one in a socket.
+	Item axe = Socketed(MakeItem("Splitting Greataxe"), 2, { AugmentId::LesserRal });
+	axe._iPoe2Craft.augments[1] = static_cast<uint8_t>(AugmentId::PerfectRal);
+	EXPECT_TRUE(ConvertLegacyCraftingIds(axe));
+	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 1), AugmentId::GreaterRal);
+	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 0), AugmentId::LesserRal);
 }
 
 TEST_F(Poe2RunesTest, AnItemSavedBeforeTheRunesNumbersGetsThem)

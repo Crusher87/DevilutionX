@@ -921,10 +921,10 @@ void BuildCurrencyView(TabView &view, unsigned page)
 }
 
 /** The column heads of a block of four strengths. */
-void AddStrengthHeads(TabView &view, int x, int y)
+void AddStrengthHeads(TabView &view, int x, int y, int strengths = 4)
 {
 	constexpr const char *Heads[] = { N_("L"), N_("N"), N_("G"), N_("P") };
-	for (int i = 0; i < 4; i++)
+	for (int i = 0; i < strengths; i++)
 		view.labels.push_back({ At(x + (i * CellPitch), y, CellSize.width, 12), std::string(_(Heads[i])), UiFlags::ColorWhite | UiFlags::AlignCenter });
 }
 
@@ -952,7 +952,8 @@ void BuildRunesView(TabView &view, unsigned page)
 		constexpr int Top = 64;
 		for (int block = 0; block < 2; block++) {
 			const int left = block == 0 ? 10 : 164;
-			AddStrengthHeads(view, left + 28, 50);
+			// Runes come in POE2's three strengths, essences in four.
+			AddStrengthHeads(view, left + 28, 50, 3);
 			for (int row = 0; row < LeftRows; row++) {
 				const int family = (block * LeftRows) + row;
 				if (family >= Families)

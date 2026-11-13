@@ -1,10 +1,9 @@
 /**
  * @file poe2/rune_fusing.hpp
  *
- * POE2 Mashup: Cain fuses runes (build spec step 5). Three Lesser runes make one plain rune, three plain make one
- * Greater, and five Greater and gold make one Perfect, once Diablo, the Act 3 boss, is dead (PerfectFusingOpen). The
- * runes come from the hero's bag and then the stash; the fusing goes through a command (CMD_POE2_FUSERUNES) with the
- * new rune's seed.
+ * POE2 Mashup: Cain fuses runes (build spec step 5). Three Lesser runes make one plain rune, and three plain make one
+ * Greater, POE2's strongest (Curtis 2026-11-13). The runes come from the hero's bag and then the stash; the fusing goes
+ * through a command (CMD_POE2_FUSERUNES) with the new rune's seed.
  */
 #pragma once
 
@@ -21,10 +20,6 @@ struct Player;
 
 /** @brief Runes a fusing takes for a plain or Greater rune. */
 constexpr int RunesPerFusion = 3;
-/** @brief Greater runes a Perfect rune takes. */
-constexpr int RunesPerPerfectFusion = 5;
-/** @brief The gold a Perfect rune also costs. */
-constexpr int PerfectFusionGold = 5000;
 
 struct RuneFusion {
 	RuneFamily family = RuneFamily::Count;
@@ -33,9 +28,6 @@ struct RuneFusion {
 	AugmentId input = AugmentId::None;
 	AugmentId output = AugmentId::None;
 	int count = 0;
-	int gold = 0;
-	/** It waits for Diablo's death (a Perfect rune). */
-	bool needsActThreeBoss = false;
 };
 
 /** @brief The fusing of the family's runes of the strength into the next; none where either strength doesn't exist. */
@@ -49,12 +41,6 @@ struct RuneFusion {
 
 /** @brief The fusing's line in Cain's list: "3 Lesser Ral Runes: 1 Ral Rune". */
 [[nodiscard]] std::string RuneFusionText(const RuneFusion &fusion);
-
-/**
- * @brief Whether Cain makes Perfect runes for the hero: once Diablo is dead in this game or the hero has killed him on
- * any difficulty, and always on Nightmare and Hell and in maps, where Perfect runes drop.
- */
-[[nodiscard]] bool PerfectFusingOpen(const Player &player);
 
 /** @brief Why the hero can't make the fusing now; empty when they can. */
 [[nodiscard]] std::string_view RuneFusionRefusal(const Player &player, const RuneFusion &fusion);

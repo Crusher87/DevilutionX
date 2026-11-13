@@ -690,12 +690,9 @@ void StartRuneFusing()
 		const RuneFusion &fusion = RuneFusingChoices[i];
 		const int line = RuneFusingFirstLine + static_cast<int>(i);
 		AddSText(20, line, RuneFusionText(fusion), UiFlags::ColorWhite, true);
-		if (fusion.gold > 0)
-			AddSTextVal(line, fusion.gold);
 	}
 	if (RuneFusingChoices.empty()) {
 		AddSText(0, RuneFusingFirstLine + 1, _("Bring me three runes of a kind."), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
-		AddSText(0, RuneFusingFirstLine + 2, _("Five Greater runes and gold make a Perfect one."), UiFlags::ColorWhitegold | UiFlags::AlignCenter, false);
 	}
 	const int line = BackButtonLine();
 	AddSLine(line - 1);
@@ -714,13 +711,6 @@ void RuneFusingEnter()
 	if (index < 0 || index >= static_cast<int>(RuneFusingChoices.size()))
 		return;
 	const RuneFusion fusion = RuneFusingChoices[static_cast<size_t>(index)];
-	if (fusion.gold > 0 && !PlayerCanAfford(fusion.gold) && (!fusion.needsActThreeBoss || PerfectFusingOpen(*MyPlayer))) {
-		OldActiveStore = TalkID::RuneFusing;
-		OldTextLine = CurrentTextLine;
-		OldScrollPos = ScrollPos;
-		StartStore(TalkID::NoMoney);
-		return;
-	}
 	if (const std::string_view refusal = RuneFusionRefusal(*MyPlayer, fusion); !refusal.empty()) {
 		EventPlrMsg(refusal, UiFlags::ColorRed);
 		return;

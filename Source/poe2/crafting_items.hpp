@@ -285,7 +285,8 @@ enum class AugmentId : uint8_t {
 	VenomRune,
 	// The full sets of the build spec's steps 5 and 6 (stash step 3). Until steps 5 and 6 give them their numbers, each
 	// row of augments.tsv copies those of the nearest older row and never drops (its drops column is 0).
-	// The rune families' other strengths: a family is Lesser, plain, Greater and Perfect (Ith has no Lesser).
+	// The rune families' other strengths: a family is Lesser, plain and Greater (Ith has no Lesser). The Perfect ones
+	// are legacy ids now: they become Greater on load (Curtis 2026-11-13, POE2's three strengths).
 	Ral,
 	GreaterRal,
 	PerfectRal,
@@ -427,7 +428,7 @@ struct Augment {
 	bool drops = false;
 	/**
 	 * @brief The hero level it needs to go in a socket, and the most a Zod Rune can raise a rune to: a rune's strength
-	 * band (Lesser 1, plain 15, Greater 30, Perfect 50), and 50 for Zod and the Runes of Legend. 0 for none.
+	 * band (Lesser 1, plain 15, Greater 30), and 50 for Zod and the Runes of Legend. 0 for none.
 	 */
 	int level = 0;
 	/** @brief Its weight among the augments a drop can be (dropLevel is the lowest area level it drops at). */
@@ -556,7 +557,7 @@ enum class RuneFamily : uint8_t {
 	Count,
 };
 
-/** @brief A rune's strength, the Runes tab's columns: Lesser, plain, Greater and Perfect, as essence tiers are. */
+/** @brief A rune's strength, the Runes tab's columns: Lesser, plain and Greater, as essence tiers are (runes have no Perfect). */
 using RuneStrength = EssenceTier;
 
 struct RuneKind {
@@ -581,7 +582,7 @@ constexpr int RunesOfLegendCount = 8;
 [[nodiscard]] std::optional<RuneFamily> BondedRuneFamily(const Item &item);
 /** @brief The family's bonded rows for that kind of item (rune_bonds.tsv); empty for none. */
 [[nodiscard]] std::vector<const RuneBond *> RuneBondsFor(RuneFamily family, AugmentKind kind);
-/** @brief The rune one strength stronger (a Zod Rune's raise); None for a Perfect rune or one with no stronger strength. */
+/** @brief The rune one strength stronger (a Zod Rune's raise); None for a Greater rune or one with no stronger strength. */
 [[nodiscard]] AugmentId NextRuneStrength(AugmentId id);
 
 enum class Catalyst : uint8_t {

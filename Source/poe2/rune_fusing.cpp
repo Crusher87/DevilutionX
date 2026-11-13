@@ -69,17 +69,9 @@ int TakeRunesFromStash(AugmentId id, int count)
 
 } // namespace
 
-bool PerfectFusingOpen(const Player &player)
-{
-	// Diablo dead in this game, or by this hero on any difficulty (saved with the hero), or past the story: a harder
-	// difficulty or an open map, where Perfect runes drop.
-	return Quests[Q_DIABLO]._qactive == QUEST_DONE || player.pDiabloKillLevel > 0 || sgGameInitInfo.nDifficulty > DIFF_NORMAL
-	    || player.poe2.mapTier > 0 || ActiveMapTier() > 0;
-}
-
 std::optional<RuneFusion> GetRuneFusion(RuneFamily family, RuneStrength from)
 {
-	if (family >= RuneFamily::Count || from >= RuneStrength::Perfect)
+	if (family >= RuneFamily::Count || from >= RuneStrength::Greater)
 		return std::nullopt;
 	const auto to = static_cast<RuneStrength>(static_cast<int>(from) + 1);
 	RuneFusion fusion;
@@ -89,10 +81,7 @@ std::optional<RuneFusion> GetRuneFusion(RuneFamily family, RuneStrength from)
 	fusion.output = RuneOf(family, to);
 	if (fusion.input == AugmentId::None || fusion.output == AugmentId::None)
 		return std::nullopt;
-	const bool perfect = to == RuneStrength::Perfect;
-	fusion.count = perfect ? RunesPerPerfectFusion : RunesPerFusion;
-	fusion.gold = perfect ? PerfectFusionGold : 0;
-	fusion.needsActThreeBoss = perfect;
+	fusion.count = RunesPerFusion;
 	return fusion;
 }
 
@@ -117,7 +106,7 @@ std::vector<RuneFusion> RuneFusionsToOffer(const Player &player)
 {
 	std::vector<RuneFusion> fusions;
 	for (int family = 0; family < static_cast<int>(RuneFamily::Count); family++) {
-		for (int from = 0; from < static_cast<int>(RuneStrength::Perfect); from++) {
+		for (int from = 0; from < static_cast<int>(RuneStrength::Greater); from++) {
 			const std::optional<RuneFusion> fusion = GetRuneFusion(static_cast<RuneFamily>(family), static_cast<RuneStrength>(from));
 			if (fusion && OwnedRuneCount(player, fusion->input) >= fusion->count)
 				fusions.push_back(*fusion);
@@ -136,10 +125,6 @@ std::string_view RuneFusionRefusal(const Player &player, const RuneFusion &fusio
 {
 	if (OwnedRuneCount(player, fusion.input) < fusion.count)
 		return _("You don't have enough of those runes.");
-	if (fusion.needsActThreeBoss && !PerfectFusingOpen(player))
-		return _("Cain: Not until Diablo is dead. Then I'll make a Perfect rune.");
-	if (fusion.gold > 0 && (&player != MyPlayer || !PlayerCanAfford(fusion.gold)))
-		return _("You don't have enough gold.");
 	return {};
 }
 
@@ -169,8 +154,6 @@ bool FuseRunes(Player &player, RuneFamily family, RuneStrength from, uint32_t se
 	const int fromBag = TakeRunesFromBag(player, fusion->input, fusion->count);
 	if (fromBag < fusion->count && &player == MyPlayer)
 		TakeRunesFromStash(fusion->input, fusion->count - fromBag);
-	if (fusion->gold > 0)
-		TakePlrsMoney(fusion->gold);
 	// The bag first, then the stash, as the runes came; the hero's feet when neither has room.
 	if (!AutoPlaceItemInInventory(player, rune) && !(&player == MyPlayer && AutoPlaceItemInAnyStashTab(rune)))
 		GiveItemToPlayer(player, rune);
