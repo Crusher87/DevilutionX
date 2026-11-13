@@ -19,6 +19,7 @@
 #include "cursor.h"
 #include "missiles.h"
 #include "poe2/aim.hpp"
+#include "poe2/atmosphere.hpp"
 #include "poe2/floor_chests.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/hit_trace.hpp"
@@ -109,6 +110,10 @@ void CreateReplEnvironment()
 			return changed(weather::Text());
 		}
 		return weather::Text();
+	};
+	// feel() lists the Atmosphere option's switches; feel("flicker", 0) turns one off, feel("reset") puts them back.
+	env["feel"] = [](sol::optional<std::string> name, sol::optional<double> value) {
+		return atmosphere::Feel(name ? std::optional<std::string>(*name) : std::nullopt, value ? std::optional<double>(*value) : std::nullopt);
 	};
 	env["aim"] = []() {
 		if (MyPlayer == nullptr)

@@ -211,6 +211,13 @@ constexpr uint8_t ArcingSparkLook = 3;
 constexpr uint8_t SpinningBladeLook = 4;
 /** @brief The colour a missile's light shines in with HD Lighting: its effects' own colour (portals blue or red), 0-255. */
 std::array<uint8_t, 3> LightColourOf(const Missile &missile);
+
+/** @brief The seed the flame of an object at this tile flickers with (its first flame's), for its light to flicker in step. */
+uint32_t FlameSeed(Point tile);
+/** @brief How bright a flame with this seed is now against its average (about 0.7 to 1.15), as its glow flickers. */
+float FlameFlicker(uint32_t seed, bool candle);
+/** @brief The effects' clock in milliseconds: it runs while the game does and stops while it is paused. */
+float Clock();
 /**
  * @brief The frame to draw of a light object: candles hold one frame (their glow sways instead) and torches run at
  * their own pace and phase, so no two flames flicker in step. Other objects draw their current frame.

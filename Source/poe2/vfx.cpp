@@ -2246,6 +2246,28 @@ float NaturalFlicker(uint32_t seed, bool candle)
 	return 0.86F + 0.05F * breathe + 0.16F * waver - 0.2F * gust;
 }
 
+} // namespace
+
+uint32_t FlameSeed(Point tile)
+{
+	// As ScanFlames seeds an object's first flame.
+	const uint32_t seed = (static_cast<uint32_t>(tile.x) * 73856093U) ^ (static_cast<uint32_t>(tile.y) * 19349663U);
+	return seed * 1664525U + 1013904223U;
+}
+
+float FlameFlicker(uint32_t seed, bool candle)
+{
+	// NaturalFlicker's average: its waver and breathing even out, and its gusts take a little off.
+	return NaturalFlicker(seed, candle) / (candle ? 0.925F : 0.83F);
+}
+
+float Clock()
+{
+	return AmbientTime;
+}
+
+namespace {
+
 bool IsCandle(const Object &object)
 {
 	return IsAnyOf(object._otype, OBJ_CANDLE1, OBJ_CANDLE2, OBJ_BOOKCANDLE, OBJ_STORYCANDLE, OBJ_L5CANDLE);

@@ -38,6 +38,7 @@
 #include "levels/reencode_dun_cels.hpp"
 #include "utils/file_util.h"
 #include "options.h"
+#include "poe2/atmosphere.hpp"
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_outline.hpp"
 #include "poe2/telemetry.hpp"
@@ -242,6 +243,8 @@ Size FieldTextureSize;
 bool FieldMultiplies = false;
 /** @brief A soft round dark spot, for the shadow round a hero's feet from the light they carry. */
 SDL_Texture *BlobTexture = nullptr;
+/** @brief Dark towards the screen's edges and corners, clear in the middle (the Atmosphere option's edges, idea 6). */
+SDL_Texture *EdgesTexture = nullptr;
 
 SDL_Renderer *CacheRenderer = nullptr;
 const std::byte *CacheCels = nullptr;
@@ -335,7 +338,7 @@ constexpr Mood TownEvening { 1.15F, { 1.06F, 0.95F, 0.82F }, { 0.84F, 0.92F, 1.0
 bool LightingWanted();
 
 /** @brief With HD Stronger Mood, firelight is warmer and dark corners darker, in a mood of its own for each part of the dungeon. */
-const Mood &CurrentMood()
+const Mood &AreaMood()
 {
 	static constexpr Mood Cathedral { 1.35F, { 1.12F, 0.95F, 0.76F }, { 0.74F, 0.84F, 1.08F } };
 	static constexpr Mood Catacombs { 1.45F, { 1.00F, 0.97F, 0.93F }, { 0.68F, 0.82F, 1.14F } };
@@ -356,6 +359,33 @@ const Mood &CurrentMood()
 	case DTYPE_CRYPT: return Crypt;
 	default: return GentleMood;
 	}
+}
+
+/**
+ * @brief The area's mood on this floor. With the Atmosphere option each floor of an area is grimmer than the one above
+ * (idea 4): a smaller pool of light round each flame, redder fires and deeper shadows. The first floor keeps the area's
+ * mood; the table (atmosphere.tsv: falloff, warm, cool) says how far it has gone by the last.
+ */
+Mood CurrentMood()
+{
+	const Mood &area = AreaMood();
+	if (leveltype == DTYPE_TOWN || &area == &GentleMood)
+		return area;
+	const float grim = atmosphere::Strength(atmosphere::Knob::Grimmer);
+	if (grim <= 0)
+		return area;
+	const float depth = atmosphere::Depth() * grim;
+	Mood mood = area;
+	mood.falloff += atmosphere::Value("falloff", 0, depth) - atmosphere::Value("falloff", 0, 0);
+	const std::array<float, 3> warm = atmosphere::Colour("warm", {}, depth);
+	const std::array<float, 3> warmFirst = atmosphere::Colour("warm", {}, 0);
+	const std::array<float, 3> cool = atmosphere::Colour("cool", {}, depth);
+	const std::array<float, 3> coolFirst = atmosphere::Colour("cool", {}, 0);
+	for (size_t c = 0; c < 3; c++) {
+		mood.warm[c] += warm[c] - warmFirst[c];
+		mood.cool[c] += cool[c] - coolFirst[c];
+	}
+	return mood;
 }
 
 /** @brief The level's palette against the one the HD tiles were made in: Cathedral levels pick one of four. */
@@ -456,6 +486,9 @@ void DestroyTextures()
 	if (BlobTexture != nullptr && CacheRenderer != nullptr)
 		SDL_DestroyTexture(BlobTexture);
 	BlobTexture = nullptr;
+	if (EdgesTexture != nullptr && CacheRenderer != nullptr)
+		SDL_DestroyTexture(EdgesTexture);
+	EdgesTexture = nullptr;
 	light::Reset();
 }
 
@@ -1475,7 +1508,7 @@ void BuildLightBuffer(Size size)
 /** @brief The shade the old light layer gives one of the game's light levels: its brightness, warm or cool, and the screen's fade. */
 std::array<float, 3> LevelShade(int level, const std::array<float, 3> &tint)
 {
-	const Mood &mood = CurrentMood();
+	const Mood mood = CurrentMood();
 	level = std::clamp(level, 0, static_cast<int>(NumLightingLevels) - 1);
 	const float warmth = std::clamp(1.F - static_cast<float>(level) / 10.F, 0.F, 1.F);
 	std::array<float, 3> shade;
@@ -3003,7 +3036,7 @@ bool RenderLit(SDL_Renderer *renderer, float toLogical, const std::array<float, 
 	}
 	LitHeroX = heroX;
 	LitHeroY = heroY;
-	const Mood &mood = CurrentMood();
+	const Mood mood = CurrentMood();
 	light::Look look;
 	look.levelBrightness = LightLevel;
 	look.falloff = mood.falloff;
@@ -3481,6 +3514,73 @@ void LiftDarkShades(SDL_Renderer *renderer, const SDL_Rect &clip, const std::arr
 	SDL_SetRenderDrawBlendMode(renderer, before);
 }
 
+/**
+ * @brief The Atmosphere option's darker screen edges (idea 6): the corners and edges of the view a touch darker, more so
+ * deeper down, so the eye stays on the hero. It darkens what is there by a share, so the dark stays dark and the
+ * spells drawn after it still shine at the edges.
+ */
+void DrawEdges(SDL_Renderer *renderer, const SDL_Rect &clip)
+{
+	const float strength = atmosphere::Strength(atmosphere::Knob::Edges);
+	if (strength <= 0)
+		return;
+	const FramePartScope part(FramePart::Atmosphere);
+	const float darken = std::clamp(atmosphere::Value("edges", 0.22F) * strength, 0.F, 0.9F);
+	if (darken <= 0.005F)
+		return;
+	if (EdgesTexture == nullptr) {
+		constexpr int Size = 256;
+		std::vector<uint8_t> rgba(static_cast<size_t>(Size) * Size * 4, 0);
+		for (int y = 0; y < Size; y++) {
+			for (int x = 0; x < Size; x++) {
+				const float u = (static_cast<float>(x) + 0.5F) / (Size / 2.F) - 1.F;
+				const float v = (static_cast<float>(y) + 0.5F) / (Size / 2.F) - 1.F;
+				// Clear round the middle, darkening smoothly from about halfway out, darkest in the corners.
+				const float d = std::sqrt(u * u + v * v);
+				const float t = std::clamp((d - 0.55F) / (1.42F - 0.55F), 0.F, 1.F);
+				const float shape = t * t * (3 - 2 * t);
+				rgba[(static_cast<size_t>(y) * Size + x) * 4 + 3] = static_cast<uint8_t>(shape * 255.F + 0.5F);
+			}
+		}
+		EdgesTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, Size, Size);
+		if (EdgesTexture == nullptr)
+			return;
+		SDL_SetTextureBlendMode(EdgesTexture, SDL_BLENDMODE_BLEND);
+		SDL_SetTextureScaleMode(EdgesTexture, SDL_ScaleModeLinear);
+		SDL_UpdateTexture(EdgesTexture, nullptr, rgba.data(), Size * 4);
+	}
+	SDL_SetTextureAlphaMod(EdgesTexture, ColourByte(darken));
+	const SDL_Rect dest = clip;
+	SDL_RenderCopy(renderer, EdgesTexture, nullptr, &dest);
+}
+
+/**
+ * @brief The Atmosphere option's coloured dark (idea 5, a maybe he tries with feel("ink", 1)): unlit corners sink into
+ * the area's own deep colour instead of flat black (brown-black in the Cathedral, blood-black in Hell), as a screen
+ * blend like LiftDarkShades: black takes the colour, lighter shades less, white not at all. It fades with the screen.
+ */
+void DrawInk(SDL_Renderer *renderer, const SDL_Rect &clip, const std::array<float, 3> &tint)
+{
+	const float strength = atmosphere::Strength(atmosphere::Knob::Ink);
+	if (strength <= 0)
+		return;
+	const FramePartScope part(FramePart::Atmosphere);
+	const std::array<float, 3> ink = atmosphere::Colour("ink", { 4.F, 4.F, 4.F });
+	SDL_BlendMode before = SDL_BLENDMODE_NONE;
+	SDL_GetRenderDrawBlendMode(renderer, &before);
+	bool screened = false;
+#if SDL_VERSION_ATLEAST(2, 0, 6)
+	static const SDL_BlendMode Screen = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE_MINUS_DST_COLOR, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
+	screened = SDL_SetRenderDrawBlendMode(renderer, Screen) == 0;
+#endif
+	if (!screened)
+		return;
+	SDL_SetRenderDrawColor(renderer, ColourByte(ink[0] * strength / 255.F * tint[0]), ColourByte(ink[1] * strength / 255.F * tint[1]), ColourByte(ink[2] * strength / 255.F * tint[2]), 255);
+	SDL_RenderFillRect(renderer, &clip);
+	SDL_SetRenderDrawBlendMode(renderer, before);
+}
+
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
@@ -3493,6 +3593,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		LightTexture = nullptr;
 		FieldTexture = nullptr;
 		BlobTexture = nullptr;
+		EdgesTexture = nullptr;
 		CacheRenderer = renderer;
 	}
 	CheckPalette();
@@ -3525,6 +3626,8 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 	// HD Lighting works out its own light, in colour and stopped by walls.
 	if (RecordingLit && HaveViewOrigin && FloorDone && RenderLit(renderer, toLogical, tint)) {
+		DrawEdges(renderer, clip);
+		DrawInk(renderer, clip, tint);
 		LiftDarkShades(renderer, clip, tint);
 		SDL_RenderSetClipRect(renderer, nullptr);
 		WorldRecorded = false;

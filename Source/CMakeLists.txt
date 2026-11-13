@@ -54,6 +54,7 @@ set(libdevilutionx_SRCS
   poe2/skill_looks.cpp
   poe2/vfx.cpp
   poe2/weather.cpp
+  poe2/atmosphere.cpp
   poe2/hd.cpp
   poe2/hd_light.cpp
   poe2/hd_outline.cpp
