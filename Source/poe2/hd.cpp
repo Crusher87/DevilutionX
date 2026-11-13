@@ -2018,8 +2018,13 @@ constexpr float ObjectWidthShare = 0.75F;
 constexpr float MaxObjectWidth = 1.6F;
 /** @brief How much of an object's height in its picture is height (the rest is its top, seen from above). */
 constexpr float ObjectHeightShare = 0.65F;
-/** @brief How far behind an object's middle its far side lies, against its width in its picture. */
-constexpr float ObjectDepthShare = 0.3F;
+/**
+ * @brief How far into an object's footprint its shadow starts, as a share of the way from its middle to its side away
+ * from the light: a little inside, so the shadow meets the object's base with no gap (the object hides the rest).
+ */
+constexpr float ObjectTuck = 0.8F;
+/** @brief The smallest side of an object's footprint, in tiles. */
+constexpr float ObjectLeastSide = 0.3F;
 /** @brief Pieces a shadow is drawn in along its length, as its light and stretch change along it. */
 constexpr int CastBands = 12;
 /** @brief The room round the body in its shadow pictures, and how soft the sharp and soft pictures are (game pixels). */
@@ -2911,16 +2916,31 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 	const bool object = IsObject(draw.caster);
 	const float HeightPerPixel = (object ? ObjectHeightShare : 1.F) / (ViewLean * TileAcross);
 	const float tall = std::max(feet - static_cast<float>(raster.bodyTop), 1.F) * HeightPerPixel;
-	// How wide the body is across the light, in tiles (a barrel's is about a hero's, a sarcophagus's three times it),
-	// and how far behind its middle its far side is.
+	// How wide the body is across the light, in tiles (a barrel's is about a hero's, a sarcophagus's three times it).
+	// An object's footprint is read from its picture: the lowest point of its outline is its front corner, the width to
+	// the left of that its length along x and to the right its length along y (a tile's side is half a tile's width in
+	// the picture). Its middle can lie off the tile it stands on (a sarcophagus covers the tile behind it too).
 	float bodyWidth = BodyWidth;
-	float behind = 0;
+	float middleX = 0;
+	float middleY = 0;
+	float halfX = 0;
+	float halfY = 0;
 	if (object) {
 		BodyBounds(raster);
 		const float pictureWidth = static_cast<float>(raster.boundRight - raster.boundLeft + 1) / TileAcross;
 		bodyWidth = std::clamp(pictureWidth * ObjectWidthShare, BodyWidth, MaxObjectWidth);
-		behind = std::min(pictureWidth * ObjectDepthShare, MaxObjectWidth / 2);
+		const float lengthX = std::max(static_cast<float>(raster.boundCorner - raster.boundLeft) / HalfTileWidth, ObjectLeastSide);
+		const float lengthY = std::max(static_cast<float>(raster.boundRight - raster.boundCorner) / HalfTileWidth, ObjectLeastSide);
+		const float cornerAcross = (static_cast<float>(raster.boundCorner) - w / 2) / HalfTileWidth;
+		const float cornerDown = std::max(static_cast<float>(raster.boundBottom) - feet, 0.F) / (HalfTileWidth / 2);
+		const float cornerX = (cornerAcross + cornerDown) / 2;
+		const float cornerY = (cornerDown - cornerAcross) / 2;
+		halfX = lengthX / 2;
+		halfY = lengthY / 2;
+		middleX = cornerX - halfX;
+		middleY = cornerY - halfY;
 	}
+	const bool block = draw.caster == Caster::ObjectBlock;
 	const float acrossShare = object ? ObjectWidthShare : 1.F;
 
 	if (BlobTexture != nullptr) {
@@ -2956,17 +2976,25 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 	constexpr int Rows = CastBands + 2;
 	for (int n = 0; n < count; n++) {
 		const light::ShadowLight &source = lights[n];
-		float dx = wx - source.x;
-		float dy = wy - source.y;
+		const float mx = wx + middleX;
+		const float my = wy + middleY;
+		float dx = mx - source.x;
+		float dy = my - source.y;
 		const float toMiddle = std::sqrt(dx * dx + dy * dy);
 		if (toMiddle < 1e-3F)
 			continue;
 		dx /= toMiddle;
 		dy /= toMiddle;
-		// Where the shadow starts: under the feet, or at an object's far side.
+		// Where the shadow starts: under the feet, or just inside an object's side away from the light (a block's side
+		// that way, a round thing's edge).
+		float behind = 0;
+		if (object) {
+			const float exit = block ? std::min(halfX / std::max(std::abs(dx), 1e-3F), halfY / std::max(std::abs(dy), 1e-3F)) : (halfX + halfY) / 2;
+			behind = exit * ObjectTuck;
+		}
 		const float distance = toMiddle + behind;
-		const float sx = wx + dx * behind;
-		const float sy = wy + dy * behind;
+		const float sx = mx + dx * behind;
+		const float sy = my + dy * behind;
 		const float lightHeight = std::max(source.height, 0.05F);
 		const float atBody = light::LinearOf(source, wx, wy);
 		// As far as the floor goes before a wall, and the light reaches past the body.
