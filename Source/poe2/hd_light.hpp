@@ -167,6 +167,16 @@ Rgb Boost(const Rgb &light, float levels);
 /** @brief This tile is a wall or rock (walls, pillars, closed doors, and the ground outside the rooms). */
 bool Blocks(int x, int y);
 
+/** @brief Whether this level has lava (or a glowing pool) that lights itself, and whether a tile is such lava. */
+bool HasLava();
+bool IsLava(int x, int y);
+
+/**
+ * @brief The daylight down the stairs from town on the Cathedral's first floor (the Atmosphere option's idea 24): where
+ * it falls and how far it reaches, in tiles. False where there is none.
+ */
+bool Daylight(float &x, float &y, float &reach);
+
 /**
  * @brief The renderer's test for ground outside the rooms that nothing stands on but light passes over (the Cathedral's
  * dirt), so its tiles count as rock for walking but not as walls for light. Null for none.

@@ -219,6 +219,11 @@ float FlameFlicker(uint32_t seed, bool candle);
 /** @brief The effects' clock in milliseconds: it runs while the game does and stops while it is paused. */
 float Clock();
 /**
+ * @brief How much the flame of the object at this tile flutters now (the Atmosphere option's idea 25): up to 1 (times
+ * its feel() setting) as a hero or monster hurries past it, gone again in under half a second; 0 for no flame there.
+ */
+float FlameFlutter(Point tile);
+/**
  * @brief The frame to draw of a light object: candles hold one frame (their glow sways instead) and torches run at
  * their own pace and phase, so no two flames flicker in step. Other objects draw their current frame.
  */

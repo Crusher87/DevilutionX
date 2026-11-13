@@ -63,6 +63,11 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "shapes", 1.F, "objects that have a shape map are lit by their shape; 0 lights them by their sides like the rest" },
 	{ "joined", 1.F, "shadows from one light are joined, never darker where they cross; 0 stacks them (works with Atmosphere off)" },
 	{ "walls", 1.F, "shadows that reach a wall go on up it; 0 stops them at the wall's foot (works with Atmosphere off)" },
+	{ "daylight", 1.F, "cold daylight down the stairs from town, Cathedral floor 1 (idea 24)" },
+	{ "flutter", 1.F, "flames flutter as you or a monster hurry past (idea 25)" },
+	{ "lava", 1.F, "lava's glow swells and fades, orange edge on who stands by it (idea 30)" },
+	{ "haze", 1.F, "the lava wavers in its heat (idea 31)" },
+	{ "farglow", 1.F, "caverns with lava are dim orange far off, not black (idea 32)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

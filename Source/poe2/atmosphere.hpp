@@ -67,8 +67,18 @@ enum class Knob : uint8_t {
 	Joined,
 	/** A shadow that reaches a wall turned to the view goes on up the wall's face; at 0 it stops at the wall's foot. */
 	Walls,
+	/** Idea 24: cold daylight falls down the stairs from town on the Cathedral's first floor, with dust drifting in it. */
+	Daylight,
+	/** Idea 25: flames flutter and their light shivers as a hero or monster hurries past. */
+	Flutter,
+	/** Idea 30: the lava's glow swells and fades slowly, and heroes and monsters take an orange edge on the side turned to it. */
+	Lava,
+	/** Idea 31: the lava's surface wavers in its heat. */
+	Haze,
+	/** Idea 32: a cavern with lava in it is dim orange in the distance, not black. */
+	FarGlow,
 };
-inline constexpr size_t NumKnobs = 16;
+inline constexpr size_t NumKnobs = 21;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

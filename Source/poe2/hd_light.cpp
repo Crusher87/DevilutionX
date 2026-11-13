@@ -268,6 +268,17 @@ std::vector<std::array<float, 4>> StaticHue;
  */
 std::vector<float> StaticTopBright;
 std::vector<std::array<float, 4>> StaticTopHue;
+/**
+ * @brief The lava's own light at every sample (it is in StaticBright too), kept by itself so it can swell and fade each
+ * frame (the Atmosphere option's idea 30).
+ */
+std::vector<float> StaticLava;
+bool StaticHasLava = false;
+/** @brief The daylight down the first floor's stairs (idea 24), where there is one. */
+bool HaveDaylight = false;
+float DaylightX = 0;
+float DaylightY = 0;
+float DaylightReach = 0;
 
 /** @brief Which samples of the lattice a moving light reaches, kept while it doesn't move. */
 struct Reach {
@@ -1077,8 +1088,12 @@ uint32_t ObjectsSignature()
  */
 void AddStairsLights()
 {
+	HaveDaylight = false;
 	const float strength = atmosphere::Strength(atmosphere::Knob::Stairs);
-	if (strength <= 0 || leveltype == DTYPE_TOWN)
+	// Idea 24: on the Cathedral's first floor the stairs up lead out to town, and cold grey daylight falls down them.
+	const bool firstFloor = leveltype == DTYPE_CATHEDRAL && currlevel == 1 && !setlevel;
+	const float daylight = firstFloor ? atmosphere::Value("daylight", 0) * atmosphere::Strength(atmosphere::Knob::Daylight) : 0.F;
+	if ((strength <= 0 && daylight <= 0.01F) || leveltype == DTYPE_TOWN)
 		return;
 	const float down = atmosphere::Value("stairs_down", 0.35F) * strength;
 	const float up = atmosphere::Value("stairs_up", 0.4F) * strength;
@@ -1092,6 +1107,25 @@ void AddStairsLights()
 		const bool goesUp = IsAnyOf(trigger._tmsg, WM_DIABPREVLVL, WM_DIABTWARPUP, WM_DIABRTNLVL);
 		if (!goesDown && !goesUp)
 			continue;
+		if (trigger._tmsg == WM_DIABPREVLVL && daylight > 0.01F) {
+			// Hung high and wide, so it falls from above and its shadows are soft.
+			Source source;
+			source.x = static_cast<float>(trigger.position.x);
+			source.y = static_cast<float>(trigger.position.y);
+			source.power = daylight;
+			source.radius = std::clamp(static_cast<int>(std::lround(atmosphere::Value("daylight_radius", 6))), 1, static_cast<int>(NumLightRadiuses) - 1);
+			source.colour = Even(atmosphere::Colour("daylight_colour", { 0.8F, 0.88F, 1.F }));
+			source.height = 3.F;
+			source.size = 1.6F;
+			source.fill = 0.45F;
+			PlaceRays(source);
+			StaticSources.push_back(source);
+			HaveDaylight = true;
+			DaylightX = source.x;
+			DaylightY = source.y;
+			DaylightReach = static_cast<float>(source.radius);
+			continue;
+		}
 		const float power = goesDown ? down : up;
 		if (power <= 0.01F)
 			continue;
@@ -1182,19 +1216,107 @@ void AddRoomLights()
 	}
 }
 
-/** @brief How bright a flickering light is this frame against steady (1). */
-float FlickerOf(const Source &source, float flicker, float stairs)
+/**
+ * @brief How bright a flickering light is this frame against steady (1).
+ * @param flutter How much its flame flutters as someone hurries past (idea 25, 0 to 1 and a little over): its flicker
+ * is some three times as strong, and its light dips and shivers.
+ */
+float FlickerOf(const Source &source, float flicker, float stairs, float flutter)
 {
+	const float shiver = flutter > 0 ? flutter * (0.12F * std::sin(vfx::Clock() * 0.047F + static_cast<float>(source.flickerSeed % 628) / 100.F) - 0.08F) : 0.F;
+	flicker += 2 * flutter;
 	switch (source.flickerKind) {
-	case TorchFlicker: return 1 + 0.55F * flicker * (vfx::FlameFlicker(source.flickerSeed, false) - 1);
-	case CandleFlicker: return 1 + 1.F * flicker * (vfx::FlameFlicker(source.flickerSeed, true) - 1);
-	case FireFlicker: return 1 + 0.45F * flicker * (vfx::FlameFlicker(source.flickerSeed, false) - 1);
+	case TorchFlicker: return 1 + 0.55F * flicker * (vfx::FlameFlicker(source.flickerSeed, false) - 1) + shiver;
+	case CandleFlicker: return 1 + 1.F * flicker * (vfx::FlameFlicker(source.flickerSeed, true) - 1) + 1.5F * shiver;
+	case FireFlicker: return 1 + 0.45F * flicker * (vfx::FlameFlicker(source.flickerSeed, false) - 1) + shiver;
 	case StairsBreath: {
 		// A slow swell, about once every four seconds, never in step with other stairs.
 		const float phase = static_cast<float>(source.flickerSeed % 628) / 100.F;
 		return 1 + 0.18F * std::min(stairs, 1.F) * std::sin(vfx::Clock() * 0.0016F + phase);
 	}
 	default: return 1;
+	}
+}
+
+/**
+ * @brief The lava's glow swells and fades slowly (the Atmosphere option's idea 30): its own light in the window, more
+ * and less of it in a slow wave that travels across the cavern. Its numbers are the area's in atmosphere.tsv
+ * (lava_breath, how much of its light comes and goes, and lava_breath_s, how many seconds a swell takes).
+ */
+void ApplyLavaBreath()
+{
+	if (!StaticHasLava)
+		return;
+	const float depth = std::min(atmosphere::Value("lava_breath", 0) * atmosphere::Strength(atmosphere::Knob::Lava), 0.8F);
+	if (depth <= 0)
+		return;
+	const float time = vfx::Clock() * 0.001F * 6.2831853F / std::max(atmosphere::Value("lava_breath_s", 6), 0.5F);
+	const Colour colour = Even(LavaColour);
+	for (int j = 0; j < WinH; j++) {
+		const size_t from = static_cast<size_t>(WinJ0 + j) * LatticeW + WinI0;
+		const size_t out = static_cast<size_t>(j) * WinW;
+		for (int i = 0; i < WinW; i++) {
+			const float lava = StaticLava[from + static_cast<size_t>(i)];
+			if (lava <= 0)
+				continue;
+			const auto across = static_cast<float>(WinI0 + i);
+			const auto down = static_cast<float>(WinJ0 + j);
+			const float wave = 0.7F * std::sin(time + (across + down) * 0.09F) + 0.3F * std::sin(time * 1.7F + (across - down) * 0.13F);
+			const float add = lava * depth * wave;
+			const size_t k = out + static_cast<size_t>(i);
+			WinBright[k] = std::max(WinBright[k] + add, 0.F);
+			for (int c = 0; c < 3; c++)
+				WinHue[k][c] = std::max(WinHue[k][c] + colour[c] * add, 0.F);
+			WinHue[k][3] = std::max(WinHue[k][3] + add, 0.F);
+		}
+	}
+}
+
+/**
+ * @brief A cavern with lava in it is dim orange in the distance, not black (the Atmosphere option's idea 32): the lava's
+ * glow fills the air of the whole cavern a little, the more the more lava lies round a spot, walls or no walls. Its
+ * numbers are the area's in atmosphere.tsv (lava_far, how bright; lava_far_reach, how many tiles round a spot count;
+ * lava_far_full, the share of them that is lava for all of the glow).
+ */
+void AddFarGlow()
+{
+	if (!StaticHasLava)
+		return;
+	const float glow = atmosphere::Value("lava_far", 0) * atmosphere::Strength(atmosphere::Knob::FarGlow);
+	if (glow <= 0)
+		return;
+	const int reach = std::clamp(static_cast<int>(std::lround(atmosphere::Value("lava_far_reach", 10))), 1, 24);
+	const float full = std::max(atmosphere::Value("lava_far_full", 0.06F), 0.005F);
+	// How many lava tiles lie in the box from the map's corner to each tile.
+	constexpr int Wide = MAXDUNY + 1;
+	static std::vector<int> sums;
+	sums.assign(static_cast<size_t>(MAXDUNX + 1) * Wide, 0);
+	for (int x = 0; x < MAXDUNX; x++) {
+		for (int y = 0; y < MAXDUNY; y++) {
+			sums[static_cast<size_t>(x + 1) * Wide + y + 1] = (LavaRadius(dPiece[x][y]) != 0 ? 1 : 0)
+			    + sums[static_cast<size_t>(x) * Wide + y + 1] + sums[static_cast<size_t>(x + 1) * Wide + y] - sums[static_cast<size_t>(x) * Wide + y];
+		}
+	}
+	const Colour colour = Even(LavaColour);
+	for (int j = 0; j < LatticeH; j++) {
+		const int y = std::clamp(static_cast<int>(std::floor(SampleAt(j) + 0.5F)), 0, MAXDUNY - 1);
+		const int y0 = std::max(y - reach, 0);
+		const int y1 = std::min(y + reach, MAXDUNY - 1) + 1;
+		for (int i = 0; i < LatticeW; i++) {
+			const int x = std::clamp(static_cast<int>(std::floor(SampleAt(i) + 0.5F)), 0, MAXDUNX - 1);
+			const int x0 = std::max(x - reach, 0);
+			const int x1 = std::min(x + reach, MAXDUNX - 1) + 1;
+			const int lava = sums[static_cast<size_t>(x1) * Wide + y1] - sums[static_cast<size_t>(x0) * Wide + y1] - sums[static_cast<size_t>(x1) * Wide + y0] + sums[static_cast<size_t>(x0) * Wide + y0];
+			if (lava == 0)
+				continue;
+			const float share = static_cast<float>(lava) / static_cast<float>((2 * reach + 1) * (2 * reach + 1));
+			const float add = glow * std::min(share / full, 1.F);
+			const size_t k = static_cast<size_t>(j) * LatticeW + i;
+			StaticBright[k] += add;
+			for (int c = 0; c < 3; c++)
+				StaticHue[k][c] += colour[c] * add;
+			StaticHue[k][3] += add;
+		}
 	}
 }
 
@@ -1207,14 +1329,17 @@ void ApplyFlicker()
 {
 	const float flicker = atmosphere::Strength(atmosphere::Knob::Flicker) * atmosphere::Value("flicker", 1);
 	const float stairs = atmosphere::Strength(atmosphere::Knob::Stairs);
-	if (flicker <= 0 && stairs <= 0) {
+	const bool flutters = atmosphere::Strength(atmosphere::Knob::Flutter) > 0;
+	if (flicker <= 0 && stairs <= 0 && !flutters) {
 		for (Source &source : StaticSources)
 			source.flicker = 1;
 		return;
 	}
 	for (size_t s = 0; s < StaticSources.size() && s < StaticPatches.size(); s++) {
 		Source &source = StaticSources[s];
-		const float factor = FlickerOf(source, flicker, stairs);
+		const bool flame = IsAnyOf(source.flickerKind, TorchFlicker, CandleFlicker, FireFlicker);
+		const float flutter = flutters && flame ? vfx::FlameFlutter(Point { static_cast<int>(std::lround(source.x)), static_cast<int>(std::lround(source.y)) }) : 0.F;
+		const float factor = FlickerOf(source, flicker, stairs, flutter);
 		source.flicker = factor;
 		const Patch &patch = StaticPatches[s];
 		if (std::abs(factor - 1) < 1e-3F || patch.linear.empty())
@@ -1315,7 +1440,9 @@ void UpdateStatics()
 	const Colour sky = Even(TownSkyColour);
 	StaticHue.assign(static_cast<size_t>(LatticeW) * LatticeH, town ? std::array<float, 4> { sky[0] * ambient, sky[1] * ambient, sky[2] * ambient, ambient } : std::array<float, 4> { 0.F, 0.F, 0.F, 0.F });
 	// Lava shines as one light: its brightest tile at each sample, added to the other lights.
-	std::vector<float> lava(StaticBright.size(), 0.F);
+	std::vector<float> &lava = StaticLava;
+	lava.assign(StaticBright.size(), 0.F);
+	StaticHasLava = false;
 	StaticPatches.assign(StaticSources.size(), {});
 	for (size_t s = 0; s < StaticSources.size(); s++) {
 		const Source &source = StaticSources[s];
@@ -1325,11 +1452,13 @@ void UpdateStatics()
 	for (size_t k = 0; k < lava.size(); k++) {
 		if (lava[k] <= 0)
 			continue;
+		StaticHasLava = true;
 		StaticBright[k] += lava[k];
 		for (int c = 0; c < 3; c++)
 			StaticHue[k][c] += lavaColour[c] * lava[k];
 		StaticHue[k][3] += lava[k];
 	}
+	AddFarGlow();
 	// The tops of the rock round the rooms, in the dungeon's dark and lit by the lights round them. The lava lies on the
 	// floor, below them.
 	StaticTopBright.clear();
@@ -1747,6 +1876,7 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 	{
 		const FramePartScope part(FramePart::Atmosphere);
 		ApplyFlicker();
+		ApplyLavaBreath();
 	}
 	GatherDynamic(heroX, heroY);
 	FillWalls();
@@ -1988,6 +2118,26 @@ Rgb Sky()
 bool Blocks(int x, int y)
 {
 	return BlocksTile(x, y);
+}
+
+bool HasLava()
+{
+	return StaticHasLava;
+}
+
+bool IsLava(int x, int y)
+{
+	return StaticHasLava && x >= 0 && y >= 0 && x < MAXDUNX && y < MAXDUNY && LavaRadius(dPiece[x][y]) != 0;
+}
+
+bool Daylight(float &x, float &y, float &reach)
+{
+	if (!HaveDaylight)
+		return false;
+	x = DaylightX;
+	y = DaylightY;
+	reach = DaylightReach;
+	return true;
 }
 
 void SetOpenGround(bool (*isOpenGround)(int x, int y))

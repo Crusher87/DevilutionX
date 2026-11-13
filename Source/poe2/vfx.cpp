@@ -2282,6 +2282,34 @@ float Clock()
 
 namespace {
 
+/**
+ * @brief Idea 25, flames that flutter as things pass: how much each flame object's flame flutters (1 as a hero or
+ * monster hurries past within FlutterReach tiles, dying away over FlutterMs), and the way it leans, away from them, as
+ * a direction on screen.
+ */
+struct Flutter {
+	float amount = 0;
+	Vec lean { 0, 0 };
+};
+std::array<Flutter, MAXOBJECTS> Flutters {};
+bool AnyFlutter = false;
+constexpr float FlutterMs = 400;
+constexpr float FlutterReach = 1.8F;
+
+} // namespace
+
+float FlameFlutter(Point tile)
+{
+	if (!AnyFlutter || !InDungeonBounds(tile))
+		return 0;
+	const int8_t at = dObject[tile.x][tile.y];
+	if (at == 0)
+		return 0;
+	return Flutters[static_cast<size_t>(std::abs(at) - 1)].amount;
+}
+
+namespace {
+
 bool IsCandle(const Object &object)
 {
 	return IsAnyOf(object._otype, OBJ_CANDLE1, OBJ_CANDLE2, OBJ_BOOKCANDLE, OBJ_STORYCANDLE, OBJ_L5CANDLE);
@@ -2611,7 +2639,13 @@ void ScanFlames(const View &view)
 			// A candle's flame sways a little.
 			if (candle)
 				pos.x += 0.6F * std::sin(AmbientTime * 0.0021F + static_cast<float>(seed % 628) / 100.F);
-			const float flicker = NaturalFlicker(seed, candle);
+			float flicker = NaturalFlicker(seed, candle);
+			// As someone hurries past, it leans away from them and shivers (idea 25).
+			if (const Flutter &flutter = Flutters[static_cast<size_t>(id)]; flutter.amount > 0) {
+				const float shiver = std::sin(AmbientTime * 0.047F + static_cast<float>(seed % 628) / 100.F);
+				pos = pos + flutter.lean * (2.2F * flutter.amount) + Vec { 0.8F * flutter.amount * shiver, 0 };
+				flicker *= 1 + flutter.amount * (0.14F * shiver - 0.1F);
+			}
 			const float s = spot.size;
 			Ring glow;
 			glow.pos = pos;
@@ -3469,6 +3503,8 @@ struct Mote {
 	float life;
 	float size;
 	float phase;
+	/** @brief One of the extra specks in the daylight down the first floor's stairs (idea 24). */
+	bool day = false;
 };
 std::vector<Mote> Motes;
 
@@ -3643,6 +3679,58 @@ void MarkStrike(Vec pos, Element element, float size)
 		AddMark(pos, MarkKind::Frost, Random(9, 14) * std::clamp(size, 0.6F, 2.5F), { 205, 225, 245 });
 }
 
+/** @brief Idea 25: flames flutter as a hero or monster hurries past them. */
+void AdvanceFlutter(float ms)
+{
+	const float strength = std::min(atmosphere::Strength(atmosphere::Knob::Flutter) * atmosphere::Value("flutter", 0), 2.F);
+	if (strength <= 0) {
+		if (AnyFlutter)
+			Flutters.fill({});
+		AnyFlutter = false;
+		return;
+	}
+	// Whoever is on the move, in tiles.
+	static std::vector<Point> movers;
+	movers.clear();
+	for (const Player &player : Players) {
+		if (player.plractive && player.isOnActiveLevel() && player.isWalking())
+			movers.push_back(player.position.tile);
+	}
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.isWalking() && (monster.flags & MFLAG_HIDDEN) == 0)
+			movers.push_back(monster.position.tile);
+	}
+	bool any = false;
+	for (int i = 0; i < ActiveObjectCount; i++) {
+		const int id = ActiveObjects[i];
+		const Object &object = Objects[id];
+		Flutter &flutter = Flutters[static_cast<size_t>(id)];
+		flutter.amount = std::max(flutter.amount - ms / FlutterMs * strength, 0.F);
+		if (!IsFlameObject(object)) {
+			flutter.amount = 0;
+			continue;
+		}
+		for (const Point mover : movers) {
+			const auto dx = static_cast<float>(object.position.x - mover.x);
+			const auto dy = static_cast<float>(object.position.y - mover.y);
+			const float distance = std::sqrt(dx * dx + dy * dy);
+			if (distance >= FlutterReach)
+				continue;
+			// All of it within a tile, less further off.
+			const float push = strength * std::min((FlutterReach - distance) / (FlutterReach - 1), 1.F);
+			if (push < flutter.amount)
+				continue;
+			flutter.amount = push;
+			const Vec away = FloorToWorld(dx, dy);
+			const float length = std::sqrt(away.x * away.x + away.y * away.y);
+			flutter.lean = length > 0.5F ? Vec { away.x / length, away.y / length } : Vec { 0, -1 };
+		}
+		any = any || flutter.amount > 0;
+	}
+	AnyFlutter = any;
+}
+
 void AdvanceDust(float ms)
 {
 	const float strength = AirStrength(atmosphere::Knob::Dust);
@@ -3652,11 +3740,12 @@ void AdvanceDust(float ms)
 		return;
 	}
 	const float dt = ms / 1000.F;
-	auto spawn = [&](bool anyAge) {
-		const std::optional<Vec> pos = LitSpotInView(80, 0.3F);
+	auto spawn = [&](bool anyAge, const std::optional<Vec> &where = std::nullopt) {
+		const std::optional<Vec> pos = where ? where : LitSpotInView(80, 0.3F);
 		if (!pos)
 			return;
 		Mote mote;
+		mote.day = where.has_value();
 		mote.pos = *pos;
 		mote.z = Random(20, 80);
 		const float angle = Random(0, 2 * Pi);
@@ -3674,9 +3763,27 @@ void AdvanceDust(float ms)
 		for (int i = static_cast<int>(target); i > 0; i--)
 			spawn(true);
 	}
-	if (static_cast<float>(Motes.size()) < target) {
+	int inDaylight = 0;
+	for (const Mote &mote : Motes)
+		inDaylight += mote.day ? 1 : 0;
+	if (static_cast<float>(Motes.size()) - static_cast<float>(inDaylight) < target) {
 		for (int i = AirCount(target / 9.F, ms); i > 0; i--)
 			spawn(false);
+	}
+	// Idea 24: more of it drifts in the daylight that falls down the first floor's stairs.
+	float dayX;
+	float dayY;
+	float dayReach;
+	if (hd::light::Daylight(dayX, dayY, dayReach)) {
+		const float more = std::min(atmosphere::Value("daylight_dust", 0) * AirStrength(atmosphere::Knob::Daylight), 60.F);
+		if (more > 0 && !OutOfView(FloorToWorld(dayX, dayY), 60)) {
+			const bool arriving = inDaylight == 0;
+			for (int i = arriving ? static_cast<int>(more) : AirCount(more / 6.F, ms); i > 0 && static_cast<float>(inDaylight) < more; i--, inDaylight++) {
+				const float angle = Random(0, 2 * Pi);
+				const float out = dayReach * 0.55F * std::sqrt(Random(0, 1));
+				spawn(arriving, FloorToWorld(dayX + std::cos(angle) * out, dayY + std::sin(angle) * out));
+			}
+		}
 	}
 	for (size_t i = 0; i < Motes.size();) {
 		Mote &mote = Motes[i];
@@ -3937,6 +4044,7 @@ void AdvanceAir(float ms)
 		Swarms.clear();
 		return;
 	}
+	AdvanceFlutter(ms);
 	AdvanceDust(ms);
 	AdvanceMist(ms);
 	AdvanceDrips(ms);

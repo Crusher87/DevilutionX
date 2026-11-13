@@ -42,6 +42,7 @@
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_outline.hpp"
 #include "poe2/telemetry.hpp"
+#include "poe2/vfx.hpp"
 #include "utils/is_of.hpp"
 #include "utils/png.h"
 #include "utils/sdl_wrap.h"
@@ -4421,6 +4422,57 @@ bool DrawShapedObject(SDL_Renderer *renderer, const Draw &draw, float toLogical,
 	return true;
 }
 
+/** @brief The colour of the edge the lava gives a body standing by it (LavaEdge). */
+constexpr Colour3 LavaEdgeColour { 1.F, 0.5F, 0.2F };
+
+/**
+ * @brief A hero or monster standing by lava takes an orange edge on the side turned to it (the Atmosphere option's idea
+ * 30): that side of its picture a little brighter and more orange, the other a little darker, by the lava's share of
+ * the light there (lava_edge in atmosphere.tsv is how strong).
+ */
+Shading LavaEdge(const Colour3 &flat, float wx, float wy)
+{
+	if (!light::HasLava())
+		return Uniform(flat);
+	const float edge = atmosphere::Strength(atmosphere::Knob::Lava) * atmosphere::Value("lava_edge", 0);
+	const float total = light::LinearAt(wx, wy);
+	if (edge <= 0 || total <= 1e-4F)
+		return Uniform(flat);
+	const LightsOn &on = LightsOnPoint(wx, wy);
+	for (int n = 0; n < on.count; n++) {
+		const light::ShadowLight &lava = on.lights[static_cast<size_t>(n)];
+		if (lava.source != light::LavaLight)
+			continue;
+		const float dx = lava.x - wx;
+		const float dy = lava.y - wy;
+		const float away = std::sqrt(dx * dx + dy * dy);
+		if (away < 1e-3F)
+			break;
+		const float share = std::clamp((1 - lava.fill) * light::LinearOf(lava, wx, wy) / total, 0.F, 1.F);
+		// To the right on screen is +x, -y.
+		const float side = (dx - dy) / away * ViewAcross;
+		const float more = std::min(edge * share * std::abs(side), 0.8F);
+		if (more < 0.02F)
+			break;
+		const float bright = std::max({ flat[0], flat[1], flat[2] });
+		Colour3 toward;
+		Colour3 turned;
+		for (size_t c = 0; c < 3; c++) {
+			toward[c] = flat[c] + LavaEdgeColour[c] * bright * more;
+			turned[c] = flat[c] * (1 - 0.4F * more);
+		}
+		// The body fills the middle of its picture: the light turns from one side to the other across it.
+		Shading shading;
+		shading.count = 4;
+		shading.stops = { 0.F, 0.38F, 0.62F, 1.F };
+		const Colour3 &left = side < 0 ? toward : turned;
+		const Colour3 &right = side < 0 ? turned : toward;
+		shading.colours = { left, left, right, right };
+		return shading;
+	}
+	return Uniform(flat);
+}
+
 /** @brief How a draw that stands on the floor is lit. */
 Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 {
@@ -4455,15 +4507,15 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 		const light::Rgb at = light::At(wx, wy);
 		const light::Rgb full = light::Full();
 		const float least = leveltype == DTYPE_TOWN ? 0.F : HeroLightFloor;
-		return Uniform({ std::max(at.r, full.r * least), std::max(at.g, full.g * least), std::max(at.b, full.b * least) });
+		return LavaEdge({ std::max(at.r, full.r * least), std::max(at.g, full.g * least), std::max(at.b, full.b * least) }, wx, wy);
 	}
 	case Caster::Hero:
 		// Other heroes are drawn 5 light levels brighter than where they stand.
-		return Uniform(draw.light >= 0 ? ToColour(light::Boost(light::At(wx, wy), 5)) : ToColour(light::Full()));
+		return draw.light >= 0 ? LavaEdge(ToColour(light::Boost(light::At(wx, wy), 5)), wx, wy) : Uniform(ToColour(light::Full()));
 	case Caster::Monster:
-		return Uniform(draw.light >= 0 ? LightAt(wx, wy) : ToColour(light::Full()));
+		return draw.light >= 0 ? LavaEdge(LightAt(wx, wy), wx, wy) : Uniform(ToColour(light::Full()));
 	case Caster::MonsterRecoloured:
-		return Uniform(LightAt(wx, wy));
+		return LavaEdge(LightAt(wx, wy), wx, wy);
 	case Caster::MonsterUnlit:
 		return Uniform(ToColour(light::Full()));
 	case Caster::None:
@@ -4504,6 +4556,71 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 	if (IsObject(draw.caster) && draw.style == SpriteStyle::Normal)
 		return ObjectLight(draw, flat, wx, wy);
 	return Uniform(flat);
+}
+
+/** @brief The most pieces of lava floor the heat haze is drawn over in a frame, and the bands each is drawn in. */
+constexpr int MaxHazePieces = 500;
+constexpr int HazeBands = 8;
+
+/**
+ * @brief The lava wavers in its heat (the Atmosphere option's idea 31): each piece of lava floor is drawn again over
+ * itself, half see-through and pushed a little left and right in bands that run up the screen, so its surface swims.
+ * Drawn before the light, so it is lit as the floor is and lies under everything standing on it. (`haze` in
+ * atmosphere.tsv is how far it sways, in game pixels.)
+ */
+void DrawHeatHaze(SDL_Renderer *renderer, float toLogical)
+{
+	if (!light::HasLava())
+		return;
+	const float sway = std::min(atmosphere::Value("haze", 0) * atmosphere::Strength(atmosphere::Knob::Haze), 6.F);
+	if (sway <= 0)
+		return;
+	const float time = vfx::Clock();
+	std::array<SDL_Vertex, (HazeBands + 1) * 2> vertices;
+	std::array<int, HazeBands * 6> indices;
+	int used = 0;
+	for (int r = 0; r < HazeBands; r++) {
+		const int corner = r * 2;
+		for (const int v : { corner, corner + 1, corner + 3, corner, corner + 3, corner + 2 })
+			indices[static_cast<size_t>(used++)] = v;
+	}
+	int pieces = 0;
+	for (size_t i = 0; i < FloorEnd && i < Draws.size() && pieces < MaxHazePieces; i++) {
+		const Draw &draw = Draws[i];
+		if (IsOutline(draw.style) || draw.kind != DrawKind::Tile)
+			continue;
+		// The floor's pieces don't carry their tile: it is the one under the middle of the piece's half of the diamond.
+		float tileX;
+		float tileY;
+		WorldOf(static_cast<float>(draw.x) + static_cast<float>(draw.width) / 2, static_cast<float>(draw.y + draw.height) - HalfTileHeight, tileX, tileY);
+		if (!light::IsLava(static_cast<int>(std::floor(tileX + 0.5F)), static_cast<int>(std::floor(tileY + 0.5F))))
+			continue;
+		const SDL_FRect dest = DestOf(draw, toLogical);
+		if (!OnScreen(dest, 0))
+			continue;
+		const DrawTexture art = TextureFor(renderer, draw, false);
+		if (art.texture == nullptr)
+			continue;
+		const Colour3 colour = ArtColour({ 1.F, 1.F, 1.F }, art);
+		const SDL_Color shade { ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), 140 };
+		SDL_SetTextureColorMod(art.texture, 255, 255, 255);
+		SDL_SetTextureAlphaMod(art.texture, 255);
+		for (int r = 0; r <= HazeBands; r++) {
+			const float v = static_cast<float>(r) / HazeBands;
+			// The waves run up the screen, fixed to the world so they don't swim when the view moves.
+			float wx;
+			float wy;
+			WorldOf(static_cast<float>(draw.x), static_cast<float>(draw.y) + v * static_cast<float>(draw.height), wx, wy);
+			const float down = (wx + wy) * HalfTileHeight;
+			const float wave = 0.65F * std::sin(down * 0.21F + time * 0.0075F) + 0.35F * std::sin(down * 0.47F + time * 0.0131F + 1.3F);
+			const float dx = wave * sway * Scale * toLogical;
+			const float y = dest.y + v * dest.h;
+			vertices[static_cast<size_t>(r) * 2] = SDL_Vertex { { dest.x + dx, y }, shade, { 0.F, v } };
+			vertices[static_cast<size_t>(r) * 2 + 1] = SDL_Vertex { { dest.x + dest.w + dx, y }, shade, { 1.F, v } };
+		}
+		SDL_RenderGeometry(renderer, art.texture, vertices.data(), static_cast<int>(vertices.size()), indices.data(), used);
+		pieces++;
+	}
 }
 
 /**
@@ -4563,6 +4680,10 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 	for (size_t i = 0; i < FloorEnd && i < Draws.size(); i++) {
 		if (!IsOutline(Draws[i].style))
 			DrawShaded(renderer, Draws[i], unlit, toLogical, true);
+	}
+	{
+		const FramePartScope part(FramePart::Atmosphere);
+		DrawHeatHaze(renderer, toLogical);
 	}
 	DrawFloorLight(renderer, toLogical);
 	for (size_t i = FloorEnd; i < Draws.size(); i++) {
