@@ -241,6 +241,9 @@ struct Patch {
 	std::vector<float> linear;
 };
 std::vector<Patch> StaticPatches;
+
+/** @brief How many times the light has been worked out, for UpdateCount. */
+uint32_t Updates = 0;
 /** @brief What the static light was worked out for: the level, its walls and the game's own baked light. */
 struct StaticKey {
 	int levelType = -1;
@@ -1119,6 +1122,66 @@ void AddStairsLights()
 	}
 }
 
+/**
+ * @brief The famous rooms' own light (idea 46), the Butcher's for now: a dull red light inside his room that the walls
+ * and his closed door hold in, so it spills out when the door opens, and a faint red glow just outside each closed door.
+ */
+void AddRoomLights()
+{
+	const float strength = atmosphere::Strength(atmosphere::Knob::Rooms);
+	const std::optional<WorldTileRectangle> butcher = atmosphere::ButcherRoom();
+	if (strength <= 0 || !butcher)
+		return;
+	const WorldTileRectangle room = *butcher;
+	const WorldTilePosition corner = room.position;
+	const float width = static_cast<float>(room.size.width);
+	const float height = static_cast<float>(room.size.height);
+	const float cx = static_cast<float>(corner.x) + width / 2 - 0.5F;
+	const float cy = static_cast<float>(corner.y) + height / 2 - 0.5F;
+	const Colour colour = Even(atmosphere::RoomColour("butcher", "light_colour", { 1.F, 0.18F, 0.1F }));
+	const float power = atmosphere::RoomValue("butcher", "light", 1.4F) * strength;
+	if (power > 0.01F) {
+		Source source;
+		source.x = cx;
+		source.y = cy;
+		source.power = power;
+		source.colour = colour;
+		source.radius = std::clamp(static_cast<int>(std::lround(atmosphere::RoomValue("butcher", "light_radius", 6))), 1, static_cast<int>(NumLightRadiuses) - 1);
+		source.height = 1.2F;
+		source.size = 0.8F;
+		source.fill = 0.3F;
+		source.flickerKind = FireFlicker;
+		source.flickerSeed = (static_cast<uint32_t>(corner.x) * 73856093U) ^ (static_cast<uint32_t>(corner.y) * 19349663U);
+		PlaceRays(source);
+		StaticSources.push_back(source);
+	}
+	const float door = atmosphere::RoomValue("butcher", "door_light", 0.45F) * strength;
+	if (door <= 0.01F)
+		return;
+	for (int i = 0; i < ActiveObjectCount; i++) {
+		const Object &object = Objects[ActiveObjects[i]];
+		if (!object.isDoor() || object._oVar4 != 0 /* closed */ || !room.contains(WorldTilePosition(object.position)))
+			continue;
+		// Just outside the door: away from the room's middle along the axis the door faces.
+		const float dx = static_cast<float>(object.position.x) - cx;
+		const float dy = static_cast<float>(object.position.y) - cy;
+		Source source;
+		source.x = static_cast<float>(object.position.x) + (std::abs(dx) >= std::abs(dy) ? (dx > 0 ? 0.6F : -0.6F) : 0.F);
+		source.y = static_cast<float>(object.position.y) + (std::abs(dx) >= std::abs(dy) ? 0.F : (dy > 0 ? 0.6F : -0.6F));
+		source.power = door;
+		source.colour = colour;
+		source.radius = 2;
+		source.height = 0.05F;
+		source.size = 0.8F;
+		source.fill = 0.2F;
+		source.castsShadows = false;
+		source.flickerKind = FireFlicker;
+		source.flickerSeed = (static_cast<uint32_t>(object.position.x) * 73856093U) ^ (static_cast<uint32_t>(object.position.y) * 19349663U);
+		PlaceRays(source);
+		StaticSources.push_back(source);
+	}
+}
+
 /** @brief How bright a flickering light is this frame against steady (1). */
 float FlickerOf(const Source &source, float flicker, float stairs)
 {
@@ -1227,6 +1290,7 @@ void UpdateStatics()
 		StaticSources.push_back(source);
 	}
 	AddStairsLights();
+	AddRoomLights();
 	for (int x = 0; x < MAXDUNX; x++) {
 		for (int y = 0; y < MAXDUNY; y++) {
 			const int radius = LavaRadius(dPiece[x][y]);
@@ -1687,7 +1751,13 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 	GatherDynamic(heroX, heroY);
 	FillWalls();
 	Finish();
+	Updates++;
 	return true;
+}
+
+uint32_t UpdateCount()
+{
+	return Updates;
 }
 
 int FieldWidth()

@@ -16,6 +16,8 @@
 #include <string>
 #include <string_view>
 
+#include "engine/world_tile.hpp"
+
 namespace devilution::atmosphere {
 
 /** @brief The Atmosphere option. */
@@ -35,12 +37,24 @@ enum class Knob : uint8_t {
 	Flicker,
 	/** Idea 48: stairs down glow dully from below, stairs up take a faint cold light. */
 	Stairs,
-	/** Idea 5 (a maybe, off until tried): the unlit dark takes the area's colour instead of flat black. */
-	Ink,
 	/** Idea 10 (a maybe, off until tried): a spell's light fades out after it ends instead of going at once. */
 	Linger,
+	/** Idea 2: specks of dust in the air, seen only where light falls on them. */
+	Dust,
+	/** Idea 11: flies round hanging bodies and old corpses. */
+	Flies,
+	/** Idea 11: water dripping from the ceiling, a small ring where it lands. */
+	Drips,
+	/** Idea 11: smoke from torches and braziers rising higher and thinning out. */
+	Smoke,
+	/** Idea 3: a thin haze that glows round the flames and is gone in the dark (the Cathedral only, for now). */
+	Mist,
+	/** Idea 46: the famous rooms' own light and air (the Butcher's, for now). */
+	Rooms,
+	/** Idea 12: blood that dries darker and stays, soot from fire and frost from cold that slowly goes. */
+	Marks,
 };
-inline constexpr size_t NumKnobs = 6;
+inline constexpr size_t NumKnobs = 12;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);
@@ -55,6 +69,12 @@ float Depth();
 float Value(std::string_view name, float fallback, float depth);
 /** @brief The same at this floor's depth. */
 float Value(std::string_view name, float fallback);
+/** @brief A special room's number from the table (rows whose area is the room's name, such as "butcher"), or the fallback. */
+float RoomValue(std::string_view room, std::string_view name, float fallback);
+std::array<float, 3> RoomColour(std::string_view room, std::string_view name, const std::array<float, 3> &fallback);
+
+/** @brief The Butcher's room on this floor, in tiles, while his quest is here (idea 46); empty otherwise. */
+std::optional<WorldTileRectangle> ButcherRoom();
 /** @brief A colour (three numbers) from the table, as Value. */
 std::array<float, 3> Colour(std::string_view name, const std::array<float, 3> &fallback, float depth);
 std::array<float, 3> Colour(std::string_view name, const std::array<float, 3> &fallback);

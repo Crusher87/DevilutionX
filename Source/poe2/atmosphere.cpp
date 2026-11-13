@@ -17,6 +17,7 @@
 #include "levels/gendung.h"
 #include "options.h"
 #include "poe2/area_levels.hpp"
+#include "quests.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
 
@@ -34,7 +35,7 @@ struct Row {
 };
 
 /** @brief The table, by area (the level type) and then by the number's name. */
-std::array<std::unordered_map<std::string, Row>, 7> Areas;
+std::array<std::unordered_map<std::string, Row>, 8> Areas;
 bool Loaded = false;
 uint32_t LoadCount = 0;
 
@@ -50,8 +51,14 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "edges", 1.F, "darker screen edges (idea 6)" },
 	{ "flicker", 1.F, "firelight flickers, shadows sway with it (idea 1)" },
 	{ "stairs", 1.F, "stairs show where they lead (idea 48)" },
-	{ "ink", 0.F, "the dark takes the area's colour (idea 5, a maybe: try it)" },
 	{ "linger", 0.F, "spell light fades out slowly (idea 10, a maybe: try it)" },
+	{ "dust", 1.F, "dust in the air, seen only in the light (idea 2)" },
+	{ "flies", 1.F, "flies round hanging bodies and old corpses (idea 11)" },
+	{ "drips", 1.F, "water drips from the ceiling (idea 11)" },
+	{ "smoke", 1.F, "smoke from flames rises higher and thins (idea 11)" },
+	{ "mist", 1.F, "a thin haze glowing round the flames, Cathedral only for now (idea 3)" },
+	{ "rooms", 1.F, "the Butcher's room: red light, flies and dripping blood (idea 46)" },
+	{ "marks", 1.F, "blood dries and stays, fire leaves soot, cold leaves frost (idea 12)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
@@ -65,7 +72,7 @@ uint32_t SettingsVersion = 0;
 
 int AreaIndex(std::string_view name)
 {
-	constexpr std::array<std::string_view, 7> Names { "town", "cathedral", "catacombs", "caves", "hell", "hive", "crypt" };
+	constexpr std::array<std::string_view, 8> Names { "town", "cathedral", "catacombs", "caves", "hell", "hive", "crypt", "butcher" };
 	for (size_t i = 0; i < Names.size(); i++) {
 		if (Names[i] == name)
 			return static_cast<int>(i);
@@ -150,16 +157,20 @@ void Load()
 	}
 }
 
-const Row *Find(std::string_view name)
+const Row *FindIn(int area, std::string_view name)
 {
 	if (!Loaded)
 		Load();
-	const int area = CurrentArea();
 	if (area < 0)
 		return nullptr;
 	const auto &rows = Areas[static_cast<size_t>(area)];
 	const auto it = rows.find(std::string(name));
 	return it != rows.end() ? &it->second : nullptr;
+}
+
+const Row *Find(std::string_view name)
+{
+	return FindIn(CurrentArea(), name);
 }
 
 float OptionScale()
@@ -280,6 +291,18 @@ std::array<float, 3> Colour(std::string_view name, const std::array<float, 3> &f
 	return Colour(name, fallback, Depth());
 }
 
+float RoomValue(std::string_view room, std::string_view name, float fallback)
+{
+	const Row *row = FindIn(AreaIndex(room), name);
+	return row != nullptr ? row->first[0] : fallback;
+}
+
+std::array<float, 3> RoomColour(std::string_view room, std::string_view name, const std::array<float, 3> &fallback)
+{
+	const Row *row = FindIn(AreaIndex(room), name);
+	return row != nullptr ? row->first : fallback;
+}
+
 bool Has(std::string_view name)
 {
 	return Find(name) != nullptr;
@@ -322,6 +345,13 @@ std::string Feel(const std::optional<std::string> &name, const std::optional<dou
 	for (const KnobInfo &knob : Knobs)
 		names += StrCat(names.empty() ? "" : ", ", knob.name);
 	return StrCat("No switch called \"", *name, "\". The switches are ", names, ", plus \"reset\" and \"reload\".");
+}
+
+std::optional<WorldTileRectangle> ButcherRoom()
+{
+	if (leveltype != DTYPE_CATHEDRAL || setlevel || !Quests[Q_BUTCHER].IsAvailable() || SetPiece.size.width == 0)
+		return std::nullopt;
+	return WorldTileRectangle { SetPiece.position.megaToWorld(), WorldTileSize(SetPiece.size.width * 2, SetPiece.size.height * 2) };
 }
 
 } // namespace devilution::atmosphere

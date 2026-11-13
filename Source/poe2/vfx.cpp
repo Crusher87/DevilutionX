@@ -40,9 +40,11 @@
 #include "objects.h"
 #include "options.h"
 #include "player.h"
+#include "poe2/atmosphere.hpp"
 #include "poe2/bound_demons.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/floor_chests.hpp"
+#include "poe2/hd_light.hpp"
 #include "poe2/loot_filter.hpp"
 #include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
@@ -905,6 +907,11 @@ const DebrisPhysics &PhysicsOf(DebrisKind kind)
 }
 
 /** @brief A piece of debris: a point on the floor in tile units, its height above it in pixels, and how it moves. */
+/** @brief The Atmosphere option's marks (idea 12): keeps a settled drop of blood on the floor; false when marks are off. */
+bool KeepBloodMark(Vec pos, float size, Rgb colour);
+/** @brief Fire leaves soot and cold frost where it strikes (idea 12), and any hit stirs the dust up (idea 2). */
+void MarkStrike(Vec pos, Element element, float size);
+
 struct DebrisPiece {
 	float x, y;
 	float vx, vy;
@@ -1160,6 +1167,9 @@ void StepDebris(DebrisPiece &piece, float dt)
 			piece.vy = 0;
 			piece.spin = 0;
 			piece.restAt = piece.age;
+			// A drop of blood that stays: the floor keeps it as a mark, drying darker, and the drop itself goes.
+			if (piece.kind == DebrisKind::Droplet && KeepBloodMark(FloorToWorld(piece.x, piece.y), piece.size * 1.4F, piece.colour))
+				piece.life = piece.age;
 			return;
 		}
 		piece.vx *= (speed - slow) / speed;
@@ -1525,6 +1535,7 @@ GraphicLook LookOf(MissileGraphicID graphic)
 
 void ImpactAt(Vec pos, Element element, float size)
 {
+	MarkStrike(pos, element, size);
 	const Colours c = ColoursOf(element);
 	switch (element) {
 	case Element::Fire: FireImpact(pos, size, c); break;
@@ -3111,17 +3122,20 @@ void EmitAmbient(float ms)
 				p.flame = emitter.object;
 				AddParticle(p);
 			}
-			for (int i = Occurrences(0.008F * s * s, ms); i > 0; i--) {
+			// The Atmosphere option's smoke (idea 11): it rises higher and spreads thinner before it's gone.
+			const float smoke = atmosphere::Strength(atmosphere::Knob::Smoke) * atmosphere::Value("smoke", 1);
+			const float wind = weather::Current().wind;
+			for (int i = Occurrences(0.008F * s * s * (1 + 0.4F * smoke), ms); i > 0; i--) {
 				Particle p;
 				p.pos = emitter.pos + Vec { Random(-2, 2), -0.5F * s };
-				p.vel = { Random(-6, 6), 0 };
-				p.vz = Random(16, 28);
-				p.life = Random(1600, 2600);
+				p.vel = { Random(-6, 6) + wind * 20 * smoke, 0 };
+				p.vz = Random(16, 28) * (1 + 0.3F * smoke);
+				p.life = Random(1600, 2600) * (1 + 0.8F * smoke);
 				p.size0 = 3;
-				p.size1 = 3 + 0.9F * s;
+				p.size1 = (3 + 0.9F * s) * (1 + 0.6F * smoke);
 				p.c0 = { 38, 32, 30 };
 				p.c1 = { 22, 20, 19 };
-				p.alpha = 0.13F;
+				p.alpha = 0.13F / (1 + 0.25F * smoke);
 				p.shape = Shape::Puff;
 				p.flame = emitter.object;
 				AddParticle(p);
@@ -3432,6 +3446,483 @@ void AdvanceWeather(float ms)
 	}
 }
 
+// POE2 Mashup: the Atmosphere option's air (step 2 of the old Diablo feel): dust and haze seen only in the light, flies,
+// drips, and the marks fights leave. Looks only, with the effects' own dice; nothing here touches the game.
+
+/** @brief The HD light was worked out this frame, so the air can read it (set each frame in Render). */
+bool AirLit = false;
+uint32_t LastLightCount = 0;
+
+/** @brief Fights stir the dust up: 0 to 1, settling over about ten seconds. */
+float Stir = 0;
+
+/** @brief A speck of dust drifting in the air (idea 2). */
+struct Mote {
+	Vec pos;
+	float z;
+	Vec vel;
+	float vz;
+	float age;
+	float life;
+	float size;
+	float phase;
+};
+std::vector<Mote> Motes;
+
+/** @brief A slow, faint puff of haze (idea 3). */
+struct Wisp {
+	Vec pos;
+	float z;
+	Vec vel;
+	float age;
+	float life;
+	float size;
+};
+std::vector<Wisp> Wisps;
+
+/** @brief A drop falling from the ceiling: water, or blood in the Butcher's room (ideas 11 and 46). */
+struct Drip {
+	Vec pos;
+	float z;
+	float vz;
+	Rgb colour;
+	bool blood;
+};
+std::vector<Drip> Drips;
+
+/** @brief Flies circling a hanging body, a severed head or an old corpse (idea 11). */
+struct Swarm {
+	Vec anchor;
+	float z;
+	int count;
+	uint32_t seed;
+	/** @brief How far they've scattered from a hero close by: 0 settled, 1 scattered. */
+	float scatter;
+};
+std::vector<Swarm> Swarms;
+std::unordered_map<uint32_t, float> SwarmScatter;
+/** @brief When each tile's corpse was first seen, so only old corpses draw flies. */
+std::unordered_map<uint32_t, float> CorpseSeenAt;
+
+enum class MarkKind : uint8_t {
+	Blood,
+	Soot,
+	Frost,
+};
+
+/** @brief What a fight leaves on the floor (idea 12): drying blood, soot, melting frost. Gone with the level. */
+struct Mark {
+	Vec pos;
+	float size;
+	float born;
+	Rgb colour;
+	MarkKind kind;
+};
+std::vector<Mark> Marks;
+constexpr size_t MaxMarks = 300;
+
+float AirStrength(atmosphere::Knob knob)
+{
+	return AirLit ? atmosphere::Strength(knob) : 0.F;
+}
+
+/** @brief The HD light at a world point, per channel (1 full, up to hd::light::MaxLight beside a strong light). */
+hd::light::Rgb LightOf(Vec pos)
+{
+	float x;
+	float y;
+	WorldToFloor(pos, x, y);
+	return hd::light::At(x, y);
+}
+
+float BrightnessOf(const hd::light::Rgb &light)
+{
+	return std::max({ light.r, light.g, light.b });
+}
+
+/** @brief A table colour (0 to 1 a channel) in the light's own colour, at full value: the light's brightness goes in the alpha. */
+Rgb InLight(const std::array<float, 3> &colour, const hd::light::Rgb &light)
+{
+	const float bright = std::max(BrightnessOf(light), 0.001F);
+	const auto channel = [&](float c, float l) { return static_cast<uint8_t>(std::clamp(255.F * c * l / bright, 0.F, 255.F)); };
+	return { channel(colour[0], light.r), channel(colour[1], light.g), channel(colour[2], light.b) };
+}
+
+float SmoothStep(float edge0, float edge1, float x)
+{
+	const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.F, 1.F);
+	return t * t * (3 - 2 * t);
+}
+
+/** @brief How many to make this time from a rate a second (randomly rounded), not scaled by Effect Intensity. */
+int AirCount(float perSecond, float ms)
+{
+	const float expected = std::max(perSecond, 0.F) * ms / 1000.F;
+	int count = static_cast<int>(expected);
+	if (Random(0, 1) < expected - static_cast<float>(count))
+		count++;
+	return count;
+}
+
+/** @brief A random open spot in the view (widened by margin), in world pixels; nullopt after a few tries on walls. */
+std::optional<Vec> OpenSpotInView(float margin, int tries = 4)
+{
+	for (; tries > 0; tries--) {
+		const Vec pos { Random(WeatherView.min.x - margin, WeatherView.max.x + margin), Random(WeatherView.min.y - margin, WeatherView.max.y + margin) };
+		float x;
+		float y;
+		WorldToFloor(pos, x, y);
+		const int tx = static_cast<int>(std::lround(x));
+		const int ty = static_cast<int>(std::lround(y));
+		if (!InDungeonBounds({ tx, ty }) || hd::light::Blocks(tx, ty))
+			continue;
+		return pos;
+	}
+	return std::nullopt;
+}
+
+/** @brief Like OpenSpotInView, but mostly where light falls, so what only shows in the light is not spent in the dark. */
+std::optional<Vec> LitSpotInView(float margin, float minBright)
+{
+	for (int tries = 0; tries < 8; tries++) {
+		const std::optional<Vec> pos = OpenSpotInView(margin, 1);
+		if (pos && BrightnessOf(LightOf(*pos)) >= minBright)
+			return pos;
+	}
+	return std::nullopt;
+}
+
+bool OutOfView(Vec pos, float margin)
+{
+	return pos.x < WeatherView.min.x - margin || pos.x > WeatherView.max.x + margin || pos.y < WeatherView.min.y - margin || pos.y > WeatherView.max.y + margin;
+}
+
+/** @brief How far a world point is from the hero being played, in tiles (far away when there is none). */
+float TilesFromHero(Vec pos)
+{
+	if (MyPlayer == nullptr)
+		return 1000;
+	float x;
+	float y;
+	WorldToFloor(pos, x, y);
+	const Point hero = MyPlayer->position.tile;
+	return std::max(std::abs(x - static_cast<float>(hero.x)), std::abs(y - static_cast<float>(hero.y)));
+}
+
+void AddMark(Vec pos, MarkKind kind, float size, Rgb colour)
+{
+	if (atmosphere::Strength(atmosphere::Knob::Marks) <= 0)
+		return;
+	if (Marks.size() >= MaxMarks)
+		Marks.erase(Marks.begin());
+	Marks.push_back({ pos, size, AmbientTime, colour, kind });
+}
+
+/** @brief Fire leaves soot and cold leaves frost where it strikes; any hit stirs the dust. */
+void MarkStrike(Vec pos, Element element, float size)
+{
+	Stir = std::min(1.F, Stir + 0.06F * size);
+	if (element == Element::Fire)
+		AddMark(pos, MarkKind::Soot, Random(9, 14) * std::clamp(size, 0.6F, 2.5F), { 16, 12, 10 });
+	else if (element == Element::Cold)
+		AddMark(pos, MarkKind::Frost, Random(9, 14) * std::clamp(size, 0.6F, 2.5F), { 205, 225, 245 });
+}
+
+void AdvanceDust(float ms)
+{
+	const float strength = AirStrength(atmosphere::Knob::Dust);
+	const float target = std::min(atmosphere::Value("dust", 0) * strength * (1 + 0.5F * Stir), 220.F);
+	if (target <= 0) {
+		Motes.clear();
+		return;
+	}
+	const float dt = ms / 1000.F;
+	auto spawn = [&](bool anyAge) {
+		const std::optional<Vec> pos = LitSpotInView(80, 0.3F);
+		if (!pos)
+			return;
+		Mote mote;
+		mote.pos = *pos;
+		mote.z = Random(20, 80);
+		const float angle = Random(0, 2 * Pi);
+		const float speed = Random(1.5F, 5);
+		mote.vel = { std::cos(angle) * speed, std::sin(angle) * speed * 0.5F };
+		mote.vz = Random(-1.5F, 1.5F);
+		mote.life = Random(6000, 12000);
+		mote.age = anyAge ? Random(0, mote.life * 0.8F) : 0;
+		mote.size = Random(0.9F, 1.6F);
+		mote.phase = Random(0, 2 * Pi);
+		Motes.push_back(mote);
+	};
+	// Arriving on a floor, the dust is already there.
+	if (Motes.empty()) {
+		for (int i = static_cast<int>(target); i > 0; i--)
+			spawn(true);
+	}
+	if (static_cast<float>(Motes.size()) < target) {
+		for (int i = AirCount(target / 9.F, ms); i > 0; i--)
+			spawn(false);
+	}
+	for (size_t i = 0; i < Motes.size();) {
+		Mote &mote = Motes[i];
+		mote.age += ms;
+		// A slow drift with a lazy curl, rising and sinking a little.
+		const float t = AmbientTime * 0.001F;
+		mote.pos = mote.pos + (mote.vel + Vec { std::sin(t * 0.6F + mote.phase) * 3, std::cos(t * 0.8F + mote.phase * 1.7F) * 1.5F }) * dt;
+		mote.z = std::clamp(mote.z + (mote.vz + std::sin(t * 0.5F + mote.phase * 2.3F) * 1.2F) * dt, 12.F, 95.F);
+		if (mote.age >= mote.life || OutOfView(mote.pos, 250)) {
+			Motes[i] = Motes.back();
+			Motes.pop_back();
+		} else {
+			i++;
+		}
+	}
+}
+
+void AdvanceMist(float ms)
+{
+	const float strength = AirStrength(atmosphere::Knob::Mist);
+	const float target = std::min(atmosphere::Value("mist", 0) * strength, 60.F);
+	if (target <= 0) {
+		Wisps.clear();
+		return;
+	}
+	const float dt = ms / 1000.F;
+	auto spawn = [&](bool anyAge) {
+		const std::optional<Vec> pos = LitSpotInView(150, 0.25F);
+		if (!pos)
+			return;
+		Wisp wisp;
+		wisp.pos = *pos;
+		wisp.z = Random(8, 40);
+		const float angle = Random(0, 2 * Pi);
+		const float speed = Random(2, 5);
+		wisp.vel = { std::cos(angle) * speed, std::sin(angle) * speed * 0.5F };
+		wisp.life = Random(14000, 26000);
+		wisp.age = anyAge ? Random(0, wisp.life * 0.8F) : 0;
+		wisp.size = Random(60, 120);
+		Wisps.push_back(wisp);
+	};
+	if (Wisps.empty()) {
+		for (int i = static_cast<int>(target); i > 0; i--)
+			spawn(true);
+	}
+	if (static_cast<float>(Wisps.size()) < target) {
+		for (int i = AirCount(target / 20.F, ms); i > 0; i--)
+			spawn(false);
+	}
+	for (size_t i = 0; i < Wisps.size();) {
+		Wisp &wisp = Wisps[i];
+		wisp.age += ms;
+		wisp.pos = wisp.pos + wisp.vel * dt;
+		if (wisp.age >= wisp.life || OutOfView(wisp.pos, 400)) {
+			Wisps[i] = Wisps.back();
+			Wisps.pop_back();
+		} else {
+			i++;
+		}
+	}
+}
+
+/** @brief Starts a drop over a random lit, open tile of the area (in view), at least a tile and a half from the hero. */
+void StartDrip(const std::optional<WorldTileRectangle> &area, Rgb colour, bool blood)
+{
+	Vec pos;
+	if (area) {
+		const int tx = area->position.x + static_cast<int>(Random(0, static_cast<float>(area->size.width) - 0.01F));
+		const int ty = area->position.y + static_cast<int>(Random(0, static_cast<float>(area->size.height) - 0.01F));
+		if (hd::light::Blocks(tx, ty))
+			return;
+		pos = TileCentre({ tx, ty }) + Vec { Random(-14, 14), Random(-7, 7) };
+		if (OutOfView(pos, 0))
+			return;
+	} else {
+		const std::optional<Vec> spot = OpenSpotInView(-40);
+		if (!spot)
+			return;
+		pos = *spot;
+	}
+	if (TilesFromHero(pos) < 1.5F || BrightnessOf(LightOf(pos)) < 0.15F)
+		return;
+	Drips.push_back({ pos, Random(130, 170), 0, colour, blood });
+}
+
+void AdvanceDrips(float ms)
+{
+	const float strength = AirStrength(atmosphere::Knob::Drips);
+	if (strength > 0) {
+		const std::array<float, 3> c = atmosphere::Colour("drip_colour", { 0.75F, 0.85F, 1.F });
+		const Rgb water { static_cast<uint8_t>(255 * c[0]), static_cast<uint8_t>(255 * c[1]), static_cast<uint8_t>(255 * c[2]) };
+		for (int i = AirCount(atmosphere::Value("drips", 0) * strength, ms); i > 0; i--)
+			StartDrip(std::nullopt, water, false);
+	}
+	const float rooms = AirStrength(atmosphere::Knob::Rooms);
+	if (rooms > 0) {
+		if (const std::optional<WorldTileRectangle> room = atmosphere::ButcherRoom()) {
+			const std::array<float, 3> c = atmosphere::RoomColour("butcher", "drip_colour", { 0.45F, 0.03F, 0.04F });
+			const Rgb blood { static_cast<uint8_t>(255 * c[0]), static_cast<uint8_t>(255 * c[1]), static_cast<uint8_t>(255 * c[2]) };
+			for (int i = AirCount(atmosphere::RoomValue("butcher", "drips", 1.5F) * rooms, ms); i > 0; i--)
+				StartDrip(room, blood, true);
+		}
+	}
+	const float dt = ms / 1000.F;
+	for (size_t i = 0; i < Drips.size();) {
+		Drip &drip = Drips[i];
+		drip.vz -= 700 * dt;
+		drip.z += drip.vz * dt;
+		if (drip.z > 0) {
+			i++;
+			continue;
+		}
+		// Landed: a small ring on water, a splat of blood.
+		if (drip.blood) {
+			if (atmosphere::Strength(atmosphere::Knob::Marks) > 0)
+				AddMark(drip.pos, MarkKind::Blood, Random(2.4F, 3.6F), drip.colour);
+			else
+				AddRing(drip.pos, 1, 4, 900, 0, drip.colour, 0.6F, true, true, true);
+		} else {
+			const hd::light::Rgb light = LightOf(drip.pos);
+			const float bright = std::min(BrightnessOf(light), 1.2F);
+			AddRing(drip.pos, 1, 7, 650, 1.2F, InLight({ drip.colour.r / 255.F, drip.colour.g / 255.F, drip.colour.b / 255.F }, light), 0.3F * bright, false, true);
+			for (int k = 0; k < 2; k++) {
+				Particle p;
+				p.pos = drip.pos;
+				p.vel = { Random(-12, 12), Random(-6, 6) };
+				p.vz = Random(30, 55);
+				p.gravity = 320;
+				p.life = Random(220, 320);
+				p.size0 = 0.6F;
+				p.size1 = 0.3F;
+				p.c0 = p.c1 = InLight({ drip.colour.r / 255.F, drip.colour.g / 255.F, drip.colour.b / 255.F }, light);
+				p.alpha = 0.5F * bright;
+				AddParticle(p);
+			}
+		}
+		Drips[i] = Drips.back();
+		Drips.pop_back();
+	}
+}
+
+bool IsGore(const Object &object)
+{
+	return IsAnyOf(object._otype, OBJ_TORTURE1, OBJ_TORTURE2, OBJ_TORTURE3, OBJ_TORTURE4, OBJ_TORTURE5, OBJ_TNUDEM1, OBJ_TNUDEM2, OBJ_TNUDEM3, OBJ_TNUDEM4, OBJ_TNUDEW1, OBJ_TNUDEW2, OBJ_TNUDEW3, OBJ_DECAP);
+}
+
+void AdvanceFlies(float ms)
+{
+	Swarms.clear();
+	const float strength = AirStrength(atmosphere::Knob::Flies);
+	if (strength <= 0)
+		return;
+	const float perSwarm = atmosphere::Value("flies", 1) * strength;
+	if (perSwarm <= 0)
+		return;
+	auto add = [&](Point tile, float z) {
+		const Vec anchor = TileCentre(tile);
+		if (OutOfView(anchor, 60))
+			return;
+		const uint32_t seed = (static_cast<uint32_t>(tile.x) * 73856093U) ^ (static_cast<uint32_t>(tile.y) * 19349663U);
+		const int count = static_cast<int>(std::lround(static_cast<float>(5 + seed % 5) * perSwarm));
+		if (count > 0)
+			Swarms.push_back({ anchor, z, std::min(count, 18), seed, 0 });
+	};
+	for (int i = 0; i < ActiveObjectCount; i++) {
+		const Object &object = Objects[ActiveObjects[i]];
+		if (!IsGore(object))
+			continue;
+		// The hanging bodies hang high; a severed head lies low.
+		add(object.position, object._otype == OBJ_DECAP ? 14.F : 58.F);
+	}
+	// Corpses that have lain a while, on the tiles in view.
+	float x0;
+	float y0;
+	float x1;
+	float y1;
+	float x2;
+	float y2;
+	float x3;
+	float y3;
+	WorldToFloor(WeatherView.min, x0, y0);
+	WorldToFloor(WeatherView.max, x1, y1);
+	WorldToFloor({ WeatherView.max.x, WeatherView.min.y }, x2, y2);
+	WorldToFloor({ WeatherView.min.x, WeatherView.max.y }, x3, y3);
+	const int tx0 = std::clamp(static_cast<int>(std::min({ x0, x1, x2, x3 })) - 1, 0, MAXDUNX - 1);
+	const int tx1 = std::clamp(static_cast<int>(std::max({ x0, x1, x2, x3 })) + 1, 0, MAXDUNX - 1);
+	const int ty0 = std::clamp(static_cast<int>(std::min({ y0, y1, y2, y3 })) - 1, 0, MAXDUNY - 1);
+	const int ty1 = std::clamp(static_cast<int>(std::max({ y0, y1, y2, y3 })) + 1, 0, MAXDUNY - 1);
+	for (int tx = tx0; tx <= tx1; tx++) {
+		for (int ty = ty0; ty <= ty1; ty++) {
+			if (dCorpse[tx][ty] == 0)
+				continue;
+			const uint32_t key = static_cast<uint32_t>(tx) * MAXDUNY + static_cast<uint32_t>(ty);
+			const float seen = CorpseSeenAt.try_emplace(key, AmbientTime).first->second;
+			if (AmbientTime - seen >= 40000)
+				add({ tx, ty }, 9.F);
+		}
+	}
+	// The nearest few only.
+	constexpr size_t MaxSwarms = 6;
+	if (Swarms.size() > MaxSwarms) {
+		std::partial_sort(Swarms.begin(), Swarms.begin() + MaxSwarms, Swarms.end(), [](const Swarm &a, const Swarm &b) { return TilesFromHero(a.anchor) < TilesFromHero(b.anchor); });
+		Swarms.resize(MaxSwarms);
+	}
+	// They scatter as a hero comes close and settle back after.
+	const float dt = ms / 1000.F;
+	for (Swarm &swarm : Swarms) {
+		float &scatter = SwarmScatter[swarm.seed];
+		const float wanted = std::clamp(1.8F - TilesFromHero(swarm.anchor), 0.F, 1.F);
+		scatter += (wanted - scatter) * std::min(1.F, dt * (wanted > scatter ? 6.F : 1.2F));
+		swarm.scatter = scatter;
+	}
+}
+
+void AdvanceMarks()
+{
+	// Soot stays some minutes and frost melts in twenty seconds; blood stays as long as the floor.
+	std::erase_if(Marks, [](const Mark &mark) {
+		const float age = AmbientTime - mark.born;
+		return (mark.kind == MarkKind::Soot && age > 240000) || (mark.kind == MarkKind::Frost && age > 20000);
+	});
+}
+
+void AdvanceAir(float ms)
+{
+	const FramePartScope part(FramePart::Atmosphere);
+	Stir = std::max(0.F, Stir - ms / 10000.F);
+	if (!Enabled()) {
+		Motes.clear();
+		Wisps.clear();
+		Drips.clear();
+		Swarms.clear();
+		return;
+	}
+	AdvanceDust(ms);
+	AdvanceMist(ms);
+	AdvanceDrips(ms);
+	AdvanceFlies(ms);
+	AdvanceMarks();
+}
+
+void ClearAir()
+{
+	Motes.clear();
+	Wisps.clear();
+	Drips.clear();
+	Swarms.clear();
+	SwarmScatter.clear();
+	CorpseSeenAt.clear();
+	Marks.clear();
+	Stir = 0;
+}
+
+bool KeepBloodMark(Vec pos, float size, Rgb colour)
+{
+	if (!AirLit || atmosphere::Strength(atmosphere::Knob::Marks) <= 0)
+		return false;
+	AddMark(pos, MarkKind::Blood, size, colour);
+	return true;
+}
+
 } // namespace
 
 Element ElementOf(DamageType type, bool spell)
@@ -3732,6 +4223,7 @@ void Clear()
 	QuestMarkSince.clear();
 	LastModes.clear();
 	LastStatus.clear();
+	ClearAir();
 }
 
 void Sigil(Point tile, int radiusTiles, int durationMs, Element element)
@@ -4133,6 +4625,7 @@ void Slam(Point tile, int radiusTiles, Element element)
 	const Vec pos = TileCentre(tile);
 	const float r = TileRadius * std::max(radiusTiles, 1);
 	const Colours c = ColoursOf(element);
+	MarkStrike(pos, element, 1.5F + 0.5F * static_cast<float>(radiusTiles));
 	AddRing(pos + Vec { 0, -10 }, 0, 34, 110, 0, { 255, 235, 200 }, 0.9F, true, false);
 	AddRing(pos, 0, r * 1.1F, 260, 3, c.core, 1.F, false, true, false, 0.06F);
 	AddRing(pos, 0, r * 1.25F, 420, 14, { 110, 95, 75 }, 0.45F, false, true, true);
@@ -4156,6 +4649,7 @@ void Nova(Point tile, int radiusTiles, Element element)
 	const float r = TileRadius * std::max(radiusTiles, 1);
 	const Colours c = ColoursOf(element);
 	const bool blood = element == Element::Blood;
+	MarkStrike(pos, element, 1.5F + 0.5F * static_cast<float>(radiusTiles));
 	// A pulse at the hero, then a heavy wave rolls out over the floor: a dark body with a bright lip, a fainter one behind.
 	AddRing(pos + Vec { 0, -16 }, 0, 30, 140, 0, c.core, 0.6F, true, false);
 	AddRing(pos, 0, r * 1.15F, 450, 26, c.edge, 0.85F, false, true, true);
@@ -5562,6 +6056,7 @@ void Advance(float ms)
 	}
 	AdvanceParticles(ms);
 	AdvanceDebris(ms);
+	AdvanceAir(ms);
 	Age(Rings, ms);
 	Age(Sigils, ms);
 	Age(Rituals, ms);
@@ -8613,6 +9108,109 @@ void DrawQuestMarks()
 }
 
 /** @brief The weather: a cold cast over the town, the drops leaning with the wind, and lightning lighting it all. */
+/** @brief The Atmosphere option's air: haze and dust glowing where the light falls, flies, falling drops. */
+void DrawAir()
+{
+	if (!AirLit)
+		return;
+	const FramePartScope part(FramePart::Atmosphere);
+	if (!Wisps.empty()) {
+		const std::array<float, 3> colour = atmosphere::Colour("mist_colour", { 1.F, 0.9F, 0.78F });
+		const float thickness = atmosphere::Value("mist_alpha", 0.05F);
+		for (const Wisp &wisp : Wisps) {
+			// Lit by the light round it: its middle and either side, so it glows on the side by a flame.
+			const hd::light::Rgb a = LightOf(wisp.pos);
+			const hd::light::Rgb b = LightOf(wisp.pos + Vec { wisp.size * 0.5F, 0 });
+			const hd::light::Rgb c = LightOf(wisp.pos - Vec { wisp.size * 0.5F, 0 });
+			const hd::light::Rgb light { (a.r * 2 + b.r + c.r) / 4, (a.g * 2 + b.g + c.g) / 4, (a.b * 2 + b.b + c.b) / 4 };
+			const float bright = std::min(BrightnessOf(light), 1.2F);
+			if (bright < 0.03F)
+				continue;
+			const float t = wisp.age / wisp.life;
+			SoftDisc(Glowing, wisp.pos - Vec { 0, wisp.z }, wisp.size, InLight(colour, light), thickness * std::sin(Pi * t) * bright, false, 0);
+		}
+	}
+	if (!Motes.empty()) {
+		const std::array<float, 3> colour = atmosphere::Colour("dust_colour", { 1.F, 0.92F, 0.8F });
+		for (const Mote &mote : Motes) {
+			const hd::light::Rgb light = LightOf(mote.pos);
+			const float seen = SmoothStep(0.1F, 0.7F, BrightnessOf(light));
+			if (seen <= 0.01F)
+				continue;
+			const float fade = std::min({ mote.age / 1200.F, (mote.life - mote.age) / 1200.F, 1.F });
+			// A slow glint as it turns, so it reads as a speck in the air and not as grain on the screen.
+			const float glint = 0.7F + 0.3F * std::sin(AmbientTime * 0.0021F + mote.phase * 3.1F);
+			const float alpha = 0.8F * seen * fade * glint;
+			SoftDisc(Glowing, mote.pos - Vec { 0, mote.z }, mote.size, InLight(colour, light), alpha, false, 0.3F * alpha);
+		}
+	}
+	for (const Drip &drip : Drips) {
+		const Vec at = drip.pos - Vec { 0, drip.z };
+		const Vec tail = at - Vec { 0, std::min(-drip.vz * 0.02F, 8.F) };
+		if (drip.blood) {
+			SoftLine(Dark, at, tail, 1.1F, drip.colour, drip.colour, 0.8F, 0.2F);
+			continue;
+		}
+		const hd::light::Rgb light = LightOf(drip.pos);
+		const float bright = std::min(BrightnessOf(light), 1.2F);
+		const Rgb colour = InLight({ drip.colour.r / 255.F, drip.colour.g / 255.F, drip.colour.b / 255.F }, light);
+		SoftLine(Glowing, at, tail, 0.9F, colour, colour, 0.45F * bright, 0.05F * bright);
+	}
+	const float t = AmbientTime * 0.001F;
+	for (const Swarm &swarm : Swarms) {
+		const float seen = std::clamp(BrightnessOf(LightOf(swarm.anchor)) * 2, 0.F, 1.F);
+		if (seen <= 0.02F)
+			continue;
+		uint32_t seed = swarm.seed;
+		for (int i = 0; i < swarm.count; i++) {
+			// Each fly on its own wobbly loop round the body, spread wide and lifted when they scatter.
+			const float radius = (5 + 7 * SeededRandom(seed)) * (1 + 3 * swarm.scatter);
+			const float speed = (2.5F + 3 * SeededRandom(seed)) * (SeededRandom(seed) < 0.5F ? -1.F : 1.F);
+			const float phase = 2 * Pi * SeededRandom(seed);
+			const float bob = 2 * Pi * SeededRandom(seed);
+			const float angle = t * speed + phase + 0.6F * std::sin(t * 7.3F + bob);
+			const float z = swarm.z + 5 * std::sin(t * 2.3F + bob) + 1.5F * std::sin(t * 13.F + phase) + 25 * swarm.scatter;
+			const Vec at = swarm.anchor + Vec { std::cos(angle) * radius, std::sin(angle) * radius * 0.5F - z };
+			SoftDisc(Dark, at, 1.F, { 14, 11, 9 }, 0.9F * seen, false, 0.35F * seen);
+		}
+	}
+}
+
+/** @brief The marks fights left on the floor, in the light falling on them: under what stands on them. */
+void DrawMarks()
+{
+	const float strength = std::min(atmosphere::Strength(atmosphere::Knob::Marks), 1.5F);
+	if (!AirLit || Marks.empty() || strength <= 0)
+		return;
+	for (const Mark &mark : Marks) {
+		const float age = AmbientTime - mark.born;
+		Rgb colour = mark.colour;
+		float alpha = 0.8F;
+		float size = mark.size;
+		switch (mark.kind) {
+		case MarkKind::Blood:
+			// Wet and bright at first, drying darker and duller over a minute.
+			colour = Mix(mark.colour, { 48, 10, 8 }, age / 60000.F);
+			alpha = 0.85F;
+			break;
+		case MarkKind::Soot:
+			alpha = 0.6F * std::clamp((240000 - age) / 60000.F, 0.F, 1.F);
+			break;
+		case MarkKind::Frost: {
+			const float melt = std::clamp(age / 20000.F, 0.F, 1.F);
+			alpha = 0.32F * (1 - melt);
+			size *= 1 - 0.3F * melt;
+			break;
+		}
+		}
+		const hd::light::Rgb light = LightOf(mark.pos);
+		const auto lit = [](uint8_t c, float l) { return static_cast<uint8_t>(std::clamp(static_cast<float>(c) * std::min(l, 1.F), 0.F, 255.F)); };
+		const Rgb shown { lit(colour.r, light.r), lit(colour.g, light.g), lit(colour.b, light.b) };
+		alpha = std::min(alpha * strength, 0.95F);
+		SoftDisc(GroundDark, mark.pos, size, shown, alpha, true, alpha * 0.35F);
+	}
+}
+
 void DrawWeather()
 {
 	const weather::State &w = weather::Current();
@@ -8991,6 +9589,10 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	const uint32_t now = SDL_GetTicks();
 	const float elapsed = LastTicks == 0 ? 0.F : static_cast<float>(std::min<uint32_t>(now - LastTicks, 50));
 	LastTicks = now;
+	// The air reads the HD light, worked out just before this when the HD world is drawn.
+	const uint32_t lightCount = hd::light::UpdateCount();
+	AirLit = lightCount != LastLightCount;
+	LastLightCount = lightCount;
 	WeatherSize = { static_cast<float>(worldSize.width), static_cast<float>(worldSize.height) };
 	WeatherView = { CameraOrigin, CameraOrigin + WeatherSize * (1 / CameraScale) };
 	if (PauseMode == 0)
@@ -8999,7 +9601,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && sky.strength <= 0 && sky.flash <= 0) {
+	if (Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && Motes.empty() && Wisps.empty() && Drips.empty() && Swarms.empty() && Marks.empty() && sky.strength <= 0 && sky.flash <= 0) {
 		FrontFresh = false;
 		return;
 	}
@@ -9039,6 +9641,8 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	DrawParticles();
 	DrawDebris();
 	DrawWeather();
+	DrawMarks();
+	DrawAir();
 
 	const float toLogical = static_cast<float>(logicalSize.width) / static_cast<float>(worldSize.width);
 	const bool targets = Layer.ensure(renderer, worldSize);

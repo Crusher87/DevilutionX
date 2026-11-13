@@ -802,7 +802,7 @@ GraphicsOptions::GraphicsOptions()
     , hdLighting("HD Lighting", OptionEntryFlags::None, N_("HD Lighting"), N_("Torches and spells light the room in their own colours, walls stop their light, and heroes and monsters cast soft shadows that move with each light. Needs HD Graphics."), true)
     , hdStrongMood("HD Stronger Mood", OptionEntryFlags::None, N_("HD Stronger Mood"), N_("Firelight warmer and dark corners darker, in a mood of its own for each part of the dungeon: cold Catacombs, ember-red Hell, a sickly green Crypt. Needs HD Graphics."), true)
     , hdLiftDarks("HD Lift Dark Shades", OptionEntryFlags::None, N_("HD Lift Dark Shades"), N_("Makes the darkest shades a little lighter, so dark scenes darken less on some screens while they move. Needs HD Graphics."), false)
-    , atmosphere("Atmosphere", OptionEntryFlags::None, N_("Atmosphere"), N_("The old Diablo feel: firelight that flickers, each floor a little grimmer than the last, darker screen edges and stairs that glow. Needs HD Lighting."), atmosphere::Level::Full,
+    , atmosphere("Atmosphere", OptionEntryFlags::None, N_("Atmosphere"), N_("The old Diablo feel: flickering firelight, grimmer floors, glowing stairs, dust, flies and drips. Needs HD Lighting."), atmosphere::Level::Full,
           {
               { atmosphere::Level::Off, N_("Off") },
               { atmosphere::Level::Subtle, N_("Subtle") },

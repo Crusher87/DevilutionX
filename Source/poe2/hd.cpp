@@ -3554,33 +3554,6 @@ void DrawEdges(SDL_Renderer *renderer, const SDL_Rect &clip)
 	SDL_RenderCopy(renderer, EdgesTexture, nullptr, &dest);
 }
 
-/**
- * @brief The Atmosphere option's coloured dark (idea 5, a maybe he tries with feel("ink", 1)): unlit corners sink into
- * the area's own deep colour instead of flat black (brown-black in the Cathedral, blood-black in Hell), as a screen
- * blend like LiftDarkShades: black takes the colour, lighter shades less, white not at all. It fades with the screen.
- */
-void DrawInk(SDL_Renderer *renderer, const SDL_Rect &clip, const std::array<float, 3> &tint)
-{
-	const float strength = atmosphere::Strength(atmosphere::Knob::Ink);
-	if (strength <= 0)
-		return;
-	const FramePartScope part(FramePart::Atmosphere);
-	const std::array<float, 3> ink = atmosphere::Colour("ink", { 4.F, 4.F, 4.F });
-	SDL_BlendMode before = SDL_BLENDMODE_NONE;
-	SDL_GetRenderDrawBlendMode(renderer, &before);
-	bool screened = false;
-#if SDL_VERSION_ATLEAST(2, 0, 6)
-	static const SDL_BlendMode Screen = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE_MINUS_DST_COLOR, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,
-	    SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
-	screened = SDL_SetRenderDrawBlendMode(renderer, Screen) == 0;
-#endif
-	if (!screened)
-		return;
-	SDL_SetRenderDrawColor(renderer, ColourByte(ink[0] * strength / 255.F * tint[0]), ColourByte(ink[1] * strength / 255.F * tint[1]), ColourByte(ink[2] * strength / 255.F * tint[2]), 255);
-	SDL_RenderFillRect(renderer, &clip);
-	SDL_SetRenderDrawBlendMode(renderer, before);
-}
-
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
@@ -3627,7 +3600,6 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	// HD Lighting works out its own light, in colour and stopped by walls.
 	if (RecordingLit && HaveViewOrigin && FloorDone && RenderLit(renderer, toLogical, tint)) {
 		DrawEdges(renderer, clip);
-		DrawInk(renderer, clip, tint);
 		LiftDarkShades(renderer, clip, tint);
 		SDL_RenderSetClipRect(renderer, nullptr);
 		WorldRecorded = false;
