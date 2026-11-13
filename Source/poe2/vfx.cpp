@@ -17,6 +17,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <string_view>
 #include <unordered_map>
@@ -9223,6 +9224,9 @@ void DrawMarks()
 	if (!AirLit || Marks.empty() || strength <= 0)
 		return;
 	for (const Mark &mark : Marks) {
+		// Only the marks in view: the floor mask under them is worked out pixel by pixel.
+		if (OutOfView(mark.pos, mark.size + 8))
+			continue;
 		const float age = AmbientTime - mark.born;
 		Rgb colour = mark.colour;
 		float alpha = 0.8F;
@@ -9402,6 +9406,8 @@ std::optional<SDL_Rect> FillFloorMask(Size worldSize)
 			y1 = std::max(y1, v.position.y);
 		}
 	}
+	x0 = std::max(x0, 0.F);
+	y0 = std::max(y0, 0.F);
 	SDL_Rect rect;
 	rect.x = std::clamp(static_cast<int>(x0) - 1, 0, worldSize.width);
 	rect.y = std::clamp(static_cast<int>(y0) - 1, 0, worldSize.height);
@@ -9409,10 +9415,37 @@ std::optional<SDL_Rect> FillFloorMask(Size worldSize)
 	rect.h = std::clamp(static_cast<int>(y1) + 2, 0, worldSize.height) - rect.y;
 	if (rect.w <= 0 || rect.h <= 0)
 		return std::nullopt;
-	void *pixels;
-	int pitch;
-	if (SDL_LockTexture(Layer.mask, &rect, &pixels, &pitch) != 0)
-		return std::nullopt;
+	// Only the blocks something on the floor is drawn over need the mask: blood and soot spread over the whole view
+	// made the box round them as big as the view, millions of pixels a frame (Curtis 2026-11-13: long fights slowed the
+	// game). Elsewhere the mask is left as it is: it cuts away only what the floor effects drew, and there they drew none.
+	constexpr int Block = 16;
+	const int blocksAcross = (rect.w + Block - 1) / Block;
+	const int blocksDown = (rect.h + Block - 1) / Block;
+	static std::vector<uint8_t> needed;
+	needed.assign(static_cast<size_t>(blocksAcross) * blocksDown, 0);
+	for (const Batch *batch : { &Ground, &GroundDark }) {
+		for (size_t i = 0; i + 2 < batch->indices.size(); i += 3) {
+			float tx0 = std::numeric_limits<float>::max();
+			float ty0 = std::numeric_limits<float>::max();
+			float tx1 = std::numeric_limits<float>::lowest();
+			float ty1 = std::numeric_limits<float>::lowest();
+			for (size_t k = 0; k < 3; k++) {
+				const SDL_FPoint &at = batch->vertices[static_cast<size_t>(batch->indices[i + k])].position;
+				tx0 = std::min(tx0, at.x);
+				ty0 = std::min(ty0, at.y);
+				tx1 = std::max(tx1, at.x);
+				ty1 = std::max(ty1, at.y);
+			}
+			const int bx0 = std::clamp((static_cast<int>(tx0) - 1 - rect.x) / Block, 0, blocksAcross - 1);
+			const int by0 = std::clamp((static_cast<int>(ty0) - 1 - rect.y) / Block, 0, blocksDown - 1);
+			const int bx1 = std::clamp((static_cast<int>(tx1) + 2 - rect.x) / Block, 0, blocksAcross - 1);
+			const int by1 = std::clamp((static_cast<int>(ty1) + 2 - rect.y) / Block, 0, blocksDown - 1);
+			if (tx1 < static_cast<float>(rect.x) || ty1 < static_cast<float>(rect.y))
+				continue;
+			for (int by = by0; by <= by1; by++)
+				std::fill_n(&needed[static_cast<size_t>(by) * blocksAcross + bx0], bx1 - bx0 + 1, uint8_t { 1 });
+		}
+	}
 	// Shadows are painted into the sprites in colour 0, so a pixel of colour 0 over the floor is a shadow lying on it,
 	// not something standing on it: the floor effects show through those. But shade on a sprite also darkens some of
 	// its own pixels to colour 0, and some of a sprite's pixels happen to match the floor under them, so a pixel like
@@ -9426,32 +9459,84 @@ std::optional<SDL_Rect> FillFloorMask(Size worldSize)
 	uint32_t covered;
 	std::memcpy(&covered, CoveredBytes, sizeof(covered));
 	const int stride = rect.w + 2 * Reach;
+	// Every flag a needed block looks at is worked out below, so only the padding round the edges is cleared.
 	static std::vector<uint8_t> padded;
-	padded.assign(static_cast<size_t>(stride) * (rect.h + 2 * Reach), 0);
-	const auto row = [&](int y) { return &padded[(static_cast<size_t>(y + Reach) * stride) + Reach]; };
+	padded.resize(static_cast<size_t>(stride) * (rect.h + 2 * Reach));
+	std::fill_n(padded.begin(), static_cast<size_t>(stride) * Reach, uint8_t { 0 });
+	std::fill_n(padded.end() - static_cast<ptrdiff_t>(stride) * Reach, static_cast<size_t>(stride) * Reach, uint8_t { 0 });
 	for (int y = 0; y < rect.h; y++) {
-		const uint8_t *now = world.at(rect.x, rect.y + y);
-		const uint8_t *bare = static_cast<const uint8_t *>(FloorSurface->pixels) + static_cast<ptrdiff_t>(rect.y + y) * FloorSurface->pitch + rect.x;
-		uint8_t *solid = row(y);
-		for (int x = 0; x < rect.w; x++)
-			solid[x] = static_cast<uint8_t>(static_cast<int>(now[x] != bare[x]) & static_cast<int>(now[x] != 0));
+		uint8_t *line = &padded[static_cast<size_t>(y + Reach) * stride];
+		std::fill_n(line, Reach, uint8_t { 0 });
+		std::fill_n(line + Reach + rect.w, Reach, uint8_t { 0 });
 	}
-	for (int y = 0; y < rect.h; y++) {
-		const uint8_t *s = row(y);
-		const uint8_t *up1 = row(y - 1);
-		const uint8_t *up2 = row(y - 2);
-		const uint8_t *up3 = row(y - 3);
-		const uint8_t *down1 = row(y + 1);
-		const uint8_t *down2 = row(y + 2);
-		const uint8_t *down3 = row(y + 3);
-		auto *out = reinterpret_cast<uint32_t *>(static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch);
-		for (int x = 0; x < rect.w; x++) {
-			const uint32_t across = static_cast<uint32_t>((s[x - 1] | s[x - 2] | s[x - 3]) & (s[x + 1] | s[x + 2] | s[x + 3]));
-			const uint32_t upDown = static_cast<uint32_t>((up1[x] | up2[x] | up3[x]) & (down1[x] | down2[x] | down3[x]));
-			out[x] = (s[x] | across | upDown) * covered;
+	const auto row = [&](int y) { return &padded[(static_cast<size_t>(y + Reach) * stride) + Reach]; };
+	// Runs of needed blocks along a row of blocks: [first pixel, past the last).
+	const auto forRuns = [&](int by, int grow, auto &&work) {
+		const uint8_t *flags = &needed[static_cast<size_t>(by) * blocksAcross];
+		for (int bx = 0; bx < blocksAcross;) {
+			if (flags[bx] == 0) {
+				bx++;
+				continue;
+			}
+			const int first = bx;
+			while (bx < blocksAcross && flags[bx] != 0)
+				bx++;
+			work(std::max(first * Block - grow, -grow), std::min(bx * Block + grow, rect.w + grow));
+		}
+	};
+	for (int by = 0; by < blocksDown; by++) {
+		// The solid flags round a needed block too, as far as its edge pixels look.
+		const int top = std::max(by * Block - Reach, 0);
+		const int bottom = std::min((by + 1) * Block + Reach, rect.h);
+		for (int y = top; y < bottom; y++) {
+			const uint8_t *now = world.at(rect.x, rect.y + y);
+			const uint8_t *bare = static_cast<const uint8_t *>(FloorSurface->pixels) + static_cast<ptrdiff_t>(rect.y + y) * FloorSurface->pitch + rect.x;
+			uint8_t *solid = row(y);
+			forRuns(by, Reach, [&](int from, int to) {
+				for (int x = std::max(from, 0); x < std::min(to, rect.w); x++)
+					solid[x] = static_cast<uint8_t>(static_cast<int>(now[x] != bare[x]) & static_cast<int>(now[x] != 0));
+			});
 		}
 	}
-	SDL_UnlockTexture(Layer.mask);
+	// The mask goes up a band of blocks at a time, as wide as that band's needed blocks.
+	bool locked = false;
+	for (int by = 0; by < blocksDown; by++) {
+		int spanFrom = rect.w;
+		int spanTo = 0;
+		forRuns(by, 0, [&](int from, int to) {
+			spanFrom = std::min(spanFrom, from);
+			spanTo = std::max(spanTo, std::min(to, rect.w));
+		});
+		if (spanTo <= spanFrom)
+			continue;
+		const int bottom = std::min((by + 1) * Block, rect.h);
+		const SDL_Rect band { rect.x + spanFrom, rect.y + by * Block, spanTo - spanFrom, bottom - by * Block };
+		void *bandPixels;
+		int pitch;
+		if (SDL_LockTexture(Layer.mask, &band, &bandPixels, &pitch) != 0)
+			continue;
+		locked = true;
+		for (int y = by * Block; y < bottom; y++) {
+			const uint8_t *s = row(y);
+			const uint8_t *up1 = row(y - 1);
+			const uint8_t *up2 = row(y - 2);
+			const uint8_t *up3 = row(y - 3);
+			const uint8_t *down1 = row(y + 1);
+			const uint8_t *down2 = row(y + 2);
+			const uint8_t *down3 = row(y + 3);
+			auto *out = reinterpret_cast<uint32_t *>(static_cast<uint8_t *>(bandPixels) + static_cast<ptrdiff_t>(y - by * Block) * pitch);
+			forRuns(by, 0, [&](int from, int to) {
+				for (int x = from; x < std::min(to, rect.w); x++) {
+					const uint32_t across = static_cast<uint32_t>((s[x - 1] | s[x - 2] | s[x - 3]) & (s[x + 1] | s[x + 2] | s[x + 3]));
+					const uint32_t upDown = static_cast<uint32_t>((up1[x] | up2[x] | up3[x]) & (down1[x] | down2[x] | down3[x]));
+					out[x - spanFrom] = (s[x] | across | upDown) * covered;
+				}
+			});
+		}
+		SDL_UnlockTexture(Layer.mask);
+	}
+	if (!locked)
+		return std::nullopt;
 	return rect;
 }
 
