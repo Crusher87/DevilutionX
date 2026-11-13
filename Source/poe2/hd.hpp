@@ -76,9 +76,23 @@ enum class Caster : uint8_t {
 	Hero,
 	/** @brief The hero being played, drawn bright whatever the light (the game's rule), still in its colour. */
 	MyHero,
+	/**
+	 * @brief A solid thing standing on the floor (a barrel, fountain, cross): with HD Lighting it takes the light on the
+	 * sides turned to it, going round it smoothly, and casts its own shadow away from each light, in place of the one
+	 * painted under it.
+	 */
+	Object,
+	/** @brief The same, for a thing with flat sides that meet at a corner in front (a sarcophagus, a chest): each side takes its own light. */
+	ObjectBlock,
 };
 
-/** @brief Set while a hero or monster is drawn. */
+/** @brief A solid object, of either kind. */
+constexpr bool IsObject(Caster caster)
+{
+	return caster == Caster::Object || caster == Caster::ObjectBlock;
+}
+
+/** @brief Set while a hero, monster or solid object is drawn. */
 extern Caster CurrentCaster;
 
 struct CasterScope {

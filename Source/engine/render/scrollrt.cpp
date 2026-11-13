@@ -772,6 +772,49 @@ void DrawDeadPlayer(const Surface &out, Point tilePosition, Point targetBufferPo
 }
 
 /**
+ * @brief POE2 Mashup: how the HD renderer lights an object and casts its shadow (hd::Caster): by its sides for solid
+ * things standing on the floor, as before for the rest (doors, open things walked over, things flat against a wall).
+ */
+hd::Caster HdObjectCaster(const Object &object)
+{
+	if (!object._oSolidFlag || object._oDoorFlag)
+		return hd::Caster::None;
+	switch (object._otype) {
+	// Flat against a wall, or hanging on one: one face, lit as the wall is.
+	case OBJ_BOOKCASEL:
+	case OBJ_BOOKCASER:
+	case OBJ_BOOKSHELF:
+	case OBJ_BOOKSHELFR:
+	case OBJ_BANNERL:
+	case OBJ_BANNERM:
+	case OBJ_BANNERR:
+	case OBJ_NUDEW2R:
+	case OBJ_TNUDEM1:
+	case OBJ_TNUDEM2:
+	case OBJ_TNUDEM3:
+	case OBJ_TNUDEM4:
+	case OBJ_TNUDEW1:
+	case OBJ_TNUDEW2:
+	case OBJ_TNUDEW3:
+		return hd::Caster::None;
+	// Flat sides that meet at a corner in front.
+	case OBJ_SARC:
+	case OBJ_L5SARC:
+	case OBJ_CHEST1:
+	case OBJ_CHEST2:
+	case OBJ_CHEST3:
+	case OBJ_TCHEST1:
+	case OBJ_TCHEST2:
+	case OBJ_TCHEST3:
+	case OBJ_SIGNCHEST:
+	case OBJ_ALTBOY:
+		return hd::Caster::ObjectBlock;
+	default:
+		return hd::Caster::Object;
+	}
+}
+
+/**
  * @brief Render an object sprite
  * @param out Output buffer
  * @param objectToDraw Dungeone object to draw
@@ -801,6 +844,8 @@ void DrawObject(const Surface &out, const Object &objectToDraw, Point tilePositi
 		ClxDrawOutlineSkipColorZero(out, PAL16_ORANGE + 2, screenPosition, sprite);
 	}
 	if (objectToDraw.applyLighting && !strongbox) {
+		// POE2 Mashup: in HD a solid thing takes the light by its sides and casts a shadow of its own (see hd::Caster::Object).
+		const hd::CasterScope caster(HdObjectCaster(objectToDraw));
 		ClxDrawLight(out, screenPosition, sprite, lightTableIndex);
 	} else {
 		ClxDraw(out, screenPosition, sprite);

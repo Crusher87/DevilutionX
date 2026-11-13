@@ -59,6 +59,7 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "mist", 1.F, "a thin haze glowing round the flames, Cathedral only for now (idea 3)" },
 	{ "rooms", 1.F, "the Butcher's room: red light, flies and dripping blood (idea 46)" },
 	{ "marks", 1.F, "blood dries and stays, fire leaves soot, cold leaves frost (idea 12)" },
+	{ "objects", 1.F, "chests, coffins, barrels and fountains lit by their sides, with real shadows (works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
@@ -243,6 +244,11 @@ float Strength(Knob knob)
 	if (scale <= 0)
 		return 0;
 	return scale * Settings[static_cast<size_t>(knob)];
+}
+
+float Setting(Knob knob)
+{
+	return Settings[static_cast<size_t>(knob)];
 }
 
 float Depth()

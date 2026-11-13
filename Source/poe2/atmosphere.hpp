@@ -53,11 +53,19 @@ enum class Knob : uint8_t {
 	Rooms,
 	/** Idea 12: blood that dries darker and stays, soot from fire and frost from cold that slowly goes. */
 	Marks,
+	/**
+	 * Solid things (sarcophagi, chests, barrels, fountains) take the light by their sides and cast real shadows. Part of
+	 * HD Lighting itself, so it shows whatever the Atmosphere option says (see Setting).
+	 */
+	Objects,
 };
-inline constexpr size_t NumKnobs = 12;
+inline constexpr size_t NumKnobs = 13;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);
+
+/** @brief An effect's feel() setting alone, for the looks that belong to HD Lighting and show with the option off. */
+float Setting(Knob knob);
 
 /** @brief How far down its area this floor is: 0 on the first floor, 1 on the last (0 in town). */
 float Depth();
