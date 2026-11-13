@@ -60,8 +60,15 @@ enum class Knob : uint8_t {
 	Objects,
 	/** Objects whose HD art has a shape map beside it are lit by their shape; at 0, by their sides as the rest are. */
 	Shapes,
+	/**
+	 * The shadows one light casts are joined: where two of them cross, the floor is no darker than under one, and a body
+	 * standing in another's shadow adds none of its own from that light. At 0 each shadow darkens the floor by itself.
+	 */
+	Joined,
+	/** A shadow that reaches a wall turned to the view goes on up the wall's face; at 0 it stops at the wall's foot. */
+	Walls,
 };
-inline constexpr size_t NumKnobs = 14;
+inline constexpr size_t NumKnobs = 16;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

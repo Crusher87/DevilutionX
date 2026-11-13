@@ -61,6 +61,8 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "marks", 1.F, "blood dries and stays, fire leaves soot, cold leaves frost (idea 12)" },
 	{ "objects", 1.F, "chests, coffins, barrels and fountains lit by their sides, with real shadows (works with Atmosphere off)" },
 	{ "shapes", 1.F, "objects that have a shape map are lit by their shape; 0 lights them by their sides like the rest" },
+	{ "joined", 1.F, "shadows from one light are joined, never darker where they cross; 0 stacks them (works with Atmosphere off)" },
+	{ "walls", 1.F, "shadows that reach a wall go on up it; 0 stops them at the wall's foot (works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
