@@ -1,4 +1,7 @@
 #include "control.hpp"
+
+#include <cmath>
+
 #include "control_panel.hpp"
 #include "controls/control_mode.hpp"
 #include "cursor.h"
@@ -12,6 +15,7 @@
 #include "panels/poe2_widgets.hpp"
 #include "panels/skill_bar.hpp"
 #include "panels/stack_split_panel.hpp"
+#include "poe2/affix_glow.hpp"
 #include "poe2/endgame.hpp"
 #include "poe2/monster_mods.hpp"
 #include "qol/stash.h"
@@ -21,6 +25,7 @@
 #include "utils/algorithm/container.hpp"
 #include "utils/format.hpp"
 #include "utils/format_int.hpp"
+#include "utils/is_of.hpp"
 #include "utils/log.hpp"
 #include "utils/screen_reader.hpp"
 #include "utils/str_cat.hpp"
@@ -316,6 +321,8 @@ UiFlags TooltipLineColor(InfoLineStyle style)
 	switch (style) {
 	case InfoLineStyle::Mod:
 	case InfoLineStyle::Affix:
+	case InfoLineStyle::NewMod:
+	case InfoLineStyle::NewAffix:
 	case InfoLineStyle::AugmentedProperty:
 		return UiFlags::ColorBlue;
 	case InfoLineStyle::Corrupted:
@@ -355,6 +362,8 @@ int TooltipGroup(InfoLineStyle style)
 		return 1;
 	case InfoLineStyle::Mod:
 	case InfoLineStyle::Affix:
+	case InfoLineStyle::NewMod:
+	case InfoLineStyle::NewAffix:
 	case InfoLineStyle::Corrupted:
 	case InfoLineStyle::InactiveMod:
 		return 2;
@@ -438,7 +447,7 @@ int AffixTierWidth()
  */
 bool ContinuesAffix(const std::vector<std::string_view> &lines, const std::vector<InfoLineStyle> &styles, size_t first, size_t i)
 {
-	return i > first && i < lines.size() && styles[i - 1] == InfoLineStyle::Affix && styles[i - 2] == InfoLineStyle::Affix
+	return i > first && i < lines.size() && IsAffixStyle(styles[i - 1]) && IsAffixStyle(styles[i - 2])
 	    && SplitAffixLine(lines[i]).side.empty();
 }
 
@@ -455,6 +464,48 @@ void DrawAffixBracket(const Surface &out, Point topLeft, int lineHeight, bool jo
 		DrawHorizontalLine(out, topLeft + Displacement { 0, top }, 3, color);
 	if (!joinedBelow)
 		DrawHorizontalLine(out, topLeft + Displacement { 0, bottom - 1 }, 3, color);
+}
+
+/**
+ * @brief POE2 Mashup: a soft gold glow behind a modifier line crafting just added (poe2/affix_glow.hpp), at
+ * @p strength from 1 (just added) to 0. It is brightest in the middle of the line and dims toward its top and bottom
+ * and its ends, so it reads as light behind the text rather than a box.
+ */
+void DrawNewAffixGlow(const Surface &out, Point lineTopLeft, int width, int textWidth, float strength)
+{
+	if (strength <= 0.F)
+		return;
+	const int glowWidth = std::min(width - 8, textWidth + 28);
+	const int left = lineTopLeft.x + ((width - glowWidth) / 2);
+	// The font's letters sit a little above the middle of the line's box.
+	constexpr float Middle = 6.F;
+	constexpr float Reach = 8.F;
+	for (int row = 0; row < TooltipLineHeight; row++) {
+		const float edge = std::min(std::abs(static_cast<float>(row) - Middle) / Reach, 1.F);
+		const float light = strength * (1.F - (edge * edge));
+		if (light < 0.06F)
+			continue;
+		// The gold ramp from its darkest (15) to a warm mid gold (8), half blended with the tooltip's dark body, so
+		// the text stays easy to read over it.
+		const int shade = 15 - static_cast<int>((light * 7.F) + 0.5F);
+		// Rounded ends: the rows away from the middle are a little shorter.
+		const int inset = static_cast<int>(((1.F - std::sqrt(1.F - (edge * edge))) * 16.F) + 0.5F);
+		const int rowWidth = glowWidth - (2 * inset);
+		if (rowWidth <= 0)
+			continue;
+		DrawHalfTransparentHorizontalLine(out, { left + inset, lineTopLeft.y + row }, rowWidth, static_cast<uint8_t>(PAL16_YELLOW + shade));
+		// A brighter core behind the text itself.
+		if (light > 0.3F) {
+			const int coreWidth = std::min(rowWidth, textWidth + 8);
+			DrawHalfTransparentHorizontalLine(out, { left + inset + ((rowWidth - coreWidth) / 2), lineTopLeft.y + row }, coreWidth, static_cast<uint8_t>(PAL16_YELLOW + std::max(shade - 1, 7)));
+		}
+	}
+}
+
+/** @brief A new modifier's text is gold-white while its glow is strong, then its own colour again. */
+UiFlags NewAffixTextColor(InfoLineStyle style, float strength)
+{
+	return strength > 0.35F ? UiFlags::ColorWhitegold : TooltipLineColor(style);
 }
 
 /** @brief Splits a tooltip's text into its title lines and body, and measures it. */
@@ -479,7 +530,7 @@ TooltipLayout MeasureTooltip(const Surface &out, const std::string &text, const 
 	int bodyHeight = 0;
 	int previousGroup = -1;
 	for (size_t i = layout.first; i < layout.lines.size(); i++) {
-		if (layout.styles[i - 1] == InfoLineStyle::Affix)
+		if (IsAffixStyle(layout.styles[i - 1]))
 			layout.width = std::max(layout.width, GetLineWidth(SplitAffixLine(layout.lines[i]).text, GameFont12, 1) + (std::max(AffixSideWidth(), AffixTierWidth()) * 2) + (TooltipPadding * 2));
 		else
 			layout.width = std::max(layout.width, GetLineWidth(layout.lines[i], GameFont12, 1) + (TooltipPadding * 2));
@@ -539,7 +590,17 @@ void DrawTooltipBox(const Surface &out, const TooltipLayout &layout, int x, int 
 			lineY += TooltipSeparatorHeight;
 		}
 		previousGroup = group;
-		if (style == InfoLineStyle::Affix) {
+		const bool fresh = IsAnyOf(style, InfoLineStyle::NewMod, InfoLineStyle::NewAffix);
+		const float glow = fresh ? AffixGlowStrength() : 0.F;
+		UiFlags textColor = TooltipLineColor(style);
+		if (fresh && glow > 0.F) {
+			const std::string_view text = IsAffixStyle(style) ? SplitAffixLine(layout.lines[i]).text : layout.lines[i];
+			DrawNewAffixGlow(out, { x, lineY }, width, GetLineWidth(text, GameFont12, 1), glow);
+			// A dark shadow keeps the text crisp over the glow.
+			DrawString(out, text, { { x, lineY + 1 }, { width, TooltipLineHeight } }, { .flags = UiFlags::ColorBlack | UiFlags::AlignCenter, .spacing = 1 });
+			textColor = NewAffixTextColor(style, glow);
+		}
+		if (IsAffixStyle(style)) {
 			// Like POE2's Alt view: the side on the left, the stat in the middle, the tier on the right.
 			const AffixLine parts = SplitAffixLine(layout.lines[i]);
 			DrawString(out, parts.side, { { x + TooltipPadding, lineY }, { AffixSideWidth(), TooltipLineHeight } }, { .flags = UiFlags::ColorButtonpushed, .spacing = 1 });
@@ -547,11 +608,11 @@ void DrawTooltipBox(const Surface &out, const TooltipLayout &layout, int x, int 
 			const bool joinedBelow = ContinuesAffix(layout.lines, layout.styles, layout.first, i + 1);
 			if (joinedAbove || joinedBelow)
 				DrawAffixBracket(out, { x + TooltipPadding + AffixSideWidth() - 4, lineY }, TooltipLineHeight, joinedAbove, joinedBelow, frame);
-			DrawString(out, parts.text, { { x, lineY }, { width, TooltipLineHeight } }, { .flags = TooltipLineColor(style) | UiFlags::AlignCenter, .spacing = 1 });
+			DrawString(out, parts.text, { { x, lineY }, { width, TooltipLineHeight } }, { .flags = textColor | UiFlags::AlignCenter, .spacing = 1 });
 			const UiFlags tierColor = parts.tier == "T1" ? UiFlags::ColorWhitegold : UiFlags::ColorButtonpushed;
 			DrawString(out, parts.tier, { { x + width - TooltipPadding - AffixTierWidth(), lineY }, { AffixTierWidth(), TooltipLineHeight } }, { .flags = tierColor | UiFlags::AlignRight, .spacing = 1 });
 		} else {
-			DrawString(out, layout.lines[i], { { x, lineY }, { width, TooltipLineHeight } }, { .flags = TooltipLineColor(style) | UiFlags::AlignCenter, .spacing = 1 });
+			DrawString(out, layout.lines[i], { { x, lineY }, { width, TooltipLineHeight } }, { .flags = textColor | UiFlags::AlignCenter, .spacing = 1 });
 		}
 		lineY += TooltipLineHeight;
 	}

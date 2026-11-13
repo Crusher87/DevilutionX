@@ -220,7 +220,7 @@ hd::OutlineLook MonsterOutlineLook(int monsterId)
 hd::OutlineLook ItemOutlineLook(const Item &item, int itemIndex)
 {
 	return {
-		.glow = gbIsPoe2 && (item._iMagical == ITEM_QUALITY_UNIQUE || item._iClass == ICLASS_QUEST),
+		.glow = ItemOutlineGlows(item),
 		.hovered = itemIndex == pcursitem,
 		.thing = hd::OutlineThing(hd::ThingKind::Item, itemIndex),
 	};
@@ -718,8 +718,7 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	const hd::OutlineScope outlineLook({ .hovered = &player == PlayerUnderCursor, .thing = hd::OutlineThing(hd::ThingKind::Player, player.getId()) });
 	if (&player == PlayerUnderCursor)
 		ClxDrawOutlineSkipColorZero(out, GetPlayerOutlineColor(player.getId()), spriteBufferPosition, sprite);
-	else if (const std::optional<uint8_t> glow = ShrineGlowColor(player))
-		ClxDrawOutlineSkipColorZero(out, *glow, spriteBufferPosition, sprite);
+	// No shrine glow around the hero (Curtis 2026-11-11): the icons over the head and top left show shrine buffs.
 
 	const std::optional<DamageType> backlash = &player == MyPlayer ? VizjereiLastBacklash(player) : std::nullopt;
 	if (&player == MyPlayer && IsNoneOf(leveltype, DTYPE_NEST, DTYPE_CRYPT)) {

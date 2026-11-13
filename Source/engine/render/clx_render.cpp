@@ -629,7 +629,10 @@ void ClxDrawBlendedWithLightmap(const Surface &out, Point position, ClxSprite cl
 
 void ClxDrawOutline(const Surface &out, uint8_t col, Point position, ClxSprite clx)
 {
-	if (hd::Recording) hd::RecordSprite(out, position, clx, nullptr, hd::SpriteStyle::Outline, col);
+	if (hd::Recording)
+		hd::RecordSprite(out, position, clx, nullptr, hd::SpriteStyle::Outline, col);
+	else if (hd::RecordUiOutlineHook != nullptr)
+		hd::RecordUiOutlineHook(out, position, clx, col);
 	RenderClxOutline</*SkipColorIndexZero=*/false>(out, position, clx, col);
 }
 
