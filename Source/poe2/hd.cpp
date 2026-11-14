@@ -6210,6 +6210,7 @@ bool Enabled() { return false; }
 bool Active() { return false; }
 void BeginWorld(const Surface &, Rectangle) { }
 void EndWorld() { }
+void RecordProps() { }
 void SetViewOrigin(Point, Point) { }
 void EndFloor() { }
 uint16_t PieceToDraw(Point tile) { return dPiece[tile.x][tile.y]; }
