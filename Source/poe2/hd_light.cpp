@@ -2322,6 +2322,16 @@ int Lamps(Lamp *out, int maxCount)
 		lamp.size = source.size;
 		lamp.colour = source.colour;
 		lamp.strength = source.power * source.flicker;
+		lamp.reach = static_cast<float>(source.radius);
+		// A doorway's light comes out as a shaft; the forge's coals lie back under its roof, so less of theirs does.
+		// The cathedral's light pours out low and far along the ground; a hearth's comes down close in front of its door.
+		if (lamp.door) {
+			lamp.shaft = 1;
+			lamp.shaftLength = 1.3F * lamp.reach;
+		} else if ((source.coneX != 0 || source.coneY != 0) && source.size >= 0.5F) {
+			lamp.shaft = source.flickerKind == FireFlicker ? 0.3F : 1.F;
+			lamp.shaftLength = 0.35F * lamp.reach;
+		}
 	}
 	return count;
 }

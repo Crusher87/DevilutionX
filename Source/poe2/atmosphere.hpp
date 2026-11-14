@@ -114,8 +114,14 @@ enum class Knob : uint8_t {
 	Cobwebs,
 	/** Idea 62: a rat or two runs off into the dark as the hero's light reaches it (Cathedral and Catacombs). */
 	Rats,
+	/** Idea 66: a wide soft glow in the air round flames, lamps and lit windows. */
+	Glow,
+	/** Idea 66: the lit air between a bright doorway and the ground its light lands on. */
+	Shafts,
+	/** Idea 66: who stands at the edge of Tristram's stream shows in the water, and the water takes a little of the sky. */
+	Reflect,
 };
-inline constexpr size_t NumKnobs = 38;
+inline constexpr size_t NumKnobs = 41;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

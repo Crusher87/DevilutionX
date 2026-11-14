@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <array>
+#include <bit>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -220,6 +221,11 @@ struct Ring {
 	bool fadeOut = false;
 	/** @brief The object whose flame gives this glow, or -1, as for a particle. */
 	int16_t flame = -1;
+	/**
+	 * @brief Idea 66: a wide, faint glow in the air round a flame, the way a bright light spreads in the eye. Soft already,
+	 * so it goes straight on over everything, with none of the bloom's passes.
+	 */
+	bool haze = false;
 };
 
 struct Bolt {
@@ -2498,6 +2504,38 @@ View WeatherView;
 /** @brief The world's size on screen, for the weather's dim and lightning over all of it. */
 Vec WeatherSize;
 
+float AirStrength(atmosphere::Knob knob);
+
+/** @brief Idea 66: how bright the soft glow in the air round a flame is here (0 when it is off), and how wide against its usual size. */
+float AirGlowAlpha()
+{
+	const float strength = std::min(AirStrength(atmosphere::Knob::Glow), 3.F);
+	return strength > 0 ? strength * atmosphere::Value("glow_alpha", 0.F) : 0.F;
+}
+
+float AirGlowReach()
+{
+	return atmosphere::Value("glow_size", 1.F);
+}
+
+/** @brief Idea 66: a flame's soft glow in the air (Ring::haze); radius in game pixels. */
+void AddAirGlow(Vec pos, float radius, Rgb colour, float alpha)
+{
+	if (alpha < 0.004F)
+		return;
+	Ring glow;
+	glow.pos = pos;
+	glow.r0 = glow.r1 = radius;
+	glow.life = 1;
+	glow.width = 0;
+	glow.colour = colour;
+	glow.alpha = alpha;
+	glow.disc = true;
+	glow.ground = false;
+	glow.haze = true;
+	FrameGlows.push_back(glow);
+}
+
 /** @brief POE2 Mashup: the big fires round a stake (burncros), in the burning cross rooms and set levels. */
 bool IsBonfire(const Object &object)
 {
@@ -2546,6 +2584,7 @@ void AddBonfire(const Object &object, int16_t id, Vec corner, const std::vector<
 	glow.colour = { 255, 125, 40 };
 	glow.alpha = 0.32F * breathe;
 	FrameGlows.push_back(glow);
+	AddAirGlow(glow.pos, glow.r1 * 1.7F * AirGlowReach(), { 255, 140, 60 }, AirGlowAlpha() * breathe);
 	glow.pos = base - Vec { 0, height * 0.15F };
 	glow.r0 = glow.r1 = std::clamp(0.4F * halfWidth + 0.12F * height, 10.F, 26.F);
 	glow.colour = { 255, 205, 130 };
@@ -2627,6 +2666,7 @@ void AddBurningCross(const Object &object, int16_t id, Vec corner, int spriteHei
 	glow.colour = { 255, 125, 40 };
 	glow.alpha = 0.16F * breathe;
 	FrameGlows.push_back(glow);
+	AddAirGlow(glow.pos, 78 * AirGlowReach(), { 255, 140, 60 }, AirGlowAlpha() * breathe);
 	glow.pos = TileCentre(object.position);
 	glow.ground = true;
 	glow.flame = -1;
@@ -2638,6 +2678,8 @@ void AddBurningCross(const Object &object, int16_t id, Vec corner, int spriteHei
 
 void ScanFlames(const View &view)
 {
+	const float airGlow = AirGlowAlpha();
+	const float airReach = AirGlowReach();
 	for (int i = 0; i < ActiveObjectCount; i++) {
 		const int id = ActiveObjects[i];
 		const Object &object = Objects[id];
@@ -2689,6 +2731,8 @@ void ScanFlames(const View &view)
 			glow.colour = { 255, 210, 140 };
 			glow.alpha = 0.4F * flicker;
 			FrameGlows.push_back(glow);
+			// Idea 66: the flame's light spread wide and faint in the air round it, a little more for a bigger flame.
+			AddAirGlow(pos, (26 + 7 * s) * airReach, { 255, 150, 70 }, airGlow * std::min(1.F, 0.55F + 0.12F * s) * flicker);
 			Emitters.push_back({ pos, s, Ambient::Flame, { 255, 150, 50 }, 0, static_cast<int16_t>(id) });
 		}
 	}
@@ -4164,6 +4208,11 @@ bool IsStreamTile(int x, int y)
 /** @brief One bit for each pixel of a stream piece's floor diamond (64 by 32): set where the game's own picture is water. */
 struct WaterMask {
 	std::array<uint64_t, 32> rows {};
+	/** @brief The piece's floor as the game draws it in town (its colours' numbers; 0 outside the diamond), row by row. */
+	std::array<uint8_t, 64 * 32> picture {};
+	/** @brief Each row's drawn part: its first pixel, and one past its last. */
+	std::array<uint8_t, 32> first {};
+	std::array<uint8_t, 32> last {};
 };
 std::unordered_map<int, WaterMask> WaterMasks;
 
@@ -4201,6 +4250,18 @@ const WaterMask &WaterMaskOf(int piece)
 		const TileType type = block.type();
 		const int_fast16_t height = IsAnyOf(type, TileType::LeftTriangle, TileType::RightTriangle) ? DunFrameTriangleHeight : DunFrameHeight;
 		RenderTileFrame(out, lightmap, Point { static_cast<int>(half * DunFrameWidth), Height - 1 }, type, GetDunFrame(pDungeonCels.get(), block.frame()), height, MaskType::Solid, FullyLitLightTable);
+	}
+	for (int y = 0; y < Height; y++) {
+		const uint8_t *row = static_cast<const uint8_t *>(surface->pixels) + static_cast<ptrdiff_t>(y) * surface->pitch;
+		std::memcpy(&mask.picture[static_cast<size_t>(y) * Width], row, Width);
+		int first = 0;
+		while (first < Width && row[first] == 0)
+			first++;
+		int last = Width;
+		while (last > first && row[last - 1] == 0)
+			last--;
+		mask.first[static_cast<size_t>(y)] = static_cast<uint8_t>(first);
+		mask.last[static_cast<size_t>(y)] = static_cast<uint8_t>(last);
 	}
 	// The picture is dithered, so a pixel counts as water when most of those round it are water-coloured.
 	std::array<std::array<bool, Width>, Height> blue {};
@@ -4242,7 +4303,8 @@ bool OnWater(Vec pos)
 	const Point tile { static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)) };
 	if (!IsStreamTile(tile.x, tile.y))
 		return false;
-	const Vec corner = TileCentre(tile) - Vec { static_cast<float>(DunFrameWidth), DunFrameHeight / 2.F };
+	// The game draws a piece's floor a pixel lower than its middle says.
+	const Vec corner = TileCentre(tile) - Vec { static_cast<float>(DunFrameWidth), DunFrameHeight / 2.F - 1 };
 	const int px = static_cast<int>(std::floor(pos.x - corner.x));
 	const int py = static_cast<int>(std::floor(pos.y - corner.y));
 	if (px < 0 || px >= 2 * DunFrameWidth || py < 0 || py >= DunFrameHeight)
@@ -4734,6 +4796,8 @@ namespace {
 SDL_Surface *FloorSurface = nullptr;
 /** @brief Whether FloorSurface holds the floor of the frame about to be shown. */
 bool FloorFresh = false;
+/** @brief Idea 66: the stream was in view last frame with its reflections on, so this frame's need the floor's copy. */
+bool StreamSeen = false;
 
 /** @brief Solid where a hero or monster standing in front of a portal or a flame was drawn this frame, the size of the world. */
 SDL_Surface *FrontSurface = nullptr;
@@ -4752,7 +4816,8 @@ SDL_Rect PieceArea {};
 bool WantsFloorCopy()
 {
 	// The portals too: without a copy their seals went over rocks and walls, except while a ripple happened to need one.
-	return Enabled() && (!Sigils.empty() || !Rituals.empty() || !IceSpikes.empty() || !Miasmas.empty() || !Lobs.empty() || !Cracks.empty() || !Rings.empty() || !FrameGlows.empty() || !Portals.empty() || !ClosingPortals.empty());
+	// And the stream's reflections, which leave out the water something stands in front of.
+	return Enabled() && (StreamSeen || !Sigils.empty() || !Rituals.empty() || !IceSpikes.empty() || !Miasmas.empty() || !Lobs.empty() || !Cracks.empty() || !Rings.empty() || !FrameGlows.empty() || !Portals.empty() || !ClosingPortals.empty());
 }
 
 void CopyFloor(const Surface &world)
@@ -6942,6 +7007,8 @@ Batch Standing;
 /** @brief The standing portals' own dark and glowing shapes, drawn before the rest so a hero in front can go over them. */
 Batch PortalStanding;
 Batch PortalGlowing;
+/** @brief Idea 66: glow in the air and shafts of light, soft as they are: added straight onto the world, with no bloom. */
+Batch Haze;
 
 Vec ToScreen(Vec world)
 {
@@ -7003,6 +7070,36 @@ void Fleck(Batch &batch, Vec centre, float radius, Rgb colour, float alpha)
 	batch.tri(middle, down, left);
 	batch.tri(middle, left, up);
 	batch.tri(middle, up, right);
+}
+
+/** @brief A disc that falls off the way a blurred light does: brightest in the middle, most of it gone a third of the way out. */
+void BlurredDisc(Batch &batch, Vec centre, float radius, Rgb colour, float alpha)
+{
+	const Vec c = ToScreen(centre);
+	radius *= CameraScale;
+	if (radius < 0.5F)
+		return;
+	constexpr int Segments = 20;
+	constexpr std::array<float, 3> At { 0.3F, 0.62F, 1.F };
+	constexpr std::array<float, 3> Share { 0.5F, 0.15F, 0.F };
+	const int middle = batch.add(c, colour, alpha);
+	const int first = static_cast<int>(batch.vertices.size());
+	for (size_t ring = 0; ring < At.size(); ring++) {
+		for (int i = 0; i < Segments; i++) {
+			const float angle = 2 * Pi * i / Segments;
+			batch.add(c + Vec { std::cos(angle), std::sin(angle) } * (radius * At[ring]), colour, alpha * Share[ring]);
+		}
+	}
+	for (int i = 0; i < Segments; i++) {
+		const int next = (i + 1) % Segments;
+		batch.tri(middle, first + i, first + next);
+		for (int ring = 1; ring < static_cast<int>(At.size()); ring++) {
+			const int inner = first + (ring - 1) * Segments;
+			const int outer = first + ring * Segments;
+			batch.tri(inner + i, outer + i, inner + next);
+			batch.tri(inner + next, outer + i, outer + next);
+		}
+	}
 }
 
 /** @brief A ring with soft edges, flat on the ground; jitter makes it jagged, dashes break it up. */
@@ -7074,7 +7171,9 @@ void DrawRings()
 		}
 	}
 	for (const Ring &glow : FrameGlows) {
-		if (!FlameIsBehind(glow.flame))
+		if (glow.haze)
+			BlurredDisc(Haze, glow.pos, glow.r1, glow.colour, glow.alpha);
+		else if (!FlameIsBehind(glow.flame))
 			SoftDisc(glow.ground ? Ground : Glowing, glow.pos, glow.r1, glow.colour, glow.alpha, glow.ground);
 	}
 }
@@ -10117,6 +10216,98 @@ void DrawMarks()
  * falls on them and lie nearly still after. All of it lies on the floor, so whatever stands there hides it, and it is
  * drawn only under the lamps, which keeps the floor's mask small.
  */
+/** @brief A lamp's own colour, deeper than the colour it lights the ground (the flame itself, not its glow). */
+Rgb LampColour(const hd::light::Lamp &lamp)
+{
+	const float top = std::max({ lamp.colour[0], lamp.colour[1], lamp.colour[2], 0.01F });
+	const auto deep = [&](int c) { return static_cast<uint8_t>(255 * std::pow(std::clamp(lamp.colour[static_cast<size_t>(c)] / top, 0.F, 1.F), 1.4F)); };
+	return { deep(0), deep(1), deep(2) };
+}
+
+/**
+ * @brief Idea 66 in town: the soft glow in the air round Tristram's lamps, lit windows, forge and doorways. (In the
+ * dungeon the flames get theirs where they are found, ScanFlames.)
+ */
+void DrawLampGlow()
+{
+	if (leveltype != DTYPE_TOWN)
+		return;
+	const float glow = AirGlowAlpha();
+	if (glow <= 0.004F)
+		return;
+	const float reach = AirGlowReach();
+	std::array<hd::light::Lamp, 32> lamps;
+	const int count = hd::light::Lamps(lamps.data(), static_cast<int>(lamps.size()));
+	for (int i = 0; i < count; i++) {
+		const hd::light::Lamp &lamp = lamps[static_cast<size_t>(i)];
+		const Vec at = FloorToWorld(lamp.x, lamp.y) - Vec { 0, lamp.height * TileTall * 0.8F };
+		const float radius = (16 + 46 * lamp.size) * reach;
+		if (OutOfView(at, radius))
+			continue;
+		BlurredDisc(Haze, at, radius, LampColour(lamp), glow * std::min(lamp.strength, 1.6F));
+	}
+}
+
+/**
+ * @brief Idea 66: the lit air between a bright doorway and the ground its light lands on: a soft wedge that widens and
+ * fades on its way out, with a few faint streaks along it. Nothing moves in it: the dust in the air has its own.
+ */
+void DrawShafts()
+{
+	const float strength = std::min(AirStrength(atmosphere::Knob::Shafts), 3.F);
+	if (strength <= 0)
+		return;
+	const float peak = strength * atmosphere::Value("shaft_alpha", 0.F);
+	if (peak <= 0.004F)
+		return;
+	const float reachBy = atmosphere::Value("shaft_reach", 1.F);
+	std::array<hd::light::Lamp, 32> lamps;
+	const int count = hd::light::Lamps(lamps.data(), static_cast<int>(lamps.size()));
+	for (int i = 0; i < count; i++) {
+		const hd::light::Lamp &lamp = lamps[static_cast<size_t>(i)];
+		const float facing = std::hypot(lamp.outX, lamp.outY);
+		if (lamp.shaft <= 0 || facing < 0.1F)
+			continue;
+		// From the opening (a hearth's from the top of its door, the cathedral's from the middle of its tall one) down to
+		// where the light lies on the ground in front of it.
+		const Vec foot = FloorToWorld(lamp.x, lamp.y);
+		const Vec from = foot - Vec { 0, lamp.height * TileTall * (lamp.door ? 0.55F : 1.F) };
+		const Vec to = foot + FloorToWorld(lamp.outX / facing, lamp.outY / facing) * (lamp.shaftLength * reachBy);
+		const Vec along = to - from;
+		const float length = Length(along);
+		if (length < 8 || OutOfView(from + along * 0.5F, length * 0.5F + 80))
+			continue;
+		const Vec side = Vec { -along.y, along.x } * (1 / length);
+		const float half0 = 6 + 22 * lamp.size;
+		const float half1 = half0 + std::min(48.F, 0.33F * length);
+		const Rgb colour = LampColour(lamp);
+		const float alpha = peak * lamp.shaft * std::min(lamp.strength, 1.6F);
+		constexpr int Along = 10;
+		constexpr int Across = 12;
+		const int first = static_cast<int>(Haze.vertices.size());
+		for (int a = 0; a <= Along; a++) {
+			const float u = static_cast<float>(a) / Along;
+			const float half = half0 + (half1 - half0) * u;
+			// It starts just outside the opening and is brightest there.
+			const float start = std::clamp(u / 0.12F, 0.F, 1.F);
+			const float lengthwise = start * start * (3 - 2 * start) * (1 - u);
+			for (int b = 0; b <= Across; b++) {
+				const float v = -1 + 2 * static_cast<float>(b) / Across;
+				const float edge = 1 - std::abs(v);
+				const float streaks = 0.72F + 0.28F * std::cos(v * 7.F + 0.8F) * std::cos(v * 2.3F - 0.4F);
+				Haze.add(ToScreen(from + along * u + side * (v * half)), colour, alpha * lengthwise * edge * std::sqrt(edge) * streaks);
+			}
+		}
+		for (int a = 0; a < Along; a++) {
+			for (int b = 0; b < Across; b++) {
+				const int corner = first + a * (Across + 1) + b;
+				Haze.tri(corner, corner + Across + 1, corner + 1);
+				Haze.tri(corner + 1, corner + Across + 1, corner + Across + 2);
+			}
+		}
+	}
+}
+
 void DrawWetShine()
 {
 	const float wet = Wetness() * atmosphere::Value("wet_shine", 1.F);
@@ -10263,14 +10454,16 @@ struct Targets {
 	SDL_Texture *mask = nullptr;
 	/** @brief The heroes standing in front of a portal, drawn again over it. */
 	SDL_Texture *front = nullptr;
+	/** @brief Idea 66: what shows in the stream's water, in game pixels (its top left part is used when zoomed in). */
+	SDL_Texture *water = nullptr;
 
 	void release()
 	{
-		for (SDL_Texture *texture : { full, half, quarter, eighth, ground, mask, front }) {
+		for (SDL_Texture *texture : { full, half, quarter, eighth, ground, mask, front, water }) {
 			if (texture != nullptr)
 				SDL_DestroyTexture(texture);
 		}
-		full = half = quarter = eighth = ground = mask = front = nullptr;
+		full = half = quarter = eighth = ground = mask = front = water = nullptr;
 	}
 
 	bool ensure(SDL_Renderer *wanted, Size wantedSize)
@@ -10281,7 +10474,7 @@ struct Targets {
 			release();
 		renderer = wanted;
 		size = wantedSize;
-		full = half = quarter = eighth = ground = mask = front = nullptr;
+		full = half = quarter = eighth = ground = mask = front = water = nullptr;
 		if (!SDL_RenderTargetSupported(renderer))
 			return false;
 		auto make = [&](int divisor) {
@@ -10316,6 +10509,11 @@ struct Targets {
 		if (front != nullptr && SDL_SetTextureBlendMode(front, SDL_BLENDMODE_BLEND) != 0) {
 			SDL_DestroyTexture(front);
 			front = nullptr;
+		}
+		water = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, size.width, size.height);
+		if (water != nullptr && (SDL_SetTextureBlendMode(water, SDL_BLENDMODE_ADD) != 0 || SDL_SetTextureScaleMode(water, SDL_ScaleModeLinear) != 0)) {
+			SDL_DestroyTexture(water);
+			water = nullptr;
 		}
 		return true;
 	}
@@ -10680,6 +10878,409 @@ void DrawHeatShimmer(SDL_Renderer *renderer, Size worldSize, float toLogical)
 	}
 }
 
+/** @brief Idea 66: how strongly the stream mirrors what stands at its edge here and now (0 when off, or out of town). */
+float ReflectStrength()
+{
+	if (leveltype != DTYPE_TOWN)
+		return 0;
+	const float strength = std::min(AirStrength(atmosphere::Knob::Reflect), 2.F) * atmosphere::Value("reflect_alpha", 0.F);
+	return strength > 0.004F ? strength : 0.F;
+}
+
+/** @brief Idea 66: whether any of the stream is in view with its reflections on. */
+bool StreamInView()
+{
+	if (ReflectStrength() <= 0)
+		return false;
+	for (const Point &tile : Stream()) {
+		if (!OutOfView(TileCentre(tile), 40))
+			return true;
+	}
+	return false;
+}
+
+/** @brief Idea 66: scratch for the stream's reflections, in game pixels: where the water is, and what is added to it. */
+std::vector<uint8_t> WaterWet;
+/** @brief The stream's own floor as the game draws it (water and bank), in game pixels; 0 where there is none in view. */
+std::vector<uint8_t> WaterBed;
+/** @brief What the water gains, a pixel in four bytes (red, green, blue, 255), as worked out and then softened. */
+std::vector<uint32_t> WaterAdd;
+std::vector<uint32_t> WaterSoft;
+/** @brief Each row's water in view last time: its first pixel and one past its last (none when the first is past it). */
+std::vector<int16_t> WaterFrom;
+std::vector<int16_t> WaterTo;
+/** @brief Down each column: the row its water was last met in, where that run of water began, and the far bank there. */
+struct WaterColumn {
+	int lastRow = -2;
+	int top = 0;
+	float edge = 0;
+	std::array<float, 3> light {};
+};
+std::vector<WaterColumn> WaterColumns;
+/** @brief Where the view stood when the water in it was last marked, and the first and last rows that held any. */
+int WaterOriginX = 0;
+int WaterOriginY = 0;
+int WaterFirstRow = 0;
+int WaterLastRow = -1;
+/** @brief The strips of the water's picture that were last sent to it, when (in ticks), and the picture they went to. */
+std::array<SDL_Rect, 64> WaterSources;
+size_t WaterSent = 0;
+uint32_t WaterAt = 0;
+SDL_Texture *WaterTexture = nullptr;
+/** @brief The water is worked out afresh this often, in milliseconds, and drawn every frame: it moves slowly. */
+constexpr uint32_t WaterEveryMs = 30;
+
+/**
+ * @brief Idea 66: whoever stands at the far edge of Tristram's stream shows in the water, upside down, with the bank's
+ * edge faintly along it, and the open water takes a little of the sky. Worked out in game pixels and only where the
+ * water is: down each column of water, what lies above the bank is mirrored into it, fading with distance and sliding
+ * slowly from side to side. What stands out from the ground behind it (a hero, a cow, a trunk) shows most; the water
+ * itself stays dark. Nothing is added where something stands in front of the water, and nothing glints (the glints
+ * were clutter, Curtis 2026-11-14). It is worked out some thirty times a second and drawn every frame, held to the
+ * ground when the view moves in between.
+ */
+void DrawReflections(SDL_Renderer *renderer, Size worldSize, float toLogical)
+{
+	if (!StreamSeen || Layer.water == nullptr)
+		return;
+	const float strength = ReflectStrength();
+	const int scale = CameraScale >= 2 ? 2 : 1;
+	const int gw = worldSize.width / scale;
+	const int gh = worldSize.height / scale;
+	if (strength <= 0 || gw < 8 || gh < 8 || gw > 16000 || gh > 16000)
+		return;
+	const size_t width = static_cast<size_t>(gw);
+	const size_t count = width * static_cast<size_t>(gh);
+	// A pixel that adds nothing: black, with the 255 that lets its colour through in full.
+	constexpr uint8_t NothingBytes[4] = { 0, 0, 0, 255 };
+	uint32_t nothing;
+	std::memcpy(&nothing, NothingBytes, sizeof(nothing));
+	if (WaterWet.size() != count || WaterFrom.size() != static_cast<size_t>(gh)) {
+		WaterSent = 0;
+		WaterWet.assign(count, 0);
+		WaterBed.assign(count, 0);
+		WaterAdd.assign(count, nothing);
+		WaterSoft.assign(count, nothing);
+		WaterFrom.assign(static_cast<size_t>(gh), static_cast<int16_t>(gw));
+		WaterTo.assign(static_cast<size_t>(gh), 0);
+		WaterLastRow = -1;
+		WaterOriginX = std::numeric_limits<int>::min();
+	}
+	const int originX = static_cast<int>(std::lround(CameraOrigin.x));
+	const int originY = static_cast<int>(std::lround(CameraOrigin.y));
+	const float toScreen = static_cast<float>(scale) * toLogical;
+	const auto draw = [&]() {
+		for (size_t i = 0; i < WaterSent; i++) {
+			const SDL_Rect &source = WaterSources[i];
+			const SDL_FRect dest { static_cast<float>(source.x + WaterOriginX - originX) * toScreen, static_cast<float>(source.y + WaterOriginY - originY) * toScreen, static_cast<float>(source.w) * toScreen, static_cast<float>(source.h) * toScreen };
+			SDL_RenderCopyF(renderer, Layer.water, &source, &dest);
+		}
+	};
+	const uint32_t now = SDL_GetTicks();
+	if (WaterSent > 0 && WaterTexture == Layer.water && now - WaterAt < WaterEveryMs) {
+		draw();
+		return;
+	}
+	WaterSent = 0;
+	WaterTexture = Layer.water;
+	// The water is marked again only when the view has moved: last time's is wiped, only where it was.
+	const bool moved = originX != WaterOriginX || originY != WaterOriginY;
+	WaterOriginX = originX;
+	WaterOriginY = originY;
+	for (int gy = 0; moved && gy < gh; gy++) {
+		const int from = WaterFrom[static_cast<size_t>(gy)];
+		const int to = WaterTo[static_cast<size_t>(gy)];
+		if (to <= from)
+			continue;
+		const size_t at = static_cast<size_t>(gy) * width + static_cast<size_t>(from);
+		std::memset(&WaterWet[at], 0, static_cast<size_t>(to - from));
+		std::fill_n(&WaterAdd[at], static_cast<size_t>(to - from), nothing);
+		WaterFrom[static_cast<size_t>(gy)] = static_cast<int16_t>(gw);
+		WaterTo[static_cast<size_t>(gy)] = 0;
+	}
+	// The stream's pieces are drawn with the walls, after the floor's copy is taken, so their own picture stands in for
+	// the bare floor there; and it says where each piece is water.
+	int firstRow = moved ? gh : WaterFirstRow;
+	int lastRow = moved ? -1 : WaterLastRow;
+	if (moved)
+		std::memset(WaterBed.data(), 0, count);
+	for (const Point &tile : Stream()) {
+		const Vec centre = TileCentre(tile);
+		if (!moved)
+			break;
+		if (OutOfView(centre, 40))
+			continue;
+		const WaterMask &mask = WaterMaskOf(dPiece[tile.x][tile.y]);
+		const int left = static_cast<int>(std::lround(centre.x)) - DunFrameWidth - originX;
+		// The game draws a piece's floor a pixel lower than its middle says.
+		const int top = static_cast<int>(std::lround(centre.y)) - DunFrameHeight / 2 + 1 - originY;
+		for (int py = 0; py < DunFrameHeight; py++) {
+			const int gy = top + py;
+			if (gy < 0 || gy >= gh)
+				continue;
+			const int from = std::max<int>(left + mask.first[static_cast<size_t>(py)], 0);
+			const int to = std::min<int>(left + mask.last[static_cast<size_t>(py)], gw);
+			if (to > from)
+				std::memcpy(&WaterBed[static_cast<size_t>(gy) * width + static_cast<size_t>(from)], &mask.picture[static_cast<size_t>(py) * 64 + static_cast<size_t>(from - left)], static_cast<size_t>(to - from));
+			uint64_t bits = mask.rows[static_cast<size_t>(py)];
+			// Only the part of the row in view.
+			if (left < 0)
+				bits = left > -64 ? bits >> -left << -left : 0;
+			if (left + 64 > gw)
+				bits = gw - left > 0 ? bits << (left + 64 - gw) >> (left + 64 - gw) : 0;
+			if (bits == 0)
+				continue;
+			const int wetFrom = left + std::countr_zero(bits);
+			const int wetTo = left + 64 - std::countl_zero(bits);
+			WaterFrom[static_cast<size_t>(gy)] = static_cast<int16_t>(std::min<int>(WaterFrom[static_cast<size_t>(gy)], wetFrom));
+			WaterTo[static_cast<size_t>(gy)] = static_cast<int16_t>(std::max<int>(WaterTo[static_cast<size_t>(gy)], wetTo));
+			firstRow = std::min(firstRow, gy);
+			lastRow = std::max(lastRow, gy);
+			uint8_t *row = &WaterWet[static_cast<size_t>(gy) * width];
+			while (bits != 0) {
+				row[left + std::countr_zero(bits)] = 1;
+				bits &= bits - 1;
+			}
+		}
+	}
+	WaterFirstRow = firstRow;
+	WaterLastRow = lastRow;
+	const Surface world = WorldBackBuffer();
+	if (lastRow < firstRow || !FloorFresh || FloorSurface == nullptr || world.w() != FloorSurface->w || world.h() != FloorSurface->h || world.w() != worldSize.width || world.h() != worldSize.height)
+		return;
+
+	const weather::State &weatherNow = weather::Current();
+	// Rain breaks the water up: less shows in it while it falls.
+	const float calm = 1 - 0.6F * std::clamp(weatherNow.strength, 0.F, 1.F);
+	const float reach = std::clamp(atmosphere::Value("reflect_reach", 55.F), 8.F, 200.F);
+	const float wobble = atmosphere::Value("reflect_wobble", 1.1F);
+	const float skyAmount = atmosphere::Value("reflect_sky", 0.07F) * strength / 0.5F;
+	const hd::light::Rgb skyLight = hd::light::Sky();
+	const std::array<float, 3> sky { 255 * skyAmount * 0.35F * skyLight.r, 255 * skyAmount * 0.42F * skyLight.g, 255 * skyAmount * 0.62F * skyLight.b };
+	// The mirror lies this far up the bank from the water's edge, in game pixels.
+	constexpr int Gap = 4;
+	// What stands out from the ground behind it shows this much more than the ground does, in the water's cool colour.
+	constexpr float StandOut = 4.F;
+	const int depthEnd = static_cast<int>(reach);
+	static std::vector<float> fades;
+	static std::vector<float> slides;
+	static std::vector<float> opens;
+	fades.resize(static_cast<size_t>(depthEnd) + 1);
+	slides.resize(static_cast<size_t>(depthEnd) + 1);
+	opens.resize(21);
+	for (int d = 0; d <= depthEnd; d++) {
+		const float along = static_cast<float>(d) / reach;
+		// The taps below add up to 256 between them.
+		fades[static_cast<size_t>(d)] = strength * calm * std::pow(std::max(1 - along, 0.F), 1.2F) / 256;
+		slides[static_cast<size_t>(d)] = wobble * (0.35F + along);
+	}
+	for (int d = 0; d <= 20; d++)
+		opens[static_cast<size_t>(d)] = SmoothStep(2.F, 20.F, static_cast<float>(d));
+	// The ripples: two slow waves, fixed to the ground so they don't swim when the view moves. One turn in four seconds.
+	const float phase = std::fmod(AmbientTime, 4000.F) * (2 * Pi / 4000.F);
+	static std::vector<float> columnSin;
+	static std::vector<float> columnCos;
+	columnSin.resize(width);
+	columnCos.resize(width);
+	for (int gx = 0; gx < gw; gx++) {
+		const float x = 2.F * static_cast<float>(originX + gx);
+		columnSin[static_cast<size_t>(gx)] = std::sin(x * 0.031F);
+		columnCos[static_cast<size_t>(gx)] = std::cos(x * 0.031F);
+	}
+	WaterColumns.assign(width, WaterColumn {});
+
+	const uint8_t *floorPixels = static_cast<const uint8_t *>(FloorSurface->pixels);
+	const ptrdiff_t floorPitch = FloorSurface->pitch;
+	const auto wetAt = [&](int gx, int gy) { return gy >= 0 && gy < gh && WaterWet[static_cast<size_t>(gy) * width + static_cast<size_t>(gx)] != 0; };
+	// One reading of the bank's light serves the columns close beside it.
+	int lightX = -100;
+	int lightY = -100;
+	std::array<float, 3> lightNear {};
+	// Row by row, each column remembering where its run of water began.
+	for (int gy = firstRow; gy <= lastRow; gy++) {
+		const int from = WaterFrom[static_cast<size_t>(gy)];
+		const int to = WaterTo[static_cast<size_t>(gy)];
+		if (to <= from)
+			continue;
+		const float y = 2.F * static_cast<float>(originY + gy);
+		const float rowWave = std::sin(y * 0.21F + phase);
+		const float rowSin = std::sin(y * 0.083F - phase);
+		const float rowCos = std::cos(y * 0.083F - phase);
+		const float breathe = 0.9F + 0.1F * rowSin;
+		const uint8_t *wet = &WaterWet[static_cast<size_t>(gy) * width];
+		const uint8_t *bed = &WaterBed[static_cast<size_t>(gy) * width];
+		const uint8_t *shown = world.at(0, gy * scale);
+		uint32_t *out = &WaterAdd[static_cast<size_t>(gy) * width];
+		for (int gx = from; gx < to; gx++) {
+			if (wet[gx] == 0)
+				continue;
+			WaterColumn &column = WaterColumns[static_cast<size_t>(gx)];
+			// A few pixels of rock or foam in the stream don't start the water again below them.
+			if (column.lastRow < gy - 4) {
+				// Water that runs off the top of the view has no bank in sight to mirror.
+				column.top = gy > 0 ? gy : -100000;
+				column.edge = static_cast<float>(column.top);
+				if (gy > 0) {
+					// The far bank's own light, for what stands on it.
+					if (std::abs(gx - lightX) > 6 || std::abs(gy - lightY) > 6) {
+						const hd::light::Rgb light = LightOf(Vec { static_cast<float>(originX + gx), static_cast<float>(originY + gy - Gap) });
+						lightNear = { light.r, light.g, light.b };
+						lightX = gx;
+						lightY = gy;
+					}
+					column.light = lightNear;
+					// The water's edge is ragged from one column to the next: the mirror lies along it evened out over
+					// the columns to either side, or the reflection breaks up into upright streaks.
+					int sum = gy;
+					int found = 1;
+					for (int dx = -3; dx <= 3; dx++) {
+						const int nx = gx + dx;
+						if (dx == 0 || nx < 0 || nx >= gw)
+							continue;
+						int ny = gy;
+						int steps = 0;
+						if (wetAt(nx, ny)) {
+							while (steps < 8 && wetAt(nx, ny - 1)) {
+								ny--;
+								steps++;
+							}
+						} else {
+							while (steps < 8 && !wetAt(nx, ny)) {
+								ny++;
+								steps++;
+							}
+						}
+						if (steps < 8) {
+							sum += ny;
+							found++;
+						}
+					}
+					column.edge = static_cast<float>(sum) / static_cast<float>(found);
+				}
+			}
+			column.lastRow = gy;
+			// Not where something stands in front of the water.
+			if (shown[gx * scale] != bed[gx]) {
+				out[gx] = nothing;
+				continue;
+			}
+			const int depth = gy - column.top;
+			float r = 0;
+			float g = 0;
+			float b = 0;
+			if (depth >= 2) {
+				// A touch of the sky in the open water, breathing very slightly.
+				const float open = breathe * (depth < 20 ? opens[static_cast<size_t>(depth)] : 1.F);
+				r = sky[0] * open;
+				g = sky[1] * open;
+				b = sky[2] * open;
+			}
+			if (depth <= depthEnd) {
+				const float wave = rowWave + 0.6F * (rowSin * columnCos[static_cast<size_t>(gx)] + rowCos * columnSin[static_cast<size_t>(gx)]);
+				// Between two pixels of what is mirrored, so it slides smoothly and not a whole pixel at a time.
+				const float fromX = static_cast<float>(gx) + slides[static_cast<size_t>(depth)] * wave;
+				// (Rounded down by way of a whole number well above any slide: quicker than asking for the floor.)
+				const int sx = static_cast<int>(fromX + 64.F) - 64;
+				const int right = static_cast<int>((fromX - static_cast<float>(sx)) * 256);
+				const int sy = static_cast<int>(column.edge - Gap - 0.95F * static_cast<float>(depth) + 0.5F);
+				if (sx >= 0 && sx + 1 < gw && sy >= 0) {
+					const uint8_t *thereRow = world.at(sx * scale, sy * scale);
+					const uint8_t *bareRow = floorPixels + static_cast<ptrdiff_t>(sy * scale) * floorPitch + sx * scale;
+					const uint8_t *bedRow = &WaterBed[static_cast<size_t>(sy) * width + static_cast<size_t>(sx)];
+					// What is there, and how far it stands out from the ground behind it, over the two pixels.
+					int there[3] = { 0, 0, 0 };
+					int stands[3] = { 0, 0, 0 };
+					for (int side = 0; side < 2; side++) {
+						const int share = side == 0 ? 256 - right : right;
+						const uint8_t index = thereRow[side * scale];
+						const uint8_t ground = bedRow[side] != 0 ? bedRow[side] : bareRow[side * scale];
+						const SDL_Color &colour = system_palette[index];
+						there[0] += share * colour.r;
+						there[1] += share * colour.g;
+						there[2] += share * colour.b;
+						if (index != ground) {
+							const SDL_Color &behind = system_palette[ground];
+							stands[0] += share * std::max(colour.r - behind.r, 0);
+							stands[1] += share * std::max(colour.g - behind.g, 0);
+							stands[2] += share * std::max(colour.b - behind.b, 0);
+						}
+					}
+					const float k = fades[static_cast<size_t>(depth)];
+					r += k * column.light[0] * (StandOut * 0.8F * static_cast<float>(stands[0]) + 0.3F * static_cast<float>(there[0]));
+					g += k * column.light[1] * (StandOut * 0.9F * static_cast<float>(stands[1]) + 0.3F * static_cast<float>(there[1]));
+					b += k * column.light[2] * (StandOut * static_cast<float>(stands[2]) + 0.3F * static_cast<float>(there[2]));
+				}
+			}
+			const uint8_t bytes[4] = { static_cast<uint8_t>(std::min(r, 255.F)), static_cast<uint8_t>(std::min(g, 255.F)), static_cast<uint8_t>(std::min(b, 255.F)), 255 };
+			std::memcpy(&out[gx], bytes, sizeof(bytes));
+		}
+	}
+
+	// Softened (each pixel with the four beside it), as water blurs what it shows; then onto the screen in upright
+	// strips, each sent a pixel wider all round than what it draws, so the smooth copy meets only this frame's pixels.
+	// All the strips are sent before any is drawn: sending to a picture that waits to be drawn makes the renderer
+	// stop and draw everything it holds first.
+	constexpr int StripWidth = 128;
+	constexpr uint32_t Fields = 0x00FF00FF;
+	const auto rowFrom = [&](int gy) { return gy >= 0 && gy < gh ? static_cast<int>(WaterFrom[static_cast<size_t>(gy)]) : gw; };
+	const auto rowTo = [&](int gy) { return gy >= 0 && gy < gh ? static_cast<int>(WaterTo[static_cast<size_t>(gy)]) : 0; };
+	for (int x0 = 0; x0 < gw && WaterSent < WaterSources.size(); x0 += StripWidth) {
+		const int x1 = std::min(x0 + StripWidth, gw);
+		// The rows of this strip the softened water reaches.
+		int top = gh;
+		int bottom = -1;
+		for (int gy = firstRow; gy <= lastRow; gy++) {
+			if (rowTo(gy) + 1 > x0 && rowFrom(gy) - 1 < x1) {
+				top = std::min(top, gy);
+				bottom = gy;
+			}
+		}
+		if (bottom < top)
+			continue;
+		SDL_Rect source;
+		source.x = x0;
+		source.y = std::max(top - 1, 0);
+		source.w = x1 - x0;
+		source.h = std::min(bottom + 2, gh) - source.y;
+		SDL_Rect rect;
+		rect.x = std::max(source.x - 1, 0);
+		rect.y = std::max(source.y - 1, 0);
+		rect.w = std::min(source.x + source.w + 1, gw) - rect.x;
+		rect.h = std::min(source.y + source.h + 1, gh) - rect.y;
+		for (int gy = rect.y; gy < rect.y + rect.h; gy++) {
+			uint32_t *out = &WaterSoft[static_cast<size_t>(gy) * width];
+			// Only as far along the row as this row's water, or the rows' above and below, can reach.
+			const int end = std::min(rect.x + rect.w, gw - 1);
+			const int from = std::clamp(std::min({ rowFrom(gy - 1), rowFrom(gy), rowFrom(gy + 1) }) - 1, std::max(rect.x, 1), end);
+			const int to = std::clamp(std::max({ rowTo(gy - 1), rowTo(gy), rowTo(gy + 1) }) + 1, from, end);
+			std::fill(out + rect.x, out + from, nothing);
+			std::fill(out + to, out + rect.x + rect.w, nothing);
+			if (gy == 0 || gy + 1 >= gh) {
+				std::fill(out + from, out + to, nothing);
+				continue;
+			}
+			const uint32_t *in = &WaterAdd[static_cast<size_t>(gy) * width];
+			const uint32_t *up = in - width;
+			const uint32_t *down = in + width;
+			for (int gx = from; gx < to; gx++) {
+				const uint32_t low = 4 * (in[gx] & Fields) + (in[gx - 1] & Fields) + (in[gx + 1] & Fields) + (up[gx] & Fields) + (down[gx] & Fields);
+				const uint32_t high = 4 * ((in[gx] >> 8) & Fields) + ((in[gx - 1] >> 8) & Fields) + ((in[gx + 1] >> 8) & Fields) + ((up[gx] >> 8) & Fields) + ((down[gx] >> 8) & Fields);
+				out[gx] = ((low >> 3) & Fields) | (((high >> 3) & Fields) << 8);
+			}
+		}
+		void *pixels;
+		int pitch;
+		if (SDL_LockTexture(Layer.water, &rect, &pixels, &pitch) != 0)
+			continue;
+		for (int y = 0; y < rect.h; y++)
+			std::memcpy(static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch, &WaterSoft[static_cast<size_t>(rect.y + y) * width + static_cast<size_t>(rect.x)], static_cast<size_t>(rect.w) * 4);
+		SDL_UnlockTexture(Layer.water);
+		WaterSources[WaterSent++] = source;
+	}
+	WaterAt = now;
+	draw();
+}
+
 } // namespace
 #endif
 
@@ -10701,7 +11302,11 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && Splashes.empty() && Motes.empty() && Wisps.empty() && Drips.empty() && Swarms.empty() && Marks.empty() && sky.strength <= 0 && sky.flash <= 0 && Wetness() <= 0.01F && Fogs.empty() && Glints.empty() && Sprays.empty() && Leaves.empty()) {
+	Haze.clear();
+	DrawLampGlow();
+	DrawShafts();
+	StreamSeen = StreamInView();
+	if (!StreamSeen && Haze.indices.empty() && Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && Splashes.empty() && Motes.empty() && Wisps.empty() && Drips.empty() && Swarms.empty() && Marks.empty() && sky.strength <= 0 && sky.flash <= 0 && Wetness() <= 0.01F && Fogs.empty() && Glints.empty() && Sprays.empty() && Leaves.empty()) {
 		FrontFresh = false;
 		return;
 	}
@@ -10747,6 +11352,9 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	const float toLogical = static_cast<float>(logicalSize.width) / static_cast<float>(worldSize.width);
 	const bool targets = Layer.ensure(renderer, worldSize);
 	const std::optional<SDL_Rect> cut = targets ? FillFloorMask(worldSize) : std::nullopt;
+	// Idea 66: the stream's reflections go on the water first, under every other effect.
+	if (targets)
+		DrawReflections(renderer, worldSize, toLogical);
 	FloorFresh = false;
 	// The red portal's heat shimmer goes first, under every effect, as it redraws the world behind them.
 	if (targets)
@@ -10782,6 +11390,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		Submit(renderer, Standing, toLogical);
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
 		Submit(renderer, Glowing, toLogical);
+		Submit(renderer, Haze, toLogical);
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 		FrontFresh = false;
 		return;
@@ -10826,6 +11435,11 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	// only its mist and rain in the air: Curtis 2026-11-14, ten frames a second lost to the rain).
 	if (!Glowing.indices.empty())
 		SubmitGlow(renderer, Glowing);
+	// Idea 66: the glow in the air and the shafts of light are soft as they are drawn, so they go straight on.
+	if (!Haze.indices.empty()) {
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+		Submit(renderer, Haze, toLogical);
+	}
 	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 #else
 	(void)renderer;
