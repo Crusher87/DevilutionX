@@ -21,7 +21,10 @@ constexpr CharacterAttribute TearsAttributes[] = {
 	CharacterAttribute::Vitality,
 };
 
-/** A stat can give a point while it is above the hero's starting value. */
+/** The lowest a stat goes by giving points. */
+constexpr int TearsLowestValue = 1;
+
+/** A stat can give a point while it is above TearsLowestValue, even below the hero's starting value. */
 bool TearsCanGive(const Player &player, CharacterAttribute attribute);
 
 /** A stat can take a point while it is below the hero's maximum. */
