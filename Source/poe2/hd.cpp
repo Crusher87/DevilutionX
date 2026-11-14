@@ -3097,6 +3097,8 @@ constexpr float WallMostTall = 3.5F;
 constexpr int WallSpan = 5;
 /** @brief A wall's face stands a little in front of its tile's edge: the shadow starts this far (tiles) below the edge. */
 constexpr float WallFootDrop = 0.03F;
+/** @brief The most (tiles) a shadow's floor part is carried on past where its middle meets a wall, for its far side to reach a slanting wall. */
+constexpr float WallMostSlant = 2.F;
 
 /**
  * @brief The part of a body's shadow that falls on a wall: where the floor ends at a wall turned to the view, the rest
@@ -3492,7 +3494,19 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		// still lands on the floor.
 		const float topZ = (feet + pad - vTop * texHeight) * HeightPerPixel;
 		const float bottomZ = (feet - h - pad) * HeightPerPixel;
-		const float highZ = std::min(topZ, lightHeight * limit / (distance + limit));
+		// The shadow's far end lies square to it, but a wall's foot may cross it at a slant: then its floor part goes on
+		// until both its sides reach the wall, and is kept in front of the wall's line, so it neither stops short of the
+		// wall on one side nor runs on into the wall on the other.
+		float floorEnd = limit;
+		const bool atWall = wall.found;
+		const float towardWall = wall.facesX ? dx : dy;
+		if (atWall && towardWall < -0.05F) {
+			const float endZ = lightHeight * limit / (distance + limit);
+			const float endSpread = endZ > 0 ? std::min(lightHeight / std::max(lightHeight - endZ, 0.05F), MaxSpread) : 1.F;
+			const float half = std::max(std::abs(softPart.u0 * texWidth - pad - w / 2), std::abs(softPart.u1 * texWidth - pad - w / 2)) / TileAcross * endSpread * acrossShare;
+			floorEnd = limit + std::min(half * std::abs(wall.facesX ? dy : dx) / -towardWall, WallMostSlant);
+		}
+		const float highZ = std::min(topZ, lightHeight * floorEnd / (distance + floorEnd));
 		const float farthest = landsAt(highZ);
 		// Rows of the shadow: the picture's bottom, the feet, then even steps along the floor to its end.
 		std::array<float, Rows> rowZ;
@@ -3560,6 +3574,12 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 						const float viewY = wy - fromMiddle * ViewAcross + dy * out + below;
 						x = viewX + (x - viewX) * turned;
 						y = viewY + (y - viewY) * turned;
+					}
+					if (atWall) {
+						if (wall.facesX)
+							x = std::max(x, wall.at);
+						else
+							y = std::max(y, wall.at);
 					}
 					if (cover)
 						pass->grow(x, y);
@@ -3906,6 +3926,9 @@ bool DrawJoinedShadows(SDL_Renderer *renderer, Size worldSize, float toLogical)
 {
 	if (atmosphere::Setting(atmosphere::Knob::Joined) <= 0 || !EnsureShade(renderer, worldSize))
 		return false;
+	// The whole picture is wiped once a frame: a graphics driver may lose what a drawn-on picture holds (on a device
+	// reset, alt-tab or a window change), and what was left there would darken the floor.
+	ShadeUsedAll = true;
 	static std::vector<CastJob> jobs;
 	static std::vector<ShadeGroup> groups;
 	jobs.clear();
