@@ -54,6 +54,7 @@
 #include "poe2/floor_chests.hpp"
 #include "poe2/hd_light.hpp"
 #include "poe2/loot_filter.hpp"
+#include "poe2/moments.hpp"
 #include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
 #include "poe2/skill_lab.hpp"
@@ -3517,8 +3518,13 @@ struct Mote {
 	float phase;
 	/** @brief One of the extra specks in the daylight down the first floor's stairs (idea 24). */
 	bool day = false;
+	/** @brief Thrown up by a moment (a door opening, the end of a fight): it slows, sinks and is soon gone. */
+	bool settling = false;
 };
 std::vector<Mote> Motes;
+/** @brief This frame's news from the moments (ideas 47 and 50): a fight has just ended, doors have just opened. */
+bool QuietJustStarted = false;
+std::vector<Point> DoorsJustOpened;
 
 /** @brief A slow, faint puff of haze (idea 3). */
 struct Wisp {
@@ -3770,6 +3776,41 @@ void AdvanceDust(float ms)
 		mote.phase = Random(0, 2 * Pi);
 		Motes.push_back(mote);
 	};
+	// Idea 50: when a fight ends, what it threw up drifts down through the light round the hero.
+	const bool quiet = moments::Quiet();
+	if (quiet)
+		Stir = std::max(0.F, Stir - ms / 1200.F);
+	auto throwUp = [&](Vec pos, float z, Vec vel, float vz) {
+		Mote mote;
+		mote.settling = true;
+		mote.pos = pos;
+		mote.z = z;
+		mote.vel = vel;
+		mote.vz = vz;
+		mote.life = Random(1700, 2700);
+		mote.age = 0;
+		mote.size = Random(1.F, 1.8F);
+		mote.phase = Random(0, 2 * Pi);
+		Motes.push_back(mote);
+	};
+	if (QuietJustStarted) {
+		for (int i = static_cast<int>(std::min(atmosphere::Value("quiet_dust", 26) * strength, 80.F)); i > 0; i--) {
+			const std::optional<Vec> pos = LitSpotInView(0, 0.3F);
+			if (pos && TilesFromHero(*pos) <= 7)
+				throwUp(*pos, Random(45, 95), { Random(-3, 3), Random(-1.5F, 1.5F) }, -Random(10, 20));
+		}
+	}
+	// Idea 47: a door swings open and the dust in the doorway swirls.
+	for (const Point &opened : DoorsJustOpened) {
+		const Vec door = TileCentre(opened);
+		if (OutOfView(door, 0))
+			continue;
+		for (int i = static_cast<int>(std::min(atmosphere::Value("door_dust", 9) * strength, 50.F)); i > 0; i--) {
+			const float angle = Random(0, 2 * Pi);
+			const float speed = Random(8, 26);
+			throwUp(door + Vec { Random(-12, 12), Random(-6, 6) }, Random(10, 60), { std::cos(angle) * speed, std::sin(angle) * speed * 0.5F }, Random(-5, 7));
+		}
+	}
 	// Arriving on a floor, the dust is already there.
 	if (Motes.empty()) {
 		for (int i = static_cast<int>(target); i > 0; i--)
@@ -3803,7 +3844,11 @@ void AdvanceDust(float ms)
 		// A slow drift with a lazy curl, rising and sinking a little.
 		const float t = AmbientTime * 0.001F;
 		mote.pos = mote.pos + (mote.vel + Vec { std::sin(t * 0.6F + mote.phase) * 3, std::cos(t * 0.8F + mote.phase * 1.7F) * 1.5F }) * dt;
-		mote.z = std::clamp(mote.z + (mote.vz + std::sin(t * 0.5F + mote.phase * 2.3F) * 1.2F) * dt, 12.F, 95.F);
+		if (mote.settling)
+			mote.vel = mote.vel * std::max(1 - 1.4F * dt, 0.F);
+		// In the quiet after a fight all of it sinks a little.
+		const float sink = quiet && !mote.settling ? 5.F : 0.F;
+		mote.z = std::clamp(mote.z + (mote.vz - sink + std::sin(t * 0.5F + mote.phase * 2.3F) * 1.2F) * dt, mote.settling ? 4.F : 12.F, 95.F);
 		if (mote.age >= mote.life || OutOfView(mote.pos, 250)) {
 			Motes[i] = Motes.back();
 			Motes.pop_back();
@@ -4581,6 +4626,14 @@ void AdvanceTownAir(float ms)
 void AdvanceAir(float ms)
 {
 	const FramePartScope part(FramePart::Atmosphere);
+	// The moments' news of this frame, for the dust (taken here so none of it waits for a floor that has dust).
+	moments::Advance(ms);
+	QuietJustStarted = moments::TakeQuietStarted();
+	DoorsJustOpened.clear();
+	int doorX;
+	int doorY;
+	while (moments::TakeDoorOpened(doorX, doorY))
+		DoorsJustOpened.push_back({ doorX, doorY });
 	Stir = std::max(0.F, Stir - ms / 10000.F);
 	if (!Enabled()) {
 		Motes.clear();
@@ -9950,7 +10003,8 @@ void DrawAir()
 	DrawTownAir();
 	if (!Wisps.empty()) {
 		const std::array<float, 3> colour = atmosphere::Colour("mist_colour", { 1.F, 0.9F, 0.78F });
-		const float thickness = atmosphere::Value("mist_alpha", 0.05F);
+		// Idea 50: a fight drives the mist off, and it rolls back in the quiet after.
+		const float thickness = atmosphere::Value("mist_alpha", 0.05F) * moments::MistKept();
 		for (const Wisp &wisp : Wisps) {
 			// Lit by the light round it: its middle and either side, so it glows on the side by a flame.
 			const hd::light::Rgb a = LightOf(wisp.pos);
@@ -9971,10 +10025,11 @@ void DrawAir()
 			const float seen = SmoothStep(0.1F, 0.7F, BrightnessOf(light));
 			if (seen <= 0.01F)
 				continue;
-			const float fade = std::min({ mote.age / 1200.F, (mote.life - mote.age) / 1200.F, 1.F });
+			const float fade = mote.settling ? std::min({ mote.age / 250.F, (mote.life - mote.age) / 900.F, 1.F }) : std::min({ mote.age / 1200.F, (mote.life - mote.age) / 1200.F, 1.F });
 			// A slow glint as it turns, so it reads as a speck in the air and not as grain on the screen.
 			const float glint = 0.7F + 0.3F * std::sin(AmbientTime * 0.0021F + mote.phase * 3.1F);
-			const float alpha = 0.8F * seen * fade * glint;
+			// What a moment threw up is fainter: it is seen against the dark of a doorway.
+			const float alpha = (mote.settling ? 0.5F : 0.8F) * seen * fade * glint;
 			SoftDisc(Glowing, mote.pos - Vec { 0, mote.z }, mote.size, InLight(colour, light), alpha, false, 0.3F * alpha);
 		}
 	}

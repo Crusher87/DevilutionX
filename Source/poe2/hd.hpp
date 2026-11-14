@@ -281,6 +281,12 @@ extern RegisterSpritesFn RegisterSpritesHook;
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
 
 /**
+ * @brief Draws the Atmosphere option's moments over the HD world and the effects on it: the dark that closes in round the
+ * hero going down a floor or dying, and the red of a death. Nothing when the HD world wasn't drawn in this present.
+ */
+void RenderOver(SDL_Renderer *renderer);
+
+/**
  * @brief This frame's HD world covers the whole world buffer of the given size, so the game's own 8-bit world
  * under it can't show anywhere and needn't be sent to the screen.
  */

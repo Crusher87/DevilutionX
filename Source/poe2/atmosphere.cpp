@@ -76,6 +76,10 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "wind", 1.F, "dead leaves blow over the ground with the wind, more in a storm (idea 20)" },
 	{ "cathedral", 1.F, "the cathedral door breathes red and cold mist creeps out, more the deeper you've been (idea 21)" },
 	{ "readahead", 1.F, "HD pictures load in the background before they come into view; 0 loads each as it first shows, the old way (works with Atmosphere off)" },
+	{ "doors", 1.F, "a door opens and the room behind it comes up from the dark, with a puff of dust; 2 takes twice as long (idea 47)" },
+	{ "descent", 1.F, "taking stairs down, the dark closes in on you and opens again on the new floor (idea 49)" },
+	{ "quiet", 1.F, "after a fight the dust settles, the mist rolls back and the flames steady for a second (idea 50)" },
+	{ "death", 1.F, "when you die your light shrinks, the flames near you die down and the colour drains to red (idea 53)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

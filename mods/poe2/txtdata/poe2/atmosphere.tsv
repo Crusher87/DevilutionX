@@ -26,6 +26,7 @@ town	cathedral_glow_deep	0.6		How much brighter that glow gets by the time the h
 town	cathedral_breath	0.15		How much the glow swells and fades as it breathes, once every five seconds: 0 steady.
 town	cathedral_mist	16		How many puffs of cold mist are rolling out of the cathedral door at once for a hero who has been to the bottom (idea 21); a new hero sees under half.
 town	cathedral_mist_alpha	3		How thick that mist is against the mist by the stream: 1 the same, 2 twice as thick.
+town	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
 cathedral	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 cathedral	warm	1.12 0.95 0.76	1.16 0.90 0.68	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 cathedral	cool	0.74 0.84 1.08	0.68 0.78 1.02	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -52,6 +53,12 @@ cathedral	daylight_colour	0.80 0.88 1.00		Its colour, red green blue.
 cathedral	daylight_radius	6		How far it reaches, in tiles.
 cathedral	daylight_dust	14		How many extra specks of dust drift in it.
 cathedral	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+cathedral	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+cathedral	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+cathedral	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+cathedral	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+cathedral	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+cathedral	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 catacombs	warm	1.00 0.97 0.93	1.04 0.92 0.85	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 catacombs	cool	0.68 0.82 1.14	0.62 0.76 1.08	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -71,6 +78,12 @@ catacombs	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before 
 catacombs	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
 catacombs	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
 catacombs	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+catacombs	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+catacombs	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+catacombs	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+catacombs	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+catacombs	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+catacombs	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 caves	falloff	1.50	1.65	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 caves	warm	1.16 0.90 0.66	1.20 0.85 0.58	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 caves	cool	0.84 0.76 0.74	0.78 0.70 0.68	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -97,6 +110,12 @@ caves	haze	1.5		How far the lava sways in its heat, in game pixels (idea 31). 0 
 caves	lava_far	0.010	0.014	How bright the dim orange glow is that fills a cavern with lava in it, first floor to last (idea 32). 0 none; 0.02 is plain to see.
 caves	lava_far_reach	10		How many tiles round a spot count as its cavern.
 caves	lava_far_full	0.06		The share of those tiles that is lava for all of the glow.
+caves	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+caves	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+caves	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+caves	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+caves	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+caves	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 hell	falloff	1.40	1.55	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 hell	warm	1.18 0.86 0.64	1.22 0.81 0.56	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 hell	cool	1.00 0.60 0.56	0.94 0.54 0.50	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -114,6 +133,12 @@ hell	dust_colour	1.00 0.80 0.70		The dust's colour, red green blue, before the l
 hell	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
 hell	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
 hell	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+hell	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+hell	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+hell	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+hell	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+hell	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+hell	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 hive	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 hive	warm	1.08 1.02 0.70	1.12 0.97 0.62	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 hive	cool	0.80 0.94 0.62	0.74 0.88 0.56	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -133,6 +158,12 @@ hive	drip_colour	0.85 1.00 0.70		The drops' colour, red green blue, before the l
 hive	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
 hive	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
 hive	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+hive	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+hive	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+hive	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+hive	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+hive	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+hive	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 crypt	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 crypt	warm	0.98 1.04 0.90	1.02 0.99 0.82	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 crypt	cool	0.72 0.98 0.80	0.66 0.92 0.74	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -152,6 +183,12 @@ crypt	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before the 
 crypt	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
 crypt	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
 crypt	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+crypt	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+crypt	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+crypt	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+crypt	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+crypt	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+crypt	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 butcher	light	1.4		The Butcher's room (idea 46): how bright the red light inside is. A torch is 2. It spills out when his door opens.
 butcher	light_colour	1.00 0.18 0.10		Its colour, red green blue.
 butcher	light_radius	6		How far it reaches, in tiles.
