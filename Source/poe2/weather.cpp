@@ -65,6 +65,9 @@ struct Schedule {
 	float left = 0;
 	/** @brief The shower's strength, around which it wanders. */
 	float base = 0;
+	/** @brief The shower's own sky and lightning, 1 to 3 (State::gloom and State::charge). */
+	float gloom = 1;
+	float charge = 1;
 };
 
 /** @brief A skill or map asking for weather: it wins over the schedule until its time is up. */
@@ -80,6 +83,8 @@ bool Started = false;
 Override Asked;
 std::optional<Kind> Forced;
 float ForcedStrength = 1;
+float ForcedGloom = 1;
+float ForcedCharge = 1;
 Kind LevelPreset = Kind::Rain;
 State Now;
 /** @brief Real time the weather has run, for its wandering and wind. */
@@ -91,12 +96,14 @@ float ThunderGain = 1;
 float SimulatedMs = 0;
 float WetMs = 0;
 
-/** @brief A shower fades in and out over about this long. */
+/** @brief A shower comes in over about this long, and eases off over a little longer (see Advance). */
 constexpr float FadeMs = 30000;
 /** @brief A dungeon has no sky, so going in stops the rain at once. */
 constexpr float NoSkyFadeMs = 300;
 /** @brief A look forced from the console comes back quickly when the sky does (walking out into town). */
 constexpr float ForcedFadeMs = 3000;
+/** @brief Rain sent away from the console still thins out to its last drops rather than stopping dead. */
+constexpr float ForcedEaseMs = 12000;
 
 /** @brief Smooth noise in -1..1 from a few slow sines, so showers swell and ease and the wind gusts. */
 float Wander(float ms, float scale, float phase)
@@ -112,6 +119,9 @@ void StartSpell(bool wet)
 		// Showers of 2 to 5 minutes, dry spells of 3 to 8: about a third of the time is wet.
 		Plan.left = Random(120000, 300000);
 		Plan.base = Random(0.25F, 1.F);
+		// No two showers alike: each has its own darkness and its own share of lightning (Curtis 2026-11-14).
+		Plan.gloom = Random(1, 3);
+		Plan.charge = Random(1, 3);
 	} else {
 		Plan.left = Random(180000, 480000);
 		Plan.base = 0;
@@ -132,7 +142,8 @@ void Target(Kind &kind, float &strength)
 		return;
 	}
 	kind = LevelPreset;
-	strength = Plan.wet && kind != Kind::Clear ? std::clamp(Plan.base + 0.2F * Wander(Clock, 0.08F, 1.3F), 0.1F, 1.F) : 0.F;
+	// A shower swells and eases as it goes: it is never one steady strength from start to end.
+	strength = Plan.wet && kind != Kind::Clear ? std::clamp(Plan.base + 0.3F * Wander(Clock, 0.08F, 1.3F), 0.12F, 1.F) : 0.F;
 }
 
 void AdvanceLightning(float ms)
@@ -146,10 +157,11 @@ void AdvanceLightning(float ms)
 			PlayThunder(ThunderGain);
 		}
 	}
-	if (Now.kind != Kind::Rain || Now.strength < 0.6F || Now.flash > 0)
+	if (Now.kind != Kind::Rain || Now.strength < 0.45F || Now.flash > 0)
 		return;
-	// Up to one strike every dozen seconds or so in a downpour, none below a steady rain.
-	const float perMs = (Now.strength - 0.6F) / 0.4F * 0.08F / 1000.F;
+	// The harder it rains the more lightning: none below a steady rain, a strike every dozen seconds or so in a plain
+	// downpour, and twice that in a shower full of it.
+	const float perMs = (Now.strength - 0.45F) / 0.55F * 0.08F / 1000.F * (0.5F + 0.5F * Now.charge);
 	if (Random(0, 1) < perMs * ms)
 		Strike();
 }
@@ -330,6 +342,21 @@ void SetLoop(SoundSample *sample, float gain)
 		sample->Play(/*numIterations=*/0);
 }
 
+/** @brief The weather falls silent, keeping its recordings for the next shower. */
+void HushSound()
+{
+	Audio.playing = false;
+	const auto hush = [](const std::unique_ptr<SoundSample> &sample) {
+		if (sample != nullptr && sample->IsPlaying())
+			sample->Stop();
+	};
+	hush(Audio.light);
+	hush(Audio.heavy);
+	hush(Audio.wind);
+	for (const std::unique_ptr<SoundSample> &clap : Audio.thunder)
+		hush(clap);
+}
+
 /**
  * @brief How hard the weather sounds, 0 to 1. It follows the weather's strength, but never faster than a fade: the rain
  * comes in over a few seconds and dies away over a few more, even where the weather itself is there or gone at once
@@ -348,6 +375,10 @@ void UpdateSound(float ms)
 		Heard = 0;
 		return;
 	}
+	// The recordings are opened once, under the sky, before any rain: opening ten files as a storm began froze the
+	// game for a moment at the start of every storm (Curtis 2026-11-14).
+	if (Outdoors() && Enabled())
+		MakeSounds();
 	const float s = Now.strength;
 	if (s > Heard)
 		Heard = std::min(s, Heard + ms / SoundInMs);
@@ -355,7 +386,7 @@ void UpdateSound(float ms)
 		Heard = std::max(s, Heard - ms / SoundOutMs);
 	if (Heard <= 0.002F) {
 		if (Audio.playing)
-			StopSound();
+			HushSound();
 		Heard = 0;
 		return;
 	}
@@ -387,7 +418,7 @@ void UpdateSound(float ms)
 		DistantIn -= ms;
 		if (DistantIn <= 0) {
 			PlayThunder(SoundRandom(0.3F, 0.9F) * (0.6F + 0.4F * Heard));
-			DistantIn = SoundRandom(7000, 26000) / (0.5F + Heard);
+			DistantIn = SoundRandom(7000, 26000) / (0.5F + Heard) / (0.6F + 0.2F * Now.charge);
 		}
 	}
 }
@@ -476,6 +507,11 @@ void Force(std::optional<Kind> kind, float strength)
 {
 	Forced = kind;
 	ForcedStrength = std::clamp(strength, 0.F, 1.F);
+	// Each call is a new shower, with its own sky and lightning.
+	if (kind && *kind != Kind::Clear) {
+		ForcedGloom = Random(1, 3);
+		ForcedCharge = Random(1, 3);
+	}
 	// Under the sky the console's look is there at once, without the fade: the console's answer read the weather a
 	// moment later and said "Dry right now" while the rain was still coming in (Curtis 2026-10-21: weather("rain", 0.9)
 	// seemed to do nothing). Handing it back to the schedule still eases into the schedule's weather.
@@ -526,11 +562,24 @@ void Advance(float ms)
 		fade = NoSkyFadeMs;
 	else if (Forced)
 		fade = ForcedFadeMs;
-	const float step = ms / fade;
-	if (target > Now.strength)
-		Now.strength = std::min(target, Now.strength + step);
-	else
-		Now.strength = std::max(target, Now.strength - step);
+	if (target > Now.strength) {
+		Now.strength = std::min(target, Now.strength + ms / fade);
+	} else if (sky) {
+		// Rain doesn't stop dead: it eases off quickly at first and then thins out, the last drops falling for a
+		// good ten seconds more (Curtis 2026-11-14).
+		const float ease = Forced ? ForcedEaseMs : fade;
+		Now.strength = std::max(target, Now.strength - ms / ease * (0.25F + 1.5F * Now.strength));
+	} else {
+		Now.strength = std::max(target, Now.strength - ms / fade);
+	}
+	// The shower's own sky and lightning: taken at once while the air is still dry, eased to in a shower under way.
+	const float gloom = Forced ? ForcedGloom : Plan.gloom;
+	const float charge = Forced ? ForcedCharge : Plan.charge;
+	if (target > 0) {
+		const float share = Now.strength <= 0.02F ? 1.F : std::min(1.F, ms / 8000.F);
+		Now.gloom += (gloom - Now.gloom) * share;
+		Now.charge += (charge - Now.charge) * share;
+	}
 	if (Now.strength > 0.01F)
 		WetMs += ms;
 	// The ground soaks in under a minute of hard rain (longer in a drizzle) and takes about four to dry.

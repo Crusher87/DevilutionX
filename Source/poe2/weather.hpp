@@ -33,7 +33,10 @@ struct State {
 	/** @brief Lightning lighting the sky, 1 at the strike fading to 0 (the HD light shines it on the town; nothing is drawn over the screen). */
 	float flash = 0;
 	/** @brief How wet the ground is, 0 (dry) to 1 (soaked): it builds while it rains and dries off slowly afterwards. */
-	float wet = 0;
+	float wet = 0; /** @brief How dark this shower's sky is against a plain one, 1 to 3: each shower draws its own. */
+	float gloom = 1;
+	/** @brief How much lightning this shower has in it against a plain one, 1 to 3: each shower draws its own. */
+	float charge = 1;
 };
 
 /** @brief Whether this level has a sky: today, the town. Dungeons stay dry. */

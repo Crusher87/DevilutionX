@@ -1293,7 +1293,8 @@ void ApplyLavaBreath()
  * the evening, so the lamps and windows stand out, and lightning lights the town from the sky for a moment (the
  * strike, a dip, then its flicker dying away), with the sky's own shadows. Nothing is drawn over the screen. The
  * numbers are the town's in atmosphere.tsv (rain_sky, the share of the sky's light a downpour takes away, and
- * lightning, how many times the evening's light a strike adds).
+ * lightning, how many times the evening's light a strike adds). Each shower multiplies both by its own draw of 1 to 3
+ * (weather::State::gloom and charge), so no two storms look alike.
  */
 void UpdateSky()
 {
@@ -1302,7 +1303,7 @@ void UpdateSky()
 		return;
 	const weather::State &sky = weather::Current();
 	const float share = sky.kind == weather::Kind::Rain ? 1.F : 0.4F;
-	const float dim = std::clamp(atmosphere::Value("rain_sky", 0.4F) * atmosphere::Strength(atmosphere::Knob::RainSky) * sky.strength * share, 0.F, 0.85F);
+	const float dim = std::clamp(atmosphere::Value("rain_sky", 0.4F) * atmosphere::Strength(atmosphere::Knob::RainSky) * sky.gloom * sky.strength * share, 0.F, 0.85F);
 	float pulse = 0;
 	if (sky.flash > 0) {
 		const float t = 1 - sky.flash;
@@ -1315,7 +1316,7 @@ void UpdateSky()
 		else
 			pulse = 0.6F * (1 - t) / 0.5F;
 	}
-	SkyScale = 1 - dim + atmosphere::Value("lightning", 1.F) * atmosphere::Strength(atmosphere::Knob::Lightning) * pulse;
+	SkyScale = 1 - dim + atmosphere::Value("lightning", 1.F) * atmosphere::Strength(atmosphere::Knob::Lightning) * sky.charge * pulse;
 }
 
 /** @brief The sky's light in the window, changed by UpdateSky's share. */
