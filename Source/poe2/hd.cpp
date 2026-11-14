@@ -43,6 +43,7 @@
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_outline.hpp"
 #include "poe2/moments.hpp"
+#include "poe2/props.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
 #include "utils/file_util.h"
@@ -60,6 +61,7 @@ namespace hd {
 float SubFrame = 0;
 bool SubFrameBackward = false;
 Caster CurrentCaster = Caster::None;
+float CurrentGhost = 0;
 OutlineLook CurrentOutlineLook;
 Point CurrentTile;
 Point CurrentTileOrigin;
@@ -126,6 +128,8 @@ struct Draw {
 	OutlineLook outlineLook {};
 	/** @brief A unique monster's colour table it is drawn in (RegisterRecolour), whose HD art it shows (its type's when empty); else null. */
 	const std::string *recolour = nullptr;
+	/** @brief Something unseen (GhostScope): how much of it shows as a faint trace; 0 for a thing drawn as usual. */
+	float ghost = 0;
 };
 
 /** @brief The part of a shadow picture that isn't empty, in texture coordinates (0 to 1): across from u0 to u1, down from vTop. */
@@ -272,6 +276,16 @@ SDL_Texture *BlobTexture = nullptr;
 SDL_Texture *EdgesTexture = nullptr;
 /** @brief The dark that closes in round the hero (the Atmosphere option's moments): clear in the middle, black at the rim. */
 SDL_Texture *IrisTexture = nullptr;
+/** @brief The small things' pictures (props.hpp), one a kind. */
+std::array<SDL_Texture *, props::NumKinds> PropTextures {};
+/** @brief A small thing standing in the world this frame: drawn just before the recorded draw `at`, its tile's floor middle at (x, y) in the world buffer. */
+struct PropDraw {
+	size_t at;
+	float x;
+	float y;
+	props::Shape shape;
+};
+std::vector<PropDraw> PropDraws;
 /** @brief Set when the HD world was drawn in this present, with where: RenderOver then draws the moments over the effects. */
 bool OverPending = false;
 SDL_Rect OverClip {};
@@ -536,6 +550,11 @@ void DestroyTextures()
 	if (IrisTexture != nullptr && CacheRenderer != nullptr)
 		SDL_DestroyTexture(IrisTexture);
 	IrisTexture = nullptr;
+	for (SDL_Texture *&texture : PropTextures) {
+		if (texture != nullptr && CacheRenderer != nullptr)
+			SDL_DestroyTexture(texture);
+		texture = nullptr;
+	}
 	light::Reset();
 }
 
@@ -5095,6 +5114,104 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 	return Uniform(flat);
 }
 
+/**
+ * @brief Draws one of the small things standing in the world (ideas 62 to 64): a strip of its picture through its
+ * corners, in the light that falls where it stands.
+ */
+void DrawProp(SDL_Renderer *renderer, const PropDraw &prop, float toLogical)
+{
+	const props::Shape &shape = prop.shape;
+	if (shape.pairs < 2 || shape.alpha <= 0)
+		return;
+	const SDL_FPoint first = OnScreenAt(prop.x + shape.corners[0].x, prop.y + shape.corners[0].y, toLogical);
+	if (!OnScreen(SDL_FRect { first.x - 1, first.y - 1, 2, 2 }, 120 * static_cast<float>(Scale) * toLogical))
+		return;
+	SDL_Texture *&texture = PropTextures[static_cast<size_t>(shape.kind)];
+	if (texture == nullptr) {
+		const props::Picture picture = props::PictureOf(shape.kind);
+		if (picture.rgba == nullptr)
+			return;
+		texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, picture.width, picture.height);
+		if (texture == nullptr)
+			return;
+		SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+		SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
+		SDL_UpdateTexture(texture, nullptr, picture.rgba, picture.width * 4);
+	}
+	// What runs on the floor is drawn a little brighter than where it is, as the game draws the other heroes: a small
+	// dark thing on a dark floor would not be seen at all.
+	const Colour3 light = ToColour(shape.onWall ? light::FaceAt(shape.lightX, shape.lightY) : light::Boost(light::At(shape.lightX, shape.lightY), 3));
+	const SDL_Color shade { ColourByte(light[0]), ColourByte(light[1]), ColourByte(light[2]), ColourByte(shape.alpha) };
+	std::array<SDL_Vertex, props::MaxPairs * 2> vertices;
+	std::array<int, (props::MaxPairs - 1) * 6> indices;
+	int used = 0;
+	for (size_t k = 0; k < shape.pairs * 2; k++) {
+		const props::Corner &corner = shape.corners[k];
+		vertices[k] = SDL_Vertex { OnScreenAt(prop.x + corner.x, prop.y + corner.y, toLogical), shade, { corner.u, corner.v } };
+	}
+	for (size_t r = 0; r + 1 < shape.pairs; r++) {
+		const int corner = static_cast<int>(r) * 2;
+		for (const int v : { corner, corner + 1, corner + 3, corner, corner + 3, corner + 2 })
+			indices[static_cast<size_t>(used++)] = v;
+	}
+	SDL_SetTextureColorMod(texture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(texture, 255);
+	SDL_RenderGeometry(renderer, texture, vertices.data(), static_cast<int>(shape.pairs * 2), indices.data(), used);
+}
+
+/** @brief The bands an unseen monster's trace is drawn in, each pushed sideways by its own share of a wave. */
+constexpr int GhostBands = 10;
+
+/**
+ * @brief Idea 57. An unseen monster on the move shows as a ripple in the air: its shape drawn twice in bands that sway
+ * like heat, once as a faint darkening and once, a little to the other side, as a pale cool gleam, so its edges catch
+ * like the edge of glass and none of its own colour shows. `draw.ghost` is how much of it shows.
+ */
+void DrawGhost(SDL_Renderer *renderer, const Draw &draw, float toLogical)
+{
+	const SDL_FRect dest = DestOf(draw, toLogical);
+	if (!OnScreen(dest, 8))
+		return;
+	const DrawTexture art = TextureFor(renderer, draw, false);
+	if (art.texture == nullptr)
+		return;
+	float wx;
+	float wy;
+	StandsAt(draw, wx, wy);
+	// The gleam is the light where it stands, cooled: an unseen thing in the dark gives nothing back.
+	const Colour3 lit = LightAt(wx, wy);
+	const float light = std::min((lit[0] + lit[1] + lit[2]) / 3, 1.F);
+	const float unit = static_cast<float>(Scale) * toLogical;
+	const float sway = std::clamp(atmosphere::Value("hidden_sway", 1.6F), 0.F, 4.F) * unit;
+	const float time = vfx::Clock();
+	const float phase = static_cast<float>(draw.x) * 0.37F;
+	std::array<SDL_Vertex, (GhostBands + 1) * 2> vertices;
+	std::array<int, GhostBands * 6> indices;
+	int used = 0;
+	for (int r = 0; r < GhostBands; r++) {
+		const int corner = r * 2;
+		for (const int v : { corner, corner + 1, corner + 3, corner, corner + 3, corner + 2 })
+			indices[static_cast<size_t>(used++)] = v;
+	}
+	const auto pass = [&](SDL_Color shade, float side) {
+		for (int r = 0; r <= GhostBands; r++) {
+			const float v = static_cast<float>(r) / GhostBands;
+			const float wave = 0.65F * std::sin(v * 7.F + time * 0.011F + phase) + 0.35F * std::sin(v * 15.F - time * 0.017F + phase);
+			const float dx = (wave + side) * sway;
+			const float y = dest.y + v * dest.h;
+			vertices[static_cast<size_t>(r) * 2] = SDL_Vertex { { dest.x + dx, y }, shade, { 0.F, v } };
+			vertices[static_cast<size_t>(r) * 2 + 1] = SDL_Vertex { { dest.x + dest.w + dx, y }, shade, { 1.F, v } };
+		}
+		SDL_RenderGeometry(renderer, art.texture, vertices.data(), static_cast<int>(vertices.size()), indices.data(), used);
+	};
+	SDL_SetTextureColorMod(art.texture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(art.texture, 255);
+	pass(SDL_Color { 0, 0, 0, ColourByte(draw.ghost) }, -0.6F);
+	SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_ADD);
+	pass(SDL_Color { ColourByte(0.62F * light), ColourByte(0.74F * light), ColourByte(0.86F * light), ColourByte(draw.ghost * 0.9F) }, 0.6F);
+	SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
+}
+
 /** @brief The most pieces of lava floor the heat haze is drawn over in a frame, and the bands each is drawn in. */
 constexpr int MaxHazePieces = 500;
 constexpr int HazeBands = 8;
@@ -5233,13 +5350,20 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 	LastTileDrawKnown = false;
 	DrawingAt = 0;
 	const bool joined = DrawJoinedShadows(renderer, worldSize, toLogical);
+	size_t nextProp = 0;
 	for (size_t i = FloorEnd; i < Draws.size(); i++) {
 		const Draw &draw = Draws[i];
 		DrawingAt = i;
 		if (i > 0)
 			DrawWallShadesAfter(renderer, i - 1);
+		while (nextProp < PropDraws.size() && PropDraws[nextProp].at <= i)
+			DrawProp(renderer, PropDraws[nextProp++], toLogical);
 		if (IsOutline(draw.style))
 			continue;
+		if (draw.ghost > 0) {
+			DrawGhost(renderer, draw, toLogical);
+			continue;
+		}
 		if (!joined && draw.style == SpriteStyle::Normal && draw.caster != Caster::None)
 			DrawCasterShadows(renderer, draw, toLogical);
 		const Kept kept = joined ? ShadeKept[i] : Kept {};
@@ -5262,6 +5386,8 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 	if (!Draws.empty())
 		DrawWallShadesAfter(renderer, Draws.size() - 1);
 	WallShades.clear();
+	while (nextProp < PropDraws.size())
+		DrawProp(renderer, PropDraws[nextProp++], toLogical);
 	// Item and monster outlines glow on top of the light.
 	const Shading glow = Uniform(tint);
 	for (size_t i = 0; i < Draws.size(); i++) {
@@ -5302,9 +5428,23 @@ bool Active()
 void RecordTileImpl(const Surface &out, const Lightmap &lightmap, Point position, TileType tile, const uint8_t *src, int height, MaskType mask, const uint8_t *tbl);
 void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const uint8_t *trn, SpriteStyle style, uint8_t outlineColor, const Lightmap *lightmap);
 
+void RecordProps()
+{
+	// Only in the lit HD world: they are things of the Atmosphere option, which is nothing without its light.
+	if (!Recording || !RecordingLit || !HaveTile || !props::Any())
+		return;
+	std::array<props::Shape, props::MaxAtTile> shapes;
+	const size_t count = props::At(CurrentTile, shapes);
+	const float x = static_cast<float>(RecordRegion.x + CurrentTileOrigin.x + TILE_WIDTH / 2);
+	const float y = static_cast<float>(RecordRegion.y + CurrentTileOrigin.y - TILE_HEIGHT / 2);
+	for (size_t i = 0; i < count; i++)
+		PropDraws.push_back({ Draws.size(), x, y, shapes[i] });
+}
+
 void BeginWorld(const Surface &out, Rectangle viewport)
 {
 	Draws.clear();
+	PropDraws.clear();
 	LightArena.clear();
 	PendingOutline = nullptr;
 	ViewportOffsetX = viewport.position.x;
@@ -5446,7 +5586,7 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 	    .lightOffset = perPixel ? CaptureLight(out, *lightmap, { position.x, position.y - clx.height() + 1 }, clx.width(), clx.height(), trn) : 0,
 	    // Two in-betweens per frame split it in thirds; played backwards they are 3 and 4.
 	    .inBetween = InBetween(),
-	    .caster = IsOutline(style) ? Caster::None : RecordedCaster(),
+	    .caster = IsOutline(style) || CurrentGhost > 0 ? Caster::None : RecordedCaster(),
 	    .floor = !FloorDone,
 	    .hasTile = HaveTile,
 	    .cell = CurrentTile,
@@ -5456,6 +5596,7 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 	    // A sprite with an outline keeps its outline's look, so its art's outlines are made in that cut as it loads.
 	    .outlineLook = IsOutline(style) ? CurrentOutlineLook : (outlined ? PendingOutlineLook : OutlineLook {}),
 	    .recolour = IsOutline(style) ? nullptr : RecolourOf(trn),
+	    .ghost = IsOutline(style) ? 0.F : CurrentGhost,
 	});
 }
 
@@ -5836,6 +5977,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		BlobTexture = nullptr;
 		EdgesTexture = nullptr;
 		IrisTexture = nullptr;
+		PropTextures.fill(nullptr);
 		ShadeTexture = nullptr;
 		ShadeTextureSize = {};
 		ShadeFailed = false;
@@ -5895,7 +6037,8 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	// Everything is drawn fully lit, then darkened by the light of each pixel, so lighting stays as smooth as the game's.
 	const Shading unlit = Uniform({ 1.F, 1.F, 1.F });
 	for (const Draw &draw : Draws) {
-		if (!IsOutline(draw.style))
+		// (Something unseen only leaves its trace with HD Lighting.)
+		if (!IsOutline(draw.style) && draw.ghost <= 0)
 			DrawShaded(renderer, draw, unlit, toLogical, true);
 	}
 

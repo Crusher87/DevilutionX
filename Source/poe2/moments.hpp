@@ -4,14 +4,16 @@
  * POE2 Mashup: the Atmosphere option's moments (step 5 of the old Diablo feel). Short changes to the HD world's light and
  * air at a point in play: a door opening on a dark room (idea 47), taking the stairs down (49), the quiet after a fight
  * (50) and the hero's death (53). This file keeps what each moment is doing now; hd.cpp, hd_light.cpp and vfx.cpp ask it
- * and draw.
+ * and draw. Two of step 6's ideas live here too, as they follow the monsters round the hero the same way: the unseen
+ * monsters' shimmer (57) and the sound of monsters waiting in the dark (59).
  *
- * Looks only: nothing here touches the game state, saves or the game's seeded random numbers, and nothing waits: the
- * game plays on under every one of them.
+ * Looks and sounds only: nothing here touches the game state, saves or the game's seeded random numbers, and nothing
+ * waits: the game plays on under every one of them.
  */
 #pragma once
 
 #include <array>
+#include <cstddef>
 
 namespace devilution::moments {
 
@@ -54,6 +56,8 @@ float MistKept();
 bool TakeQuietStarted();
 /** @brief Idea 50. Whether the quiet is on now. */
 bool Quiet();
+/** @brief Whether a fight is on round the hero now. */
+bool FightOn();
 
 /** @brief Idea 47. How long the room behind a door takes to come up from the dark, in milliseconds; 0 when off. */
 float DoorRevealMs();
@@ -61,6 +65,12 @@ float DoorRevealMs();
 void DoorOpened(int x, int y);
 /** @brief Idea 47. Takes the next door that opened, for its puff of dust; false when there is none. */
 bool TakeDoorOpened(int &x, int &y);
+
+/**
+ * @brief Idea 57. How much of an unseen monster shows as a trace in the air: nothing while it stands, easing in as it
+ * moves and out when it stops. 0 for a monster that isn't hidden, or with the switch off.
+ */
+float HiddenShimmer(size_t monsterId);
 
 /** @brief Forgets everything (a new game, a level change). */
 void Reset();
