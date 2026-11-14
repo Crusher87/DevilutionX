@@ -161,7 +161,12 @@ void AdvanceLightning(float ms)
 // (sfx\poe2\). Each may be a .wav or an .mp3; a .wav loops without a gap. With no file there is no sound.
 //   rain.wav        the rain, looping; alone it gets louder as the rain gets harder
 //   rain_heavy.wav  optional: a downpour, which the rain blends into as it gets harder
-//   thunder1.wav to thunder4.wav  optional: thunder, one picked for each strike
+//   thunder1.wav to thunder12.wav  optional: thunder, each by itself
+// A loop with thunder in it gives itself away: the same thunder comes round every time (Curtis 2026-11-14). So the
+// rain's recording holds steady rain only, and the thunders are played over it at times and a loudness of their own,
+// never the same one twice running: distant thunder now and then while it rains hard enough, and a clap after each
+// lightning strike. The rain's own loudness swells and eases slowly too. The sound has its own dice, so nothing heard
+// moves the weather's schedule.
 // The wind under snow is still made in memory.
 #ifndef NOSOUND
 
@@ -245,7 +250,22 @@ std::vector<float> WindLoop()
 	return s;
 }
 
-constexpr int MaxThunders = 4;
+constexpr int MaxThunders = 12;
+
+uint32_t SoundSeed = 0x7F4A7C15U;
+
+float SoundRandom(float lo, float hi)
+{
+	SoundSeed ^= SoundSeed << 13;
+	SoundSeed ^= SoundSeed >> 17;
+	SoundSeed ^= SoundSeed << 5;
+	return lo + (hi - lo) * static_cast<float>(SoundSeed & 0xFFFFFF) / static_cast<float>(0xFFFFFF);
+}
+
+/** @brief The thunder played last and the one before it, so neither is the next; and how long until distant thunder rolls again. */
+int LastThunder = -1;
+int ThunderBefore = -1;
+float DistantIn = 0;
 
 struct Sounds {
 	std::unique_ptr<SoundSample> light, heavy, wind;
@@ -355,10 +375,21 @@ void UpdateSound(float ms)
 		SetLoop(Audio.light.get(), rain * light * 0.8F);
 		SetLoop(Audio.heavy.get(), rain * heavy * 0.9F);
 	} else {
-		// One recording for all of it: quiet in a drizzle, full in a downpour.
-		SetLoop(Audio.light.get(), rain * in * std::clamp(0.3F + 0.7F * Heard, 0.F, 1.F));
+		// One recording for all of it: quiet in a drizzle, full in a downpour, swelling and easing a little as it goes.
+		const float swell = 1 + 0.18F * Wander(Clock, 0.5F, 5.1F);
+		SetLoop(Audio.light.get(), rain * in * std::clamp((0.3F + 0.7F * Heard) * swell, 0.F, 1.F));
 	}
 	SetLoop(Audio.wind.get(), snow * in * std::clamp(0.2F + Heard * 0.7F, 0.F, 0.9F));
+	// Distant thunder, the more often the harder it rains; none in a light shower.
+	if (rain > 0 && Audio.thunders > 0 && Heard >= 0.3F && s >= 0.3F) {
+		if (DistantIn <= 0)
+			DistantIn = SoundRandom(4000, 14000);
+		DistantIn -= ms;
+		if (DistantIn <= 0) {
+			PlayThunder(SoundRandom(0.3F, 0.9F) * (0.6F + 0.4F * Heard));
+			DistantIn = SoundRandom(7000, 26000) / (0.5F + Heard);
+		}
+	}
 }
 
 void PlayThunder(float gain)
@@ -368,7 +399,16 @@ void PlayThunder(float gain)
 	MakeSounds();
 	if (Audio.thunders == 0)
 		return;
-	SoundSample &clap = *Audio.thunder[NextRandom() % static_cast<uint32_t>(Audio.thunders)];
+	// Not the last one or the one before it, where there are enough to choose from.
+	int pick = 0;
+	for (int tries = 0; tries < 8; tries++) {
+		pick = std::min(static_cast<int>(SoundRandom(0, static_cast<float>(Audio.thunders))), Audio.thunders - 1);
+		if ((pick != LastThunder || Audio.thunders < 2) && (pick != ThunderBefore || Audio.thunders < 4))
+			break;
+	}
+	ThunderBefore = LastThunder;
+	LastThunder = pick;
+	SoundSample &clap = *Audio.thunder[static_cast<size_t>(pick)];
 	if (clap.IsPlaying())
 		clap.Stop();
 	const int attenuation = std::clamp(static_cast<int>(2000.F * std::log10(std::max(gain, 0.05F))), ATTENUATION_MIN, 0);
