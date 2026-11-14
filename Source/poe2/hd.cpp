@@ -42,6 +42,7 @@
 #include "poe2/atmosphere.hpp"
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_outline.hpp"
+#include "poe2/moments.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
 #include "utils/file_util.h"
@@ -269,6 +270,13 @@ bool FieldMultiplies = false;
 SDL_Texture *BlobTexture = nullptr;
 /** @brief Dark towards the screen's edges and corners, clear in the middle (the Atmosphere option's edges, idea 6). */
 SDL_Texture *EdgesTexture = nullptr;
+/** @brief The dark that closes in round the hero (the Atmosphere option's moments): clear in the middle, black at the rim. */
+SDL_Texture *IrisTexture = nullptr;
+/** @brief Set when the HD world was drawn in this present, with where: RenderOver then draws the moments over the effects. */
+bool OverPending = false;
+SDL_Rect OverClip {};
+SDL_FPoint OverHero {};
+float OverTilePixels = 0;
 
 SDL_Renderer *CacheRenderer = nullptr;
 const std::byte *CacheCels = nullptr;
@@ -525,6 +533,9 @@ void DestroyTextures()
 	if (EdgesTexture != nullptr && CacheRenderer != nullptr)
 		SDL_DestroyTexture(EdgesTexture);
 	EdgesTexture = nullptr;
+	if (IrisTexture != nullptr && CacheRenderer != nullptr)
+		SDL_DestroyTexture(IrisTexture);
+	IrisTexture = nullptr;
 	light::Reset();
 }
 
@@ -5824,6 +5835,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		FieldTexture = nullptr;
 		BlobTexture = nullptr;
 		EdgesTexture = nullptr;
+		IrisTexture = nullptr;
 		ShadeTexture = nullptr;
 		ShadeTextureSize = {};
 		ShadeFailed = false;
@@ -5840,7 +5852,8 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	}
 
 	const float toLogical = static_cast<float>(logicalSize.width) / static_cast<float>(worldSize.width);
-	const std::array<float, 3> tint = ScreenTint();
+	// Idea 49: while the hero goes down the world dims more slowly than the fade, and the dark closes in instead.
+	const std::array<float, 3> tint = moments::WorldTint(ScreenTint());
 	const SDL_Rect clip {
 		static_cast<int>(ClipRect.position.x * toLogical),
 		static_cast<int>(ClipRect.position.y * toLogical),
@@ -5864,6 +5877,17 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		LiftDarkShades(renderer, clip, tint);
 		SDL_RenderSetClipRect(renderer, nullptr);
 		WorldRecorded = false;
+		// The moments go over the effects (RenderOver): where the hero is on screen, and how wide a tile is there.
+		OverPending = true;
+		OverClip = clip;
+		OverHero = SDL_FPoint { static_cast<float>(clip.x) + static_cast<float>(clip.w) / 2, static_cast<float>(clip.y) + static_cast<float>(clip.h) / 2 };
+		if (!std::isnan(LitHeroX)) {
+			float bx;
+			float by;
+			BufferOf(LitHeroX, LitHeroY, bx, by);
+			OverHero = OnScreenAt(bx, by, toLogical);
+		}
+		OverTilePixels = HalfTileWidth * Scale * toLogical;
 		return;
 	}
 #endif
@@ -5932,6 +5956,103 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	WorldRecorded = false;
 }
 
+/** @brief How much of the dark's picture, from its middle out, is clear. */
+constexpr float IrisClear = 0.45F;
+
+/**
+ * @brief The dark closed in round the hero (ideas 49 and 53): a pool of the view left clear round them, as wide on the
+ * floor as it is deep, and the rest darkened. open is how far it has opened (1 clears the view), darkness how dark the
+ * rest is (1 black), smallest the pool's size when closed, in tiles across the floor.
+ */
+void DrawIris(SDL_Renderer *renderer, float open, float darkness, float smallest)
+{
+	if (IrisTexture == nullptr) {
+		constexpr int Size = 256;
+		std::vector<uint8_t> rgba(static_cast<size_t>(Size) * Size * 4, 0);
+		for (int y = 0; y < Size; y++) {
+			for (int x = 0; x < Size; x++) {
+				const float u = (static_cast<float>(x) + 0.5F) / (Size / 2.F) - 1.F;
+				const float v = (static_cast<float>(y) + 0.5F) / (Size / 2.F) - 1.F;
+				const float t = std::clamp((std::sqrt(u * u + v * v) - IrisClear) / (0.98F - IrisClear), 0.F, 1.F);
+				rgba[(static_cast<size_t>(y) * Size + x) * 4 + 3] = static_cast<uint8_t>(t * t * (3 - 2 * t) * 255.F + 0.5F);
+			}
+		}
+		IrisTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, Size, Size);
+		if (IrisTexture == nullptr)
+			return;
+		SDL_SetTextureBlendMode(IrisTexture, SDL_BLENDMODE_BLEND);
+		SDL_SetTextureScaleMode(IrisTexture, SDL_ScaleModeLinear);
+		SDL_UpdateTexture(IrisTexture, nullptr, rgba.data(), Size * 4);
+	}
+	const SDL_Rect &clip = OverClip;
+	// Wide enough when open for the clear middle to hold the whole view; a circle on the floor is twice as wide as tall.
+	float reach = 0;
+	for (const float cx : { static_cast<float>(clip.x), static_cast<float>(clip.x + clip.w) }) {
+		for (const float cy : { static_cast<float>(clip.y), static_cast<float>(clip.y + clip.h) })
+			reach = std::max(reach, std::hypot(cx - OverHero.x, 2 * (cy - OverHero.y)));
+	}
+	const float widest = reach / IrisClear + 2;
+	// Closed, the pool's edge (halfway through the rim's fade) lies the smallest size from the hero.
+	const float narrowest = smallest * 1.41421356F * OverTilePixels / ((IrisClear + 0.98F) / 2);
+	const float halfWidth = narrowest + (widest - narrowest) * std::clamp(open, 0.F, 1.F);
+	const SDL_FRect pool { OverHero.x - halfWidth, OverHero.y - halfWidth / 2, halfWidth * 2, halfWidth };
+	const uint8_t alpha = ColourByte(darkness);
+	SDL_BlendMode before = SDL_BLENDMODE_NONE;
+	SDL_GetRenderDrawBlendMode(renderer, &before);
+	SDL_RenderSetClipRect(renderer, &clip);
+	SDL_SetTextureAlphaMod(IrisTexture, alpha);
+	SDL_RenderCopyF(renderer, IrisTexture, nullptr, &pool);
+	// The dark outside the pool's picture.
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, alpha);
+	const float right = pool.x + pool.w;
+	const float bottom = pool.y + pool.h;
+	const auto clipRight = static_cast<float>(clip.x + clip.w);
+	const auto clipBottom = static_cast<float>(clip.y + clip.h);
+	const std::array<SDL_FRect, 4> around { {
+		{ static_cast<float>(clip.x), static_cast<float>(clip.y), static_cast<float>(clip.w), pool.y - static_cast<float>(clip.y) },
+		{ static_cast<float>(clip.x), bottom, static_cast<float>(clip.w), clipBottom - bottom },
+		{ static_cast<float>(clip.x), pool.y, pool.x - static_cast<float>(clip.x), pool.h },
+		{ right, pool.y, clipRight - right, pool.h },
+	} };
+	for (const SDL_FRect &rect : around) {
+		if (rect.w > 0 && rect.h > 0)
+			SDL_RenderFillRectF(renderer, &rect);
+	}
+	SDL_SetRenderDrawBlendMode(renderer, before);
+	SDL_RenderSetClipRect(renderer, nullptr);
+}
+
+/**
+ * @brief Idea 53: the colour drains to red at the hero's death, as the original's death screen does (the game's own red
+ * is drawn on its own world, which the HD world covers). What is there keeps its red and loses the rest.
+ */
+void DrawDeathRed(SDL_Renderer *renderer, float drain)
+{
+	SDL_BlendMode before = SDL_BLENDMODE_NONE;
+	SDL_GetRenderDrawBlendMode(renderer, &before);
+	if (SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_MOD) != 0)
+		return;
+	SDL_SetRenderDrawColor(renderer, 255, ColourByte(1 - 0.85F * drain), ColourByte(1 - 0.9F * drain), 255);
+	SDL_RenderFillRect(renderer, &OverClip);
+	SDL_SetRenderDrawBlendMode(renderer, before);
+}
+
+void RenderOver(SDL_Renderer *renderer)
+{
+	if (!OverPending || renderer == nullptr)
+		return;
+	OverPending = false;
+	const FramePartScope part(FramePart::Atmosphere);
+	float darkness = 1;
+	const float open = moments::Iris(darkness);
+	if (open < 1 && darkness > 0.004F)
+		DrawIris(renderer, open, darkness, moments::IrisFloor());
+	const float drain = moments::RedDrain();
+	if (drain > 0.004F)
+		DrawDeathRed(renderer, drain);
+}
+
 bool CoversView(Size worldSize)
 {
 	if (!WorldRecorded || worldSize.width <= 0 || worldSize.height <= 0)
@@ -5955,6 +6076,7 @@ void ForgetSprites(ClxSpriteListOrSheet) { }
 bool HasArt(std::string_view) { return false; }
 bool DrawUiSprite(ClxSprite, Rectangle, float) { return false; }
 void RenderUi(SDL_Renderer *) { }
+void RenderOver(SDL_Renderer *) { }
 void ClearCaches() { }
 void Render(SDL_Renderer *, Size, Size) { }
 bool CoversView(Size) { return false; }

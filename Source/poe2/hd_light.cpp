@@ -15,14 +15,15 @@
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
+#include "levels/trigs.h"
 #include "lighting.h"
 #include "missiles.h"
 #include "monster.h"
 #include "objects.h"
-#include "levels/trigs.h"
 #include "player.h"
 #include "poe2/atmosphere.hpp"
 #include "poe2/defenses.hpp"
+#include "poe2/moments.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
 #include "poe2/weather.hpp"
@@ -686,6 +687,91 @@ void UpdateLook(const Look &look)
  * see SetOpenGround). Stopped by the dirt as by a wall, the light of a hero at a room's open corner left the room
  * across the dirt black, and the dirt drawn beside them with it, from a straight line on.
  */
+/**
+ * @brief Idea 47: a room coming up from the dark behind a door that has just opened. The light as it was the frame before,
+ * which what the door lets through is faded in over.
+ */
+struct Reveal {
+	std::vector<float> bright;
+	std::vector<std::array<float, 4>> hue;
+	int i0;
+	int j0;
+	int w;
+	int h;
+	float x;
+	float y;
+	uint32_t start;
+};
+std::vector<Reveal> Reveals;
+/** @brief The floor's light as the last frame showed it, and its window, while doors are watched. */
+std::vector<float> ShownBright;
+std::vector<std::array<float, 4>> ShownHue;
+int ShownI0 = 0;
+int ShownJ0 = 0;
+int ShownW = 0;
+int ShownH = 0;
+/** @brief How far from its door a reveal reaches, in tiles: as far as a hero's light, fading out over the last two. */
+constexpr float RevealReach = 11;
+
+void StartReveal(int x, int y)
+{
+	moments::DoorOpened(x, y);
+	if (ShownBright.empty() || ShownW <= 0)
+		return;
+	if (Reveals.size() >= 3)
+		Reveals.erase(Reveals.begin());
+	Reveals.push_back({ ShownBright, ShownHue, ShownI0, ShownJ0, ShownW, ShownH, static_cast<float>(x), static_cast<float>(y), SDL_GetTicks() });
+}
+
+/** @brief Holds the light a newly opened door lets through back to what was there before it opened, less and less. */
+void ApplyReveals()
+{
+	const float length = moments::DoorRevealMs();
+	if (length <= 0) {
+		Reveals.clear();
+		ShownBright.clear();
+		return;
+	}
+	const uint32_t now = SDL_GetTicks();
+	for (size_t r = 0; r < Reveals.size();) {
+		const Reveal &reveal = Reveals[r];
+		const float t = static_cast<float>(now - reveal.start) / length;
+		if (t >= 1) {
+			Reveals.erase(Reveals.begin() + static_cast<ptrdiff_t>(r));
+			continue;
+		}
+		r++;
+		const float held = 1 - t * t * (3 - 2 * t);
+		const int i0 = std::max({ WinI0, reveal.i0, SampleBefore(reveal.x - RevealReach) });
+		const int i1 = std::min({ WinI0 + WinW, reveal.i0 + reveal.w, SampleBefore(reveal.x + RevealReach) + 2 });
+		const int j0 = std::max({ WinJ0, reveal.j0, SampleBefore(reveal.y - RevealReach) });
+		const int j1 = std::min({ WinJ0 + WinH, reveal.j0 + reveal.h, SampleBefore(reveal.y + RevealReach) + 2 });
+		for (int j = j0; j < j1; j++) {
+			const float dy = SampleAt(j) - reveal.y;
+			for (int i = i0; i < i1; i++) {
+				const size_t k = static_cast<size_t>(j - WinJ0) * WinW + static_cast<size_t>(i - WinI0);
+				const size_t was = static_cast<size_t>(j - reveal.j0) * reveal.w + static_cast<size_t>(i - reveal.i0);
+				const float more = WinBright[k] - reveal.bright[was];
+				if (more <= 0)
+					continue;
+				const float distance = Length(SampleAt(i) - reveal.x, dy);
+				const float hold = held * std::clamp((RevealReach - distance) / 2, 0.F, 1.F);
+				if (hold <= 0)
+					continue;
+				WinBright[k] -= more * hold;
+				for (int c = 0; c < 4; c++)
+					WinHue[k][c] -= (WinHue[k][c] - reveal.hue[was][c]) * hold;
+			}
+		}
+	}
+	ShownBright = WinBright;
+	ShownHue = WinHue;
+	ShownI0 = WinI0;
+	ShownJ0 = WinJ0;
+	ShownW = WinW;
+	ShownH = WinH;
+}
+
 void UpdateBlocks()
 {
 	std::array<uint8_t, MAXDUNX * MAXDUNY> blocks;
@@ -698,6 +784,29 @@ void UpdateBlocks()
 		}
 	}
 	if (blocks != BlockMap) {
+		// Idea 47: a door that stopped the light a frame ago and lets it through now has just been opened. (A new
+		// level changes far more of the map than a few doors.)
+		if (moments::DoorRevealMs() > 0) {
+			std::array<Point, 4> opened;
+			size_t count = 0;
+			for (int x = 0; x < MAXDUNX && count <= opened.size(); x++) {
+				for (int y = 0; y < MAXDUNY; y++) {
+					const size_t k = static_cast<size_t>(x) * MAXDUNY + y;
+					if (blocks[k] == BlockMap[k])
+						continue;
+					const Object *object = blocks[k] == 0 ? FindObjectAtPosition({ x, y }) : nullptr;
+					if (object == nullptr || !object->isDoor() || count == opened.size()) {
+						count = opened.size() + 1;
+						break;
+					}
+					opened[count++] = { x, y };
+				}
+			}
+			if (count <= opened.size()) {
+				for (size_t i = 0; i < count; i++)
+					StartReveal(opened[i].x, opened[i].y);
+			}
+		}
 		BlockMap = blocks;
 		BlockVersion++;
 	}
@@ -1392,11 +1501,14 @@ void AddFarGlow()
  */
 void ApplyFlicker()
 {
-	const float flicker = atmosphere::Strength(atmosphere::Knob::Flicker) * atmosphere::Value("flicker", 1);
+	// Idea 50: the flames steady in the quiet after a fight.
+	const float flicker = atmosphere::Strength(atmosphere::Knob::Flicker) * atmosphere::Value("flicker", 1) * moments::FlickerKept();
 	const float stairs = atmosphere::Strength(atmosphere::Knob::Stairs);
 	const bool flutters = atmosphere::Strength(atmosphere::Knob::Flutter) > 0;
 	const float door = atmosphere::Strength(atmosphere::Knob::Cathedral);
-	if (flicker <= 0 && stairs <= 0 && !flutters && door <= 0) {
+	// Idea 53: the flames near a dying hero die down.
+	const bool dimmed = moments::FlamesDimmed();
+	if (flicker <= 0 && stairs <= 0 && !flutters && door <= 0 && !dimmed) {
 		for (Source &source : StaticSources)
 			source.flicker = 1;
 		return;
@@ -1405,7 +1517,9 @@ void ApplyFlicker()
 		Source &source = StaticSources[s];
 		const bool flame = IsAnyOf(source.flickerKind, TorchFlicker, CandleFlicker, FireFlicker);
 		const float flutter = flutters && flame ? vfx::FlameFlutter(Point { static_cast<int>(std::lround(source.x)), static_cast<int>(std::lround(source.y)) }) : 0.F;
-		const float factor = FlickerOf(source, flicker, stairs, flutter, door);
+		float factor = FlickerOf(source, flicker, stairs, flutter, door);
+		if (dimmed && flame)
+			factor *= moments::FlameKept(source.x, source.y);
 		source.flicker = factor;
 		const Patch &patch = StaticPatches[s];
 		if (std::abs(factor - 1) < 1e-3F || patch.linear.empty())
@@ -1769,7 +1883,8 @@ void GatherDynamic(float heroX, float heroY)
 		source.height = kinds[id].height;
 		source.size = kinds[id].size;
 		source.fill = kinds[id].fill;
-		source.power = kinds[id].power;
+		// Idea 53: a dying hero's light shrinks away.
+		source.power = kinds[id].power * (id == myLight ? moments::HeroLightKept() : 1.F);
 		source.glow = kinds[id].glow;
 		source.carried = kinds[id].carried;
 		// Moving lights shine from where they are: a tile can stop light and still be walked on (cathedral piece 450).
@@ -1952,6 +2067,7 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 		ApplySky();
 	}
 	GatherDynamic(heroX, heroY);
+	ApplyReveals();
 	FillWalls();
 	Finish();
 	Updates++;

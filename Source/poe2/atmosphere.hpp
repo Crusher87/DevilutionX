@@ -96,8 +96,16 @@ enum class Knob : uint8_t {
 	 * each is read in the frame that first shows it, as before.
 	 */
 	ReadAhead,
+	/** Idea 47: when a door opens, the room beyond comes up from the dark over a third of a second, and dust swirls in the doorway. */
+	Doors,
+	/** Idea 49: taking stairs down, the dark closes in on the hero as the level fades, and opens out again on the new floor. */
+	Descent,
+	/** Idea 50: when the last monster of a fight dies the dust settles, the mist rolls back in and the flames steady for a second. */
+	Quiet,
+	/** Idea 53: when the hero dies their light shrinks, the flames near them die down and the colour drains to red. */
+	Death,
 };
-inline constexpr size_t NumKnobs = 29;
+inline constexpr size_t NumKnobs = 33;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);
