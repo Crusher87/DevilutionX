@@ -70,16 +70,22 @@ TEST_F(Poe2TearsTest, MovesOnePointBetweenThePickedStats)
 	EXPECT_EQ(player._pBaseDex, dex);
 }
 
-TEST_F(Poe2TearsTest, NeverTakesAStatBelowItsStartingValue)
+TEST_F(Poe2TearsTest, AnyStatGivesDownToOne)
 {
+	// A hero of the mod gets no stat points per level, so its stats sit at their starting values; the fountain still
+	// trades (Curtis 2026-11-14).
 	Player &player = *MyPlayer;
-	EXPECT_FALSE(TearsCanGive(player, CharacterAttribute::Magic));
-	EXPECT_FALSE(TearsTrade(player, CharacterAttribute::Magic, CharacterAttribute::Strength));
-	EXPECT_EQ(player._pBaseMag, player.getClassAttributes().baseMag);
+	ASSERT_EQ(player._pBaseMag, player.getClassAttributes().baseMag);
+	EXPECT_TRUE(TearsCanGive(player, CharacterAttribute::Magic));
+	ASSERT_TRUE(TearsTrade(player, CharacterAttribute::Magic, CharacterAttribute::Strength));
+	EXPECT_EQ(player._pBaseMag, player.getClassAttributes().baseMag - 1);
 
-	for (int i = 0; i < 2; i++)
-		ASSERT_TRUE(TearsTrade(player, CharacterAttribute::Dexterity, CharacterAttribute::Magic));
+	player._pBaseDex = player._pDexterity = TearsLowestValue + 1;
+	ASSERT_TRUE(TearsTrade(player, CharacterAttribute::Dexterity, CharacterAttribute::Magic));
+	EXPECT_EQ(player._pBaseDex, TearsLowestValue);
 	EXPECT_FALSE(TearsCanGive(player, CharacterAttribute::Dexterity));
+	EXPECT_FALSE(TearsTrade(player, CharacterAttribute::Dexterity, CharacterAttribute::Magic));
+	EXPECT_EQ(player._pBaseDex, TearsLowestValue);
 }
 
 TEST_F(Poe2TearsTest, AStatCannotTradeWithItself)
