@@ -199,6 +199,16 @@ using RecordUiSpriteFn = void (*)(const Surface &out, Point position, ClxSprite 
  */
 extern RecordUiSpriteFn RecordUiSpriteHook;
 
+using RecordUiPictureFn = void (*)(const Surface &out, const Rectangle &box, const std::string &name, const uint8_t *before);
+
+/**
+ * @brief Notes a picture the game draws in code in the UI (a rune), with what was in its box before it went on (set by
+ * the HD renderer; null without it). `before` holds the box's pixels a row at a time, box.size.width to a row. Where
+ * there is HD art for it (hd/<name>.png), the art shows over the UI in the box as an item picture's does, where the
+ * pixels it drew still show; without the art, or with HD off, the game's own drawing stays.
+ */
+extern RecordUiPictureFn RecordUiPictureHook;
+
 /** @brief An item picture frame (data/inv/objcurs) and its HD art's name. */
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height);
 

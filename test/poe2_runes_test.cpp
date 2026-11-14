@@ -4,6 +4,7 @@
  */
 #include <algorithm>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,7 @@
 
 #include "cursor.h"
 #include "engine/assets.hpp"
+#include "engine/surface.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "inv.h"
@@ -22,10 +24,12 @@
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/effect_primitives.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/mix.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/rune_fusing.hpp"
+#include "poe2/rune_icons.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "qol/stash.h"
@@ -799,6 +803,79 @@ TEST_F(Poe2RunesTest, ASoulstoneSavedBeforeItsNumbersGetsThem)
 	// Runes alone don't move then.
 	Item runes = Socketed(MakeItem("Full Plate"), 1, { AugmentId::LesserRal });
 	EXPECT_FALSE(MigrateRuneNumbers(runes, runes._iPoe2Craft, /*soulstonesOnly=*/true));
+}
+
+// The runes' painted pictures (hd/runes/<key>_<strength>.png): each rune drawn asks for its own, with what its box held.
+struct RecordedPicture {
+	std::string name;
+	Rectangle box;
+	std::vector<uint8_t> before;
+};
+std::vector<RecordedPicture> RecordedPictures;
+
+void RecordPicture(const Surface & /*out*/, const Rectangle &box, const std::string &name, const uint8_t *before)
+{
+	RecordedPictures.push_back({ name, box, std::vector<uint8_t>(before, before + static_cast<size_t>(box.size.width) * box.size.height) });
+}
+
+TEST(RunePictures, EachRuneAsksForItsOwnPaintedPicture)
+{
+	const hd::RecordUiPictureFn saved = hd::RecordUiPictureHook;
+	hd::RecordUiPictureHook = RecordPicture;
+	OwnedSurface out { 40, 40 };
+	const Rectangle box { { 6, 5 }, { 28, 28 } };
+	const auto draw = [&](AugmentId id, bool dim) {
+		RecordedPictures.clear();
+		for (int y = 0; y < 40; y++) {
+			for (int x = 0; x < 40; x++)
+				out[{ x, y }] = 77;
+		}
+		DrawRuneIcon(out, box, id, dim);
+	};
+
+	const std::vector<std::string_view> keys = { "ral", "thul", "ort", "ohm", "amn", "vex", "io", "tir", "sol", "gul", "fal", "ko", "lum", "ith", "shael", "zod", "venom" };
+	std::set<std::string> asked;
+	for (size_t family = 0; family < static_cast<size_t>(RuneFamily::Count); family++) {
+		for (const RuneStrength strength : { RuneStrength::Lesser, RuneStrength::Normal, RuneStrength::Greater, RuneStrength::Perfect }) {
+			const AugmentId id = RuneOf(static_cast<RuneFamily>(family), strength);
+			if (id == AugmentId::None)
+				continue;
+			draw(id, /*dim=*/false);
+			ASSERT_EQ(RecordedPictures.size(), 1U) << keys[family];
+			const RecordedPicture &picture = RecordedPictures[0];
+			EXPECT_EQ(picture.name.rfind(StrCat("runes/", keys[family], "_"), 0), 0U) << picture.name;
+			EXPECT_EQ(picture.box.position, box.position);
+			EXPECT_EQ(picture.box.size, box.size);
+			// What the box held before the rune went on.
+			EXPECT_TRUE(std::all_of(picture.before.begin(), picture.before.end(), [](uint8_t pixel) { return pixel == 77; })) << picture.name;
+			asked.insert(picture.name);
+		}
+	}
+	for (int legend = 0; legend < RunesOfLegendCount; legend++) {
+		draw(static_cast<AugmentId>(static_cast<int>(FirstRuneOfLegend) + legend), /*dim=*/false);
+		ASSERT_EQ(RecordedPictures.size(), 1U);
+		asked.insert(RecordedPictures[0].name);
+	}
+
+	// Three strengths for each family; one picture for Shael, Zod, Venom and each Rune of Legend.
+	std::set<std::string> expected;
+	for (size_t family = 0; family < keys.size(); family++) {
+		const bool one = keys[family] == "shael" || keys[family] == "zod" || keys[family] == "venom";
+		for (const std::string_view strength : { "normal", "greater", "perfect" }) {
+			if (!one || strength == "normal")
+				expected.insert(StrCat("runes/", keys[family], "_", strength));
+		}
+	}
+	for (const std::string_view legend : { "talic", "madawc", "korlic", "bulkathos", "talrasha", "horazon", "jeredcain", "zoltunkulle" })
+		expected.insert(StrCat("runes/", legend, "_normal"));
+	EXPECT_EQ(asked, expected);
+	EXPECT_EQ(expected.size(), 53U);
+
+	// An empty Runes tab slot's dim rune keeps the drawn one.
+	draw(RuneOf(RuneFamily::Ral, RuneStrength::Normal), /*dim=*/true);
+	EXPECT_TRUE(RecordedPictures.empty());
+
+	hd::RecordUiPictureHook = saved;
 }
 
 } // namespace

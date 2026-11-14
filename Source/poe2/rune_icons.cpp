@@ -5,11 +5,15 @@
 #include <cstdlib>
 #include <optional>
 #include <span>
+#include <string>
+#include <string_view>
+#include <vector>
 
 #include "engine/palette.h"
 #include "engine/surface.hpp"
 #include "game_mode.hpp"
 #include "items.h"
+#include "poe2/hd.hpp"
 #include "poe2/crafting_items.hpp"
 
 namespace devilution {
@@ -98,6 +102,41 @@ Glyph GlyphFor(AugmentId id)
 	return {};
 }
 
+/** The names of the runes' painted pictures (hd/runes/<key>_<strength>.png), in the order of FamilyGlyphs and LegendGlyphs. */
+constexpr std::array<std::string_view, static_cast<size_t>(RuneFamily::Count)> FamilyKeys = {
+	"ral", "thul", "ort", "ohm", "amn", "vex", "io", "tir", "sol", "gul", "fal", "ko", "lum", "ith", "shael", "zod", "venom"
+};
+constexpr std::array<std::string_view, RunesOfLegendCount> LegendKeys = {
+	"talic", "madawc", "korlic", "bulkathos", "talrasha", "horazon", "jeredcain", "zoltunkulle"
+};
+
+/**
+ * The name of the rune's painted picture: its family's key and its strength. Shael, Zod and Venom come in one
+ * strength and the Runes of Legend in none, so each has one picture, its plain one.
+ */
+std::string PictureName(AugmentId id)
+{
+	std::string name = "runes/";
+	if (IsRuneOfLegend(id)) {
+		name += LegendKeys[static_cast<size_t>(id) - static_cast<size_t>(FirstRuneOfLegend)];
+		return name + "_normal";
+	}
+	const std::optional<RuneKind> rune = GetRuneKind(id);
+	if (!rune)
+		return {};
+	name += FamilyKeys[static_cast<size_t>(rune->family)];
+	if (rune->family == RuneFamily::Shael || rune->family == RuneFamily::Zod || rune->family == RuneFamily::Venom)
+		return name + "_normal";
+	switch (rune->strength) {
+	case RuneStrength::Greater:
+		return name + "_greater";
+	case RuneStrength::Perfect:
+		return name + "_perfect";
+	default:
+		return name + "_normal";
+	}
+}
+
 void Plot(const Surface &out, Point point, uint8_t color)
 {
 	if (out.InBounds(point))
@@ -157,6 +196,21 @@ void DrawRuneIcon(const Surface &out, const Rectangle &box, AugmentId id, bool d
 	const int ry = std::max(box.size.height / 2 - 3, 5);
 	const Glow glow = dim ? Glow { 0, 0, 0, 0 } : GlowFor(id);
 
+	// HD: what was in the box before the rune goes on, so its painted picture can show over it (an empty slot's dim
+	// rune has none). Without the picture, or with HD off, the stone drawn here stays.
+	static std::vector<uint8_t> before;
+	const bool record = !dim && hd::RecordUiPictureHook != nullptr && box.size.width > 0 && box.size.height > 0;
+	if (record) {
+		before.assign(static_cast<size_t>(box.size.width) * box.size.height, 0);
+		for (int y = 0; y < box.size.height; y++) {
+			for (int x = 0; x < box.size.width; x++) {
+				const Point point = box.position + Displacement { x, y };
+				if (out.InBounds(point))
+					before[static_cast<size_t>(y) * box.size.width + x] = out[point];
+			}
+		}
+	}
+
 	// The glow: rings just outside the stone.
 	for (int ring = glow.rings; ring >= 1; ring--) {
 		const uint8_t color = ring == 1 ? glow.inner : glow.outer;
@@ -199,6 +253,12 @@ void DrawRuneIcon(const Surface &out, const Rectangle &box, AugmentId id, bool d
 		ForLine(stroke.x0 * 2, stroke.y0 * 2, stroke.x1 * 2, stroke.y1 * 2, [&](int x, int y) {
 			Plot(out, origin + Displacement { x, y }, groove);
 		});
+	}
+
+	if (record) {
+		const std::string name = PictureName(id);
+		if (!name.empty())
+			hd::RecordUiPictureHook(out, box, name, before.data());
 	}
 }
 

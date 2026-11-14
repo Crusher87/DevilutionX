@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <utility>
@@ -74,6 +75,8 @@ struct UiDraw {
 	const UiSpriteName *name = nullptr;
 	const UiPattern *pattern = nullptr;
 	bool red = false;
+	/** @brief The pattern of a picture drawn in code (a rune), which only this draw has; `pattern` points to it. */
+	std::shared_ptr<const UiPattern> ownPattern;
 	/** @brief Where it is drawn in the UI. */
 	SDL_Rect rect {};
 	/** @brief The UI's pixels under it before it was drawn. */
@@ -235,6 +238,58 @@ void RecordUiSpriteImpl(const Surface &out, Point position, ClxSprite clx, const
 }
 
 [[maybe_unused]] const bool RecordUiSpriteHookSet = (RecordUiSpriteHook = RecordUiSpriteImpl, true);
+
+/** @brief The names of pictures drawn in code (runes), by their HD art's name and the size of the box they are drawn in. */
+std::unordered_map<std::string, UiSpriteName> UiPictureNames;
+
+void RecordUiPictureImpl(const Surface &out, const Rectangle &box, const std::string &name, const uint8_t *before)
+{
+	if (out.surface == nullptr || out.surface != PalSurface || before == nullptr)
+		return;
+	const int w = box.size.width;
+	const int h = box.size.height;
+	if (w <= 0 || h <= 0 || w > UINT16_MAX || h > UINT16_MAX)
+		return;
+	if (!Enabled())
+		return;
+	const auto [named, inserted] = UiPictureNames.try_emplace(name + '@' + std::to_string(w) + 'x' + std::to_string(h));
+	if (inserted)
+		named->second = UiSpriteName { name, static_cast<uint16_t>(w), static_cast<uint16_t>(h) };
+	if (UiDraws.size() >= 512)
+		UiDraws.clear();
+	UiDraw &draw = UiDraws.emplace_back();
+	draw.name = &named->second;
+	auto pattern = std::make_shared<UiPattern>();
+	pattern->width = static_cast<uint16_t>(w);
+	pattern->height = static_cast<uint16_t>(h);
+	pattern->pixels.assign(static_cast<size_t>(w) * h, -1);
+	draw.rect = SDL_Rect { out.region.x + box.position.x, out.region.y + box.position.y, w, h };
+	// What it was drawn over, and the pixels it changed: those are the ones it lays down. Pixels outside the surface it
+	// is drawn on (clipped) lay nothing down.
+	draw.under.assign(static_cast<size_t>(w) * h, 0);
+	draw.shows.assign(static_cast<size_t>(w) * h, 0);
+	const SDL_Surface *ui = PalSurface;
+	for (int y = 0; y < h; y++) {
+		const int uy = draw.rect.y + y;
+		if (uy < 0 || uy >= ui->h || uy < out.region.y || uy >= out.region.y + out.region.h)
+			continue;
+		const auto *line = static_cast<const uint8_t *>(ui->pixels) + static_cast<ptrdiff_t>(uy) * ui->pitch;
+		for (int x = 0; x < w; x++) {
+			const int ux = draw.rect.x + x;
+			if (ux < 0 || ux >= ui->w || ux < out.region.x || ux >= out.region.x + out.region.w)
+				continue;
+			const size_t i = static_cast<size_t>(y) * w + x;
+			draw.under[i] = before[i];
+			draw.shows[i] = 1; // inside the surface: may show
+			if (line[ux] != before[i])
+				pattern->pixels[i] = line[ux];
+		}
+	}
+	draw.pattern = pattern.get();
+	draw.ownPattern = std::move(pattern);
+}
+
+[[maybe_unused]] const bool RecordUiPictureHookSet = (RecordUiPictureHook = RecordUiPictureImpl, true);
 
 } // namespace
 
