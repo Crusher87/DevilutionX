@@ -102,9 +102,15 @@ void CreateReplEnvironment()
 				weather::Force(std::nullopt);
 				return changed(std::string("Weather follows its schedule again.\n") + weather::Text());
 			}
+			if (*what == "lightning") {
+				if (!weather::Enabled() || !weather::Outdoors())
+					return std::string("Lightning needs a sky: try it in town with the Weather option on.");
+				weather::Strike();
+				return changed(std::string("Lightning."));
+			}
 			const std::optional<weather::Kind> kind = weather::KindNamed(*what);
 			if (!kind)
-				return std::string("Say weather(\"rain\"), weather(\"snow\"), weather(\"clear\") or weather(\"auto\"), with a strength 0 to 1 after rain or snow.");
+				return std::string("Say weather(\"rain\"), weather(\"snow\"), weather(\"clear\") or weather(\"auto\"), with a strength 0 to 1 after rain or snow, or weather(\"lightning\") for one strike.");
 			weather::Force(kind, static_cast<float>(strength.value_or(0.8)));
 			weather::Advance(1);
 			return changed(weather::Text());

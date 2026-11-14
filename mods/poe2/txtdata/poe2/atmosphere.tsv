@@ -2,6 +2,16 @@ area	knob	first	last	note
 town	edges	0.12		Town: the screen's corners a touch darker (idea 6). 0 none, 0.5 half dark in the corners.
 town	flicker	1		How much the forge, lamps and lit windows flicker (idea 1): 0 steady, 1 normal, 2 double.
 town	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+town	rain_sky	0.22		How much of the evening sky's light a downpour takes away (idea 23): the town darkens and the lamps and windows stand out. 0 none, 0.5 half.
+town	lightning	1		How much light a lightning strike adds, in evening skies (idea 23): 1 lights the town about as bright as a dull day for a moment. 0 none. It is light on the town with shadows, never a white screen.
+town	rain_drops	2		How many raindrops fall: 1 normal, 2 twice as many.
+town	rain_alpha	1		How easy the raindrops and their splashes are to see: 1 normal, 0.5 half as bright.
+town	rain_splash	1		How many drops throw up a splash where they land: 1 normal, 0 none.
+town	rain_colour	0.74 0.82 0.95		The rain's own colour, red green blue, before the light on it colours it.
+town	rain_veil	0.05		How much a downpour lifts the far dark towards grey, the air being full of water: 0 none, 0.1 a clear haze.
+town	rain_veil_colour	0.30 0.35 0.43		That haze's colour, red green blue.
+town	wet_shine	1		How bright the lamps and lit windows shine back off wet ground (ideas 23 and 14): 0 none, 1 strong. The ground gets wet as it rains and dries in a few minutes after.
+town	roof_drips	1.2		How many drops a second fall from the roof edge over each lamp or lit window while the ground is wet.
 cathedral	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 cathedral	warm	1.12 0.95 0.76	1.16 0.90 0.68	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 cathedral	cool	0.74 0.84 1.08	0.68 0.78 1.02	The shadows' colour, first floor to last: deeper further down (idea 4).

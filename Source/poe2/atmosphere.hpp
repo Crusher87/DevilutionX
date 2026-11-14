@@ -77,8 +77,14 @@ enum class Knob : uint8_t {
 	Haze,
 	/** Idea 32: a cavern with lava in it is dim orange in the distance, not black. */
 	FarGlow,
+	/** Idea 23: while it rains the evening sky over Tristram is darker, so the lamps and windows stand out. */
+	RainSky,
+	/** Idea 23: lightning lights the town from the sky for a moment, with the shadows it casts; never a white screen. */
+	Lightning,
+	/** Ideas 23 and 14: wet ground shines under the lamps, puddles ring where drops land, roofs drip after the rain. */
+	Wet,
 };
-inline constexpr size_t NumKnobs = 21;
+inline constexpr size_t NumKnobs = 24;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);
