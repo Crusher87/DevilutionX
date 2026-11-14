@@ -6,8 +6,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <limits>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <span>
 #include <string>
@@ -33,18 +35,21 @@
 #include "headless_mode.hpp"
 #include "levels/dun_tile.hpp"
 #include "levels/dun_tile_data.hpp"
-#include "levels/tileset_mix.hpp"
 #include "levels/gendung.h"
 #include "levels/reencode_dun_cels.hpp"
-#include "utils/file_util.h"
+#include "levels/tileset_mix.hpp"
 #include "options.h"
 #include "poe2/atmosphere.hpp"
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_outline.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
+#include "utils/file_util.h"
 #include "utils/is_of.hpp"
+#include "utils/paths.h"
 #include "utils/png.h"
+#include "utils/sdl_mutex.h"
+#include "utils/sdl_thread.h"
 #include "utils/sdl_wrap.h"
 
 namespace devilution {
@@ -211,6 +216,8 @@ constexpr size_t NumShapeAxes = 5;
 struct HdArt {
 	SDL_Texture *texture = nullptr;
 	bool missing = false;
+	/** @brief Its picture is still being read (ReadPictures): the game's own pixels show until it is in. */
+	bool waiting = false;
 	/**
 	 * @brief An object's art split by the way each part of it faces, from the shape map beside it (MakeShape): one
 	 * picture per ShapeAxes entry, null where nothing faces that way. All null without a shape map.
@@ -413,6 +420,8 @@ uint32_t PaletteVersion = 1;
 std::array<SDL_Color, 256> LastPalette;
 
 int PackState = -1;
+/** @brief The HD pack is loose files on disk, not packed in an archive: its pictures can be read ahead by the reader. */
+bool PackLoose = false;
 
 /** @brief The palette this level type's HD tiles were made in, and a count of its loads. */
 std::array<SDL_Color, 256> PackColours;
@@ -427,6 +436,9 @@ bool HavePack()
 	if (PackState < 0) {
 		AssetRef ref = FindAsset("hd\\pack.txt");
 		PackState = ref.ok() ? 1 : 0;
+#ifndef UNPACKED_MPQS
+		PackLoose = ref.directHandle != nullptr;
+#endif
 	}
 	return PackState == 1;
 }
@@ -476,6 +488,8 @@ int LightIndexOf(const uint8_t *tbl)
 	return -1;
 }
 
+void DropReadPictures();
+
 void DestroyTextures()
 {
 	if (CacheRenderer != nullptr) {
@@ -497,6 +511,7 @@ void DestroyTextures()
 	Art.clear();
 	Rasters.clear();
 	ArtChoices.clear();
+	DropReadPictures();
 	WorldRecorded = false;
 	if (LightTexture != nullptr && CacheRenderer != nullptr)
 		SDL_DestroyTexture(LightTexture);
@@ -537,6 +552,7 @@ void IndexTiles()
 {
 	TileNames.clear();
 	ArtChoices.clear();
+	DropReadPictures();
 	TileArtShown = false;
 	RecolouredTileArtShown = false;
 	CacheCels = pDungeonCels.get();
@@ -756,6 +772,478 @@ Outline OutlineFromPicture(SDL_Renderer *renderer, SDL_Surface *picture, const D
 	return MakeOutline(renderer, body, cover, width, height, static_cast<float>(width) / static_cast<float>(sprite.width), static_cast<float>(height) / static_cast<float>(sprite.height), cut);
 }
 
+// HD pictures are read from disk by threads of their own, ahead of the frame that shows them. Opening and unpacking a
+// picture in the frame froze it (some 10 ms a picture on a busy disk: a building coming into view cost 27 at once).
+#if !defined(UNPACKED_MPQS) && (defined(_WIN32) || defined(__APPLE__) || (defined(__linux__) && !defined(__ANDROID__)))
+#define POE2_HD_READER 1
+#endif
+
+/** @brief A picture asked of the reader: waiting, read (`done`), or not on disk (`done` with no surface). */
+struct ReadPicture {
+	SDL_Surface *surface = nullptr;
+	bool done = false;
+	/** @brief When it was last asked for (SDL_GetTicks): pictures nobody took are let go (TidyReadPictures). */
+	uint32_t used = 0;
+	/** @brief A draw is waiting on it, so it was moved to the front of the reader's list. */
+	bool rushed = false;
+	/** @brief A draw has taken it before. */
+	bool taken = false;
+};
+
+/**
+ * @brief How long a sprite's picture read ahead is kept for the draw that may want it, in milliseconds. A tile's
+ * picture is kept while its level lasts: the same tile is cut again each time a wall near the hero turns see-through.
+ */
+constexpr uint32_t ReadPictureKeptMs = 15000;
+/** @brief How long a frame may spend turning pictures read ahead into textures; the rest wait a frame. */
+constexpr float PictureBudgetMs = 2.5F;
+
+/** @brief The pictures asked of the reader, by asset path (hd\tiles\town\12.png). Only the game's thread touches it. */
+std::unordered_map<std::string, ReadPicture> ReadPictures;
+/** @brief The folders loose files are looked for in, in order (the game's thread's copy). */
+std::vector<std::string> ReadDirs;
+/** @brief Frames drawn since the level's art was last named: the first ones wait for their pictures, later ones don't. */
+int SettledFrames = 0;
+/** @brief A level's first frames come up whole, behind the loading screen's fade, however long their pictures take. */
+constexpr int SettlingFrames = 3;
+/** @brief A picture was not in yet when it was asked for, since this was last cleared: what was chosen is not kept. */
+bool ArtLater = false;
+uint64_t PictureBudgetEnd = 0;
+bool PictureMadeThisFrame = false;
+/** @brief The dungeon pieces whose pictures were asked for ahead (ReadAheadTiles). */
+std::vector<bool> PieceReadAhead;
+Point ReadAheadView { -1, -1 };
+uint32_t ReadTidiedMs = 0;
+/** @brief Sprites are being drawn with in-between frames, so those are read ahead too. */
+bool InBetweensShown = false;
+/** @brief The frame of each animation that was read last, by its name up to the frame's number: tells which way it plays. */
+std::unordered_map<std::string, int> SpriteFrameShown;
+
+bool IsTilePicture(std::string_view path)
+{
+	return path.starts_with("hd\\tiles\\");
+}
+
+/** @brief Reads a loose picture from the first folder that has it. Safe on any thread. */
+SDL_Surface *ReadLoosePicture(const std::vector<std::string> &dirs, const std::string &path)
+{
+	std::string relative = path;
+#ifndef _WIN32
+	std::replace(relative.begin(), relative.end(), '\\', '/');
+#endif
+	for (const std::string &dir : dirs) {
+		SDL_RWops *file = SDL_RWFromFile((dir + relative).c_str(), "rb");
+		if (file == nullptr)
+			continue;
+		SDL_Surface *surface = IMG_LoadPNG_RW(file);
+		SDL_RWclose(file);
+		// A tile's picture is cut to the tile's shape in this format (MaskedArt): turned into it here, off the frame.
+		if (surface != nullptr && surface->format->format != SDL_PIXELFORMAT_RGBA32 && IsTilePicture(path)) {
+			SDL_Surface *rgba = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
+			if (rgba != nullptr) {
+				SDL_FreeSurface(surface);
+				surface = rgba;
+			}
+		}
+		return surface;
+	}
+	return nullptr;
+}
+
+#ifdef POE2_HD_READER
+/** @brief How many pictures are read at a time: small files read side by side come in about that much faster. */
+constexpr size_t ReaderThreads = 2;
+
+/** @brief What the reader's threads and the game's share, under `lock`. Made once and never freed: the threads may outlive the game's own data. */
+struct Reader {
+	SdlMutex lock;
+	/** @brief Signalled when a picture is asked for. */
+	SDL_cond *asked = SDL_CreateCond();
+	/** @brief Signalled when a picture is read. */
+	SDL_cond *read = SDL_CreateCond();
+	std::deque<std::string> wanted;
+	/** @brief The pictures being read now, one a thread (empty for a thread with nothing to read). */
+	std::array<std::string, ReaderThreads> busy;
+	std::vector<std::pair<std::string, SDL_Surface *>> done;
+	std::vector<std::string> dirs;
+	std::array<SdlThread, ReaderThreads> threads;
+};
+Reader *TheReader = nullptr;
+
+/** @brief A reader thread and its place in Reader::busy. */
+struct ReaderSeat {
+	Reader *reader;
+	size_t seat;
+};
+
+int SDLCALL ReaderMain(void *data)
+{
+	const auto *mine = static_cast<const ReaderSeat *>(data);
+	Reader *reader = mine->reader;
+	std::string &busy = reader->busy[mine->seat];
+	for (;;) {
+		std::string path;
+		std::vector<std::string> dirs;
+		{
+			const std::lock_guard<SdlMutex> guard(reader->lock);
+			while (reader->wanted.empty())
+				SDL_CondWait(reader->asked, reader->lock.get());
+			path = std::move(reader->wanted.front());
+			reader->wanted.pop_front();
+			busy = path;
+			dirs = reader->dirs;
+		}
+		SDL_Surface *surface = ReadLoosePicture(dirs, path);
+		{
+			const std::lock_guard<SdlMutex> guard(reader->lock);
+			reader->done.emplace_back(std::move(path), surface);
+			busy.clear();
+		}
+		SDL_CondBroadcast(reader->read);
+	}
+	return 0;
+}
+#endif
+
+/** @brief Whether pictures are read ahead: on a computer with threads, for a pack of loose files (feel("readahead", 0) or POE2_HD_READER=0 turns it off). */
+bool ReaderOn()
+{
+#ifdef POE2_HD_READER
+	static const bool allowed = [] {
+		const char *env = std::getenv("POE2_HD_READER");
+		return env == nullptr || env[0] != '0';
+	}();
+	return allowed && PackLoose && atmosphere::Setting(atmosphere::Knob::ReadAhead) > 0;
+#else
+	return false;
+#endif
+}
+
+#ifdef POE2_HD_READER
+/** @brief Keeps the folders to look in the same as the game's own search (FindAsset): mod folders first, then the game's assets. */
+void UpdateReadDirs()
+{
+	const std::string &assets = paths::AssetsPath();
+	if (ReadDirs.size() == OverridePaths.size() + 1 && ReadDirs.back() == assets && std::equal(OverridePaths.begin(), OverridePaths.end(), ReadDirs.begin()))
+		return;
+	ReadDirs = OverridePaths;
+	ReadDirs.push_back(assets);
+	if (TheReader != nullptr) {
+		const std::lock_guard<SdlMutex> guard(TheReader->lock);
+		TheReader->dirs = ReadDirs;
+	}
+}
+
+/** @brief Takes in what the reader has read since the last time. */
+void CollectReadPictures()
+{
+	if (TheReader == nullptr)
+		return;
+	std::vector<std::pair<std::string, SDL_Surface *>> done;
+	{
+		const std::lock_guard<SdlMutex> guard(TheReader->lock);
+		done.swap(TheReader->done);
+	}
+	const uint32_t now = SDL_GetTicks();
+	for (auto &[path, surface] : done) {
+		const auto it = ReadPictures.find(path);
+		if (it == ReadPictures.end() || it->second.done) {
+			// Nobody is waiting for it any more.
+			if (surface != nullptr)
+				SDL_FreeSurface(surface);
+			continue;
+		}
+		it->second.surface = surface;
+		it->second.done = true;
+		it->second.used = now;
+	}
+}
+
+/** @brief Starts the reader's threads the first time a picture is asked of them. */
+void StartReader()
+{
+	if (TheReader != nullptr)
+		return;
+	// Made sure of on this thread, before the others unpack pictures too.
+	InitPNG();
+	UpdateReadDirs();
+	TheReader = new Reader();
+	TheReader->dirs = ReadDirs;
+	for (size_t seat = 0; seat < ReaderThreads; seat++)
+		TheReader->threads[seat] = SdlThread { ReaderMain, new ReaderSeat { TheReader, seat } };
+}
+
+/** @brief Asks the reader for a picture, if it wasn't asked for yet: `first` for one a draw wants now or within a few frames. */
+void WantPicture(const std::string &path, bool first)
+{
+	const auto [it, inserted] = ReadPictures.try_emplace(path);
+	if (!inserted)
+		return;
+	it->second.used = SDL_GetTicks();
+	StartReader();
+	{
+		const std::lock_guard<SdlMutex> guard(TheReader->lock);
+		if (first)
+			TheReader->wanted.push_front(path);
+		else
+			TheReader->wanted.push_back(path);
+	}
+	SDL_CondSignal(TheReader->asked);
+}
+
+/** @brief Asks the reader for those of a list of pictures that weren't asked for yet, after what it has to read already. */
+void WantPictures(std::vector<std::string> &paths)
+{
+	const uint32_t now = SDL_GetTicks();
+	std::erase_if(paths, [now](const std::string &path) {
+		const auto [it, inserted] = ReadPictures.try_emplace(path);
+		if (inserted)
+			it->second.used = now;
+		return !inserted;
+	});
+	if (paths.empty())
+		return;
+	StartReader();
+	{
+		const std::lock_guard<SdlMutex> guard(TheReader->lock);
+		for (std::string &path : paths)
+			TheReader->wanted.push_back(std::move(path));
+	}
+	SDL_CondBroadcast(TheReader->asked);
+}
+
+/** @brief Gets a picture the reader was asked for in now: read here if the reader hasn't started on it, waited for if it has. */
+void SettlePicture(const std::string &path, ReadPicture &picture)
+{
+	bool readHere = false;
+	{
+		const std::lock_guard<SdlMutex> guard(TheReader->lock);
+		const auto queued = std::find(TheReader->wanted.begin(), TheReader->wanted.end(), path);
+		if (queued != TheReader->wanted.end()) {
+			TheReader->wanted.erase(queued);
+			readHere = true;
+		} else {
+			while (std::find(TheReader->busy.begin(), TheReader->busy.end(), path) != TheReader->busy.end())
+				SDL_CondWait(TheReader->read, TheReader->lock.get());
+		}
+	}
+	if (readHere)
+		picture.surface = ReadLoosePicture(ReadDirs, path);
+	else
+		CollectReadPictures();
+	picture.done = true;
+}
+#endif
+
+/** @brief Whether a frame may still turn a picture read ahead into a texture: always one, then as many as fit in PictureBudgetMs. */
+bool MayMakePicture()
+{
+	return !PictureMadeThisFrame || SDL_GetPerformanceCounter() < PictureBudgetEnd;
+}
+
+/**
+ * @brief Whether a picture can be had without holding the frame up: it has been read ahead (or found to be missing)
+ * and, for a `timed` one, the frame has time left for it. If not, it is asked for and the draw shows the game's own
+ * pixels meanwhile.
+ */
+bool PictureIsIn(const std::string &path, bool timed)
+{
+#ifdef POE2_HD_READER
+	UpdateReadDirs();
+	const auto it = ReadPictures.find(path);
+	if (it == ReadPictures.end()) {
+		WantPicture(path, true);
+		return false;
+	}
+	if (!it->second.done) {
+		if (!it->second.rushed) {
+			it->second.rushed = true;
+			const std::lock_guard<SdlMutex> guard(TheReader->lock);
+			const auto queued = std::find(TheReader->wanted.begin(), TheReader->wanted.end(), path);
+			if (queued != TheReader->wanted.end() && queued != TheReader->wanted.begin()) {
+				TheReader->wanted.erase(queued);
+				TheReader->wanted.push_front(path);
+			}
+		}
+		return false;
+	}
+	// A tile shown before is cut again at once (a wall turning see-through must not flicker).
+	return !timed || it->second.surface == nullptr || it->second.taken || MayMakePicture();
+#else
+	(void)path;
+	(void)timed;
+	return true;
+#endif
+}
+
+/**
+ * @brief An HD picture by its asset path, or nullptr if there is none: from the reader if it has it, else read now.
+ * A picture that is `shared` stays with the reader for a while, for the other cuts of the same tile; the caller frees
+ * what it gets either way.
+ */
+SDL_Surface *TakePicture(const std::string &path, bool shared)
+{
+#ifdef POE2_HD_READER
+	if (ReaderOn()) {
+		UpdateReadDirs();
+		auto [it, inserted] = ReadPictures.try_emplace(path);
+		ReadPicture &picture = it->second;
+		if (inserted) {
+			picture.surface = ReadLoosePicture(ReadDirs, path);
+			picture.done = true;
+		} else if (!picture.done) {
+			SettlePicture(path, picture);
+		}
+		picture.used = SDL_GetTicks();
+		SDL_Surface *surface = picture.surface;
+		if (surface != nullptr) {
+			if (!PictureMadeThisFrame) {
+				PictureMadeThisFrame = true;
+				PictureBudgetEnd = SDL_GetPerformanceCounter() + static_cast<uint64_t>(static_cast<double>(SDL_GetPerformanceFrequency()) * PictureBudgetMs / 1000);
+			}
+			if (shared) {
+				surface->refcount++;
+				picture.taken = true;
+			} else {
+				ReadPictures.erase(it);
+			}
+		}
+		return surface;
+	}
+#else
+	(void)shared;
+#endif
+	AssetRef ref = FindAsset(path);
+	if (!ref.ok())
+		return nullptr;
+#ifdef UNPACKED_MPQS
+	SDL_RWops *file = SDL_RWFromFile(ref.path, "rb");
+#else
+	SDL_RWops *file = OpenAsset(std::move(ref)).release();
+#endif
+	if (file == nullptr)
+		return nullptr;
+	SDL_Surface *surface = IMG_LoadPNG_RW(file);
+	SDL_RWclose(file);
+	return surface;
+}
+
+/** @brief The asset path of an HD picture by its name (tiles/town/12). */
+std::string PicturePath(std::string_view name)
+{
+	std::string path = "hd\\";
+	path += name;
+	path += ".png";
+	std::replace(path.begin(), path.end(), '/', '\\');
+	return path;
+}
+
+/** @brief Lets go of sprite pictures read ahead that no draw took. */
+void TidyReadPictures()
+{
+	const uint32_t now = SDL_GetTicks();
+	if (now - ReadTidiedMs < 2000)
+		return;
+	ReadTidiedMs = now;
+	for (auto it = ReadPictures.begin(); it != ReadPictures.end();) {
+		if (it->second.done && now - it->second.used > ReadPictureKeptMs && !IsTilePicture(it->first)) {
+			if (it->second.surface != nullptr)
+				SDL_FreeSurface(it->second.surface);
+			it = ReadPictures.erase(it);
+		} else {
+			++it;
+		}
+	}
+}
+
+/** @brief Lets go of everything read ahead or asked for: the level changed, or the art is to be made anew. */
+void DropReadPictures()
+{
+#ifdef POE2_HD_READER
+	if (TheReader != nullptr) {
+		const std::lock_guard<SdlMutex> guard(TheReader->lock);
+		TheReader->wanted.clear();
+	}
+	CollectReadPictures();
+#endif
+	for (auto &[path, picture] : ReadPictures) {
+		if (picture.surface != nullptr)
+			SDL_FreeSurface(picture.surface);
+	}
+	// A picture the reader is in the middle of comes back to nobody, and is freed (CollectReadPictures).
+	ReadPictures.clear();
+	PieceReadAhead.clear();
+	ReadAheadView = { -1, -1 };
+	SettledFrames = 0;
+}
+
+/**
+ * @brief Asks the reader for the frames that follow a sprite's (and their in-betweens), so an animation's pictures are
+ * in before they show. Some animations play backwards (the storyteller's): those have the frames before read instead.
+ */
+void ReadAheadSprite(const std::string &name, bool withoutShadow)
+{
+#ifdef POE2_HD_READER
+	if (!ReaderOn())
+		return;
+	// monsters/sking/skinga/d3_f05, or an in-between of it: d3_f05_m1 on the way to f06, d3_f05_b1 on the way back to f04.
+	std::string_view frameName = name;
+	int way = 0;
+	if (frameName.size() > 3 && frameName[frameName.size() - 3] == '_' && (frameName[frameName.size() - 2] == 'm' || frameName[frameName.size() - 2] == 'b')) {
+		way = frameName[frameName.size() - 2] == 'm' ? 1 : -1;
+		frameName.remove_suffix(3);
+	}
+	const size_t at = frameName.rfind("_f");
+	if (at == std::string_view::npos || at + 2 >= frameName.size())
+		return;
+	int frame = 0;
+	for (const char c : frameName.substr(at + 2)) {
+		if (c < '0' || c > '9')
+			return;
+		frame = frame * 10 + (c - '0');
+	}
+	const std::string stem(frameName.substr(0, at + 2));
+	// Which way it plays: by its in-between, else by the frame of it that showed before.
+	int &last = SpriteFrameShown.try_emplace(stem, frame).first->second;
+	if (way == 0)
+		way = frame < last ? -1 : 1;
+	last = frame;
+	std::vector<std::string> wanted;
+	const auto want = [&](const std::string &picture) {
+		if (!Art.contains(withoutShadow ? picture + "#lit" : picture))
+			wanted.push_back(PicturePath(picture));
+	};
+	const char *between = way > 0 ? "_m" : "_b";
+	for (int ahead = 0; ahead <= 3; ahead++) {
+		if (frame + way * ahead < 0)
+			break;
+		char number[16];
+		std::snprintf(number, sizeof(number), "%02d", frame + way * ahead);
+		const std::string next = stem + number;
+		if (ahead != 0)
+			want(next);
+		if (InBetweensShown && ahead < 3) {
+			want(next + between + "1");
+			want(next + between + "2");
+		}
+	}
+	// An animation that goes round starts again at its first frame.
+	if (way > 0 && frame > 0) {
+		want(stem + "00");
+		if (InBetweensShown) {
+			want(stem + "00_m1");
+			want(stem + "00_m2");
+		}
+	}
+	// Ahead of the tiles round the view: these show within a few frames. The nearest goes in front.
+	for (size_t i = wanted.size(); i-- > 0;)
+		WantPicture(wanted[i], true);
+#else
+	(void)name;
+	(void)withoutShadow;
+#endif
+}
+
 /** @brief A shape map's tilt: the game looks down on the floor at 30 degrees (a tile is twice as wide as it is high). */
 constexpr float ViewSin = 0.5F;
 constexpr float ViewCos = 0.8660254F;
@@ -775,11 +1263,7 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 {
 	if (picture->format->format != SDL_PIXELFORMAT_RGBA32)
 		return;
-	std::string path = "hd\\" + name + "_n.png";
-	std::replace(path.begin(), path.end(), '/', '\\');
-	if (!FindAsset(path).ok())
-		return;
-	SDL_Surface *loaded = LoadPNG(path.c_str());
+	SDL_Surface *loaded = TakePicture(PicturePath(name + "_n"), false);
 	if (loaded == nullptr)
 		return;
 	SDL_Surface *map = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
@@ -865,20 +1349,30 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
  * @brief A sprite's HD art, loaded the first time it is asked for (its texture is null when there is none). A sprite
  * drawn with an outline (`outlined`) gets its smooth outline made at the same time, from the picture just loaded.
  * Without its painted shadow, an `object` loses the floor shadow the game painted into it (WithoutObjectShadow), and
- * takes its shape map if it has one (MakeShape).
+ * takes its shape map if it has one (MakeShape). A picture that `mayComeLater` is not waited for (its texture is null
+ * and ArtLater set until the reader has it).
  */
-HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShadow, const Draw *outlined, const Draw *object = nullptr)
+HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShadow, const Draw *outlined, const Draw *object = nullptr, bool mayComeLater = false)
 {
 	auto [it, inserted] = Art.try_emplace(withoutShadow ? name + "#lit" : name);
 	HdArt &art = it->second;
-	if (!inserted)
+	if (!inserted && !art.waiting)
 		return art;
-	// Read from disk the first time it shows, in the frame: timed for the play log's freezes.
+	// A sprite seen for the first time doesn't hold the frame up for its picture: it shows the game's own pixels for
+	// the frame or two until the reader has it, and the frames after it are read meanwhile (ReadAheadSprite).
+	art.waiting = mayComeLater && ReaderOn() && SettledFrames >= SettlingFrames && !PictureIsIn(PicturePath(name), false);
+	if (art.waiting) {
+		ArtLater = true;
+		ReadAheadSprite(name, withoutShadow);
+		return art;
+	}
+	// Made the first time it shows, in the frame (and read then too, unless the reader had it): timed for the play log's freezes.
 	const SlowWorkScope timed(SlowWork::HdArt);
 	art.name = name;
-	std::string path = "hd\\" + name + ".png";
-	std::replace(path.begin(), path.end(), '/', '\\');
-	if (!FindAsset(path).ok()) {
+	SDL_Surface *surface = TakePicture(PicturePath(name), false);
+	// The frames that follow it in its animation are read meanwhile, off the frame.
+	ReadAheadSprite(name, withoutShadow);
+	if (surface == nullptr) {
 		art.missing = true;
 		// For the pack maker: POE2_HD_MISSING=<file> lists the art the game looked for and did not find.
 		if (const char *log = std::getenv("POE2_HD_MISSING"); log != nullptr) {
@@ -887,11 +1381,6 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 				std::fclose(f);
 			}
 		}
-		return art;
-	}
-	SDL_Surface *surface = LoadPNG(path.c_str());
-	if (surface == nullptr) {
-		art.missing = true;
 		return art;
 	}
 	if (withoutShadow)
@@ -1338,15 +1827,19 @@ HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &dr
 	const std::string key = name + "#" + std::to_string(static_cast<int>(draw.mask)) + "/" + std::to_string(static_cast<int>(draw.tile)) + "/" + std::to_string(draw.height);
 	auto [it, inserted] = Art.try_emplace(key);
 	HdArt &art = it->second;
-	if (!inserted)
+	if (!inserted && !art.waiting)
 		return art.texture != nullptr ? &art : nullptr;
+	const std::string path = PicturePath(name);
+	// Once a level has settled, a tile that comes into view never holds the frame up for its picture: it shows the
+	// game's own pixels for the frame or two until the reader has it (ReadAheadTiles asks before it is in view).
+	art.waiting = ReaderOn() && SettledFrames >= SettlingFrames && !PictureIsIn(path, true);
+	if (art.waiting) {
+		ArtLater = true;
+		return nullptr;
+	}
 	const SlowWorkScope timed(SlowWork::HdArt);
 	art.missing = true;
-	std::string path = "hd\\" + name + ".png";
-	std::replace(path.begin(), path.end(), '/', '\\');
-	if (!FindAsset(path).ok())
-		return nullptr;
-	SDL_Surface *loaded = LoadPNG(path.c_str());
+	SDL_Surface *loaded = TakePicture(path, true);
 	if (loaded == nullptr)
 		return nullptr;
 	SDL_Surface *surface = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
@@ -1431,7 +1924,8 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 	// In-betweens 1 and 2 lead to the next frame (_m1, _m2); 3 and 4 back to the frame before (_b1, _b2).
 	if (draw.inBetween != 0 && !masked) {
 		const bool back = draw.inBetween > 2;
-		art = &LoadArt(renderer, *name + (back ? "_b" : "_m") + std::to_string(back ? draw.inBetween - 2 : draw.inBetween), withoutShadow, draw.outlined ? &draw : nullptr, object);
+		InBetweensShown = true;
+		art = &LoadArt(renderer, *name + (back ? "_b" : "_m") + std::to_string(back ? draw.inBetween - 2 : draw.inBetween), withoutShadow, draw.outlined ? &draw : nullptr, object, true);
 		texture = art->texture;
 	}
 	// Tiles recoloured for this level's palette, e.g. tiles/l1_p3/120, beat evening out the base ones.
@@ -1442,6 +1936,9 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 			tileArt = MaskedArt(renderer, name->substr(0, slash) + "_p" + std::to_string(PaletteVariant) + name->substr(slash), draw);
 			texture = tileArt != nullptr ? tileArt->texture : nullptr;
 			recoloured = texture != nullptr;
+			// Still being read: not the plain tile meanwhile, which would show in other colours for a frame.
+			if (ArtLater)
+				return choice;
 		}
 	}
 	if (texture == nullptr) {
@@ -1449,7 +1946,7 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 			tileArt = MaskedArt(renderer, *name, draw);
 			texture = tileArt != nullptr ? tileArt->texture : nullptr;
 		} else {
-			art = &LoadArt(renderer, *name, withoutShadow, draw.outlined ? &draw : nullptr, object);
+			art = &LoadArt(renderer, *name, withoutShadow, draw.outlined ? &draw : nullptr, object, true);
 			texture = art->texture;
 		}
 	}
@@ -1475,9 +1972,17 @@ ArtChoice CachedArt(SDL_Renderer *renderer, const Draw &draw)
 	    | (static_cast<uint64_t>(draw.tile) << 24) | (static_cast<uint64_t>(draw.inBetween) << 32) | (static_cast<uint64_t>(PaletteVariant & 0xFF) << 40)
 	    | (static_cast<uint64_t>(draw.height & 0x7FFF) << 48) | (static_cast<uint64_t>(FrameLit && draw.caster != Caster::None ? 1 : 0) << 63);
 	auto [it, inserted] = ArtChoices.try_emplace(ArtChoiceKey { data, shape, draw.recolour });
-	if (inserted)
-		it->second = ChooseArt(renderer, draw);
-	return it->second;
+	if (!inserted)
+		return it->second;
+	ArtLater = false;
+	const ArtChoice choice = ChooseArt(renderer, draw);
+	if (ArtLater) {
+		// Its picture is still being read: chosen again next frame.
+		ArtChoices.erase(it);
+		return choice;
+	}
+	it->second = choice;
+	return choice;
 }
 
 /** @brief How long a frame may spend making outlines for art loaded before; the rest show the game's own for a frame. */
@@ -1491,9 +1996,7 @@ Outline MakeArtOutline(SDL_Renderer *renderer, const HdArt &art, const Draw &spr
 	Outline none;
 	none.tried = true;
 	const SlowWorkScope timed(SlowWork::HdArt);
-	std::string path = "hd\\" + art.name + ".png";
-	std::replace(path.begin(), path.end(), '/', '\\');
-	SDL_Surface *picture = LoadPNG(path.c_str());
+	SDL_Surface *picture = TakePicture(PicturePath(art.name), false);
 	if (picture == nullptr)
 		return none;
 	Outline outline = OutlineFromPicture(renderer, picture, sprite, cut, !(FrameLit && sprite.caster != Caster::None));
@@ -5232,6 +5735,81 @@ void DrawEdges(SDL_Renderer *renderer, const SDL_Rect &clip)
 	SDL_RenderCopy(renderer, EdgesTexture, nullptr, &dest);
 }
 
+/** @brief How far past the edge of the view tiles have their pictures read ahead, in tiles. */
+constexpr int ReadAheadTilesPast = 5;
+
+/**
+ * @brief Asks the reader for the pictures of the tiles in and just round the view, before they are drawn: as the hero
+ * walks, a tile's picture is in by the time the tile comes into view. Only looks again when the view has moved a tile.
+ */
+void ReadAheadTiles(Size worldSize)
+{
+#ifdef POE2_HD_READER
+	if (CacheCels == nullptr || CacheCels != pDungeonCels.get() || ViewPosition == ReadAheadView)
+		return;
+	ReadAheadView = ViewPosition;
+	if (PieceReadAhead.size() != MAXTILES + 1)
+		PieceReadAhead.assign(MAXTILES + 1, false);
+	// Across the screen a tile is one step of x - y; down it, one of x + y. Tall tiles below the view reach up into it.
+	const int across = worldSize.width / TILE_WIDTH + ReadAheadTilesPast;
+	const int up = worldSize.height / TILE_HEIGHT + ReadAheadTilesPast;
+	const int down = up + MicroTileLen;
+	std::vector<std::string> wanted;
+	for (int v = -up; v <= down; v++) {
+		for (int u = -across; u <= across; u++) {
+			if (((u + v) & 1) != 0)
+				continue;
+			const Point tile = ViewPosition + Displacement { (u + v) / 2, (v - u) / 2 };
+			if (!InDungeonBounds(tile))
+				continue;
+			const uint16_t piece = dPiece[tile.x][tile.y];
+			if (piece >= PieceReadAhead.size() || PieceReadAhead[piece])
+				continue;
+			PieceReadAhead[piece] = true;
+			for (int block = 0; block < MicroTileLen; block++) {
+				const LevelCelBlock cel = DPieceMicros[piece].mt[block];
+				if (!cel.hasValue())
+					continue;
+				const auto it = TileNames.find(GetDunFrame(CacheCels, cel.frame()));
+				if (it == TileNames.end())
+					continue;
+				const std::string &name = it->second;
+				const size_t slash = name.find('/', 6);
+				if (PaletteVariant > 1 && slash != std::string::npos)
+					wanted.push_back(PicturePath(name.substr(0, slash) + "_p" + std::to_string(PaletteVariant) + name.substr(slash)));
+				wanted.push_back(PicturePath(name));
+				// A floor tile with something growing over it has that in a picture of its own.
+				if (cel.type() == TileType::TransparentSquare)
+					wanted.push_back(PicturePath(name + "f"));
+			}
+		}
+	}
+	WantPictures(wanted);
+#else
+	(void)worldSize;
+#endif
+}
+
+/** @brief A frame's share of reading ahead: takes in what the reader has read, and asks for what the view will want next. */
+void ReadAhead(Size worldSize)
+{
+	PictureMadeThisFrame = false;
+	if (SettledFrames < SettlingFrames)
+		SettledFrames++;
+#ifdef POE2_HD_READER
+	if (!ReaderOn())
+		return;
+	UpdateReadDirs();
+	CollectReadPictures();
+	TidyReadPictures();
+	// A level's first frames read their own pictures as they draw; the reader then goes on to what lies round them.
+	if (SettledFrames >= SettlingFrames)
+		ReadAheadTiles(worldSize);
+#else
+	(void)worldSize;
+#endif
+}
+
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
@@ -5241,6 +5819,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		Art.clear();
 		Rasters.clear();
 		ArtChoices.clear();
+		DropReadPictures();
 		LightTexture = nullptr;
 		FieldTexture = nullptr;
 		BlobTexture = nullptr;
@@ -5251,6 +5830,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		CacheRenderer = renderer;
 	}
 	CheckPalette();
+	ReadAhead(worldSize);
 	if (Rasters.size() > 20000) {
 		// Every picture on screen is made again in the next frame: a likely freeze, so the play log notes it.
 		TelemetryHdCacheDropped(Rasters.size());

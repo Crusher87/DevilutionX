@@ -15,17 +15,17 @@ town	roof_drips	1.2		How many drops a second fall from the roof edge over each l
 town	town_fog	30		How many patches of low mist lie by the stream and between the graves at once (idea 18); half as many again when the ground is wet. 0 none.
 town	town_fog_alpha	0.14		How thick each patch of that mist is: 0.05 barely there, 0.15 heavy.
 town	town_fog_colour	0.72 0.78 0.86		That mist's own colour, red green blue, before the light on it colours it.
-town	town_water	1		How much the stream glints and the fountain sprays (idea 19): 1 normal, 0 none.
-town	town_water_alpha	0.5		How bright those glints are: 0.25 faint, 1 bright.
-town	town_water_colour	0.78 0.87 1		The glints' own colour, red green blue.
+town	town_water	1		How much water the fountain drops into its basin (idea 19): 1 normal, 0 none. (The stream itself only takes the rain's rings.)
+town	town_water_alpha	0.5		How bright the fountain's drops and the glints in its basin are: 0.25 faint, 1 bright.
+town	town_water_colour	0.78 0.87 1		Their own colour, red green blue.
 town	fountain_height	26		How high over the ground the water leaves the fountain's pillar, in game pixels.
 town	fountain_basin	13		How high over the ground the water in the fountain's basin lies, in game pixels.
-town	town_leaves	1		How many dead leaves blow over the ground (idea 20): 1 a few now and then and more in a storm, 0 none.
+town	town_leaves	1.5		How many dead leaves blow over the ground (idea 20): 1 a few now and then and more in a storm, 0 none.
 town	cathedral_glow	0.75		How bright the cathedral doorway's red glow is for a new hero, against the glow before this (idea 21).
 town	cathedral_glow_deep	0.6		How much brighter that glow gets by the time the hero has reached the last floor of Hell.
 town	cathedral_breath	0.15		How much the glow swells and fades as it breathes, once every five seconds: 0 steady.
-town	cathedral_mist	10		How many patches of cold mist creep out of the cathedral door at once for a hero who has been to the bottom (idea 21); a new hero sees under half.
-town	cathedral_mist_alpha	1.6		How thick that mist is against the mist by the stream: 1 the same, 2 twice as thick.
+town	cathedral_mist	16		How many puffs of cold mist are rolling out of the cathedral door at once for a hero who has been to the bottom (idea 21); a new hero sees under half.
+town	cathedral_mist_alpha	3		How thick that mist is against the mist by the stream: 1 the same, 2 twice as thick.
 cathedral	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 cathedral	warm	1.12 0.95 0.76	1.16 0.90 0.68	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 cathedral	cool	0.74 0.84 1.08	0.68 0.78 1.02	The shadows' colour, first floor to last: deeper further down (idea 4).

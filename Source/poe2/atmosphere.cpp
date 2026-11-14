@@ -75,6 +75,7 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "water", 1.F, "the stream and the fountain glint and move, the fountain splashes (idea 19)" },
 	{ "wind", 1.F, "dead leaves blow over the ground with the wind, more in a storm (idea 20)" },
 	{ "cathedral", 1.F, "the cathedral door breathes red and cold mist creeps out, more the deeper you've been (idea 21)" },
+	{ "readahead", 1.F, "HD pictures load in the background before they come into view; 0 loads each as it first shows, the old way (works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

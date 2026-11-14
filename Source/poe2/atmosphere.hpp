@@ -91,8 +91,13 @@ enum class Knob : uint8_t {
 	Wind,
 	/** Idea 21: the cathedral's doorway breathes a red glow and cold mist creeps out of it, stronger the deeper the hero has been. */
 	Cathedral,
+	/**
+	 * Not a look: HD pictures are read from disk off the frame, before they come into view (see hd.cpp's reader). At 0
+	 * each is read in the frame that first shows it, as before.
+	 */
+	ReadAhead,
 };
-inline constexpr size_t NumKnobs = 28;
+inline constexpr size_t NumKnobs = 29;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);
