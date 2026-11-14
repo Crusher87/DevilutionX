@@ -310,34 +310,55 @@ void SetLoop(SoundSample *sample, float gain)
 		sample->Play(/*numIterations=*/0);
 }
 
-void UpdateSound()
+/**
+ * @brief How hard the weather sounds, 0 to 1. It follows the weather's strength, but never faster than a fade: the rain
+ * comes in over a few seconds and dies away over a few more, even where the weather itself is there or gone at once
+ * (the console, a doorway down to the dungeon).
+ */
+float Heard = 0;
+Kind HeardKind = Kind::Rain;
+constexpr float SoundInMs = 3500;
+constexpr float SoundOutMs = 5000;
+
+void UpdateSound(float ms)
 {
 	if (!SoundReady()) {
 		if (Audio.playing)
 			StopSound();
+		Heard = 0;
 		return;
 	}
 	const float s = Now.strength;
-	if (s <= 0.01F) {
+	if (s > Heard)
+		Heard = std::min(s, Heard + ms / SoundInMs);
+	else
+		Heard = std::max(s, Heard - ms / SoundOutMs);
+	if (Heard <= 0.002F) {
 		if (Audio.playing)
 			StopSound();
+		Heard = 0;
 		return;
 	}
 	MakeSounds();
 	Audio.playing = true;
-	const float rain = Now.kind == Kind::Rain ? 1.F : 0.F;
-	const float snow = Now.kind == Kind::Snow ? 1.F : 0.F;
+	// The kind that is fading out is still the one heard.
+	if (s > 0.01F)
+		HeardKind = Now.kind;
+	const float rain = HeardKind == Kind::Rain ? 1.F : 0.F;
+	const float snow = HeardKind == Kind::Snow ? 1.F : 0.F;
+	// Up from silence: the first of the fade is the sound coming in, whatever it settles at.
+	const float in = std::min(1.F, Heard * 5);
 	if (Audio.heavy != nullptr) {
 		// The rain gives way to the downpour as it gets heavier; the two overlap in the middle.
-		const float light = std::clamp(1.F - std::abs(s - 0.35F) / 0.4F, 0.F, 1.F) * std::min(1.F, s * 4);
-		const float heavy = std::clamp((s - 0.3F) / 0.6F, 0.F, 1.F);
+		const float light = std::clamp(1.F - std::abs(Heard - 0.35F) / 0.4F, 0.F, 1.F) * in;
+		const float heavy = std::clamp((Heard - 0.3F) / 0.6F, 0.F, 1.F);
 		SetLoop(Audio.light.get(), rain * light * 0.8F);
 		SetLoop(Audio.heavy.get(), rain * heavy * 0.9F);
 	} else {
 		// One recording for all of it: quiet in a drizzle, full in a downpour.
-		SetLoop(Audio.light.get(), rain * std::clamp(0.12F + 0.88F * s * s, 0.F, 1.F));
+		SetLoop(Audio.light.get(), rain * in * std::clamp(0.3F + 0.7F * Heard, 0.F, 1.F));
 	}
-	SetLoop(Audio.wind.get(), snow * std::clamp(0.2F + s * 0.7F, 0.F, 0.9F));
+	SetLoop(Audio.wind.get(), snow * in * std::clamp(0.2F + Heard * 0.7F, 0.F, 0.9F));
 }
 
 void PlayThunder(float gain)
@@ -355,7 +376,7 @@ void PlayThunder(float gain)
 	clap.Play(1);
 }
 #else
-void UpdateSound()
+void UpdateSound(float /*ms*/)
 {
 }
 
@@ -483,7 +504,7 @@ void Advance(float ms)
 	Now.wind = std::clamp(Wander(Clock, 0.15F, 2.7F) * (0.3F + 0.7F * Now.strength) + gust * gust * 0.5F * Now.strength, -1.F, 1.F);
 
 	AdvanceLightning(ms);
-	UpdateSound();
+	UpdateSound(ms);
 }
 
 void Reseed(uint32_t seed)
