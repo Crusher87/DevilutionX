@@ -258,6 +258,11 @@ void BeginFront(const Surface &world);
 /** @brief Records the shape of a hero's or monster's sprite as it's drawn into the world, to draw it again over the effects. */
 void MarkFront(const Surface &out, Point position, ClxSprite sprite);
 /**
+ * @brief Idea 66: notes a hero or townsperson as they are drawn into the world, so that the stream can show them mirrored
+ * at their feet. Nothing is kept unless the stream is in view with its reflections on.
+ */
+void NoteReflection(const Surface &out, Point position, ClxSprite sprite);
+/**
  * @brief Whether the walls, pillars and arches standing on this tile are in front of a portal, so they hide it as heroes
  * do (Curtis, Rogue run 2: the town portal was drawn over the walls in front of it).
  */
@@ -336,6 +341,11 @@ Piece At(size_t index);
  * @param worldSize The world's size in pixels; the renderer's logical size can be smaller (the UI's).
  */
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
+/**
+ * @brief Idea 66: draws the shafts of light out of Tristram's bright doorways onto the floor. Called by the HD world
+ * between its floor and its shadows, so the shadows fall across them and everyone stands in front of them.
+ */
+void DrawFloorShafts(SDL_Renderer *renderer, float toLogical);
 #endif
 
 } // namespace devilution::vfx

@@ -5138,9 +5138,9 @@ void DrawProp(SDL_Renderer *renderer, const PropDraw &prop, float toLogical)
 		SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
 		SDL_UpdateTexture(texture, nullptr, picture.rgba, picture.width * 4);
 	}
-	// What runs on the floor is drawn a little brighter than where it is, as the game draws the other heroes: a small
-	// dark thing on a dark floor would not be seen at all.
-	const Colour3 light = ToColour(shape.onWall ? light::FaceAt(shape.lightX, shape.lightY) : light::Boost(light::At(shape.lightX, shape.lightY), 3));
+	// What runs on the floor is drawn a touch brighter than where it is: a small dark thing on a dark floor would not be
+	// seen at all. Only a touch, so that it still belongs to the dark it runs in.
+	const Colour3 light = ToColour(shape.onWall ? light::FaceAt(shape.lightX, shape.lightY) : light::Boost(light::At(shape.lightX, shape.lightY), 2));
 	const SDL_Color shade { ColourByte(light[0]), ColourByte(light[1]), ColourByte(light[2]), ColourByte(shape.alpha) };
 	std::array<SDL_Vertex, props::MaxPairs * 2> vertices;
 	std::array<int, (props::MaxPairs - 1) * 6> indices;
@@ -5349,6 +5349,11 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 	NextWallShade = std::numeric_limits<size_t>::max();
 	LastTileDrawKnown = false;
 	DrawingAt = 0;
+	{
+		// A bright doorway's shaft of light lies on the floor, under the shadows and whoever stands in it (idea 66).
+		const FramePartScope part(FramePart::Atmosphere);
+		vfx::DrawFloorShafts(renderer, toLogical);
+	}
 	const bool joined = DrawJoinedShadows(renderer, worldSize, toLogical);
 	size_t nextProp = 0;
 	for (size_t i = FloorEnd; i < Draws.size(); i++) {

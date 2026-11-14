@@ -289,11 +289,11 @@ Canvas PaintRat()
 {
 	Canvas canvas;
 	canvas.resize(RatWide, RatTall * RatFrames);
-	// Paler than a real rat: it is seen in dim light on a dark floor, and has to stand out from it as the old game's
-	// monsters do.
-	const Rgba fur { 128, 110, 94, 1 };
-	const Rgba belly { 188, 168, 142, 1 };
-	const Rgba skin { 214, 160, 146, 1 };
+	// A little paler than a real rat, as it is seen in dim light on a dark floor; but dark enough to belong to the
+	// place (the first ones were paler and bigger, and stood out from it: Curtis 2026-11-14).
+	const Rgba fur { 100, 86, 74, 1 };
+	const Rgba belly { 144, 128, 108, 1 };
+	const Rgba skin { 168, 126, 114, 1 };
 	// Front and hind feet, how far forward of where the leg starts; and the body's rise in the stride.
 	const std::array<float, RatFrames> front { 2.6F, 0.9F, -1.6F, 0.2F };
 	const std::array<float, RatFrames> hind { -2.6F, -0.4F, 2.F, 0.6F };
@@ -821,7 +821,7 @@ Shape RatShape(const Rat &rat, Point tile)
 	const bool right = sx >= 0;
 	// Its picture runs level; turned to the slope the floor's lines have on screen.
 	const float slope = std::atan2(sy * 0.5F, std::abs(sx) > 0 ? std::abs(sx) : 1.F) * (right ? 1.F : -1.F);
-	const float size = std::clamp(atmosphere::Value("rat_size", 0.8F), 0.3F, 1.5F);
+	const float size = std::clamp(atmosphere::Value("rat_size", 0.4F), 0.2F, 1.5F);
 	const float c = std::cos(slope);
 	const float s = std::sin(slope);
 	const int frame = static_cast<int>(rat.age / 55) % RatFrames;

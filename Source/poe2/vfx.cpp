@@ -4798,6 +4798,13 @@ SDL_Surface *FloorSurface = nullptr;
 bool FloorFresh = false;
 /** @brief Idea 66: the stream was in view last frame with its reflections on, so this frame's need the floor's copy. */
 bool StreamSeen = false;
+/** @brief Idea 66: a hero or townsperson drawn into this frame's world: where (the sprite's lower left, in the world's own pixels before any zoom) and which picture. */
+struct MirroredFigure {
+	int x;
+	int y;
+	ClxSprite sprite;
+};
+std::vector<MirroredFigure> MirroredFigures;
 
 /** @brief Solid where a hero or monster standing in front of a portal or a flame was drawn this frame, the size of the world. */
 SDL_Surface *FrontSurface = nullptr;
@@ -4832,6 +4839,7 @@ void CopyFloor(const Surface &world)
 	for (int y = 0; y < world.h(); y++)
 		std::memcpy(static_cast<uint8_t *>(FloorSurface->pixels) + static_cast<ptrdiff_t>(y) * FloorSurface->pitch, world.at(0, y), world.w());
 	FloorFresh = true;
+	MirroredFigures.clear();
 }
 
 Surface FloorCopy()
@@ -4968,6 +4976,13 @@ Surface FrontMask()
 {
 	return FrontFresh && FrontUsed ? Surface(FrontSurface) : Surface();
 }
+
+void NoteReflection(const Surface &out, Point position, ClxSprite sprite)
+{
+	if (!StreamSeen || !FloorFresh || MirroredFigures.size() >= 24)
+		return;
+	MirroredFigures.push_back({ out.region.x + position.x, out.region.y + position.y, sprite });
+}
 #else
 bool WantsFloorCopy()
 {
@@ -5006,6 +5021,10 @@ void BeginFront(const Surface &)
 }
 
 void MarkFront(const Surface &, Point, ClxSprite)
+{
+}
+
+void NoteReflection(const Surface &, Point, ClxSprite)
 {
 }
 
@@ -10251,8 +10270,11 @@ void DrawLampGlow()
 /**
  * @brief Idea 66: the lit air between a bright doorway and the ground its light lands on: a soft wedge that widens and
  * fades on its way out, with a few faint streaks along it. Nothing moves in it: the dust in the air has its own.
+ * It is drawn with the HD world, on the floor and under the shadows and everyone and everything that stands on it
+ * (DrawFloorShafts): drawn over them it read as a lamp shining straight on Ogden in his doorway (Curtis 2026-11-14),
+ * when the light comes from behind him.
  */
-void DrawShafts()
+void DrawShafts(Batch &batch)
 {
 	const float strength = std::min(AirStrength(atmosphere::Knob::Shafts), 3.F);
 	if (strength <= 0)
@@ -10284,7 +10306,7 @@ void DrawShafts()
 		const float alpha = peak * lamp.shaft * std::min(lamp.strength, 1.6F);
 		constexpr int Along = 10;
 		constexpr int Across = 12;
-		const int first = static_cast<int>(Haze.vertices.size());
+		const int first = static_cast<int>(batch.vertices.size());
 		for (int a = 0; a <= Along; a++) {
 			const float u = static_cast<float>(a) / Along;
 			const float half = half0 + (half1 - half0) * u;
@@ -10295,14 +10317,14 @@ void DrawShafts()
 				const float v = -1 + 2 * static_cast<float>(b) / Across;
 				const float edge = 1 - std::abs(v);
 				const float streaks = 0.72F + 0.28F * std::cos(v * 7.F + 0.8F) * std::cos(v * 2.3F - 0.4F);
-				Haze.add(ToScreen(from + along * u + side * (v * half)), colour, alpha * lengthwise * edge * std::sqrt(edge) * streaks);
+				batch.add(ToScreen(from + along * u + side * (v * half)), colour, alpha * lengthwise * edge * std::sqrt(edge) * streaks);
 			}
 		}
 		for (int a = 0; a < Along; a++) {
 			for (int b = 0; b < Across; b++) {
 				const int corner = first + a * (Across + 1) + b;
-				Haze.tri(corner, corner + Across + 1, corner + 1);
-				Haze.tri(corner + 1, corner + Across + 1, corner + Across + 2);
+				batch.tri(corner, corner + Across + 1, corner + 1);
+				batch.tri(corner + 1, corner + Across + 1, corner + Across + 2);
 			}
 		}
 	}
@@ -10878,12 +10900,16 @@ void DrawHeatShimmer(SDL_Renderer *renderer, Size worldSize, float toLogical)
 	}
 }
 
-/** @brief Idea 66: how strongly the stream mirrors what stands at its edge here and now (0 when off, or out of town). */
+/** @brief Idea 66: how far the stream's reflections are turned up here and now (0 when off, or out of town). */
+float ReflectAmount()
+{
+	return leveltype == DTYPE_TOWN ? std::min(AirStrength(atmosphere::Knob::Reflect), 2.F) : 0.F;
+}
+
+/** @brief Idea 66: how strongly the stream mirrors whoever stands by it here and now (0 when off, or out of town). */
 float ReflectStrength()
 {
-	if (leveltype != DTYPE_TOWN)
-		return 0;
-	const float strength = std::min(AirStrength(atmosphere::Knob::Reflect), 2.F) * atmosphere::Value("reflect_alpha", 0.F);
+	const float strength = ReflectAmount() * atmosphere::Value("reflect_alpha", 0.F);
 	return strength > 0.004F ? strength : 0.F;
 }
 
@@ -10930,14 +10956,19 @@ SDL_Texture *WaterTexture = nullptr;
 /** @brief The water is worked out afresh this often, in milliseconds, and drawn every frame: it moves slowly. */
 constexpr uint32_t WaterEveryMs = 30;
 
+/** @brief Idea 66: scratch a hero's or townsperson's picture is drawn into, to be mirrored from. */
+SDL_Surface *FigureSurface = nullptr;
+
 /**
- * @brief Idea 66: whoever stands at the far edge of Tristram's stream shows in the water, upside down, with the bank's
- * edge faintly along it, and the open water takes a little of the sky. Worked out in game pixels and only where the
- * water is: down each column of water, what lies above the bank is mirrored into it, fading with distance and sliding
- * slowly from side to side. What stands out from the ground behind it (a hero, a cow, a trunk) shows most; the water
- * itself stays dark. Nothing is added where something stands in front of the water, and nothing glints (the glints
- * were clutter, Curtis 2026-11-14). It is worked out some thirty times a second and drawn every frame, held to the
- * ground when the view moves in between.
+ * @brief Idea 66: whoever stands by Tristram's stream with water in front of their feet shows in it, whole and upside
+ * down from the feet, as a mirror would show them; the bank's edge shows faintly along the far side, and the open
+ * water takes a little of the sky. Worked out in game pixels and only where the water is. Each hero and townsperson is
+ * mirrored from their own picture, about the line they stand on, fading towards the head and sliding slowly from side
+ * to side. (The first build mirrored whatever lay above the bank about the water's edge: rocks, trunks and a hero's
+ * legs on the bridge came out as bright blots nobody could read, and the hero was too faint: Curtis 2026-11-14.)
+ * Nothing is added where something stands in front of the water, and nothing glints (the glints were clutter, Curtis
+ * 2026-11-14). It is worked out some thirty times a second and drawn every frame, held to the ground when the view
+ * moves in between.
  */
 void DrawReflections(SDL_Renderer *renderer, Size worldSize, float toLogical)
 {
@@ -11052,15 +11083,17 @@ void DrawReflections(SDL_Renderer *renderer, Size worldSize, float toLogical)
 	const weather::State &weatherNow = weather::Current();
 	// Rain breaks the water up: less shows in it while it falls.
 	const float calm = 1 - 0.6F * std::clamp(weatherNow.strength, 0.F, 1.F);
-	const float reach = std::clamp(atmosphere::Value("reflect_reach", 55.F), 8.F, 200.F);
+	const float amount = ReflectAmount();
+	// How far down the water a figure shows, and how far the bank does, in game pixels.
+	const float figureReach = std::clamp(atmosphere::Value("reflect_reach", 110.F), 8.F, 200.F);
+	const float reach = std::clamp(atmosphere::Value("reflect_bank_reach", 14.F), 2.F, 60.F);
+	const float bank = atmosphere::Value("reflect_bank", 0.15F) * amount;
 	const float wobble = atmosphere::Value("reflect_wobble", 1.1F);
-	const float skyAmount = atmosphere::Value("reflect_sky", 0.07F) * strength / 0.5F;
+	const float skyAmount = atmosphere::Value("reflect_sky", 0.07F) * amount;
 	const hd::light::Rgb skyLight = hd::light::Sky();
 	const std::array<float, 3> sky { 255 * skyAmount * 0.35F * skyLight.r, 255 * skyAmount * 0.42F * skyLight.g, 255 * skyAmount * 0.62F * skyLight.b };
-	// The mirror lies this far up the bank from the water's edge, in game pixels.
+	// The bank's mirror lies this far up it from the water's edge, in game pixels.
 	constexpr int Gap = 4;
-	// What stands out from the ground behind it shows this much more than the ground does, in the water's cool colour.
-	constexpr float StandOut = 4.F;
 	const int depthEnd = static_cast<int>(reach);
 	static std::vector<float> fades;
 	static std::vector<float> slides;
@@ -11071,7 +11104,7 @@ void DrawReflections(SDL_Renderer *renderer, Size worldSize, float toLogical)
 	for (int d = 0; d <= depthEnd; d++) {
 		const float along = static_cast<float>(d) / reach;
 		// The taps below add up to 256 between them.
-		fades[static_cast<size_t>(d)] = strength * calm * std::pow(std::max(1 - along, 0.F), 1.2F) / 256;
+		fades[static_cast<size_t>(d)] = bank * calm * std::pow(std::max(1 - along, 0.F), 1.2F) / 256;
 		slides[static_cast<size_t>(d)] = wobble * (0.35F + along);
 	}
 	for (int d = 0; d <= 20; d++)
@@ -11089,8 +11122,6 @@ void DrawReflections(SDL_Renderer *renderer, Size worldSize, float toLogical)
 	}
 	WaterColumns.assign(width, WaterColumn {});
 
-	const uint8_t *floorPixels = static_cast<const uint8_t *>(FloorSurface->pixels);
-	const ptrdiff_t floorPitch = FloorSurface->pitch;
 	const auto wetAt = [&](int gx, int gy) { return gy >= 0 && gy < gh && WaterWet[static_cast<size_t>(gy) * width + static_cast<size_t>(gx)] != 0; };
 	// One reading of the bank's light serves the columns close beside it.
 	int lightX = -100;
@@ -11175,7 +11206,7 @@ void DrawReflections(SDL_Renderer *renderer, Size worldSize, float toLogical)
 				g = sky[1] * open;
 				b = sky[2] * open;
 			}
-			if (depth <= depthEnd) {
+			if (depth <= depthEnd && bank > 0) {
 				const float wave = rowWave + 0.6F * (rowSin * columnCos[static_cast<size_t>(gx)] + rowCos * columnSin[static_cast<size_t>(gx)]);
 				// Between two pixels of what is mirrored, so it slides smoothly and not a whole pixel at a time.
 				const float fromX = static_cast<float>(gx) + slides[static_cast<size_t>(depth)] * wave;
@@ -11184,35 +11215,101 @@ void DrawReflections(SDL_Renderer *renderer, Size worldSize, float toLogical)
 				const int right = static_cast<int>((fromX - static_cast<float>(sx)) * 256);
 				const int sy = static_cast<int>(column.edge - Gap - 0.95F * static_cast<float>(depth) + 0.5F);
 				if (sx >= 0 && sx + 1 < gw && sy >= 0) {
+					// The bank there, over the two pixels: faint, and in its own colours.
 					const uint8_t *thereRow = world.at(sx * scale, sy * scale);
-					const uint8_t *bareRow = floorPixels + static_cast<ptrdiff_t>(sy * scale) * floorPitch + sx * scale;
-					const uint8_t *bedRow = &WaterBed[static_cast<size_t>(sy) * width + static_cast<size_t>(sx)];
-					// What is there, and how far it stands out from the ground behind it, over the two pixels.
-					int there[3] = { 0, 0, 0 };
-					int stands[3] = { 0, 0, 0 };
-					for (int side = 0; side < 2; side++) {
-						const int share = side == 0 ? 256 - right : right;
-						const uint8_t index = thereRow[side * scale];
-						const uint8_t ground = bedRow[side] != 0 ? bedRow[side] : bareRow[side * scale];
-						const SDL_Color &colour = system_palette[index];
-						there[0] += share * colour.r;
-						there[1] += share * colour.g;
-						there[2] += share * colour.b;
-						if (index != ground) {
-							const SDL_Color &behind = system_palette[ground];
-							stands[0] += share * std::max(colour.r - behind.r, 0);
-							stands[1] += share * std::max(colour.g - behind.g, 0);
-							stands[2] += share * std::max(colour.b - behind.b, 0);
-						}
-					}
+					const SDL_Color &first = system_palette[thereRow[0]];
+					const SDL_Color &second = system_palette[thereRow[scale]];
 					const float k = fades[static_cast<size_t>(depth)];
-					r += k * column.light[0] * (StandOut * 0.8F * static_cast<float>(stands[0]) + 0.3F * static_cast<float>(there[0]));
-					g += k * column.light[1] * (StandOut * 0.9F * static_cast<float>(stands[1]) + 0.3F * static_cast<float>(there[1]));
-					b += k * column.light[2] * (StandOut * static_cast<float>(stands[2]) + 0.3F * static_cast<float>(there[2]));
+					r += k * column.light[0] * static_cast<float>((256 - right) * first.r + right * second.r);
+					g += k * column.light[1] * static_cast<float>((256 - right) * first.g + right * second.g);
+					b += k * column.light[2] * static_cast<float>((256 - right) * first.b + right * second.b);
 				}
 			}
 			const uint8_t bytes[4] = { static_cast<uint8_t>(std::min(r, 255.F)), static_cast<uint8_t>(std::min(g, 255.F)), static_cast<uint8_t>(std::min(b, 255.F)), 255 };
 			std::memcpy(&out[gx], bytes, sizeof(bytes));
+		}
+	}
+
+	// Whoever stands by the water, mirrored about the line they stand on. A figure's feet are this far up from the foot
+	// of its picture, and the water lies this far below the ground they stand on.
+	constexpr int FeetUp = 15;
+	constexpr int WaterLow = 3;
+	for (const MirroredFigure &figure : MirroredFigures) {
+		const int wide = figure.sprite.width();
+		const int tall = figure.sprite.height();
+		const int left = figure.x;
+		const int mirror = figure.y - FeetUp + WaterLow;
+		const int rowsEnd = std::min({ mirror + static_cast<int>(figureReach), mirror + (mirror - (figure.y - tall)), lastRow, gh - 1 });
+		const int rowsFrom = std::max(mirror + 1, firstRow);
+		if (wide <= 0 || tall <= 0 || wide > 512 || tall > 512 || rowsEnd < rowsFrom || left + wide + 2 <= 0 || left - 2 >= gw)
+			continue;
+		bool reaches = false;
+		for (int gy = rowsFrom; gy <= rowsEnd && !reaches; gy++)
+			reaches = WaterTo[static_cast<size_t>(gy)] > left - 2 && WaterFrom[static_cast<size_t>(gy)] < left + wide + 2;
+		if (!reaches)
+			continue;
+		if (FigureSurface == nullptr || FigureSurface->w < wide || FigureSurface->h < tall) {
+			if (FigureSurface != nullptr)
+				SDL_FreeSurface(FigureSurface);
+			FigureSurface = SDL_CreateRGBSurfaceWithFormat(0, std::max(wide, 160), std::max(tall, 160), 8, SDL_PIXELFORMAT_INDEX8);
+			if (FigureSurface == nullptr)
+				break;
+		}
+		const SDL_Rect box { 0, 0, wide, tall };
+		SDL_FillRect(FigureSurface, &box, 0);
+		ClxDraw(Surface(FigureSurface, box), Point { 0, tall - 1 }, figure.sprite);
+		const uint8_t *picture = static_cast<const uint8_t *>(FigureSurface->pixels);
+		const ptrdiff_t picturePitch = FigureSurface->pitch;
+		// They show in the light they stand in, a little cooled by the water.
+		const hd::light::Rgb light = LightOf(Vec { static_cast<float>(originX + left + wide / 2), static_cast<float>(originY + figure.y - FeetUp) });
+		const std::array<float, 3> tint { 0.85F * std::min(light.r, 1.5F), 0.93F * std::min(light.g, 1.5F), std::min(light.b, 1.5F) };
+		for (int gy = rowsFrom; gy <= rowsEnd; gy++) {
+			const int from = std::max<int>({ static_cast<int>(WaterFrom[static_cast<size_t>(gy)]), left - 2, 0 });
+			const int to = std::min<int>({ static_cast<int>(WaterTo[static_cast<size_t>(gy)]), left + wide + 2, gw });
+			const int depth = gy - mirror;
+			const int row = mirror - depth - (figure.y - tall + 1);
+			if (to <= from || row < 0 || row >= tall)
+				continue;
+			const float along = static_cast<float>(depth) / figureReach;
+			// The taps below add up to 256 between them.
+			const float k = strength * calm * std::pow(std::max(1 - along, 0.F), 0.7F) / 256;
+			const float y = 2.F * static_cast<float>(originY + gy);
+			const float slide = wobble * (0.35F + along) * (std::sin(y * 0.21F + phase) + 0.6F * std::sin(y * 0.083F - phase + 2.F * static_cast<float>(originX + left) * 0.031F));
+			const uint8_t *wet = &WaterWet[static_cast<size_t>(gy) * width];
+			const uint8_t *bed = &WaterBed[static_cast<size_t>(gy) * width];
+			const uint8_t *shown = world.at(0, gy * scale);
+			const uint8_t *source = picture + static_cast<ptrdiff_t>(row) * picturePitch;
+			uint32_t *out = &WaterAdd[static_cast<size_t>(gy) * width];
+			for (int gx = from; gx < to; gx++) {
+				if (wet[gx] == 0 || shown[gx * scale] != bed[gx])
+					continue;
+				const float fromX = static_cast<float>(gx - left) + slide;
+				const int sx = static_cast<int>(fromX + 64.F) - 64;
+				const int right = static_cast<int>((fromX - static_cast<float>(sx)) * 256);
+				const uint8_t first = sx >= 0 && sx < wide ? source[sx] : 0;
+				const uint8_t second = sx + 1 >= 0 && sx + 1 < wide ? source[sx + 1] : 0;
+				if (first == 0 && second == 0)
+					continue;
+				// (A pixel of the picture's colour 0 is no part of the figure.)
+				int there[3] = { 0, 0, 0 };
+				if (first != 0) {
+					const SDL_Color &colour = system_palette[first];
+					there[0] += (256 - right) * colour.r;
+					there[1] += (256 - right) * colour.g;
+					there[2] += (256 - right) * colour.b;
+				}
+				if (second != 0) {
+					const SDL_Color &colour = system_palette[second];
+					there[0] += right * colour.r;
+					there[1] += right * colour.g;
+					there[2] += right * colour.b;
+				}
+				uint8_t bytes[4];
+				std::memcpy(bytes, &out[gx], sizeof(bytes));
+				for (int c = 0; c < 3; c++)
+					bytes[c] = static_cast<uint8_t>(std::min(static_cast<float>(bytes[c]) + k * tint[static_cast<size_t>(c)] * static_cast<float>(there[c]), 255.F));
+				std::memcpy(&out[gx], bytes, sizeof(bytes));
+			}
 		}
 	}
 
@@ -11304,7 +11401,6 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	const weather::State &sky = weather::Current();
 	Haze.clear();
 	DrawLampGlow();
-	DrawShafts();
 	StreamSeen = StreamInView();
 	if (!StreamSeen && Haze.indices.empty() && Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && Splashes.empty() && Motes.empty() && Wisps.empty() && Drips.empty() && Swarms.empty() && Marks.empty() && sky.strength <= 0 && sky.flash <= 0 && Wetness() <= 0.01F && Fogs.empty() && Glints.empty() && Sprays.empty() && Leaves.empty()) {
 		FrontFresh = false;
@@ -11435,7 +11531,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	// only its mist and rain in the air: Curtis 2026-11-14, ten frames a second lost to the rain).
 	if (!Glowing.indices.empty())
 		SubmitGlow(renderer, Glowing);
-	// Idea 66: the glow in the air and the shafts of light are soft as they are drawn, so they go straight on.
+	// Idea 66: the glow in the air is soft as it is drawn, so it goes straight on.
 	if (!Haze.indices.empty()) {
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
 		Submit(renderer, Haze, toLogical);
@@ -11445,6 +11541,25 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	(void)renderer;
 	(void)worldSize;
 	(void)logicalSize;
+#endif
+}
+
+void DrawFloorShafts(SDL_Renderer *renderer, float toLogical)
+{
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+	static Batch shafts;
+	shafts.clear();
+	DrawShafts(shafts);
+	if (shafts.indices.empty())
+		return;
+	SDL_BlendMode before = SDL_BLENDMODE_NONE;
+	SDL_GetRenderDrawBlendMode(renderer, &before);
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+	Submit(renderer, shafts, toLogical);
+	SDL_SetRenderDrawBlendMode(renderer, before);
+#else
+	(void)renderer;
+	(void)toLogical;
 #endif
 }
 #endif
