@@ -27,6 +27,14 @@ town	cathedral_breath	0.15		How much the glow swells and fades as it breathes, o
 town	cathedral_mist	16		How many puffs of cold mist are rolling out of the cathedral door at once for a hero who has been to the bottom (idea 21); a new hero sees under half.
 town	cathedral_mist_alpha	3		How thick that mist is against the mist by the stream: 1 the same, 2 twice as thick.
 town	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+town	glow_alpha	0.2		How bright the wide soft glow in the air round the lamps, lit windows, forge and doors is (idea 66). 0 none, 0.4 twice as bright.
+town	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+town	shaft_alpha	0.45		How bright the shaft of lit air out of the tavern and cathedral doors is (idea 66). 0 none, 0.2 the quiet setting.
+town	shaft_reach	1		How far out the shaft runs: 1 normal, 0.5 half as far.
+town	reflect_alpha	0.5		How strongly whoever stands at the stream's edge shows in the water (idea 66). 0 none, 0.85 strong.
+town	reflect_reach	55		How far down the water the reflection runs before it has faded out, in game pixels.
+town	reflect_sky	0.07		How much of the evening sky's colour the open water takes. 0 none.
+town	reflect_wobble	1.1		How far the reflection slides from side to side, in game pixels. 0 still.
 cathedral	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 cathedral	warm	1.12 0.95 0.76	1.16 0.90 0.68	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 cathedral	cool	0.74 0.84 1.08	0.68 0.78 1.02	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -70,6 +78,8 @@ cathedral	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels
 cathedral	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
 cathedral	rat_speed	5		How fast a rat runs, in tiles a second.
 cathedral	rat_size	0.8		How big a rat is. 1 is 32 game pixels from nose to tail.
+cathedral	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+cathedral	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 catacombs	warm	1.00 0.97 0.93	1.04 0.92 0.85	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 catacombs	cool	0.68 0.82 1.14	0.62 0.76 1.08	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -103,6 +113,8 @@ catacombs	chain_gap	9		One plain stretch of wall in this many holds a chain with
 catacombs	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
 catacombs	rat_speed	5		How fast a rat runs, in tiles a second.
 catacombs	rat_size	0.8		How big a rat is. 1 is 32 game pixels from nose to tail.
+catacombs	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+catacombs	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 caves	falloff	1.50	1.65	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 caves	warm	1.16 0.90 0.66	1.20 0.85 0.58	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 caves	cool	0.84 0.76 0.74	0.78 0.70 0.68	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -139,6 +151,8 @@ caves	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in th
 caves	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
 caves	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
 caves	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+caves	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+caves	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 hell	falloff	1.40	1.55	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 hell	warm	1.18 0.86 0.64	1.22 0.81 0.56	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 hell	cool	1.00 0.60 0.56	0.94 0.54 0.50	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -167,6 +181,8 @@ hell	hidden_sway	1.6		How far that ripple sways from side to side, in game pixel
 hell	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
 hell	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
 hell	chain_gap	8		One plain stretch of wall in this many holds a chain with a hook (idea 63). 0 none.
+hell	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+hell	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 hive	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 hive	warm	1.08 1.02 0.70	1.12 0.97 0.62	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 hive	cool	0.80 0.94 0.62	0.74 0.88 0.56	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -196,6 +212,8 @@ hive	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the
 hive	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
 hive	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
 hive	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+hive	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+hive	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 crypt	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 crypt	warm	0.98 1.04 0.90	1.02 0.99 0.82	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 crypt	cool	0.72 0.98 0.80	0.66 0.92 0.74	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -229,6 +247,8 @@ crypt	web_gap	2.5		One room corner in this many holds a cobweb (idea 64). 1 ever
 crypt	web_alpha	0.6		How much of a cobweb shows. 0 none, 1 solid.
 crypt	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
 crypt	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels. 0 still.
+crypt	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+crypt	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 butcher	light	1.4		The Butcher's room (idea 46): how bright the red light inside is. A torch is 2. It spills out when his door opens.
 butcher	light_colour	1.00 0.18 0.10		Its colour, red green blue.
 butcher	light_radius	6		How far it reaches, in tiles.

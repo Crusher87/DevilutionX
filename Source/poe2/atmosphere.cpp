@@ -85,6 +85,9 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "chains", 1.F, "chains with hooks hang by the walls and sway when something passes (idea 63)" },
 	{ "cobwebs", 1.F, "cobwebs in the wall corners that tremble in the draft (idea 64)" },
 	{ "rats", 1.F, "a rat or two runs off into the dark as your light reaches it (idea 62)" },
+	{ "glow", 1.F, "a wide soft glow round flames, lamps and lit windows; 2 twice as bright (idea 66)" },
+	{ "shafts", 1.F, "a shaft of lit air out of a bright doorway; 0.5 half as bright (idea 66)" },
+	{ "reflect", 1.F, "you show in Tristram's stream when you stand at its edge, and the water takes a little of the sky (idea 66)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

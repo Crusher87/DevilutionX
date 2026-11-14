@@ -184,6 +184,15 @@ struct Lamp {
 	float strength = 1;
 	/** @brief It is the cathedral's doorway in town. */
 	bool door = false;
+	/** @brief How far its light reaches, in tiles. */
+	float reach = 0;
+	/**
+	 * @brief How much of a shaft of lit air it throws out of its opening (idea 66): 1 for a doorway with a fire behind it,
+	 * less for a fire set back under a roof, 0 for a lamp or a window.
+	 */
+	float shaft = 0;
+	/** @brief How far out from the opening that shaft comes down to the ground, in tiles. */
+	float shaftLength = 0;
 };
 
 /** @brief The level's lamps and fires (not its lava). Returns how many were written to out. */
