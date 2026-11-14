@@ -182,6 +182,8 @@ struct Lamp {
 	std::array<float, 3> colour {};
 	/** @brief How bright it shines this frame against the hero's own glow (1), flicker and all. */
 	float strength = 1;
+	/** @brief It is the cathedral's doorway in town. */
+	bool door = false;
 };
 
 /** @brief The level's lamps and fires (not its lava). Returns how many were written to out. */

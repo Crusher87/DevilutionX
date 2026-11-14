@@ -22,6 +22,7 @@
 #include "levels/trigs.h"
 #include "player.h"
 #include "poe2/atmosphere.hpp"
+#include "poe2/defenses.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
 #include "poe2/weather.hpp"
@@ -110,6 +111,8 @@ constexpr uint8_t TorchFlicker = 1;
 constexpr uint8_t CandleFlicker = 2;
 constexpr uint8_t FireFlicker = 3;
 constexpr uint8_t StairsBreath = 4;
+/** @brief The cathedral's doorway in town: its red glow breathes, and is stronger the deeper the hero has been (idea 21). */
+constexpr uint8_t DoorBreath = 5;
 
 // The colours of the lights, before they're evened out.
 constexpr Colour TorchColour { 1.00F, 0.60F, 0.28F };
@@ -1227,7 +1230,7 @@ void AddRoomLights()
  * @param flutter How much its flame flutters as someone hurries past (idea 25, 0 to 1 and a little over): its flicker
  * is some three times as strong, and its light dips and shivers.
  */
-float FlickerOf(const Source &source, float flicker, float stairs, float flutter)
+float FlickerOf(const Source &source, float flicker, float stairs, float flutter, float door)
 {
 	const float shiver = flutter > 0 ? flutter * (0.12F * std::sin(vfx::Clock() * 0.047F + static_cast<float>(source.flickerSeed % 628) / 100.F) - 0.08F) : 0.F;
 	flicker += 2 * flutter;
@@ -1239,6 +1242,13 @@ float FlickerOf(const Source &source, float flicker, float stairs, float flutter
 		// A slow swell, about once every four seconds, never in step with other stairs.
 		const float phase = static_cast<float>(source.flickerSeed % 628) / 100.F;
 		return 1 + 0.18F * std::min(stairs, 1.F) * std::sin(vfx::Clock() * 0.0016F + phase);
+	}
+	case DoorBreath: {
+		// A slow breath, once every five seconds, round a glow that grows with the deepest floor the hero has reached.
+		const float deep = MyPlayer != nullptr ? std::clamp(static_cast<float>(DeepestDungeonLevel(*MyPlayer)) / 16.F, 0.F, 1.F) : 0.F;
+		const float glow = atmosphere::Value("cathedral_glow", 0.75F) + atmosphere::Value("cathedral_glow_deep", 0.6F) * deep;
+		const float breath = 1 + atmosphere::Value("cathedral_breath", 0.15F) * std::sin(vfx::Clock() * 0.00126F);
+		return 1 + std::min(door, 1.F) * (glow * breath - 1);
 	}
 	default: return 1;
 	}
@@ -1384,7 +1394,8 @@ void ApplyFlicker()
 	const float flicker = atmosphere::Strength(atmosphere::Knob::Flicker) * atmosphere::Value("flicker", 1);
 	const float stairs = atmosphere::Strength(atmosphere::Knob::Stairs);
 	const bool flutters = atmosphere::Strength(atmosphere::Knob::Flutter) > 0;
-	if (flicker <= 0 && stairs <= 0 && !flutters) {
+	const float door = atmosphere::Strength(atmosphere::Knob::Cathedral);
+	if (flicker <= 0 && stairs <= 0 && !flutters && door <= 0) {
 		for (Source &source : StaticSources)
 			source.flicker = 1;
 		return;
@@ -1393,7 +1404,7 @@ void ApplyFlicker()
 		Source &source = StaticSources[s];
 		const bool flame = IsAnyOf(source.flickerKind, TorchFlicker, CandleFlicker, FireFlicker);
 		const float flutter = flutters && flame ? vfx::FlameFlutter(Point { static_cast<int>(std::lround(source.x)), static_cast<int>(std::lround(source.y)) }) : 0.F;
-		const float factor = FlickerOf(source, flicker, stairs, flutter);
+		const float factor = FlickerOf(source, flicker, stairs, flutter, door);
 		source.flicker = factor;
 		const Patch &patch = StaticPatches[s];
 		if (std::abs(factor - 1) < 1e-3F || patch.linear.empty())
@@ -1451,6 +1462,8 @@ void UpdateStatics()
 				source.flickerKind = TorchFlicker;
 			else if (fire.colour == CandleColour)
 				source.flickerKind = CandleFlicker;
+			else if (fire.colour == CathedralDoorColour)
+				source.flickerKind = DoorBreath;
 			source.flickerSeed = (static_cast<uint32_t>(fire.x * 8) * 73856093U) ^ (static_cast<uint32_t>(fire.y * 8) * 19349663U);
 			PlaceRays(source);
 			StaticSources.push_back(source);
@@ -2183,6 +2196,7 @@ int Lamps(Lamp *out, int maxCount)
 		if (source.lava || source.glow || source.carried || source.flickerKind == StairsBreath)
 			continue;
 		Lamp &lamp = out[count++];
+		lamp.door = source.flickerKind == DoorBreath;
 		lamp.x = source.rayX;
 		lamp.y = source.rayY;
 		lamp.height = source.height;
