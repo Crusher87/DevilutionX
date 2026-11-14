@@ -1001,8 +1001,8 @@ std::string FramePartsText(const TelemetryCounts &counts)
 	if (counts.frames <= 0)
 		return {};
 	const auto part = [&](FramePart which) { return counts.framePartMs[static_cast<size_t>(which)] / counts.frames; };
-	return std::format(", frame ms: drawing {:.1f} (world {:.1f}), world upload {:.1f}, hd {:.1f}, effects {:.1f}, ui layer {:.1f}, present {:.1f}",
-	    part(FramePart::Drawing), part(FramePart::World), part(FramePart::WorldUpload), part(FramePart::Hd), part(FramePart::Effects),
+	return std::format(", frame ms: drawing {:.1f} (world {:.1f}), world upload {:.1f}, hd {:.1f} (atmosphere {:.2f}), effects {:.1f}, ui layer {:.1f}, present {:.1f}",
+	    part(FramePart::Drawing), part(FramePart::World), part(FramePart::WorldUpload), part(FramePart::Hd), part(FramePart::Atmosphere), part(FramePart::Effects),
 	    part(FramePart::UiLayer), part(FramePart::Present));
 }
 
@@ -1036,6 +1036,7 @@ void WriteStatsLine(uint32_t now)
 	    .add("worldMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::World)] / Window.frames : 0.0)
 	    .add("worldUploadMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::WorldUpload)] / Window.frames : 0.0)
 	    .add("hdMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Hd)] / Window.frames : 0.0)
+	    .add("atmosphereMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Atmosphere)] / Window.frames : 0.0)
 	    .add("effectsMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Effects)] / Window.frames : 0.0)
 	    .add("uiLayerMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::UiLayer)] / Window.frames : 0.0)
 	    .add("presentMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Present)] / Window.frames : 0.0)

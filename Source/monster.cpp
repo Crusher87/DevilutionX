@@ -3659,6 +3659,8 @@ std::expected<void, std::string> InitTRNForUniqueMonster(Monster &monster)
 	char filestr[64];
 	*BufCopy(filestr, R"(monsters\monsters\)", UniqueMonstersData[static_cast<size_t>(monster.uniqueType)].mTrnName, ".trn") = '\0';
 	ASSIGN_OR_RETURN(monster.uniqueMonsterTRN, LoadFileInMemWithStatus<uint8_t>(filestr));
+	// POE2 Mashup: its sprites drawn in these colours show their own HD art.
+	hd::RegisterRecolour(monster.uniqueMonsterTRN.get(), UniqueMonstersData[static_cast<size_t>(monster.uniqueType)].mTrnName);
 	return {};
 }
 

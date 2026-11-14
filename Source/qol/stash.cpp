@@ -32,6 +32,7 @@
 #include "plrmsg.h"
 #include "poe2/currency.hpp"
 #include "poe2/economy_state.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/item_search.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
@@ -479,9 +480,11 @@ void DrawStash(const Surface &out)
 
 		if (pcursstashitem == itemId) {
 			const uint8_t color = GetOutlineColor(item, true);
-			ClxDrawOutline(out, color, position, sprite);
+			// POE2 Mashup: in HD the outline of the item under the cursor shows smooth and fades in, as the world's do.
+			const hd::OutlineScope outlineLook({ .glow = ItemOutlineGlows(item), .hovered = true });
+			DrawItemOutline(item, out, color, position, sprite);
 		} else if (HeldCurrencyFits(item)) {
-			ClxDrawOutline(out, PAL16_ORANGE + 2, position, sprite);
+			DrawItemOutline(item, out, PAL16_ORANGE + 2, position, sprite);
 		}
 
 		DrawItem(item, out, position, sprite);

@@ -107,6 +107,8 @@ UiFlags DetailColor(InfoLineStyle style)
 	switch (style) {
 	case InfoLineStyle::Mod:
 	case InfoLineStyle::Affix:
+	case InfoLineStyle::NewMod:
+	case InfoLineStyle::NewAffix:
 	case InfoLineStyle::AugmentedProperty:
 		return UiFlags::ColorBlue;
 	case InfoLineStyle::Corrupted:

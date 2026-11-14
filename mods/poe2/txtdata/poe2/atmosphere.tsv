@@ -1,0 +1,258 @@
+area	knob	first	last	note
+town	edges	0.12		Town: the screen's corners a touch darker (idea 6). 0 none, 0.5 half dark in the corners.
+town	flicker	1		How much the forge, lamps and lit windows flicker (idea 1): 0 steady, 1 normal, 2 double.
+town	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+town	rain_sky	0.22		How much of the evening sky's light a downpour takes away (idea 23): the town darkens and the lamps and windows stand out. 0 none, 0.5 half.
+town	lightning	1		How much light a lightning strike adds, in evening skies (idea 23): 1 lights the town about as bright as a dull day for a moment. 0 none. It is light on the town with shadows, never a white screen.
+town	rain_drops	2		How many raindrops fall: 1 normal, 2 twice as many.
+town	rain_alpha	1		How easy the raindrops and their splashes are to see: 1 normal, 0.5 half as bright.
+town	rain_splash	1		How many drops throw up a splash where they land: 1 normal, 0 none.
+town	rain_colour	0.74 0.82 0.95		The rain's own colour, red green blue, before the light on it colours it.
+town	rain_veil	0.05		How much a downpour lifts the far dark towards grey, the air being full of water: 0 none, 0.1 a clear haze.
+town	rain_veil_colour	0.30 0.35 0.43		That haze's colour, red green blue.
+town	wet_shine	1		How bright the lamps and lit windows shine back off wet ground (ideas 23 and 14): 0 none, 1 strong. The ground gets wet as it rains and dries in a few minutes after.
+town	roof_drips	1.2		How many drops a second fall from the roof edge over each lamp or lit window while the ground is wet.
+town	town_fog	30		How many patches of low mist lie by the stream and between the graves at once (idea 18); half as many again when the ground is wet. 0 none.
+town	town_fog_alpha	0.14		How thick each patch of that mist is: 0.05 barely there, 0.15 heavy.
+town	town_fog_colour	0.72 0.78 0.86		That mist's own colour, red green blue, before the light on it colours it.
+town	town_water	1		How much water the fountain drops into its basin (idea 19): 1 normal, 0 none. (The stream itself only takes the rain's rings.)
+town	town_water_alpha	0.5		How bright the fountain's drops and the glints in its basin are: 0.25 faint, 1 bright.
+town	town_water_colour	0.78 0.87 1		Their own colour, red green blue.
+town	fountain_height	26		How high over the ground the water leaves the fountain's pillar, in game pixels.
+town	fountain_basin	13		How high over the ground the water in the fountain's basin lies, in game pixels.
+town	town_leaves	1.5		How many dead leaves blow over the ground (idea 20): 1 a few now and then and more in a storm, 0 none.
+town	cathedral_glow	0.75		How bright the cathedral doorway's red glow is for a new hero, against the glow before this (idea 21).
+town	cathedral_glow_deep	0.6		How much brighter that glow gets by the time the hero has reached the last floor of Hell.
+town	cathedral_breath	0.15		How much the glow swells and fades as it breathes, once every five seconds: 0 steady.
+town	cathedral_mist	16		How many puffs of cold mist are rolling out of the cathedral door at once for a hero who has been to the bottom (idea 21); a new hero sees under half.
+town	cathedral_mist_alpha	3		How thick that mist is against the mist by the stream: 1 the same, 2 twice as thick.
+town	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+town	glow_alpha	0.2		How bright the wide soft glow in the air round the lamps, lit windows, forge and doors is (idea 66). 0 none, 0.4 twice as bright.
+town	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+town	shaft_alpha	0.45		How bright the shaft of lit air out of the tavern and cathedral doors is (idea 66). 0 none, 0.2 the quiet setting.
+town	shaft_reach	1		How far out the shaft runs: 1 normal, 0.5 half as far.
+town	reflect_alpha	0.5		How strongly whoever stands at the stream's edge shows in the water (idea 66). 0 none, 0.85 strong.
+town	reflect_reach	55		How far down the water the reflection runs before it has faded out, in game pixels.
+town	reflect_sky	0.07		How much of the evening sky's colour the open water takes. 0 none.
+town	reflect_wobble	1.1		How far the reflection slides from side to side, in game pixels. 0 still.
+cathedral	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+cathedral	warm	1.12 0.95 0.76	1.16 0.90 0.68	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+cathedral	cool	0.74 0.84 1.08	0.68 0.78 1.02	The shadows' colour, first floor to last: deeper further down (idea 4).
+cathedral	edges	0.20	0.26	How dark the screen's corners get, first floor to last (idea 6).
+cathedral	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+cathedral	stairs_down	0.30	0.36	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+cathedral	stairs_down_colour	1.00 0.48 0.24	1.00 0.42 0.20	Its colour, red green blue: redder further down.
+cathedral	stairs_down_radius	4		How far it reaches, in tiles.
+cathedral	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+cathedral	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+cathedral	stairs_up_radius	3		How far it reaches, in tiles.
+cathedral	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+cathedral	dust	30	40	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+cathedral	dust_colour	1.00 0.92 0.80		The dust's colour, red green blue, before the light's colour.
+cathedral	drips	1.05		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+cathedral	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before the light's colour.
+cathedral	mist	18	24	How many slow puffs of haze hang in view, first floor to last (idea 3). They glow round the flames and are gone in the dark.
+cathedral	mist_colour	1.00 0.90 0.78		The haze's colour, red green blue, before the light's colour.
+cathedral	mist_alpha	0.06		How thick each puff of haze is: 0.05 is faint, 0.15 is thick.
+cathedral	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+cathedral	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+cathedral	daylight	1.3		How bright the cold daylight down the stairs from town is, on the first floor only (idea 24). A torch is 2. 0 none.
+cathedral	daylight_colour	0.80 0.88 1.00		Its colour, red green blue.
+cathedral	daylight_radius	6		How far it reaches, in tiles.
+cathedral	daylight_dust	14		How many extra specks of dust drift in it.
+cathedral	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+cathedral	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+cathedral	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+cathedral	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+cathedral	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+cathedral	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+cathedral	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+cathedral	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+cathedral	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+cathedral	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+cathedral	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+cathedral	web_gap	2.5		One room corner in this many holds a cobweb (idea 64). 1 every corner, 0 none.
+cathedral	web_alpha	0.6		How much of a cobweb shows. 0 none, 1 solid.
+cathedral	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
+cathedral	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels. 0 still.
+cathedral	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
+cathedral	rat_speed	5		How fast a rat runs, in tiles a second.
+cathedral	rat_size	0.8		How big a rat is. 1 is 32 game pixels from nose to tail.
+cathedral	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+cathedral	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+catacombs	warm	1.00 0.97 0.93	1.04 0.92 0.85	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+catacombs	cool	0.68 0.82 1.14	0.62 0.76 1.08	The shadows' colour, first floor to last: deeper further down (idea 4).
+catacombs	edges	0.24	0.30	How dark the screen's corners get, first floor to last (idea 6).
+catacombs	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+catacombs	stairs_down	0.42	0.48	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+catacombs	stairs_down_colour	1.00 0.42 0.20	1.00 0.38 0.18	Its colour, red green blue: redder further down.
+catacombs	stairs_down_radius	4		How far it reaches, in tiles.
+catacombs	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+catacombs	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+catacombs	stairs_up_radius	3		How far it reaches, in tiles.
+catacombs	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+catacombs	dust	28	35	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+catacombs	dust_colour	0.90 0.95 1.00		The dust's colour, red green blue, before the light's colour.
+catacombs	drips	2.4		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+catacombs	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before the light's colour.
+catacombs	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+catacombs	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+catacombs	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+catacombs	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+catacombs	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+catacombs	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+catacombs	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+catacombs	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+catacombs	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+catacombs	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+catacombs	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+catacombs	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+catacombs	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+catacombs	chain_gap	9		One plain stretch of wall in this many holds a chain with a hook (idea 63). 0 none.
+catacombs	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
+catacombs	rat_speed	5		How fast a rat runs, in tiles a second.
+catacombs	rat_size	0.8		How big a rat is. 1 is 32 game pixels from nose to tail.
+catacombs	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+catacombs	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+caves	falloff	1.50	1.65	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+caves	warm	1.16 0.90 0.66	1.20 0.85 0.58	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+caves	cool	0.84 0.76 0.74	0.78 0.70 0.68	The shadows' colour, first floor to last: deeper further down (idea 4).
+caves	edges	0.24	0.30	How dark the screen's corners get, first floor to last (idea 6).
+caves	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+caves	stairs_down	0.55	0.62	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+caves	stairs_down_colour	1.00 0.38 0.16	1.00 0.34 0.14	Its colour, red green blue: redder further down.
+caves	stairs_down_radius	4		How far it reaches, in tiles.
+caves	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+caves	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+caves	stairs_up_radius	3		How far it reaches, in tiles.
+caves	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+caves	dust	22	30	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+caves	dust_colour	1.00 0.85 0.70		The dust's colour, red green blue, before the light's colour.
+caves	drips	1.8		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+caves	drip_colour	0.80 0.85 0.95		The drops' colour, red green blue, before the light's colour.
+caves	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+caves	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+caves	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+caves	lava_breath	0.12		How much of the lava's light comes and goes as it swells and fades (idea 30): 0 steady, 0.12 an eighth of it.
+caves	lava_breath_s	6		How many seconds one swell takes.
+caves	lava_edge	1		How strong the orange edge is on heroes and monsters standing by the lava, on the side turned to it (idea 30). 0 none.
+caves	haze	1.5		How far the lava sways in its heat, in game pixels (idea 31). 0 none.
+caves	lava_far	0.010	0.014	How bright the dim orange glow is that fills a cavern with lava in it, first floor to last (idea 32). 0 none; 0.02 is plain to see.
+caves	lava_far_reach	10		How many tiles round a spot count as its cavern.
+caves	lava_far_full	0.06		The share of those tiles that is lava for all of the glow.
+caves	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+caves	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+caves	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+caves	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+caves	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+caves	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+caves	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+caves	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+caves	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+caves	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+caves	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+caves	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+hell	falloff	1.40	1.55	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+hell	warm	1.18 0.86 0.64	1.22 0.81 0.56	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+hell	cool	1.00 0.60 0.56	0.94 0.54 0.50	The shadows' colour, first floor to last: deeper further down (idea 4).
+hell	edges	0.28	0.34	How dark the screen's corners get, first floor to last (idea 6).
+hell	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+hell	stairs_down	0.75	0.90	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+hell	stairs_down_colour	1.00 0.28 0.14	1.00 0.22 0.12	Its colour, red green blue: redder further down.
+hell	stairs_down_radius	4		How far it reaches, in tiles.
+hell	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+hell	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+hell	stairs_up_radius	3		How far it reaches, in tiles.
+hell	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+hell	dust	15	20	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+hell	dust_colour	1.00 0.80 0.70		The dust's colour, red green blue, before the light's colour.
+hell	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+hell	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+hell	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+hell	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+hell	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+hell	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+hell	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+hell	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+hell	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+hell	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+hell	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+hell	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+hell	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+hell	chain_gap	8		One plain stretch of wall in this many holds a chain with a hook (idea 63). 0 none.
+hell	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+hell	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+hive	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+hive	warm	1.08 1.02 0.70	1.12 0.97 0.62	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+hive	cool	0.80 0.94 0.62	0.74 0.88 0.56	The shadows' colour, first floor to last: deeper further down (idea 4).
+hive	edges	0.26	0.32	How dark the screen's corners get, first floor to last (idea 6).
+hive	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+hive	stairs_down	0.50	0.56	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+hive	stairs_down_colour	1.00 0.50 0.20	1.00 0.44 0.18	Its colour, red green blue: redder further down.
+hive	stairs_down_radius	4		How far it reaches, in tiles.
+hive	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+hive	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+hive	stairs_up_radius	3		How far it reaches, in tiles.
+hive	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+hive	dust	18	22	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+hive	dust_colour	0.95 1.00 0.80		The dust's colour, red green blue, before the light's colour.
+hive	drips	2.1		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+hive	drip_colour	0.85 1.00 0.70		The drops' colour, red green blue, before the light's colour.
+hive	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+hive	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+hive	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+hive	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+hive	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+hive	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+hive	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+hive	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+hive	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+hive	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+hive	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+hive	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+hive	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+hive	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+hive	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+crypt	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
+crypt	warm	0.98 1.04 0.90	1.02 0.99 0.82	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
+crypt	cool	0.72 0.98 0.80	0.66 0.92 0.74	The shadows' colour, first floor to last: deeper further down (idea 4).
+crypt	edges	0.26	0.32	How dark the screen's corners get, first floor to last (idea 6).
+crypt	flicker	1		How much the torches, candles and braziers flicker (idea 1): 0 steady, 1 normal, 2 double.
+crypt	stairs_down	0.50	0.56	How bright the glow from below the stairs down is, first floor to last (idea 48). A torch is 2.
+crypt	stairs_down_colour	0.90 0.50 0.30	0.95 0.40 0.24	Its colour, red green blue: redder further down.
+crypt	stairs_down_radius	4		How far it reaches, in tiles.
+crypt	stairs_up	0.35		How bright the cold light down the stairs up is (idea 48).
+crypt	stairs_up_colour	0.75 0.85 1.00		Its colour, red green blue.
+crypt	stairs_up_radius	3		How far it reaches, in tiles.
+crypt	linger_ms	330		How long a spell's light takes to fade after it ends (idea 10, a maybe, off until switched on in the console), in milliseconds.
+crypt	dust	35	45	How many specks of dust float in view, first floor to last (idea 2). They only show where light falls.
+crypt	dust_colour	0.92 1.00 0.92		The dust's colour, red green blue, before the light's colour.
+crypt	drips	1.5		How many drops fall from the ceiling a second, over the whole view (idea 11). 0 none.
+crypt	drip_colour	0.75 0.85 1.00		The drops' colour, red green blue, before the light's colour.
+crypt	smoke	1		How much higher the flames' smoke rises before it thins out (idea 11): 0 as before, 1 normal, 2 double.
+crypt	flies	1		How many flies round each hanging body and old corpse (idea 11): 1 normal, 0.5 half.
+crypt	flutter	1		How much flames flutter as you or a monster hurry past (idea 25): 0 not at all, 1 normal, 2 double.
+crypt	door_reveal_ms	330		How long the room behind a door takes to come up from the dark when the door opens (idea 47), in milliseconds.
+crypt	door_dust	9		How many specks of dust swirl in the doorway as the door opens. 0 none.
+crypt	descent_open_ms	480		How long the dark takes to open out again on the new floor after stairs down (idea 49), in milliseconds. The closing takes as long as the fade between floors does anyway.
+crypt	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
+crypt	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
+crypt	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+crypt	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+crypt	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+crypt	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+crypt	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+crypt	web_gap	2.5		One room corner in this many holds a cobweb (idea 64). 1 every corner, 0 none.
+crypt	web_alpha	0.6		How much of a cobweb shows. 0 none, 1 solid.
+crypt	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
+crypt	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels. 0 still.
+crypt	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
+crypt	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+butcher	light	1.4		The Butcher's room (idea 46): how bright the red light inside is. A torch is 2. It spills out when his door opens.
+butcher	light_colour	1.00 0.18 0.10		Its colour, red green blue.
+butcher	light_radius	6		How far it reaches, in tiles.
+butcher	door_light	0.45		How bright the dull red glow under his closed door is.
+butcher	drips	1.5		How many drops of blood fall in his room a second.
+butcher	drip_colour	0.45 0.03 0.04		The blood's colour, red green blue.
+butcher	chain_gap	2		One plain stretch of his walls in this many holds a chain with a hook (idea 63). 0 none.
