@@ -1683,13 +1683,16 @@ void GatherDynamic(float heroX, float heroY)
 		// Tristram's evening is lit by its sky and its fires: no glow round the heroes (the game keeps a light on each).
 		if (leveltype == DTYPE_TOWN && !kinds[id].spell)
 			continue;
+		// The hero being played carries their light where they are drawn. (The game's own record of where that light is
+		// can be left behind, in the rock, after a level change or a load until the hero moves; the light was lost then.)
+		const bool mine = id == myLight && !std::isnan(heroX);
 		// As the game does: a monster hidden in a wall doesn't give itself away.
-		if (TileHasAny(light.position.tile, TileProperties::Solid))
+		if (!mine && TileHasAny(light.position.tile, TileProperties::Solid))
 			continue;
 		Source source;
 		source.x = static_cast<float>(light.position.tile.x) + static_cast<float>(light.position.offset.deltaX) / 8.F;
 		source.y = static_cast<float>(light.position.tile.y) + static_cast<float>(light.position.offset.deltaY) / 8.F;
-		if (id == myLight && !std::isnan(heroX)) {
+		if (mine) {
 			source.x = heroX;
 			source.y = heroY;
 		}
