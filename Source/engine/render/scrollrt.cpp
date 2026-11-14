@@ -86,6 +86,7 @@
 #include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/hud_minions.hpp"
+#include "poe2/moments.hpp"
 #include "poe2/corner_map.hpp"
 #include "poe2/overhead_bars.hpp"
 #include "poe2/quest_tracker.hpp"
@@ -1124,6 +1125,15 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 
 	const auto &monster = Monsters[mi];
 	if ((monster.flags & MFLAG_HIDDEN) != 0) {
+		// POE2 Mashup: the Atmosphere option's idea 57. An unseen monster on the move bends the air a little: only in
+		// the HD world, where its picture is noted as a faint trace and never drawn.
+		if (hd::Recording && monster.animInfo.sprites) {
+			if (const float shown = moments::HiddenShimmer(static_cast<size_t>(mi)); shown > 0) {
+				const ClxSprite sprite = monster.animInfo.currentSprite();
+				const hd::GhostScope ghost(shown);
+				hd::RecordSprite(out, targetBufferPosition + monster.getRenderingOffset(sprite), sprite, nullptr, hd::SpriteStyle::Normal);
+			}
+		}
 		return;
 	}
 	// POE2 Mashup: a monster caught without a picture is skipped and logged, not a crash (Curtis 2026-10-19, maps).
@@ -1179,6 +1189,8 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 	const int lightTableIndex = dLight[tilePosition.x][tilePosition.y];
 
 	DrawCell(out, lightmap, tilePosition, targetBufferPosition, lightTableIndex);
+	// POE2 Mashup: the Atmosphere option's small things by this tile's walls and on its floor (chains, cobwebs, rats).
+	hd::RecordProps();
 
 	const int8_t bDead = dCorpse[tilePosition.x][tilePosition.y];
 	const int8_t bMap = dTransVal[tilePosition.x][tilePosition.y];

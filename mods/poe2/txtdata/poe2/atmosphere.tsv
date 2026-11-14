@@ -59,6 +59,17 @@ cathedral	descent_open_ms	480		How long the dark takes to open out again on the 
 cathedral	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
 cathedral	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
 cathedral	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+cathedral	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+cathedral	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+cathedral	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+cathedral	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+cathedral	web_gap	2.5		One room corner in this many holds a cobweb (idea 64). 1 every corner, 0 none.
+cathedral	web_alpha	0.6		How much of a cobweb shows. 0 none, 1 solid.
+cathedral	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
+cathedral	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels. 0 still.
+cathedral	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
+cathedral	rat_speed	5		How fast a rat runs, in tiles a second.
+cathedral	rat_size	0.8		How big a rat is. 1 is 32 game pixels from nose to tail.
 catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 catacombs	warm	1.00 0.97 0.93	1.04 0.92 0.85	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 catacombs	cool	0.68 0.82 1.14	0.62 0.76 1.08	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -84,6 +95,14 @@ catacombs	descent_open_ms	480		How long the dark takes to open out again on the 
 catacombs	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
 catacombs	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
 catacombs	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+catacombs	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+catacombs	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+catacombs	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+catacombs	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+catacombs	chain_gap	9		One plain stretch of wall in this many holds a chain with a hook (idea 63). 0 none.
+catacombs	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
+catacombs	rat_speed	5		How fast a rat runs, in tiles a second.
+catacombs	rat_size	0.8		How big a rat is. 1 is 32 game pixels from nose to tail.
 caves	falloff	1.50	1.65	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 caves	warm	1.16 0.90 0.66	1.20 0.85 0.58	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 caves	cool	0.84 0.76 0.74	0.78 0.70 0.68	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -116,6 +135,10 @@ caves	descent_open_ms	480		How long the dark takes to open out again on the new 
 caves	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
 caves	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
 caves	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+caves	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+caves	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+caves	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+caves	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
 hell	falloff	1.40	1.55	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 hell	warm	1.18 0.86 0.64	1.22 0.81 0.56	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 hell	cool	1.00 0.60 0.56	0.94 0.54 0.50	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -139,6 +162,11 @@ hell	descent_open_ms	480		How long the dark takes to open out again on the new f
 hell	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
 hell	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
 hell	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+hell	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+hell	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+hell	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+hell	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+hell	chain_gap	8		One plain stretch of wall in this many holds a chain with a hook (idea 63). 0 none.
 hive	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 hive	warm	1.08 1.02 0.70	1.12 0.97 0.62	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 hive	cool	0.80 0.94 0.62	0.74 0.88 0.56	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -164,6 +192,10 @@ hive	descent_open_ms	480		How long the dark takes to open out again on the new f
 hive	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
 hive	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
 hive	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+hive	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+hive	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+hive	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+hive	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
 crypt	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 crypt	warm	0.98 1.04 0.90	1.02 0.99 0.82	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 crypt	cool	0.72 0.98 0.80	0.66 0.92 0.74	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -189,9 +221,18 @@ crypt	descent_open_ms	480		How long the dark takes to open out again on the new 
 crypt	quiet_ms	1500		How long the quiet after a fight lasts (idea 50), in milliseconds: the flames flicker half as much, the dust sinks and the mist comes back.
 crypt	quiet_dust	26		How many specks of dust drift down round the hero as the quiet starts. 0 none.
 crypt	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
+crypt	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
+crypt	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
+crypt	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
+crypt	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
+crypt	web_gap	2.5		One room corner in this many holds a cobweb (idea 64). 1 every corner, 0 none.
+crypt	web_alpha	0.6		How much of a cobweb shows. 0 none, 1 solid.
+crypt	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
+crypt	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels. 0 still.
 butcher	light	1.4		The Butcher's room (idea 46): how bright the red light inside is. A torch is 2. It spills out when his door opens.
 butcher	light_colour	1.00 0.18 0.10		Its colour, red green blue.
 butcher	light_radius	6		How far it reaches, in tiles.
 butcher	door_light	0.45		How bright the dull red glow under his closed door is.
 butcher	drips	1.5		How many drops of blood fall in his room a second.
 butcher	drip_colour	0.45 0.03 0.04		The blood's colour, red green blue.
+butcher	chain_gap	2		One plain stretch of his walls in this many holds a chain with a hook (idea 63). 0 none.

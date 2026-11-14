@@ -103,6 +103,20 @@ struct CasterScope {
 };
 
 /**
+ * @brief Set while something unseen is noted for the HD world (the Atmosphere option's idea 57, the Hidden's shimmer):
+ * how much of it shows, 0 for a thing drawn as usual. It is drawn as a faint wavering trace of its own picture, casts
+ * no shadow and takes no outline.
+ */
+extern float CurrentGhost;
+
+struct GhostScope {
+	explicit GhostScope(float shown) { CurrentGhost = shown; }
+	~GhostScope() { CurrentGhost = 0; }
+	GhostScope(const GhostScope &) = delete;
+	GhostScope &operator=(const GhostScope &) = delete;
+};
+
+/**
  * @brief How an outline the game draws in the world shows in HD: thicker round rare monsters and bosses, with a slow
  * glow round bosses and unique or quest items, and fading in on the thing under the cursor.
  */
@@ -159,6 +173,12 @@ struct TileScope {
 	TileScope(const TileScope &) = delete;
 	TileScope &operator=(const TileScope &) = delete;
 };
+
+/**
+ * @brief Notes the small things standing on the current tile (props.hpp: chains, cobwebs, rats) at this point of the
+ * world's drawing, so they are drawn over the tile's own walls and under whatever stands in front of them.
+ */
+void RecordProps();
 
 /** @brief The HD Graphics option is on and an HD pack is installed. */
 bool Enabled();

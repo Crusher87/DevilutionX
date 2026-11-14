@@ -57,6 +57,7 @@
 #include "poe2/moments.hpp"
 #include "poe2/monster_armour.hpp"
 #include "poe2/monster_mods.hpp"
+#include "poe2/props.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/skill_looks.hpp"
 #include "poe2/telemetry.hpp"
@@ -4628,6 +4629,7 @@ void AdvanceAir(float ms)
 	const FramePartScope part(FramePart::Atmosphere);
 	// The moments' news of this frame, for the dust (taken here so none of it waits for a floor that has dust).
 	moments::Advance(ms);
+	props::Advance(ms);
 	QuietJustStarted = moments::TakeQuietStarted();
 	DoorsJustOpened.clear();
 	int doorX;

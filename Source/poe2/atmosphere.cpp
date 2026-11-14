@@ -80,6 +80,11 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "descent", 1.F, "taking stairs down, the dark closes in on you and opens again on the new floor (idea 49)" },
 	{ "quiet", 1.F, "after a fight the dust settles, the mist rolls back and the flames steady for a second (idea 50)" },
 	{ "death", 1.F, "when you die your light shrinks, the flames near you die down and the colour drains to red (idea 53)" },
+	{ "hidden", 1.F, "the unseen monsters show as a faint bending of the air while they move; 0 leaves them unseen as in the old game (idea 57)" },
+	{ "growls", 1.F, "monsters waiting just outside your light are heard now and then, quietly, from their side; 2 twice as often (idea 59)" },
+	{ "chains", 1.F, "chains with hooks hang by the walls and sway when something passes (idea 63)" },
+	{ "cobwebs", 1.F, "cobwebs in the wall corners that tremble in the draft (idea 64)" },
+	{ "rats", 1.F, "a rat or two runs off into the dark as your light reaches it (idea 62)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

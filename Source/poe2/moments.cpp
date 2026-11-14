@@ -1,6 +1,7 @@
 #include "poe2/moments.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -12,10 +13,16 @@
 #include <SDL.h>
 #endif
 
+#include "diablo.h"
+#include "engine/sound.h"
+#include "engine/sound_position.hpp"
 #include "levels/gendung.h"
 #include "monster.h"
+#include "msg.h"
+#include "options.h"
 #include "player.h"
 #include "poe2/atmosphere.hpp"
+#include "poe2/props.hpp"
 
 namespace devilution::moments {
 
@@ -79,6 +86,109 @@ bool QuietStarted = false;
 // Idea 53: death.
 
 float DeathFor = 0;
+
+// Idea 57: the Hidden's shimmer.
+
+/** @brief How much each monster's trace shows, 0 to 1. */
+std::array<float, MaxMonsters> Shimmers {};
+bool AnyShimmer = false;
+
+void AdvanceShimmers(float ms)
+{
+	const float strength = atmosphere::Strength(atmosphere::Knob::Hidden);
+	if (strength <= 0) {
+		if (AnyShimmer)
+			Shimmers.fill(0);
+		AnyShimmer = false;
+		return;
+	}
+	bool any = false;
+	std::array<bool, MaxMonsters> hidden {};
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const size_t id = ActiveMonsters[i];
+		const Monster &monster = Monsters[id];
+		if ((monster.flags & MFLAG_HIDDEN) == 0)
+			continue;
+		hidden[id] = true;
+		// In over a quarter of a second as it starts to move, out over a little more once it stands.
+		float &shown = Shimmers[id];
+		shown = monster.isWalking() ? std::min(shown + ms / 250.F, 1.F) : std::max(shown - ms / 400.F, 0.F);
+		any = any || shown > 0;
+	}
+	if (AnyShimmer) {
+		for (size_t id = 0; id < MaxMonsters; id++) {
+			if (!hidden[id])
+				Shimmers[id] = 0;
+		}
+	}
+	AnyShimmer = any;
+}
+
+// Idea 59: hear them before you see them.
+
+/** @brief The nearest and furthest a waiting monster is heard from, in tiles: past the hero's light, short of silence. */
+constexpr int GrowlNearest = 6;
+constexpr int GrowlFurthest = 15;
+/** @brief Milliseconds until the next one is due. */
+float GrowlIn = 6000;
+/** @brief This file's own dice: never the game's seeded ones. */
+uint32_t Dice = 0x9E3779B9U;
+
+uint32_t Roll()
+{
+	Dice ^= Dice << 13;
+	Dice ^= Dice >> 17;
+	Dice ^= Dice << 5;
+	return Dice;
+}
+
+/**
+ * @brief Now and then one monster that waits in the dark near the hero is heard: its own voice from the old game, much
+ * quieter than in a fight and from its side. Never during a fight, and nothing the game counts on: only a sound.
+ */
+void AdvanceGrowls(float ms)
+{
+	const float strength = std::min(atmosphere::Strength(atmosphere::Knob::Growls), 3.F);
+	if (strength <= 0 || MyPlayer == nullptr || leveltype == DTYPE_TOWN)
+		return;
+	if (Fighting || PauseMode != 0 || DeathFor > 0 || MyPlayer->pLvlLoad != 0 || !gbSndInited || !gbSoundOn || gbBufferMsgs != 0)
+		return;
+	GrowlIn -= ms * strength;
+	if (GrowlIn > 0)
+		return;
+	const float every = std::max(atmosphere::Value("growl_every", 9), 2.F) * 1000;
+	GrowlIn = every * (0.6F + 0.8F * static_cast<float>(Roll() % 1000) / 1000);
+	// One of those that wait unseen, picked by this file's own dice.
+	const Point hero = MyPlayer->position.tile;
+	const Monster *picked = nullptr;
+	int waiting = 0;
+	for (size_t i = 0; i < ActiveMonsterCount; i++) {
+		const Monster &monster = Monsters[ActiveMonsters[i]];
+		if (monster.isPlayerMinion() || monster.mode == MonsterMode::Death || monster.hasNoLife())
+			continue;
+		const Point at = monster.position.tile;
+		const int far = hero.ApproxDistance(at);
+		if (far < GrowlNearest || far > GrowlFurthest || !InDungeonBounds(at) || IsTileLit(at))
+			continue;
+		waiting++;
+		if (Roll() % static_cast<uint32_t>(waiting) == 0)
+			picked = &monster;
+	}
+	if (picked == nullptr)
+		return;
+	TSnd *voice = picked->type().sounds[static_cast<size_t>(MonsterSound::Attack)][Roll() % 2].get();
+	if (voice == nullptr || voice->isPlaying())
+		return;
+	int volume = 0;
+	int pan = 0;
+	if (!CalculateSoundPosition(picked->position.tile, &volume, &pan))
+		return;
+	// Hundredths of a decibel under what the game would play it at from there.
+	volume -= static_cast<int>(std::clamp(atmosphere::Value("growl_quiet", 9), 0.F, 40.F) * 100);
+	if (volume <= ATTENUATION_MIN)
+		return;
+	snd_play_snd(voice, volume, pan, *GetOptions().Audio.soundVolume);
+}
 
 // Idea 47: doors.
 
@@ -193,6 +303,8 @@ void Advance(float ms)
 		ScanFight(SinceScan);
 		SinceScan = 0;
 	}
+	AdvanceShimmers(ms);
+	AdvanceGrowls(ms);
 	QuietLeft = std::max(QuietLeft - ms, 0.F);
 	if (Fighting)
 		FightAir = std::min(FightAir + ms / 2000.F, 1.F);
@@ -307,6 +419,11 @@ bool Quiet()
 	return QuietLeft > 0;
 }
 
+bool FightOn()
+{
+	return Fighting;
+}
+
 float DoorRevealMs()
 {
 	const float strength = atmosphere::Strength(atmosphere::Knob::Doors);
@@ -331,6 +448,14 @@ bool TakeDoorOpened(int &x, int &y)
 	return true;
 }
 
+float HiddenShimmer(size_t monsterId)
+{
+	if (!AnyShimmer || monsterId >= MaxMonsters)
+		return 0;
+	const float strength = std::min(atmosphere::Strength(atmosphere::Knob::Hidden), 3.F);
+	return std::clamp(Shimmers[monsterId] * strength * atmosphere::Value("hidden_shimmer", 0.22F), 0.F, 0.6F);
+}
+
 void Reset()
 {
 	DescentNow = Descent::None;
@@ -346,6 +471,10 @@ void Reset()
 	QuietStarted = false;
 	DeathFor = 0;
 	OpenedDoors.clear();
+	Shimmers.fill(0);
+	AnyShimmer = false;
+	GrowlIn = 6000;
+	props::Reset();
 }
 
 } // namespace devilution::moments
