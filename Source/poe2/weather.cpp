@@ -1,9 +1,12 @@
 #include "poe2/weather.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <memory>
+#include <string>
+#include <string_view>
 #include <vector>
 
 #ifdef USE_SDL3
@@ -15,6 +18,7 @@
 #include <SDL.h>
 #endif
 
+#include "engine/assets.hpp"
 #include "engine/sound.h"
 #include "engine/sound_defs.hpp"
 #include "engine/ui_scale.hpp"
@@ -133,7 +137,8 @@ void Target(Kind &kind, float &strength)
 
 void AdvanceLightning(float ms)
 {
-	Now.flash = std::max(0.F, Now.flash - ms / 150.F);
+	// The sky stays lit for under half a second: the strike, a dip, and its flicker dying away.
+	Now.flash = std::max(0.F, Now.flash - ms / 420.F);
 	if (ThunderIn > 0) {
 		ThunderIn -= ms;
 		if (ThunderIn <= 0) {
@@ -145,14 +150,19 @@ void AdvanceLightning(float ms)
 		return;
 	// Up to one strike every dozen seconds or so in a downpour, none below a steady rain.
 	const float perMs = (Now.strength - 0.6F) / 0.4F * 0.08F / 1000.F;
-	if (Random(0, 1) < perMs * ms) {
-		Now.flash = 1;
-		ThunderIn = Random(400, 1800);
-		ThunderGain = Random(0.5F, 1.F);
-	}
+	if (Random(0, 1) < perMs * ms)
+		Strike();
 }
 
-// --- Sound: rain and thunder made in memory, so no audio files are needed. --------------------------------------
+// --- Sound ------------------------------------------------------------------------------------------------------
+// Rain and thunder are real recordings, played from files: a rain made by code never sounded like rain (Curtis
+// 2026-11-14). The game looks for them first in the player's own game folder (assets\sounds\, which a download never
+// touches, so a recording that may not be shared can stay on one PC, as the HD art does), then among the mod's files
+// (sfx\poe2\). Each may be a .wav or an .mp3; a .wav loops without a gap. With no file there is no sound.
+//   rain.wav        the rain, looping; alone it gets louder as the rain gets harder
+//   rain_heavy.wav  optional: a downpour, which the rain blends into as it gets harder
+//   thunder1.wav to thunder4.wav  optional: thunder, one picked for each strike
+// The wind under snow is still made in memory.
 #ifndef NOSOUND
 
 constexpr int SampleRate = 22050;
@@ -216,77 +226,6 @@ struct Noise {
 	}
 };
 
-/**
- * @brief Rain: a hiss of filtered noise with drops pattering on top of it. Light rain is sparse patter on a thin hiss;
- * heavy rain is a dense roar with a low rumble under it.
- */
-std::vector<float> RainLoop(bool heavy)
-{
-	const size_t n = SampleRate * 4;
-	std::vector<float> s(n + SampleRate / 5);
-	Noise noise { heavy ? 0x1234567U : 0x7654321U };
-	float lp = 0;
-	float lp2 = 0;
-	float rumble = 0;
-	// Drops in flight: each a short ring that dies in a few ms.
-	struct Drop {
-		float phase, step, amp, decay;
-	};
-	std::vector<Drop> drops;
-	const float dropsPerSample = (heavy ? 1.F / 60.F : 1.F / 400.F);
-	for (size_t i = 0; i < s.size(); i++) {
-		const float white = noise.next();
-		lp += 0.35F * (white - lp);
-		lp2 += 0.04F * (lp - lp2);
-		const float hiss = (lp - lp2) * (heavy ? 0.55F : 0.22F);
-		rumble += 0.004F * (white - rumble);
-		if (noise.next() * 0.5F + 0.5F < dropsPerSample)
-			drops.push_back({ 0, Pi * 2 * (1500 + 4500 * (noise.next() * 0.5F + 0.5F)) / SampleRate, 0.15F + 0.5F * (noise.next() * 0.5F + 0.5F), 1.F - 1.F / (SampleRate * (0.002F + 0.004F * (noise.next() * 0.5F + 0.5F))) });
-		float patter = 0;
-		for (size_t d = 0; d < drops.size();) {
-			Drop &drop = drops[d];
-			patter += std::sin(drop.phase) * drop.amp;
-			drop.phase += drop.step;
-			drop.amp *= drop.decay;
-			if (drop.amp < 0.003F) {
-				drops[d] = drops.back();
-				drops.pop_back();
-			} else {
-				d++;
-			}
-		}
-		s[i] = hiss + patter * (heavy ? 0.25F : 0.35F) + (heavy ? rumble * 1.2F : 0.F);
-	}
-	MakeSeamless(s, SampleRate / 5);
-	return s;
-}
-
-/** @brief Thunder: a low rumble rolling in two or three waves and dying away over a few seconds. */
-std::vector<float> ThunderClip()
-{
-	const size_t n = SampleRate * 4;
-	std::vector<float> s(n);
-	Noise noise { 0x7A7A7A7AU };
-	float lp = 0;
-	float lp2 = 0;
-	struct Roll {
-		float at, gain, tau;
-	};
-	const Roll rolls[] = { { 0.F, 1.F, 0.9F }, { 0.7F, 0.7F, 1.1F }, { 1.6F, 0.5F, 1.4F } };
-	for (size_t i = 0; i < n; i++) {
-		const float t = static_cast<float>(i) / SampleRate;
-		lp += 0.03F * (noise.next() - lp);
-		lp2 += 0.006F * (lp - lp2);
-		float env = 0;
-		for (const Roll &roll : rolls) {
-			if (t >= roll.at)
-				env += roll.gain * std::min(1.F, (t - roll.at) / 0.08F) * std::exp(-(t - roll.at) / roll.tau);
-		}
-		s[i] = (lp2 * 3.F + lp * 0.6F) * env * 0.9F;
-	}
-	return s;
-}
-
 /** @brief Wind, for snow: deep filtered noise swelling and easing. */
 std::vector<float> WindLoop()
 {
@@ -306,8 +245,12 @@ std::vector<float> WindLoop()
 	return s;
 }
 
+constexpr int MaxThunders = 4;
+
 struct Sounds {
-	std::unique_ptr<SoundSample> light, heavy, wind, thunder;
+	std::unique_ptr<SoundSample> light, heavy, wind;
+	std::array<std::unique_ptr<SoundSample>, MaxThunders> thunder;
+	int thunders = 0;
 	bool made = false;
 	bool playing = false;
 };
@@ -319,15 +262,36 @@ bool SoundReady()
 	return gbSndInited && gbSoundOn && !HeadlessMode;
 }
 
+/** @brief A recording by its name (no ending), from the player's own folder or the mod's; nothing when there is none. */
+std::unique_ptr<SoundSample> LoadRecording(std::string_view name)
+{
+	for (const std::string_view folder : { "sounds\\", "sfx\\poe2\\" }) {
+		for (const std::string_view ending : { ".wav", ".mp3" }) {
+			const std::string path = StrCat(folder, name, ending);
+			if (!FindAsset(path).ok())
+				continue;
+			auto sample = std::make_unique<SoundSample>();
+			if (sample->SetChunkStream(path, ending == ".mp3", /*logErrors=*/true) == 0)
+				return sample;
+		}
+	}
+	return nullptr;
+}
+
 void MakeSounds()
 {
 	if (Audio.made)
 		return;
 	Audio.made = true;
-	Audio.light = MakeSample(RainLoop(false));
-	Audio.heavy = MakeSample(RainLoop(true));
+	Audio.light = LoadRecording("rain");
+	Audio.heavy = LoadRecording("rain_heavy");
 	Audio.wind = MakeSample(WindLoop());
-	Audio.thunder = MakeSample(ThunderClip());
+	Audio.thunders = 0;
+	for (int i = 0; i < MaxThunders; i++) {
+		std::unique_ptr<SoundSample> clap = LoadRecording(StrCat("thunder", i + 1));
+		if (clap != nullptr)
+			Audio.thunder[static_cast<size_t>(Audio.thunders++)] = std::move(clap);
+	}
 }
 
 /** @brief Sets a looping sample's loudness, 0 to 1, against the player's sound volume; 0 stops it. */
@@ -363,11 +327,16 @@ void UpdateSound()
 	Audio.playing = true;
 	const float rain = Now.kind == Kind::Rain ? 1.F : 0.F;
 	const float snow = Now.kind == Kind::Snow ? 1.F : 0.F;
-	// Light rain gives way to the downpour loop as it gets heavier; the two overlap in the middle.
-	const float light = std::clamp(1.F - std::abs(s - 0.35F) / 0.4F, 0.F, 1.F) * std::min(1.F, s * 4);
-	const float heavy = std::clamp((s - 0.3F) / 0.6F, 0.F, 1.F);
-	SetLoop(Audio.light.get(), rain * light * 0.8F);
-	SetLoop(Audio.heavy.get(), rain * heavy * 0.9F);
+	if (Audio.heavy != nullptr) {
+		// The rain gives way to the downpour as it gets heavier; the two overlap in the middle.
+		const float light = std::clamp(1.F - std::abs(s - 0.35F) / 0.4F, 0.F, 1.F) * std::min(1.F, s * 4);
+		const float heavy = std::clamp((s - 0.3F) / 0.6F, 0.F, 1.F);
+		SetLoop(Audio.light.get(), rain * light * 0.8F);
+		SetLoop(Audio.heavy.get(), rain * heavy * 0.9F);
+	} else {
+		// One recording for all of it: quiet in a drizzle, full in a downpour.
+		SetLoop(Audio.light.get(), rain * std::clamp(0.12F + 0.88F * s * s, 0.F, 1.F));
+	}
 	SetLoop(Audio.wind.get(), snow * std::clamp(0.2F + s * 0.7F, 0.F, 0.9F));
 }
 
@@ -376,13 +345,14 @@ void PlayThunder(float gain)
 	if (!SoundReady())
 		return;
 	MakeSounds();
-	if (Audio.thunder == nullptr)
+	if (Audio.thunders == 0)
 		return;
-	if (Audio.thunder->IsPlaying())
-		Audio.thunder->Stop();
+	SoundSample &clap = *Audio.thunder[NextRandom() % static_cast<uint32_t>(Audio.thunders)];
+	if (clap.IsPlaying())
+		clap.Stop();
 	const int attenuation = std::clamp(static_cast<int>(2000.F * std::log10(std::max(gain, 0.05F))), ATTENUATION_MIN, 0);
-	Audio.thunder->SetVolume(attenuation + *GetOptions().Audio.soundVolume * (ATTENUATION_MIN / VOLUME_MIN), ATTENUATION_MIN, 0);
-	Audio.thunder->Play(1);
+	clap.SetVolume(attenuation + *GetOptions().Audio.soundVolume * (ATTENUATION_MIN / VOLUME_MIN), ATTENUATION_MIN, 0);
+	clap.Play(1);
 }
 #else
 void UpdateSound()
@@ -454,6 +424,13 @@ void Force(std::optional<Kind> kind, float strength)
 	}
 }
 
+void Strike()
+{
+	Now.flash = 1;
+	ThunderIn = Random(400, 1800);
+	ThunderGain = Random(0.5F, 1.F);
+}
+
 void Advance(float ms)
 {
 	if (ms <= 0)
@@ -495,6 +472,11 @@ void Advance(float ms)
 		Now.strength = std::max(target, Now.strength - step);
 	if (Now.strength > 0.01F)
 		WetMs += ms;
+	// The ground soaks in under a minute of hard rain (longer in a drizzle) and takes about four to dry.
+	if (Now.kind == Kind::Rain && Now.strength > 0.02F)
+		Now.wet = std::min(1.F, Now.wet + Now.strength * ms / 45000.F);
+	else
+		Now.wet = std::max(0.F, Now.wet - ms / 240000.F);
 
 	// Wind: a slow lean that gusts, stronger in heavier weather, and never quite still while it rains.
 	const float gust = std::max(0.F, Wander(Clock, 0.9F, 4.2F));
@@ -523,11 +505,17 @@ void StopSound()
 #ifndef NOSOUND
 	// The samples go too, so nothing of theirs outlives the audio; they're made again when needed.
 	Audio.playing = false;
-	for (std::unique_ptr<SoundSample> *sample : { &Audio.light, &Audio.heavy, &Audio.wind, &Audio.thunder }) {
-		if (*sample != nullptr && (*sample)->IsPlaying())
-			(*sample)->Stop();
-		sample->reset();
-	}
+	const auto drop = [](std::unique_ptr<SoundSample> &sample) {
+		if (sample != nullptr && sample->IsPlaying())
+			sample->Stop();
+		sample.reset();
+	};
+	drop(Audio.light);
+	drop(Audio.heavy);
+	drop(Audio.wind);
+	for (std::unique_ptr<SoundSample> &clap : Audio.thunder)
+		drop(clap);
+	Audio.thunders = 0;
 	Audio.made = false;
 #endif
 }

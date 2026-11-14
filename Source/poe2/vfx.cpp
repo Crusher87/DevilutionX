@@ -2464,7 +2464,23 @@ struct Drop {
 	float sway;
 	float size;
 	bool snow;
+	/** @brief Rain: how near the eye it falls, 0 (far off: thin, short and faint) to 1 (close by: big, fast and soft). */
+	float depth = 0;
+	/** @brief Rain: its own share of brightness, so no two drops look alike. */
+	float bright = 1;
+	float age = 0;
 };
+
+/** @brief Where a raindrop landed: a few droplets thrown up for a moment, seen in the light there. */
+struct Splash {
+	Vec pos;
+	float age;
+	float life;
+	uint32_t seed;
+	Rgb colour;
+	float alpha;
+};
+std::vector<Splash> Splashes;
 
 std::vector<Drop> Drops;
 /** @brief The world on screen this frame, where the weather falls. */
@@ -3429,60 +3445,6 @@ void EmitAmbient(float ms)
 	}
 }
 
-/** @brief Lets drops fall and land: new ones over the view, splashes where the rain hits the ground. */
-void AdvanceWeather(float ms)
-{
-	const weather::State &w = weather::Current();
-	const bool snow = w.kind == weather::Kind::Snow;
-	const float width = WeatherView.max.x - WeatherView.min.x;
-	const float height = WeatherView.max.y - WeatherView.min.y;
-	if (w.strength > 0 && width > 0 && height > 0) {
-		// Drops a second over a million world pixels: a shower starts sparse and a downpour fills the air.
-		const float perMillion = snow ? 160 * w.strength : 180 * w.strength + 1100 * w.strength * w.strength;
-		const float area = (width + 400) * (height + 100) / 1000000.F;
-		const int room = Scaled(3000) - static_cast<int>(Drops.size());
-		for (int i = std::min(room, Occurrences(perMillion * area, ms)); i > 0; i--) {
-			Drop drop;
-			drop.pos = { Random(WeatherView.min.x - 200, WeatherView.max.x + 200), Random(WeatherView.min.y, WeatherView.max.y + 100) };
-			drop.snow = snow;
-			if (snow) {
-				drop.z = Random(250, 450);
-				drop.vz = Random(-95, -55);
-				drop.vx = w.wind * 110 + Random(-15, 15);
-				drop.size = Random(1.1F, 2.4F);
-			} else {
-				drop.z = Random(320, 520);
-				drop.vz = Random(-1350, -1050) * (0.8F + 0.4F * w.strength);
-				drop.vx = w.wind * 380 + Random(-25, 25);
-				drop.size = Random(0.7F, 1.3F);
-			}
-			drop.sway = Random(0, 2 * Pi);
-			Drops.push_back(drop);
-		}
-	}
-	const float dt = ms / 1000.F;
-	for (size_t i = 0; i < Drops.size();) {
-		Drop &drop = Drops[i];
-		drop.z += drop.vz * dt;
-		drop.pos.x += drop.vx * dt;
-		if (drop.snow)
-			drop.pos.x += std::sin(drop.sway + AmbientTime * 0.0025F) * 22 * dt;
-		const bool gone = drop.pos.x < WeatherView.min.x - 300 || drop.pos.x > WeatherView.max.x + 300;
-		if (drop.z <= 0 || gone) {
-			if (!gone && !drop.snow && Random(0, 1) < 0.35F * std::min(1.F, Intensity())) {
-				// A splash: a small ring on the ground, and now and then a glint off the wet floor.
-				AddRing(drop.pos, 1, Random(4, 7), Random(0.2F, 0.35F), 1.2F, { 150, 185, 220 }, 0.3F, false, true);
-				if (Random(0, 1) < 0.15F)
-					Spray(drop.pos, 1, 10, 30, 80, 160, Shape::Dot, { 200, 220, 245 }, { 120, 150, 190 }, 1.F, 0.3F, 60, 120, 500, 0, 0.5F);
-			}
-			Drops[i] = Drops.back();
-			Drops.pop_back();
-		} else {
-			i++;
-		}
-	}
-}
-
 // POE2 Mashup: the Atmosphere option's air (step 2 of the old Diablo feel): dust and haze seen only in the light, flies,
 // drips, and the marks fights leave. Looks only, with the effects' own dice; nothing here touches the game.
 
@@ -4033,6 +3995,145 @@ void AdvanceMarks()
 	});
 }
 
+/** @brief The light a raindrop or its splash is seen in: the HD light where it falls, or a dull evening without it. */
+hd::light::Rgb RainLight(Vec pos)
+{
+	if (!AirLit)
+		return { 0.5F, 0.56F, 0.66F };
+	return LightOf(pos);
+}
+
+/** @brief A raindrop lands: on open ground in view and in some light, a few droplets jump up for a moment. */
+void LandDrop(const Drop &drop, const std::array<float, 3> &tint)
+{
+	if (Splashes.size() >= 1500 || OutOfView(drop.pos, 8))
+		return;
+	if (Random(0, 1) > 0.75F * atmosphere::Value("rain_splash", 1.F) * std::min(1.F, Intensity()))
+		return;
+	float x;
+	float y;
+	WorldToFloor(drop.pos, x, y);
+	if (AirLit && hd::light::Blocks(static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y))))
+		return;
+	const hd::light::Rgb light = RainLight(drop.pos);
+	const float lit = std::min(BrightnessOf(light), 1.3F);
+	if (lit < 0.08F)
+		return;
+	Splashes.push_back({ drop.pos, 0, Random(130, 220), NextRandom() | 1, InLight(tint, light), 0.1F + 0.55F * lit });
+}
+
+/** @brief A tile's length stood upright, in world pixels (the view looks down at 30 degrees: 45.25 x cos 30). */
+constexpr float TileTall = 39.F;
+
+/** @brief How wet the town's ground looks: the weather's wetness by the Atmosphere option's wet switch (it needs the HD light's lamps). */
+float Wetness()
+{
+	if (!AirLit || !weather::Enabled() || !weather::Outdoors())
+		return 0;
+	return weather::Current().wet * atmosphere::Strength(atmosphere::Knob::Wet);
+}
+
+/**
+ * @brief Water runs off the roofs (idea 23): drops fall from the eaves over the lamps and lit windows, where there is
+ * light to see them by, while the ground is wet: in the rain and for a few minutes after it stops.
+ */
+void AdvanceRoofDrips(float ms)
+{
+	const float wet = Wetness();
+	const float rate = atmosphere::Value("roof_drips", 1.2F) * wet;
+	if (rate <= 0.01F)
+		return;
+	std::array<hd::light::Lamp, 32> lamps;
+	const int count = hd::light::Lamps(lamps.data(), static_cast<int>(lamps.size()));
+	const std::array<float, 3> tint = atmosphere::Colour("rain_colour", { 0.74F, 0.82F, 0.95F });
+	const Rgb water { static_cast<uint8_t>(255 * tint[0]), static_cast<uint8_t>(255 * tint[1]), static_cast<uint8_t>(255 * tint[2]) };
+	for (int i = 0; i < count; i++) {
+		const hd::light::Lamp &lamp = lamps[static_cast<size_t>(i)];
+		const float out = std::hypot(lamp.outX, lamp.outY);
+		if (out < 0.01F || OutOfView(FloorToWorld(lamp.x, lamp.y), 120))
+			continue;
+		for (int n = Occurrences(rate, ms); n > 0; n--) {
+			// Along the wall the lamp hangs on, a little out from it.
+			const float along = Random(-1.6F, 1.6F);
+			const float off = Random(0.15F, 0.45F);
+			const float x = lamp.x - lamp.outY / out * along + lamp.outX / out * off;
+			const float y = lamp.y + lamp.outX / out * along + lamp.outY / out * off;
+			if (hd::light::Blocks(static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y))))
+				continue;
+			Drips.push_back({ FloorToWorld(x, y), (lamp.height + 0.7F) * TileTall * Random(0.95F, 1.1F), 0, water, false });
+		}
+	}
+}
+
+/** @brief Lets drops fall and land: new ones over the view, splashes where the rain hits the ground. */
+void AdvanceWeather(float ms)
+{
+	const weather::State &w = weather::Current();
+	const bool snow = w.kind == weather::Kind::Snow;
+	const float width = WeatherView.max.x - WeatherView.min.x;
+	const float height = WeatherView.max.y - WeatherView.min.y;
+	const std::array<float, 3> tint = atmosphere::Colour("rain_colour", { 0.74F, 0.82F, 0.95F });
+	if (w.strength > 0 && width > 0 && height > 0) {
+		// Drops a second over a million world pixels. Rain is a great many faint drops, not a few bright ones: a shower
+		// starts thin and a downpour fills the air.
+		const float perMillion = snow ? 160 * w.strength : (1100 * w.strength + 3200 * w.strength * w.strength) * atmosphere::Value("rain_drops", 1.F);
+		const float area = (width + 400) * (height + 100) / 1000000.F;
+		const int room = Scaled(6000) - static_cast<int>(Drops.size());
+		for (int i = std::min(room, Occurrences(perMillion * area, ms)); i > 0; i--) {
+			Drop drop;
+			drop.pos = { Random(WeatherView.min.x - 200, WeatherView.max.x + 200), Random(WeatherView.min.y, WeatherView.max.y + 100) };
+			drop.snow = snow;
+			if (snow) {
+				drop.z = Random(250, 450);
+				drop.vz = Random(-95, -55);
+				drop.vx = w.wind * 110 + Random(-15, 15);
+				drop.size = Random(1.1F, 2.4F);
+			} else {
+				// Most fall far off; a few pass close to the eye, bigger, faster and softer.
+				const float near = Random(0, 1);
+				drop.depth = near * near * near;
+				drop.z = Random(300, 480) + 140 * drop.depth;
+				drop.vz = -(950 + 700 * drop.depth) * (0.85F + 0.3F * w.strength) * Random(0.9F, 1.1F);
+				drop.vx = w.wind * (300 + 260 * drop.depth) + Random(-18, 18);
+				drop.size = 0.45F + 1.1F * drop.depth;
+				// Most are faint and a few catch the light.
+				const float glint = Random(0, 1);
+				drop.bright = 0.3F + 0.7F * glint * glint;
+			}
+			drop.sway = Random(0, 2 * Pi);
+			Drops.push_back(drop);
+		}
+	}
+	const float dt = ms / 1000.F;
+	for (size_t i = 0; i < Drops.size();) {
+		Drop &drop = Drops[i];
+		drop.age += ms;
+		drop.z += drop.vz * dt;
+		drop.pos.x += drop.vx * dt;
+		if (drop.snow)
+			drop.pos.x += std::sin(drop.sway + AmbientTime * 0.0025F) * 22 * dt;
+		const bool gone = drop.pos.x < WeatherView.min.x - 300 || drop.pos.x > WeatherView.max.x + 300;
+		if (drop.z <= 0 || gone) {
+			if (!gone && !drop.snow)
+				LandDrop(drop, tint);
+			Drops[i] = Drops.back();
+			Drops.pop_back();
+		} else {
+			i++;
+		}
+	}
+	for (size_t i = 0; i < Splashes.size();) {
+		Splashes[i].age += ms;
+		if (Splashes[i].age >= Splashes[i].life) {
+			Splashes[i] = Splashes.back();
+			Splashes.pop_back();
+		} else {
+			i++;
+		}
+	}
+	AdvanceRoofDrips(ms);
+}
+
 void AdvanceAir(float ms)
 {
 	const FramePartScope part(FramePart::Atmosphere);
@@ -4365,6 +4466,7 @@ void Clear()
 	SeenBursts.clear();
 	Emitters.clear();
 	Drops.clear();
+	Splashes.clear();
 	HotSpots.clear();
 	SteadySpots.clear();
 	Halos.clear();
@@ -6194,8 +6296,10 @@ void Advance(float ms)
 	weather::Advance(ms);
 	if (weather::Enabled())
 		AdvanceWeather(ms);
-	else if (!Drops.empty())
+	else if (!Drops.empty() || !Splashes.empty()) {
 		Drops.clear();
+		Splashes.clear();
+	}
 	EmitAmbient(ms);
 	for (auto &[missile, trail] : Trails) {
 		if (trail.count > 0) {
@@ -6373,6 +6477,22 @@ void SoftDisc(Batch &batch, Vec centre, float radius, Rgb colour, float alpha, b
 	}
 	for (int i = 0; i < segments; i++)
 		batch.tri(middle, first + i, first + (i + 1) % segments);
+}
+
+/** @brief A speck: one bright point fading to nothing a radius away. Cheap, for the hundreds of droplets rain throws up. */
+void Fleck(Batch &batch, Vec centre, float radius, Rgb colour, float alpha)
+{
+	const Vec c = ToScreen(centre);
+	radius *= CameraScale;
+	const int middle = batch.add(c, colour, alpha);
+	const int right = batch.add(c + Vec { radius, 0 }, colour, 0);
+	const int down = batch.add(c + Vec { 0, radius }, colour, 0);
+	const int left = batch.add(c - Vec { radius, 0 }, colour, 0);
+	const int up = batch.add(c - Vec { 0, radius }, colour, 0);
+	batch.tri(middle, right, down);
+	batch.tri(middle, down, left);
+	batch.tri(middle, left, up);
+	batch.tri(middle, up, right);
 }
 
 /** @brief A ring with soft edges, flat on the ground; jitter makes it jagged, dashes break it up. */
@@ -9256,7 +9376,6 @@ void DrawQuestMarks()
 	}
 }
 
-/** @brief The weather: a cold cast over the town, the drops leaning with the wind, and lightning lighting it all. */
 /** @brief The Atmosphere option's air: haze and dust glowing where the light falls, flies, falling drops. */
 void DrawAir()
 {
@@ -9363,6 +9482,65 @@ void DrawMarks()
 	}
 }
 
+/**
+ * @brief The weather. Rain is seen by the light on it: every drop takes the colour and brightness of the light where it
+ * falls, so it glints round the lamps and all but goes in the dark, and where it lands a few droplets jump. The sky
+ * itself darkens in the HD light (hd_light's UpdateSky); nothing is laid over the screen but a breath of haze.
+ */
+/**
+ * @brief Wet ground shines under the lamps (ideas 23 and 14): a lamp's image lies as far under the ground as the lamp
+ * hangs over it, and rough wet ground smears it into a soft streak running from the lamp's foot towards the eye, with
+ * brighter glints where water stands. The glints stay where they are on the ground; they shiver while rain still
+ * falls on them and lie nearly still after. All of it lies on the floor, so whatever stands there hides it, and it is
+ * drawn only under the lamps, which keeps the floor's mask small.
+ */
+void DrawWetShine()
+{
+	const float wet = Wetness() * atmosphere::Value("wet_shine", 1.F);
+	if (wet <= 0.01F)
+		return;
+	std::array<hd::light::Lamp, 32> lamps;
+	const int count = hd::light::Lamps(lamps.data(), static_cast<int>(lamps.size()));
+	const float shiver = weather::Current().strength > 0.05F ? 0.012F : 0.0025F;
+	constexpr int Glints = 14;
+	for (int i = 0; i < count; i++) {
+		const hd::light::Lamp &lamp = lamps[static_cast<size_t>(i)];
+		const Vec foot = FloorToWorld(lamp.x, lamp.y);
+		const float tall = std::max(lamp.height, 0.3F) * TileTall;
+		if (OutOfView(foot + Vec { 0, tall }, tall + 60))
+			continue;
+		// The light's own colour, deeper than the colour it lights the ground (a flame seen in water, not its glow).
+		const float top = std::max({ lamp.colour[0], lamp.colour[1], lamp.colour[2], 0.01F });
+		const auto deep = [&](int c) { return static_cast<uint8_t>(255 * std::pow(std::clamp(lamp.colour[static_cast<size_t>(c)] / top, 0.F, 1.F), 1.4F)); };
+		const Rgb colour { deep(0), deep(1), deep(2) };
+		const float power = wet * std::min(lamp.strength, 1.6F);
+		const float half = 5 + lamp.size * 22;
+		const Vec from = foot + Vec { 0, tall * 0.2F };
+		const Vec middle = foot + Vec { 0, tall };
+		const Vec to = foot + Vec { 0, tall * 1.9F };
+		SoftLine(Ground, from, middle, half * 2.4F, colour, colour, 0, power * 0.16F);
+		SoftLine(Ground, middle, to, half * 2.4F, colour, colour, power * 0.16F, 0);
+		uint32_t seed = ((static_cast<uint32_t>(lamp.x * 16) * 73856093U) ^ (static_cast<uint32_t>(lamp.y * 16) * 19349663U)) | 1;
+		for (int k = 0; k < Glints; k++) {
+			const float f = SeededRandom(seed);
+			const float side = SeededRandom(seed) + SeededRandom(seed) - 1;
+			const float length = 3 + 7 * SeededRandom(seed);
+			const float thick = 2 + 1.6F * SeededRandom(seed);
+			// Brightest where the image itself lies, fading towards the wall, towards the eye and to the sides.
+			const float away = std::abs(f - 0.45F) / 0.55F;
+			const float share = (1 - away) * (1 - away) * (1 - 0.6F * std::abs(side));
+			const float glint = SmoothNoise(seed, AmbientTime * shiver);
+			const float alpha = power * share * (0.25F + 0.75F * glint) * 0.8F;
+			if (alpha < 0.01F)
+				continue;
+			const Vec centre = foot + Vec { side * half * 1.3F, tall * (0.2F + 1.7F * f) };
+			const Vec reach { length * (0.8F + 0.4F * glint), 0 };
+			SoftLine(Ground, centre, centre + reach, thick, colour, colour, alpha, 0);
+			SoftLine(Ground, centre, centre - reach, thick, colour, colour, alpha, 0);
+		}
+	}
+}
+
 void DrawWeather()
 {
 	const weather::State &w = weather::Current();
@@ -9375,30 +9553,59 @@ void DrawWeather()
 		batch.tri(a, b, c);
 		batch.tri(a, c, d);
 	};
+	// With the HD light the rain darkens the sky's own light. Without it, a cold cast over the town stands in.
+	const bool skyLit = AirLit && atmosphere::Strength(atmosphere::Knob::RainSky) > 0;
+	DrawWetShine();
 	if (w.strength > 0 && WeatherSize.x > 0) {
-		if (snow)
+		if (snow) {
 			quad(Dark, { 70, 80, 100 }, 0.12F * w.strength);
-		else
+		} else if (!skyLit) {
 			quad(Dark, { 14, 22, 40 }, 0.3F * w.strength);
+		} else {
+			// The air full of water: the far dark lifts a touch towards grey.
+			const std::array<float, 3> veil = atmosphere::Colour("rain_veil_colour", { 0.30F, 0.35F, 0.43F });
+			quad(Dark, { static_cast<uint8_t>(255 * veil[0]), static_cast<uint8_t>(255 * veil[1]), static_cast<uint8_t>(255 * veil[2]) }, atmosphere::Value("rain_veil", 0.05F) * w.strength);
+		}
 	}
+	// Lightning lights the drops in the air too.
+	const float strike = 1 + 2.5F * w.flash * atmosphere::Strength(atmosphere::Knob::Lightning);
+	const float seen = atmosphere::Value("rain_alpha", 1.F);
+	const std::array<float, 3> tint = atmosphere::Colour("rain_colour", { 0.74F, 0.82F, 0.95F });
 	for (const Drop &drop : Drops) {
 		const Vec at = drop.pos - Vec { 0, drop.z };
 		if (drop.snow) {
 			SoftDisc(Glowing, at, drop.size, { 235, 240, 255 }, 0.5F, false);
 			continue;
 		}
-		// A streak back along its fall; the head, lowest, is the brightest.
-		const Vec tail = at - Vec { drop.vx, drop.vz } * 0.03F;
-		SoftLine(Glowing, at, tail, drop.size, { 185, 205, 235 }, { 120, 140, 170 }, 0.32F, 0.04F);
+		// A short streak back up along its fall: as long as the eye smears it, longer for the ones close by.
+		const float smear = 0.012F + 0.012F * drop.depth;
+		const Vec tail = at - Vec { drop.vx, -drop.vz } * smear;
+		// It is seen by the light in the air it falls through (the light on the ground behind it on screen): warm and
+		// bright in a lamp's pool, a dull grey under the open sky, all but gone in the dark.
+		const hd::light::Rgb light = RainLight(at);
+		const float lit = std::min(BrightnessOf(light), 1.3F);
+		const float fade = std::min(drop.age / 70.F, 1.F);
+		const float alpha = std::min((0.09F + 0.32F * lit) * strike, 0.8F) * drop.bright * fade * seen * (1 - 0.5F * drop.depth);
+		const Rgb colour = InLight(tint, light);
+		SoftLine(Glowing, at, tail, drop.size, colour, colour, alpha, alpha * 0.2F);
 	}
-	if (w.flash > 0 && WeatherSize.x > 0) {
-		// Two pulses: the strike, then its flicker.
-		float pulse = 0.6F;
-		if (w.flash > 0.7F)
-			pulse = 1.F;
-		else if (w.flash > 0.45F)
-			pulse = 0.25F;
-		quad(Glowing, { 225, 230, 255 }, 0.22F * w.flash * pulse);
+	// The splashes are blended straight on, with no bloom (which made stars of them). They are not cut away behind
+	// what stands on the floor: that mask is worked out pixel by pixel wherever floor effects are drawn, and rain
+	// falls over the whole view.
+	for (const Splash &splash : Splashes) {
+		const float t = splash.age / splash.life;
+		const float alpha = splash.alpha * seen * (1 - t);
+		uint32_t seed = splash.seed;
+		// The drop bursts where it lands, then two or three droplets hop out and fall back.
+		if (t < 0.4F)
+			Fleck(Standing, splash.pos - Vec { 0, 0.5F }, 1.6F, splash.colour, alpha * (1 - t / 0.4F));
+		const int droplets = 2 + static_cast<int>(SeededRandom(seed) * 2);
+		for (int k = 0; k < droplets; k++) {
+			const float angle = 2 * Pi * SeededRandom(seed);
+			const float reach = (2.5F + 3.5F * SeededRandom(seed)) * t;
+			const float hop = (3 + 4 * SeededRandom(seed)) * 4 * t * (1 - t);
+			Fleck(Standing, splash.pos + Vec { std::cos(angle) * reach, std::sin(angle) * reach * 0.5F - hop }, 0.9F, splash.colour, alpha);
+		}
 	}
 }
 
@@ -9834,7 +10041,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && Motes.empty() && Wisps.empty() && Drips.empty() && Swarms.empty() && Marks.empty() && sky.strength <= 0 && sky.flash <= 0) {
+	if (Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && Splashes.empty() && Motes.empty() && Wisps.empty() && Drips.empty() && Swarms.empty() && Marks.empty() && sky.strength <= 0 && sky.flash <= 0 && Wetness() <= 0.01F) {
 		FrontFresh = false;
 		return;
 	}

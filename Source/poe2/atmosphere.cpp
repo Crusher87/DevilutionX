@@ -68,6 +68,9 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "lava", 1.F, "lava's glow swells and fades, orange edge on who stands by it (idea 30)" },
 	{ "haze", 1.F, "the lava wavers in its heat (idea 31)" },
 	{ "farglow", 1.F, "caverns with lava are dim orange far off, not black (idea 32)" },
+	{ "rainsky", 1.F, "the evening is darker while it rains, so lamps and windows stand out (idea 23)" },
+	{ "lightning", 1.F, "lightning lights the town from the sky for a moment, never a white screen (idea 23)" },
+	{ "wet", 1.F, "wet ground shines under the lamps, puddles ring, roofs drip after rain (ideas 23 and 14)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

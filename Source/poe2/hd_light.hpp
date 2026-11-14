@@ -167,6 +167,26 @@ Rgb Boost(const Rgb &light, float levels);
 /** @brief This tile is a wall or rock (walls, pillars, closed doors, and the ground outside the rooms). */
 bool Blocks(int x, int y);
 
+/** @brief A lamp, lit window, doorway or fire that stays where it is, for effects that show it on the ground (its shine on wet ground). */
+struct Lamp {
+	/** @brief Where its light starts out, in tiles (for a lamp on a wall, just in front of the wall). */
+	float x = 0;
+	float y = 0;
+	/** @brief How high it hangs, in tiles. */
+	float height = 1;
+	/** @brief The open side it shines out of, as a direction in tiles; 0, 0 for all round. */
+	float outX = 0;
+	float outY = 0;
+	/** @brief How wide its flame or glow is, in tiles. */
+	float size = 0.2F;
+	std::array<float, 3> colour {};
+	/** @brief How bright it shines this frame against the hero's own glow (1), flicker and all. */
+	float strength = 1;
+};
+
+/** @brief The level's lamps and fires (not its lava). Returns how many were written to out. */
+int Lamps(Lamp *out, int maxCount);
+
 /** @brief Whether this level has lava (or a glowing pool) that lights itself, and whether a tile is such lava. */
 bool HasLava();
 bool IsLava(int x, int y);

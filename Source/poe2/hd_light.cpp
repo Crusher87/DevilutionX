@@ -24,6 +24,7 @@
 #include "poe2/atmosphere.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/vfx.hpp"
+#include "poe2/weather.hpp"
 #include "utils/endian_swap.hpp"
 #include "utils/is_of.hpp"
 
@@ -211,6 +212,11 @@ std::array<float, 4097> BrightnessOfLinear {};
 std::array<float, 256> WarmthOfBrightness {};
 /** @brief The sky's light alone as drawn (see Sky), worked out with the rest of the light in Finish. */
 Rgb SkyRgb;
+/**
+ * @brief The sky's light over Tristram this frame against the evening's own (1): less while it rains, and for a moment
+ * much more when lightning strikes (idea 23). Linear light.
+ */
+float SkyScale = 1;
 
 /** @brief Per tile: 0 where light and walkers pass, 1 where light stops (walls), 2 for ground light passes over that
  * nothing stands on (OpenGround: the Cathedral's dirt outside the rooms). */
@@ -1273,6 +1279,54 @@ void ApplyLavaBreath()
 }
 
 /**
+ * @brief Rain and lightning change the sky's light over Tristram (the Atmosphere option's idea 23): a shower darkens
+ * the evening, so the lamps and windows stand out, and lightning lights the town from the sky for a moment (the
+ * strike, a dip, then its flicker dying away), with the sky's own shadows. Nothing is drawn over the screen. The
+ * numbers are the town's in atmosphere.tsv (rain_sky, the share of the sky's light a downpour takes away, and
+ * lightning, how many times the evening's light a strike adds).
+ */
+void UpdateSky()
+{
+	SkyScale = 1;
+	if (leveltype != DTYPE_TOWN || !weather::Enabled())
+		return;
+	const weather::State &sky = weather::Current();
+	const float share = sky.kind == weather::Kind::Rain ? 1.F : 0.4F;
+	const float dim = std::clamp(atmosphere::Value("rain_sky", 0.4F) * atmosphere::Strength(atmosphere::Knob::RainSky) * sky.strength * share, 0.F, 0.85F);
+	float pulse = 0;
+	if (sky.flash > 0) {
+		const float t = 1 - sky.flash;
+		if (t < 0.12F)
+			pulse = 1;
+		else if (t < 0.3F)
+			pulse = 0.15F;
+		else if (t < 0.5F)
+			pulse = 0.6F;
+		else
+			pulse = 0.6F * (1 - t) / 0.5F;
+	}
+	SkyScale = 1 - dim + atmosphere::Value("lightning", 1.F) * atmosphere::Strength(atmosphere::Knob::Lightning) * pulse;
+}
+
+/** @brief The sky's light in the window, changed by UpdateSky's share. */
+void ApplySky()
+{
+	if (SkyScale == 1 || leveltype != DTYPE_TOWN)
+		return;
+	const float add = ToLinear(TownSkyBrightness) * (SkyScale - 1);
+	const Colour sky = Even(TownSkyColour);
+	for (size_t k = 0; k < WinBright.size(); k++) {
+		WinBright[k] = std::max(WinBright[k] + add, 0.F);
+		for (int c = 0; c < 3; c++)
+			WinHue[k][c] = std::max(WinHue[k][c] + sky[c] * add, 0.F);
+		WinHue[k][3] = std::max(WinHue[k][3] + add, 0.F);
+	}
+	// The rock tops keep their hue (the sky's share of it was never in it).
+	for (float &bright : WinTopBright)
+		bright = std::max(bright + add, 0.F);
+}
+
+/**
  * @brief A cavern with lava in it is dim orange in the distance, not black (the Atmosphere option's idea 32): the lava's
  * glow fills the air of the whole cavern a little, the more the more lava lies round a spot, walls or no walls. Its
  * numbers are the area's in atmosphere.tsv (lava_far, how bright; lava_far_reach, how many tiles round a spot count;
@@ -1827,7 +1881,7 @@ void Finish()
 	// The sky's light alone, drawn as a point lit by nothing else is above.
 	SkyRgb = Full();
 	if (leveltype == DTYPE_TOWN) {
-		const float brightness = DrawnBrightness(ToLinear(TownSkyBrightness));
+		const float brightness = DrawnBrightness(ToLinear(TownSkyBrightness) * SkyScale);
 		const float warmth = WarmthOfBrightness[static_cast<size_t>(std::clamp(brightness, 0.F, 1.F) * 255.F + 0.5F)];
 		const Colour sky = Even(TownSkyColour);
 		std::array<float, 3> colour;
@@ -1880,6 +1934,8 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 		const FramePartScope part(FramePart::Atmosphere);
 		ApplyFlicker();
 		ApplyLavaBreath();
+		UpdateSky();
+		ApplySky();
 	}
 	GatherDynamic(heroX, heroY);
 	FillWalls();
@@ -2118,6 +2174,27 @@ Rgb Sky()
 	return SkyRgb;
 }
 
+int Lamps(Lamp *out, int maxCount)
+{
+	int count = 0;
+	for (const Source &source : StaticSources) {
+		if (count >= maxCount)
+			break;
+		if (source.lava || source.glow || source.carried || source.flickerKind == StairsBreath)
+			continue;
+		Lamp &lamp = out[count++];
+		lamp.x = source.rayX;
+		lamp.y = source.rayY;
+		lamp.height = source.height;
+		lamp.outX = source.coneX;
+		lamp.outY = source.coneY;
+		lamp.size = source.size;
+		lamp.colour = source.colour;
+		lamp.strength = source.power * source.flicker;
+	}
+	return count;
+}
+
 bool Blocks(int x, int y)
 {
 	return BlocksTile(x, y);
@@ -2274,8 +2351,9 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 		consider(source, index++);
 	if (leveltype == DTYPE_TOWN) {
 		// The evening sky shines on all of the town from far off, so its shadows all fall the same way.
-		const ShadowLight sky { x - SkyDirX * SkyDistance, y - SkyDirY * SkyDistance, TownSkyBrightness, SkyDistance / SkyShadowLength, SkySize, SkyFill, SkyDistance * 2, SkyLight };
-		offer(sky, ToLinear(TownSkyBrightness), SkyDistance, false);
+		const float linear = ToLinear(TownSkyBrightness) * SkyScale;
+		const ShadowLight sky { x - SkyDirX * SkyDistance, y - SkyDirY * SkyDistance, ToBrightness(linear), SkyDistance / SkyShadowLength, SkySize, SkyFill, SkyDistance * 2, SkyLight };
+		offer(sky, linear, SkyDistance, false);
 	}
 	const float lavaStrength = ToBrightness(lavaBrightest);
 	if (lavaStrength >= 0.02F) {
@@ -2306,7 +2384,7 @@ int ShadowLights(float x, float y, ShadowLight *out, int maxCount, ShadowLight &
 float LinearOf(const ShadowLight &light, float x, float y)
 {
 	if (light.source == SkyLight)
-		return ToLinear(TownSkyBrightness);
+		return ToLinear(TownSkyBrightness) * SkyScale;
 	if (light.source == LavaLight) {
 		const float distance = Length(x - light.x, y - light.y);
 		if (distance >= static_cast<float>(light.radius + 1))
