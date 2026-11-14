@@ -71,6 +71,10 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "rainsky", 1.F, "the evening is darker while it rains, so lamps and windows stand out (idea 23)" },
 	{ "lightning", 1.F, "lightning lights the town from the sky for a moment, never a white screen (idea 23)" },
 	{ "wet", 1.F, "wet ground shines under the lamps, puddles ring, roofs drip after rain (ideas 23 and 14)" },
+	{ "fog", 1.F, "low mist along Tristram's stream and between the graves (idea 18)" },
+	{ "water", 1.F, "the stream and the fountain glint and move, the fountain splashes (idea 19)" },
+	{ "wind", 1.F, "dead leaves blow over the ground with the wind, more in a storm (idea 20)" },
+	{ "cathedral", 1.F, "the cathedral door breathes red and cold mist creeps out, more the deeper you've been (idea 21)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

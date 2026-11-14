@@ -83,8 +83,16 @@ enum class Knob : uint8_t {
 	Lightning,
 	/** Ideas 23 and 14: wet ground shines under the lamps, puddles ring where drops land, roofs drip after the rain. */
 	Wet,
+	/** Idea 18: low mist lies along Tristram's stream and between the graves. */
+	Fog,
+	/** Idea 19: the stream and the fountain glint and move, and the fountain splashes a little. */
+	Water,
+	/** Idea 20: dead leaves blow across the ground with the wind, more in a storm. */
+	Wind,
+	/** Idea 21: the cathedral's doorway breathes a red glow and cold mist creeps out of it, stronger the deeper the hero has been. */
+	Cathedral,
 };
-inline constexpr size_t NumKnobs = 24;
+inline constexpr size_t NumKnobs = 28;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

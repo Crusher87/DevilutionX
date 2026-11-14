@@ -44,6 +44,7 @@
 #include "options.h"
 #include "player.h"
 #include "poe2/atmosphere.hpp"
+#include "poe2/defenses.hpp"
 #include "poe2/bound_demons.hpp"
 #include "poe2/camera_shake.hpp"
 #include "poe2/floor_chests.hpp"
@@ -2479,6 +2480,8 @@ struct Splash {
 	uint32_t seed;
 	Rgb colour;
 	float alpha;
+	/** @brief It landed on water: a ring spreads where it fell, and nothing hops up. */
+	bool ring = false;
 };
 std::vector<Splash> Splashes;
 
@@ -3996,6 +3999,100 @@ void AdvanceMarks()
 }
 
 /** @brief The light a raindrop or its splash is seen in: the HD light where it falls, or a dull evening without it. */
+// Tristram's own air (the Atmosphere option's ideas 18 to 21): mist along the stream, between the graves and out of the
+// cathedral's door; glints on the stream and a little spray at the fountain; leaves in the wind. Looks only.
+
+/** @brief A patch of low mist lying on the ground. */
+struct Fog {
+	Vec pos;
+	Vec vel;
+	float age;
+	float life;
+	float size;
+	/** @brief It creeps out of the cathedral's door (idea 21) rather than lying by the water or the graves (idea 18). */
+	bool door;
+};
+std::vector<Fog> Fogs;
+
+/** @brief Light catching the moving water for a moment. */
+struct Glint {
+	Vec pos;
+	Vec vel;
+	float age;
+	float life;
+	float length;
+};
+std::vector<Glint> Glints;
+
+/** @brief A drop thrown up by the fountain. */
+struct FountainDrop {
+	Vec pos;
+	Vec vel;
+	float z;
+	float vz;
+	float age;
+	float life;
+};
+std::vector<FountainDrop> Sprays;
+
+/** @brief A dead leaf tumbling over the ground with the wind. */
+struct Leaf {
+	Vec pos;
+	Vec vel;
+	float age;
+	float life;
+	float phase;
+	float hop;
+	std::array<float, 3> colour;
+};
+std::vector<Leaf> Leaves;
+
+/** @brief The tiles of Tristram's stream, found once for the town. */
+std::vector<Point> StreamTiles;
+bool StreamFound = false;
+
+/**
+ * @brief Whether a town tile is the stream's water. Town's water isn't drawn in the palette's moving colours, so it is
+ * known by its pieces: the stream's (259 to 364 of town's tile set) where nothing can walk. The town's map uses the same
+ * pieces as filler under the roofs of the houses, all of them west of the stream (x under 60).
+ */
+bool IsStreamTile(int x, int y)
+{
+	if (leveltype != DTYPE_TOWN || x < 60 || x >= MAXDUNX || y < 0 || y >= MAXDUNY)
+		return false;
+	const int piece = dPiece[x][y];
+	return piece >= 259 && piece <= 364 && TileHasAny(Point { x, y }, TileProperties::Solid);
+}
+
+const std::vector<Point> &Stream()
+{
+	if (!StreamFound) {
+		StreamFound = true;
+		StreamTiles.clear();
+		for (int x = 60; x < MAXDUNX; x++) {
+			for (int y = 0; y < MAXDUNY; y++) {
+				if (IsStreamTile(x, y))
+					StreamTiles.push_back({ x, y });
+			}
+		}
+	}
+	return StreamTiles;
+}
+
+/** @brief The town's graveyard beside the cathedral, and the fountain in the square (its four tiles' middle), in tiles. */
+constexpr int GraveyardX0 = 31;
+constexpr int GraveyardY0 = 15;
+constexpr int GraveyardX1 = 45;
+constexpr int GraveyardY1 = 29;
+constexpr float FountainX = 60.5F;
+constexpr float FountainY = 70.5F;
+
+/** @brief The fountain runs clean: not while the Poisoned Water Supply is still to be cleansed. */
+bool FountainRuns()
+{
+	return IsNoneOf(Quests[Q_PWATER]._qactive, QUEST_INIT, QUEST_ACTIVE);
+}
+
 hd::light::Rgb RainLight(Vec pos)
 {
 	if (!AirLit)
@@ -4013,12 +4110,20 @@ void LandDrop(const Drop &drop, const std::array<float, 3> &tint)
 	float x;
 	float y;
 	WorldToFloor(drop.pos, x, y);
-	if (AirLit && hd::light::Blocks(static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y))))
+	const int tx = static_cast<int>(std::lround(x));
+	const int ty = static_cast<int>(std::lround(y));
+	// On the stream a ring spreads where it falls (idea 19).
+	const bool water = AirLit && atmosphere::Strength(atmosphere::Knob::Water) > 0 && IsStreamTile(tx, ty);
+	if (AirLit && !water && hd::light::Blocks(tx, ty))
 		return;
 	const hd::light::Rgb light = RainLight(drop.pos);
 	const float lit = std::min(BrightnessOf(light), 1.3F);
 	if (lit < 0.08F)
 		return;
+	if (water) {
+		Splashes.push_back({ drop.pos, 0, Random(450, 700), NextRandom() | 1, InLight(tint, light), 0.08F + 0.4F * lit, true });
+		return;
+	}
 	Splashes.push_back({ drop.pos, 0, Random(130, 220), NextRandom() | 1, InLight(tint, light), 0.1F + 0.55F * lit });
 }
 
@@ -4134,6 +4239,194 @@ void AdvanceWeather(float ms)
 	AdvanceRoofDrips(ms);
 }
 
+/** @brief A colour as bytes, as bright as the light on it (full at 1 and above). */
+Rgb LitColour(const std::array<float, 3> &colour, const hd::light::Rgb &light, float least = 0)
+{
+	const Rgb hue = InLight(colour, light);
+	const float bright = std::clamp(BrightnessOf(light), least, 1.F);
+	return { static_cast<uint8_t>(hue.r * bright), static_cast<uint8_t>(hue.g * bright), static_cast<uint8_t>(hue.b * bright) };
+}
+
+/** @brief Mist by the stream and between the graves (idea 18), and creeping out of the cathedral's door (idea 21). */
+void AdvanceFog(float ms)
+{
+	const float dt = ms / 1000.F;
+	const weather::State &sky = weather::Current();
+	const float lying = AirStrength(atmosphere::Knob::Fog) * atmosphere::Value("town_fog", 0);
+	// Thicker when the ground is wet, after rain.
+	const float target = std::min(lying * (1 + 0.6F * sky.wet), 80.F);
+	int lyingNow = 0;
+	int doorNow = 0;
+	for (const Fog &fog : Fogs)
+		(fog.door ? doorNow : lyingNow)++;
+	const std::vector<Point> &stream = Stream();
+	const Vec drift { sky.wind * 7, 0 };
+	if (static_cast<float>(lyingNow) < target) {
+		for (int i = AirCount(target / 5.F, ms); i > 0; i--) {
+			// By the water, or among the graves; only where it is in view or just outside it.
+			Vec pos;
+			if (!stream.empty() && Random(0, 1) < 0.6F) {
+				const Point tile = stream[NextRandom() % stream.size()];
+				pos = TileCentre(tile) + Vec { Random(-70, 70), Random(-35, 35) };
+			} else {
+				pos = FloorToWorld(Random(GraveyardX0, GraveyardX1), Random(GraveyardY0, GraveyardY1));
+			}
+			if (OutOfView(pos, 220))
+				continue;
+			Fogs.push_back({ pos, drift + Vec { Random(-2.5F, 2.5F), Random(-1.2F, 1.2F) }, 0, Random(14000, 24000), Random(70, 130), false });
+		}
+	}
+	// The cathedral breathes cold out of its door, more the deeper the hero has been.
+	const float cathedral = AirStrength(atmosphere::Knob::Cathedral);
+	if (cathedral > 0 && leveltype == DTYPE_TOWN) {
+		std::array<hd::light::Lamp, 32> lamps;
+		const int count = hd::light::Lamps(lamps.data(), static_cast<int>(lamps.size()));
+		const float deep = MyPlayer != nullptr ? std::clamp(static_cast<float>(DeepestDungeonLevel(*MyPlayer)) / 16.F, 0.F, 1.F) : 0.F;
+		const float want = atmosphere::Value("cathedral_mist", 0) * cathedral * (0.4F + 0.6F * deep);
+		for (int l = 0; l < count; l++) {
+			const hd::light::Lamp &lamp = lamps[static_cast<size_t>(l)];
+			const float out = std::hypot(lamp.outX, lamp.outY);
+			if (!lamp.door || out < 0.01F || static_cast<float>(doorNow) >= want)
+				continue;
+			for (int i = AirCount(want / 6.F, ms); i > 0; i--) {
+				const float along = Random(0.2F, 1.4F);
+				const float side = Random(-0.7F, 0.7F);
+				const Vec pos = FloorToWorld(lamp.x + lamp.outX / out * along - lamp.outY / out * side, lamp.y + lamp.outY / out * along + lamp.outX / out * side);
+				if (OutOfView(pos, 220))
+					continue;
+				// Out of the door and down the path, slowly.
+				const Vec way = FloorToWorld(lamp.outX / out, lamp.outY / out);
+				Fogs.push_back({ pos, way * (Random(5, 9) / std::max(Length(way), 1.F)) + Vec { Random(-1.5F, 1.5F), 0 }, 0, Random(9000, 15000), Random(45, 80), true });
+			}
+		}
+	}
+	for (size_t i = 0; i < Fogs.size();) {
+		Fog &fog = Fogs[i];
+		fog.age += ms;
+		fog.pos = fog.pos + fog.vel * dt;
+		if (fog.age >= fog.life || OutOfView(fog.pos, 500)) {
+			Fogs[i] = Fogs.back();
+			Fogs.pop_back();
+		} else {
+			i++;
+		}
+	}
+}
+
+/** @brief The stream glints as it runs, and the fountain throws a little spray (idea 19). */
+void AdvanceWater(float ms)
+{
+	const float dt = ms / 1000.F;
+	const float strength = AirStrength(atmosphere::Knob::Water) * atmosphere::Value("town_water", 0);
+	// The stream runs down the map (+y), which is down and to the left on screen.
+	const Vec flow = Vec { -0.894F, 0.447F } * 9;
+	if (strength > 0) {
+		const std::vector<Point> &stream = Stream();
+		// So many glints a second for each tile of water; only those in view are kept.
+		for (int i = AirCount(0.8F * strength * static_cast<float>(stream.size()), ms); i > 0 && Glints.size() < 400; i--) {
+			const Vec pos = TileCentre(stream[NextRandom() % stream.size()]) + Vec { Random(-20, 20), Random(-10, 10) };
+			if (!OutOfView(pos, 10))
+				Glints.push_back({ pos, flow, 0, Random(500, 1200), Random(1.5F, 4.5F) });
+		}
+		const Vec fountain = FloorToWorld(FountainX, FountainY);
+		if (FountainRuns() && !OutOfView(fountain, 60)) {
+			// Water runs off the pillar all round and falls into the basin, whose surface glints where it lands.
+			const float spout = atmosphere::Value("fountain_height", 26);
+			const float basin = atmosphere::Value("fountain_basin", 13);
+			for (int i = AirCount(18 * strength, ms); i > 0 && Sprays.size() < 80; i--) {
+				const float angle = Random(0, 2 * Pi);
+				const Vec out { std::cos(angle), std::sin(angle) * 0.5F };
+				Sprays.push_back({ fountain + out * 5, out * Random(10, 18), spout, Random(4, 14), 0, Random(450, 600) });
+			}
+			for (int i = AirCount(7 * strength, ms); i > 0; i--) {
+				const float angle = Random(0, 2 * Pi);
+				const float reach = Random(11, 21);
+				Glints.push_back({ fountain + Vec { std::cos(angle) * reach, std::sin(angle) * reach * 0.5F - basin }, { 0, 0 }, 0, Random(400, 900), Random(1.2F, 3) });
+			}
+		}
+	}
+	for (size_t i = 0; i < Glints.size();) {
+		Glint &glint = Glints[i];
+		glint.age += ms;
+		glint.pos = glint.pos + glint.vel * dt;
+		if (glint.age >= glint.life) {
+			Glints[i] = Glints.back();
+			Glints.pop_back();
+		} else {
+			i++;
+		}
+	}
+	for (size_t i = 0; i < Sprays.size();) {
+		FountainDrop &spray = Sprays[i];
+		spray.age += ms;
+		spray.vz -= 160 * dt;
+		spray.z = std::max(spray.z + spray.vz * dt, atmosphere::Value("fountain_basin", 13));
+		spray.pos = spray.pos + spray.vel * dt;
+		if (spray.age >= spray.life) {
+			Sprays[i] = Sprays.back();
+			Sprays.pop_back();
+		} else {
+			i++;
+		}
+	}
+}
+
+/** @brief A few dead leaves lift off the ground and tumble away with the wind, more of them in a storm (idea 20). */
+void AdvanceLeaves(float ms)
+{
+	const float dt = ms / 1000.F;
+	const float strength = AirStrength(atmosphere::Knob::Wind) * atmosphere::Value("town_leaves", 0);
+	const float wind = weather::Current().wind;
+	if (strength > 0 && Leaves.size() < 24) {
+		for (int i = AirCount(strength * (0.15F + 6 * wind * wind), ms); i > 0; i--) {
+			const std::optional<Vec> pos = OpenSpotInView(-30);
+			if (!pos)
+				continue;
+			Leaf leaf;
+			leaf.pos = *pos;
+			// With the wind (from the left when it is above 0), or a slow drift when the air is still.
+			const float push = std::abs(wind) > 0.1F ? wind : (Random(0, 1) < 0.5F ? -0.1F : 0.1F);
+			leaf.vel = { push * Random(110, 190), Random(-10, 10) };
+			leaf.age = 0;
+			leaf.life = Random(1800, 3600);
+			leaf.phase = Random(0, 2 * Pi);
+			leaf.hop = Random(4, 13);
+			const float shade = Random(0, 1);
+			leaf.colour = { 0.5F + 0.22F * shade, 0.3F + 0.18F * shade, 0.1F + 0.06F * shade };
+			Leaves.push_back(leaf);
+		}
+	}
+	for (size_t i = 0; i < Leaves.size();) {
+		Leaf &leaf = Leaves[i];
+		leaf.age += ms;
+		leaf.pos = leaf.pos + leaf.vel * dt;
+		float x;
+		float y;
+		WorldToFloor(leaf.pos, x, y);
+		// It stops against a wall or a trunk.
+		if (leaf.age >= leaf.life || hd::light::Blocks(static_cast<int>(std::lround(x)), static_cast<int>(std::lround(y)))) {
+			Leaves[i] = Leaves.back();
+			Leaves.pop_back();
+		} else {
+			i++;
+		}
+	}
+}
+
+void AdvanceTownAir(float ms)
+{
+	if (leveltype != DTYPE_TOWN || !AirLit) {
+		Fogs.clear();
+		Glints.clear();
+		Sprays.clear();
+		Leaves.clear();
+		return;
+	}
+	AdvanceFog(ms);
+	AdvanceWater(ms);
+	AdvanceLeaves(ms);
+}
+
 void AdvanceAir(float ms)
 {
 	const FramePartScope part(FramePart::Atmosphere);
@@ -4143,8 +4436,13 @@ void AdvanceAir(float ms)
 		Wisps.clear();
 		Drips.clear();
 		Swarms.clear();
+		Fogs.clear();
+		Glints.clear();
+		Sprays.clear();
+		Leaves.clear();
 		return;
 	}
+	AdvanceTownAir(ms);
 	AdvanceFlutter(ms);
 	AdvanceDust(ms);
 	AdvanceMist(ms);
@@ -4155,6 +4453,11 @@ void AdvanceAir(float ms)
 
 void ClearAir()
 {
+	Fogs.clear();
+	Glints.clear();
+	Sprays.clear();
+	Leaves.clear();
+	StreamFound = false;
 	Motes.clear();
 	Wisps.clear();
 	Drips.clear();
@@ -9377,11 +9680,62 @@ void DrawQuestMarks()
 }
 
 /** @brief The Atmosphere option's air: haze and dust glowing where the light falls, flies, falling drops. */
+/** @brief Tristram's mist, water and leaves (ideas 18 to 21), each seen by the light that falls on it. */
+void DrawTownAir()
+{
+	if (!Fogs.empty()) {
+		const std::array<float, 3> tint = atmosphere::Colour("town_fog_colour", { 0.72F, 0.78F, 0.86F });
+		const float thick = atmosphere::Value("town_fog_alpha", 0.09F);
+		for (const Fog &fog : Fogs) {
+			const hd::light::Rgb light = LightOf(fog.pos);
+			const float t = fog.age / fog.life;
+			// Mist is paler than the ground under it: it shows faintly even by the sky's light alone, and takes the
+			// colour of a lamp or the cathedral's door. The door's is thicker, and stays a little cold.
+			const float bright = std::min(0.3F + 0.7F * BrightnessOf(light), 1.F);
+			const Rgb hue = InLight(tint, light);
+			const float cold = fog.door ? 0.6F : 0.F;
+			const Rgb colour { static_cast<uint8_t>((hue.r * (1 - cold) + 255 * tint[0] * cold) * bright), static_cast<uint8_t>((hue.g * (1 - cold) + 255 * tint[1] * cold) * bright), static_cast<uint8_t>((hue.b * (1 - cold) + 255 * tint[2] * cold) * bright) };
+			const float alpha = thick * (fog.door ? atmosphere::Value("cathedral_mist_alpha", 2.F) : 1.F) * std::sin(Pi * t);
+			SoftDisc(Standing, fog.pos - Vec { 0, 5 }, fog.size, colour, alpha, true, 0);
+		}
+	}
+	if (!Glints.empty() || !Sprays.empty()) {
+		const std::array<float, 3> tint = atmosphere::Colour("town_water_colour", { 0.78F, 0.87F, 1.F });
+		const float seen = atmosphere::Value("town_water_alpha", 0.5F);
+		for (const Glint &glint : Glints) {
+			const hd::light::Rgb light = LightOf(glint.pos);
+			const float alpha = seen * std::sin(Pi * glint.age / glint.life) * std::min(1.F, 0.35F + BrightnessOf(light));
+			const Rgb colour = InLight(tint, light);
+			const Vec reach { glint.length, 0 };
+			SoftLine(Standing, glint.pos, glint.pos + reach, 1.5F, colour, colour, alpha, 0);
+			SoftLine(Standing, glint.pos, glint.pos - reach, 1.5F, colour, colour, alpha, 0);
+		}
+		for (const FountainDrop &spray : Sprays) {
+			const hd::light::Rgb light = LightOf(spray.pos);
+			const float alpha = seen * 1.2F * (1 - spray.age / spray.life) * std::min(1.F, 0.2F + BrightnessOf(light));
+			Fleck(Standing, spray.pos - Vec { 0, spray.z }, 1.7F, InLight(tint, light), alpha);
+		}
+	}
+	for (const Leaf &leaf : Leaves) {
+		const hd::light::Rgb light = LightOf(leaf.pos);
+		const float t = leaf.age / leaf.life;
+		const float fade = std::min({ t / 0.12F, (1 - t) / 0.2F, 1.F });
+		// It hops and turns as it goes.
+		const float hop = leaf.hop * std::abs(std::sin(leaf.phase + leaf.age * 0.0045F));
+		const float turn = leaf.phase + leaf.age * 0.011F;
+		const Vec at = leaf.pos - Vec { 0, hop };
+		const Vec half { std::cos(turn) * 4.2F, std::sin(turn) * 2.4F };
+		const Rgb colour = LitColour(leaf.colour, light, 0.24F);
+		SoftLine(Standing, at - half, at + half, 3.6F, colour, colour, 0.95F * fade, 0.95F * fade);
+	}
+}
+
 void DrawAir()
 {
 	if (!AirLit)
 		return;
 	const FramePartScope part(FramePart::Atmosphere);
+	DrawTownAir();
 	if (!Wisps.empty()) {
 		const std::array<float, 3> colour = atmosphere::Colour("mist_colour", { 1.F, 0.9F, 0.78F });
 		const float thickness = atmosphere::Value("mist_alpha", 0.05F);
@@ -9596,6 +9950,10 @@ void DrawWeather()
 		const float t = splash.age / splash.life;
 		const float alpha = splash.alpha * seen * (1 - t);
 		uint32_t seed = splash.seed;
+		if (splash.ring) {
+			SoftRing(Standing, splash.pos, 1 + 6 * t, 1.2F, splash.colour, alpha, 0, seed);
+			continue;
+		}
 		// The drop bursts where it lands, then two or three droplets hop out and fall back.
 		if (t < 0.4F)
 			Fleck(Standing, splash.pos - Vec { 0, 0.5F }, 1.6F, splash.colour, alpha * (1 - t / 0.4F));
@@ -10041,7 +10399,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		return;
 	LastDrawnScan = ScanFrame;
 	const weather::State &sky = weather::Current();
-	if (Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && Splashes.empty() && Motes.empty() && Wisps.empty() && Drips.empty() && Swarms.empty() && Marks.empty() && sky.strength <= 0 && sky.flash <= 0 && Wetness() <= 0.01F) {
+	if (Particles.empty() && Debris.empty() && Rings.empty() && Bolts.empty() && Sigils.empty() && Rituals.empty() && IceSpikes.empty() && Miasmas.empty() && Lobs.empty() && ThornBursts.empty() && Cracks.empty() && Sweeps.empty() && FrameGlows.empty() && Halos.empty() && QuestMarks.empty() && Beams.empty() && LootBeams.empty() && Portals.empty() && ClosingPortals.empty() && Drops.empty() && Splashes.empty() && Motes.empty() && Wisps.empty() && Drips.empty() && Swarms.empty() && Marks.empty() && sky.strength <= 0 && sky.flash <= 0 && Wetness() <= 0.01F && Fogs.empty() && Glints.empty() && Sprays.empty() && Leaves.empty()) {
 		FrontFresh = false;
 		return;
 	}
