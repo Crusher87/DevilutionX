@@ -714,6 +714,9 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
 	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, spriteBufferPosition, sprite);
+	// POE2 Mashup: Tristram's stream shows whoever stands by it (idea 66).
+	if (gbIsPoe2 && leveltype == DTYPE_TOWN)
+		vfx::NoteReflection(out, spriteBufferPosition, sprite);
 
 	// POE2 Mashup: in HD the outline under the cursor fades in.
 	const hd::OutlineScope outlineLook({ .hovered = &player == PlayerUnderCursor, .thing = hd::OutlineThing(hd::ThingKind::Player, player.getId()) });
@@ -1111,6 +1114,9 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 		// POE2 Mashup: with HD Lighting a townsperson (or a cow) casts shadows in town's evening light, as monsters do.
 		const hd::CasterScope caster(hd::Caster::Monster);
 		ClxDraw(out, position, sprite);
+		// And the stream shows them, as it does a hero (idea 66).
+		if (gbIsPoe2)
+			vfx::NoteReflection(out, position, sprite);
 		return;
 	}
 

@@ -15,7 +15,7 @@ town	roof_drips	1.2		How many drops a second fall from the roof edge over each l
 town	town_fog	30		How many patches of low mist lie by the stream and between the graves at once (idea 18); half as many again when the ground is wet. 0 none.
 town	town_fog_alpha	0.14		How thick each patch of that mist is: 0.05 barely there, 0.15 heavy.
 town	town_fog_colour	0.72 0.78 0.86		That mist's own colour, red green blue, before the light on it colours it.
-town	town_water	1		How much water the fountain drops into its basin (idea 19): 1 normal, 0 none. (The stream itself only takes the rain's rings.)
+town	town_water	0		How much water the fountain drops into its basin (idea 19): 1 normal, 0 none (as built: the splashing did not look good). (The stream itself only takes the rain's rings.)
 town	town_water_alpha	0.5		How bright the fountain's drops and the glints in its basin are: 0.25 faint, 1 bright.
 town	town_water_colour	0.78 0.87 1		Their own colour, red green blue.
 town	fountain_height	26		How high over the ground the water leaves the fountain's pillar, in game pixels.
@@ -31,8 +31,10 @@ town	glow_alpha	0.2		How bright the wide soft glow in the air round the lamps, l
 town	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 town	shaft_alpha	0.45		How bright the shaft of lit air out of the tavern and cathedral doors is (idea 66). 0 none, 0.2 the quiet setting.
 town	shaft_reach	1		How far out the shaft runs: 1 normal, 0.5 half as far.
-town	reflect_alpha	0.5		How strongly whoever stands at the stream's edge shows in the water (idea 66). 0 none, 0.85 strong.
-town	reflect_reach	55		How far down the water the reflection runs before it has faded out, in game pixels.
+town	reflect_alpha	1.2		How strongly a hero or townsperson standing by the stream shows in the water in front of their feet (idea 66). 0 none, 0.5 faint, 1 as bright as they are.
+town	reflect_reach	130		How far down from the feet the reflection runs before it has faded out, in game pixels (a hero is about 80 tall).
+town	reflect_bank	0.15		How strongly the far bank's edge shows along the water. 0 none.
+town	reflect_bank_reach	14		How far into the water the bank's edge shows, in game pixels.
 town	reflect_sky	0.07		How much of the evening sky's colour the open water takes. 0 none.
 town	reflect_wobble	1.1		How far the reflection slides from side to side, in game pixels. 0 still.
 cathedral	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
@@ -77,7 +79,7 @@ cathedral	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
 cathedral	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels. 0 still.
 cathedral	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
 cathedral	rat_speed	5		How fast a rat runs, in tiles a second.
-cathedral	rat_size	0.8		How big a rat is. 1 is 32 game pixels from nose to tail.
+cathedral	rat_size	0.4		How big a rat is. 1 is 32 game pixels from nose to tail.
 cathedral	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 cathedral	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
@@ -112,7 +114,7 @@ catacombs	growl_quiet	9		How much quieter than in a fight those sounds are, in d
 catacombs	chain_gap	9		One plain stretch of wall in this many holds a chain with a hook (idea 63). 0 none.
 catacombs	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
 catacombs	rat_speed	5		How fast a rat runs, in tiles a second.
-catacombs	rat_size	0.8		How big a rat is. 1 is 32 game pixels from nose to tail.
+catacombs	rat_size	0.4		How big a rat is. 1 is 32 game pixels from nose to tail.
 catacombs	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 catacombs	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 caves	falloff	1.50	1.65	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
