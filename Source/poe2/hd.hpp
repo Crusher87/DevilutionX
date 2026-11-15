@@ -291,9 +291,17 @@ bool HasArt(std::string_view name);
  * @brief Shows a sprite's HD art over the UI this frame, filling @p dest (UI pixels), for a preview in a panel.
  * Only one such sprite is shown at a time.
  * @param subFrame How far the sprite is towards its next frame, for the in-between drawings.
+ * @param recolour For a unique monster, its colour table's name in lower case: its own art is shown
+ * (UniqueArtName); empty for the sprite's own.
  * @return false when HD art isn't shown or the sprite has none: the caller then draws the game's own pixels.
  */
-bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame);
+bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame, std::string_view recolour = {});
+
+/**
+ * @brief The name of a unique monster's own HD art, beside its type's (monsters/sking/skinga@skelaxe/white+genrl/d3_f05):
+ * the type's art name with "+<recolour>" before its last part; the type's own name when @p recolour is empty.
+ */
+std::string UniqueArtName(std::string_view typeArtName, std::string_view recolour);
 
 /** @brief Draws what DrawUiSprite asked for, over the UI. */
 void RenderUi(SDL_Renderer *renderer);

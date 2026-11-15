@@ -5826,15 +5826,18 @@ bool HasArt(std::string_view name)
 	return it->second;
 }
 
-bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame)
+bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame, std::string_view recolour)
 {
 	// Only while the frames go up in layers with the HD world under the UI (PresentLayeredFrame calls RenderUi).
 	if (!Active() || UiRenderedTicks == 0 || SDL_GetTicks() - UiRenderedTicks > 1000)
 		return false;
 	const auto it = SpriteNames.find(sprite.pixelData());
-	if (it == SpriteNames.end() || !HasArt(it->second.name))
+	if (it == SpriteNames.end())
 		return false;
-	UiSprite = PendingUiSprite { it->second.name, dest, static_cast<uint8_t>(std::clamp(static_cast<int>(subFrame * 3), 0, 2)) };
+	std::string name = UniqueArtName(it->second.name, recolour);
+	if (name.empty() || !HasArt(name))
+		return false;
+	UiSprite = PendingUiSprite { std::move(name), dest, static_cast<uint8_t>(std::clamp(static_cast<int>(subFrame * 3), 0, 2)) };
 	return true;
 }
 
@@ -6371,7 +6374,7 @@ void RegisterSprites(std::string_view, ClxSpriteListOrSheet) { }
 void RegisterRecolour(const uint8_t *, std::string_view) { }
 void ForgetSprites(ClxSpriteListOrSheet) { }
 bool HasArt(std::string_view) { return false; }
-bool DrawUiSprite(ClxSprite, Rectangle, float) { return false; }
+bool DrawUiSprite(ClxSprite, Rectangle, float, std::string_view) { return false; }
 void RenderUi(SDL_Renderer *) { }
 void RenderOver(SDL_Renderer *) { }
 void ClearCaches() { }
@@ -6381,6 +6384,20 @@ bool ExportLevelTiles(const std::string &) { return false; }
 const char *PackPalette(uint8_t) { return nullptr; }
 
 #endif
+
+std::string UniqueArtName(std::string_view typeArtName, std::string_view recolour)
+{
+	if (recolour.empty())
+		return std::string(typeArtName);
+	const size_t slash = typeArtName.rfind('/');
+	if (slash == std::string_view::npos)
+		return {};
+	std::string name(typeArtName.substr(0, slash));
+	name += '+';
+	name += recolour;
+	name += typeArtName.substr(slash);
+	return name;
+}
 
 } // namespace hd
 
