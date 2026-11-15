@@ -59,7 +59,20 @@ struct Shape {
 	bool onWall;
 	size_t pairs;
 	std::array<Corner, MaxPairs * 2> corners;
+	/**
+	 * @brief For a rat, what its run's pictures need (RatRunFrames frames a way, beside the picture painted here):
+	 * which way it runs on screen (0 down, then round as the screen is seen: 1 down-left, 2 left, 3 up-left, 4 up,
+	 * 5 up-right, 6 right, 7 down-right), the frame of its run, and where its feet are, in game pixels from the middle
+	 * of its tile's floor. -1 for anything else.
+	 */
+	int direction = -1;
+	int frame = 0;
+	float footX = 0;
+	float footY = 0;
 };
+
+/** @brief The frames of a rat's run, a loop, in its run's pictures. */
+inline constexpr int RatRunFrames = 14;
 
 /** @brief The most things one tile holds. */
 inline constexpr size_t MaxAtTile = 3;

@@ -48,6 +48,7 @@
 #include "poe2/vfx.hpp"
 #include "utils/file_util.h"
 #include "utils/is_of.hpp"
+#include "utils/log.hpp"
 #include "utils/paths.h"
 #include "utils/png.h"
 #include "utils/sdl_mutex.h"
@@ -278,6 +279,14 @@ SDL_Texture *EdgesTexture = nullptr;
 SDL_Texture *IrisTexture = nullptr;
 /** @brief The small things' pictures (props.hpp), one a kind. */
 std::array<SDL_Texture *, props::NumKinds> PropTextures {};
+/**
+ * @brief The rat's run, made in 3D for Curtis (2026-11-15): one sheet, a row for each way it runs on screen (props'
+ * order: down, down-left, ... down-right) and a column for each frame of the loop, at twice the game's size. It is his
+ * own art, kept beside the game and never in the repo; without it the rat painted in props.cpp runs instead.
+ */
+SDL_Texture *RatRunTexture = nullptr;
+/** @brief Whether the rat's run was looked for: 0 not yet, 1 asked of the reader, 2 have it, 3 there is none. */
+int RatRunState = 0;
 /** @brief A small thing standing in the world this frame: drawn just before the recorded draw `at`, its tile's floor middle at (x, y) in the world buffer. */
 struct PropDraw {
 	size_t at;
@@ -556,6 +565,10 @@ void DestroyTextures()
 			SDL_DestroyTexture(texture);
 		texture = nullptr;
 	}
+	if (RatRunTexture != nullptr && CacheRenderer != nullptr)
+		SDL_DestroyTexture(RatRunTexture);
+	RatRunTexture = nullptr;
+	RatRunState = 0;
 	light::Reset();
 }
 
@@ -5176,10 +5189,85 @@ Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
  * @brief Draws one of the small things standing in the world (ideas 62 to 64): a strip of its picture through its
  * corners, in the light that falls where it stands.
  */
+/** @brief A cell of the rat's run's sheet, in its pixels (the game's 48 at twice the size). */
+constexpr int RatRunCell = 96;
+constexpr int RatRunWays = 8;
+/** @brief Where the rat's feet are in a cell, in game pixels: across, and down for each way it runs (rat_run.json). */
+constexpr float RatRunFeetX = 24;
+constexpr std::array<float, RatRunWays> RatRunFeetY { 32, 31, 30, 31, 31, 30, 30, 31 };
+
+/** @brief The rat's run's sheet, once it is in: asked of the reader first, so looking for it never holds a frame up. */
+SDL_Texture *RatRun(SDL_Renderer *renderer)
+{
+	if (RatRunState >= 2)
+		return RatRunTexture;
+	const std::string path = PicturePath("props/rat/rat_run_sheet_hd_2x");
+	if (ReaderOn() && !PictureIsIn(path, false)) {
+		RatRunState = 1;
+		return nullptr;
+	}
+	RatRunState = 3;
+	SDL_Surface *sheet = TakePicture(path, false);
+	if (sheet == nullptr)
+		return nullptr;
+	if (sheet->w == RatRunCell * props::RatRunFrames && sheet->h == RatRunCell * RatRunWays) {
+		RatRunTexture = SDL_CreateTextureFromSurface(renderer, sheet);
+		if (RatRunTexture != nullptr) {
+			SDL_SetTextureBlendMode(RatRunTexture, SDL_BLENDMODE_BLEND);
+			SDL_SetTextureScaleMode(RatRunTexture, SDL_ScaleModeLinear);
+			RatRunState = 2;
+		}
+	} else {
+		LogWarn("HD: {} is {}x{}, not {}x{} ({} frames by {} ways): the drawn rat runs instead", path, sheet->w, sheet->h, RatRunCell * props::RatRunFrames, RatRunCell * RatRunWays, props::RatRunFrames, RatRunWays);
+	}
+	SDL_FreeSurface(sheet);
+	return RatRunTexture;
+}
+
+/** @brief How much brighter than the light where it runs a rat is drawn, in light levels: a dark thing on a dark floor isn't seen at all. */
+float RatLift()
+{
+	return std::clamp(atmosphere::Value("rat_lift", 2.F), 0.F, 4.F);
+}
+
+/** @brief A rat drawn from its run's pictures, standing on its feet; false when they aren't there. */
+bool DrawRatRun(SDL_Renderer *renderer, const PropDraw &prop, float toLogical)
+{
+	const props::Shape &shape = prop.shape;
+	if (shape.direction < 0 || shape.direction >= RatRunWays)
+		return false;
+	SDL_Texture *texture = RatRun(renderer);
+	if (texture == nullptr)
+		return false;
+	const float size = std::clamp(atmosphere::Value("rat_run_size", 1.F), 0.3F, 2.F);
+	const float wide = static_cast<float>(RatRunCell) / Scale * size;
+	const float left = shape.footX - RatRunFeetX * size;
+	const float top = shape.footY - RatRunFeetY[static_cast<size_t>(shape.direction)] * size;
+	const Colour3 light = ToColour(light::Boost(light::At(shape.lightX, shape.lightY), RatLift()));
+	const SDL_Color shade { ColourByte(light[0]), ColourByte(light[1]), ColourByte(light[2]), ColourByte(shape.alpha) };
+	const float u0 = static_cast<float>(std::clamp(shape.frame, 0, props::RatRunFrames - 1)) / props::RatRunFrames;
+	const float u1 = u0 + 1.F / props::RatRunFrames;
+	const float v0 = static_cast<float>(shape.direction) / RatRunWays;
+	const float v1 = v0 + 1.F / RatRunWays;
+	const std::array<SDL_Vertex, 4> vertices {
+		SDL_Vertex { OnScreenAt(prop.x + left, prop.y + top, toLogical), shade, { u0, v0 } },
+		SDL_Vertex { OnScreenAt(prop.x + left + wide, prop.y + top, toLogical), shade, { u1, v0 } },
+		SDL_Vertex { OnScreenAt(prop.x + left, prop.y + top + wide, toLogical), shade, { u0, v1 } },
+		SDL_Vertex { OnScreenAt(prop.x + left + wide, prop.y + top + wide, toLogical), shade, { u1, v1 } },
+	};
+	constexpr std::array<int, 6> Indices { 0, 1, 3, 0, 3, 2 };
+	SDL_SetTextureColorMod(texture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(texture, 255);
+	SDL_RenderGeometry(renderer, texture, vertices.data(), static_cast<int>(vertices.size()), Indices.data(), static_cast<int>(Indices.size()));
+	return true;
+}
+
 void DrawProp(SDL_Renderer *renderer, const PropDraw &prop, float toLogical)
 {
 	const props::Shape &shape = prop.shape;
 	if (shape.pairs < 2 || shape.alpha <= 0)
+		return;
+	if (shape.kind == props::Kind::Rat && DrawRatRun(renderer, prop, toLogical))
 		return;
 	const SDL_FPoint first = OnScreenAt(prop.x + shape.corners[0].x, prop.y + shape.corners[0].y, toLogical);
 	if (!OnScreen(SDL_FRect { first.x - 1, first.y - 1, 2, 2 }, 120 * static_cast<float>(Scale) * toLogical))
@@ -5198,7 +5286,7 @@ void DrawProp(SDL_Renderer *renderer, const PropDraw &prop, float toLogical)
 	}
 	// What runs on the floor is drawn a touch brighter than where it is: a small dark thing on a dark floor would not be
 	// seen at all. Only a touch, so that it still belongs to the dark it runs in.
-	const Colour3 light = ToColour(shape.onWall ? light::FaceAt(shape.lightX, shape.lightY) : light::Boost(light::At(shape.lightX, shape.lightY), 2));
+	const Colour3 light = ToColour(shape.onWall ? light::FaceAt(shape.lightX, shape.lightY) : light::Boost(light::At(shape.lightX, shape.lightY), RatLift()));
 	const SDL_Color shade { ColourByte(light[0]), ColourByte(light[1]), ColourByte(light[2]), ColourByte(shape.alpha) };
 	std::array<SDL_Vertex, props::MaxPairs * 2> vertices;
 	std::array<int, (props::MaxPairs - 1) * 6> indices;
@@ -6041,6 +6129,8 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		EdgesTexture = nullptr;
 		IrisTexture = nullptr;
 		PropTextures.fill(nullptr);
+		RatRunTexture = nullptr;
+		RatRunState = 0;
 		ShadeTexture = nullptr;
 		ShadeTextureSize = {};
 		ShadeFailed = false;
