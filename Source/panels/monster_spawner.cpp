@@ -113,6 +113,8 @@ bool PreviewLoaded = false;
 std::array<uint8_t, 256> PreviewTrn;
 int PreviewUnique = -1;
 bool HavePreviewTrn = false;
+/** @brief The preview's unique colours as its HD art is named (lower case), empty for its type's own art. */
+std::string PreviewRecolour;
 
 struct Layout {
 	Rectangle search;
@@ -214,6 +216,12 @@ std::string UniqueColoursPath(const UniqueMonsterData &unique)
 	return StrCat(R"(monsters\monsters\)", unique.mTrnName, ".trn");
 }
 
+/** @brief A unique monster's colour table name as its HD art is named: lower case (hd::RegisterRecolour). */
+std::string UniqueRecolour(const UniqueMonsterData &unique)
+{
+	return AsciiStrToLower(unique.mTrnName);
+}
+
 /** @brief Whether a unique monster's colours are in the game's data (the shareware data has few). */
 bool UniqueColoursExist(const UniqueMonsterData &unique)
 {
@@ -232,6 +240,7 @@ void FreePreview()
 	PreviewLoaded = false;
 	PreviewUnique = -1;
 	HavePreviewTrn = false;
+	PreviewRecolour.clear();
 }
 
 /** @brief Loads the pictures of the selected monster for the preview, when it changed. */
@@ -259,6 +268,15 @@ void LoadPreview(const MonsterSpawnerEntry &entry)
 		if (entry.unique >= 0) {
 			const std::string path = UniqueColoursPath(UniqueMonstersData[entry.unique]);
 			HavePreviewTrn = LoadFileInMemWithStatus(path.c_str(), PreviewTrn).has_value();
+		}
+		// A table that changes no colour (Genrl: the Skeleton King, the Butcher, Na-Krul) shows its type's own art, as in the game.
+		PreviewRecolour.clear();
+		if (HavePreviewTrn) {
+			bool changesNothing = true;
+			for (size_t i = 0; i < PreviewTrn.size() && changesNothing; i++)
+				changesNothing = PreviewTrn[i] == i;
+			if (!changesNothing)
+				PreviewRecolour = UniqueRecolour(UniqueMonstersData[entry.unique]);
 		}
 	}
 }
@@ -526,11 +544,11 @@ void DrawPreview(const Surface &out, const Layout &layout)
 		box.position.y + box.size.height - 6 - drawn.height,
 	};
 
-	// The HD art is twice the game's pixels and stands in for them exactly (unique monsters keep their own colours, as in the game).
-	if (!HavePreviewTrn) {
+	// The HD art is twice the game's pixels and stands in for them exactly; a unique shows its own HD art, as in the game.
+	{
 		const Rectangle dest { topLeft + Displacement { out.region.x, out.region.y }, drawn };
 		const bool fits = drawn.width <= box.size.width && drawn.height <= box.size.height;
-		if (fits && hd::DrawUiSprite(sprite, dest, shown.fraction)) {
+		if (fits && hd::DrawUiSprite(sprite, dest, shown.fraction, PreviewRecolour)) {
 			DrawString(out, "HD", { box.position + Displacement { 6, box.size.height - 22 }, { 40, 18 } }, { .flags = UiFlags::ColorGold });
 			return;
 		}
@@ -836,8 +854,14 @@ void OpenMonsterSpawner()
 		// A unique needs its colours too.
 		std::erase_if(List, [](const MonsterSpawnerEntry &entry) { return entry.unique >= 0 && !UniqueColoursExist(UniqueMonstersData[entry.unique]); });
 		for (MonsterSpawnerEntry &entry : List) {
-			// The game shows HD art for normal monsters only: a unique is drawn in its own colours.
-			entry.hdArt = entry.unique < 0 && hd::HasArt(MonsterArtName(MonstersData[entry.type], MonsterGraphic::Stand, Direction::South, 0));
+			// A unique shows its own HD art (named for its colours) as in the game; one whose table changes no colour (Genrl) shows its type's.
+			const std::string typeArt = MonsterArtName(MonstersData[entry.type], MonsterGraphic::Stand, Direction::South, 0);
+			if (entry.unique < 0) {
+				entry.hdArt = hd::HasArt(typeArt);
+			} else {
+				const std::string recolour = UniqueRecolour(UniqueMonstersData[entry.unique]);
+				entry.hdArt = hd::HasArt(hd::UniqueArtName(typeArt, recolour)) || (recolour == "genrl" && hd::HasArt(typeArt));
+			}
 		}
 	}
 	LastFilter = MonsterSpawnerFilter::Count; // Forces a refresh, keeping the pick when the list is the same.
