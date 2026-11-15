@@ -10,6 +10,7 @@
 #include "headless_mode.hpp"
 #include "monster.h"
 #include "panels/monster_spawner.hpp"
+#include "poe2/hd.hpp"
 #include "tables/monstdat.h"
 
 namespace devilution {
@@ -223,6 +224,14 @@ TEST(Poe2MonsterSpawnerCl2Test, AcceptsWellFormedListsAndSheets)
 	sheet.resize(sheet.size() - 5);
 	EXPECT_FALSE(MonsterCl2LooksValid(sheet.data(), sheet.size()));
 	EXPECT_FALSE(MonsterCl2LooksValid(nullptr, 0));
+}
+
+// A unique monster's own HD art sits beside its type's, named for its colours, as the game shows it.
+TEST(Poe2MonsterSpawnerHd, AUniqueShowsArtNamedForItsColours)
+{
+	EXPECT_EQ(hd::UniqueArtName("monsters/skelaxe/sklaxa@skelaxe/white/d0_f00", "br"), "monsters/skelaxe/sklaxa@skelaxe/white+br/d0_f00");
+	EXPECT_EQ(hd::UniqueArtName("monsters/sking/sking/d0_f00", ""), "monsters/sking/sking/d0_f00");
+	EXPECT_EQ(hd::UniqueArtName("nameless", "br"), "");
 }
 
 } // namespace
