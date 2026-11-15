@@ -511,6 +511,7 @@ int LightIndexOf(const uint8_t *tbl)
 }
 
 void DropReadPictures();
+void KeepTilePictures();
 
 void DestroyTextures()
 {
@@ -582,7 +583,7 @@ void IndexTiles()
 {
 	TileNames.clear();
 	ArtChoices.clear();
-	DropReadPictures();
+	KeepTilePictures();
 	TileArtShown = false;
 	RecolouredTileArtShown = false;
 	CacheCels = pDungeonCels.get();
@@ -827,6 +828,8 @@ struct ReadPicture {
 constexpr uint32_t ReadPictureKeptMs = 15000;
 /** @brief How long a frame may spend turning pictures read ahead into textures; the rest wait a frame. */
 constexpr float PictureBudgetMs = 2.5F;
+/** @brief How much memory the tile pictures kept from levels left behind may take (a tile's is 16 KB), before they are let go. */
+constexpr size_t KeptTilePictureBytes = 160U << 20;
 
 /** @brief The pictures asked of the reader, by asset path (hd\tiles\town\12.png). Only the game's thread touches it. */
 std::unordered_map<std::string, ReadPicture> ReadPictures;
@@ -911,6 +914,8 @@ int SDLCALL ReaderMain(void *data)
 	const auto *mine = static_cast<const ReaderSeat *>(data);
 	Reader *reader = mine->reader;
 	std::string &busy = reader->busy[mine->seat];
+	// Reading ahead takes what the game's own thread leaves: it must never cost a frame.
+	SDL_SetThreadPriority(SDL_THREAD_PRIORITY_LOW);
 	for (;;) {
 		std::string path;
 		std::vector<std::string> dirs;
@@ -975,6 +980,7 @@ void CollectReadPictures()
 		done.swap(TheReader->done);
 	}
 	const uint32_t now = SDL_GetTicks();
+	TelemetryHdPicturesRead(done.size());
 	for (auto &[path, surface] : done) {
 		const auto it = ReadPictures.find(path);
 		if (it == ReadPictures.end() || it->second.done) {
@@ -1202,6 +1208,58 @@ void DropReadPictures()
 	}
 	// A picture the reader is in the middle of comes back to nobody, and is freed (CollectReadPictures).
 	ReadPictures.clear();
+	PieceReadAhead.clear();
+	ReadAheadView = { -1, -1 };
+	SettledFrames = 0;
+}
+
+/**
+ * @brief The level changed: lets go of what was asked for and not read yet and of the sprites' pictures, but keeps the
+ * tile pictures that were read. Dropped each time, a few thousand small files were read again after every level change
+ * (all the tiles round the view, though their textures were made long before), which kept the reader's threads and the
+ * disk busy for seconds and cost frames just after loading (Curtis 2026-11-15). With more than KeptTilePictureBytes
+ * held, only the pictures of the level being entered stay.
+ */
+void KeepTilePictures()
+{
+#ifdef POE2_HD_READER
+	if (TheReader != nullptr) {
+		const std::lock_guard<SdlMutex> guard(TheReader->lock);
+		TheReader->wanted.clear();
+	}
+	CollectReadPictures();
+#endif
+	const auto let = [](ReadPicture &picture) {
+		if (picture.surface != nullptr)
+			SDL_FreeSurface(picture.surface);
+	};
+	size_t bytes = 0;
+	// A picture the reader is in the middle of comes back to nobody, and is freed (CollectReadPictures).
+	for (auto it = ReadPictures.begin(); it != ReadPictures.end();) {
+		ReadPicture &picture = it->second;
+		if (!picture.done || !IsTilePicture(it->first)) {
+			let(picture);
+			it = ReadPictures.erase(it);
+			continue;
+		}
+		if (picture.surface != nullptr)
+			bytes += static_cast<size_t>(picture.surface->pitch) * static_cast<size_t>(picture.surface->h);
+		++it;
+	}
+	if (bytes > KeptTilePictureBytes) {
+		// hd\tiles\l1\12.png and its palettes' hd\tiles\l1_p3\12.png belong to the Cathedral.
+		const std::string mine = PicturePath("tiles/" + std::string(LevelTypeName()));
+		const std::string_view folder = std::string_view(mine).substr(0, mine.rfind('.'));
+		for (auto it = ReadPictures.begin(); it != ReadPictures.end();) {
+			const std::string_view path = it->first;
+			if (path.size() > folder.size() && path.starts_with(folder) && (path[folder.size()] == '\\' || path[folder.size()] == '_')) {
+				++it;
+				continue;
+			}
+			let(it->second);
+			it = ReadPictures.erase(it);
+		}
+	}
 	PieceReadAhead.clear();
 	ReadAheadView = { -1, -1 };
 	SettledFrames = 0;

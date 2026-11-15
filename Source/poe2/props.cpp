@@ -435,18 +435,31 @@ bool Placed = false;
 float Time = 0;
 float SinceKicks = 0;
 
-/** @brief A rat on the run from one tile's middle to the next. */
+/**
+ * @brief A rat on the run from one tile's middle to the next: out of the dark as far as the hero's light, then back along
+ * a way worked out for it into the dark. It comes and goes only where it can't be seen: one that vanished in plain sight
+ * read as a fault (Curtis 2026-11-15).
+ */
 struct Rat {
 	Point from;
 	Point to;
 	float along = 0;
 	float age = 0;
-	float life = 0;
-	/** @brief Running out of floor: it fades where it is. */
-	bool stopped = false;
+	/** @brief The tiles still ahead of it after `to`, the last of them out of sight; and how many it has taken. */
+	std::vector<Point> way;
+	size_t taken = 0;
+	/** @brief How long it has stood with no way into the dark, in milliseconds. */
+	float stuck = 0;
+	/** @brief Its age when it began to fade (the last resort, when no way opens); negative while it doesn't. */
+	float fadeFrom = -1;
+	/** @brief Whether it has yet been where it can be seen: it starts in the dark. */
+	bool seen = false;
+	bool gone = false;
 };
 
 std::vector<Rat> Rats;
+/** @brief How long a rat that found no way out of sight takes to fade, in milliseconds. */
+constexpr float RatFade = 600;
 float RatIn = 6000;
 uint32_t Dice = 0x51ED270BU;
 
@@ -631,37 +644,70 @@ bool RatCanStand(Point tile)
 	return Floor(tile) && dObject[tile.x][tile.y] == 0;
 }
 
-/** @brief The next tile for a rat: on the way it was going if it can, else whichever way leads from the hero. */
-bool NextTile(const Rat &rat, Point &next)
-{
-	const Point hero = MyPlayer->position.tile;
-	const Displacement going = rat.to - rat.from;
-	const Displacement away = rat.to - hero;
-	std::array<Displacement, 3> tries {
-		going,
-		std::abs(away.deltaX) >= std::abs(away.deltaY) ? Displacement { 0, away.deltaY >= 0 ? 1 : -1 } : Displacement { away.deltaX >= 0 ? 1 : -1, 0 },
-		std::abs(away.deltaX) >= std::abs(away.deltaY) ? Displacement { 0, away.deltaY >= 0 ? -1 : 1 } : Displacement { away.deltaX >= 0 ? -1 : 1, 0 },
-	};
-	for (const Displacement step : tries) {
-		const Point tile = rat.to + step;
-		if ((step.deltaX == 0 && step.deltaY == 0) || !RatCanStand(tile))
-			continue;
-		// Never back towards the hero.
-		if (hero.WalkingDistance(tile) < hero.WalkingDistance(rat.to))
-			continue;
-		next = tile;
-		return true;
-	}
-	return false;
-}
-
 float Brightness(Point tile)
 {
 	const hd::light::Rgb light = hd::light::At(static_cast<float>(tile.x), static_cast<float>(tile.y));
 	return (light.r + light.g + light.b) / 3;
 }
 
-/** @brief A rat starts where the hero's light is just reaching, ahead of the hero, and runs from it. */
+/** @brief Whether a rat on this tile is out of sight: in the dark, or too far from the hero to be in view. */
+bool OutOfSight(Point tile)
+{
+	const Point hero = MyPlayer->position.tile;
+	return Brightness(tile) < 0.03F || hero.WalkingDistance(tile) > 15;
+}
+
+/** @brief Whether a rat may run over this tile: floor with nothing on it, and not right by the hero. */
+bool RatCanPass(Point tile)
+{
+	const Point hero = MyPlayer->position.tile;
+	return RatCanStand(tile) && dMonster[tile.x][tile.y] == 0 && dPlayer[tile.x][tile.y] == 0 && hero.WalkingDistance(tile) >= 2;
+}
+
+/**
+ * @brief The shortest way for a rat from a tile to one that is out of sight, a step at a time along the floor and never
+ * past the hero: the tiles after the first, in order. False when there is none within reach.
+ */
+bool WayIntoTheDark(Point start, std::vector<Point> &way)
+{
+	constexpr int Reach = 26;
+	constexpr int Wide = 2 * Reach + 1;
+	// Each tile round the start: 0 not reached yet, else 1 + the step that reached it (0 to 3).
+	static std::array<uint8_t, Wide * Wide> reached;
+	static std::vector<Point> open;
+	reached.fill(0);
+	open.clear();
+	const auto slot = [&](Point tile) { return static_cast<size_t>(tile.y - start.y + Reach) * Wide + static_cast<size_t>(tile.x - start.x + Reach); };
+	// The steps tried first lead away from the hero, so of two ways as short it takes the one that flees.
+	const Point hero = MyPlayer->position.tile;
+	const Displacement away = start - hero;
+	const Displacement alongX { away.deltaX >= 0 ? 1 : -1, 0 };
+	const Displacement alongY { 0, away.deltaY >= 0 ? 1 : -1 };
+	const bool xFirst = std::abs(away.deltaX) >= std::abs(away.deltaY);
+	const std::array<Displacement, 4> steps { xFirst ? alongX : alongY, xFirst ? alongY : alongX, xFirst ? -alongY : -alongX, xFirst ? -alongX : -alongY };
+	reached[slot(start)] = 5;
+	open.push_back(start);
+	for (size_t i = 0; i < open.size(); i++) {
+		const Point tile = open[i];
+		if (tile != start && OutOfSight(tile)) {
+			way.clear();
+			for (Point back = tile; back != start; back -= steps[reached[slot(back)] - 1U])
+				way.push_back(back);
+			std::reverse(way.begin(), way.end());
+			return true;
+		}
+		for (size_t k = 0; k < steps.size(); k++) {
+			const Point next = tile + steps[k];
+			if (std::abs(next.x - start.x) > Reach || std::abs(next.y - start.y) > Reach || reached[slot(next)] != 0 || !RatCanPass(next))
+				continue;
+			reached[slot(next)] = static_cast<uint8_t>(k + 1);
+			open.push_back(next);
+		}
+	}
+	return false;
+}
+
+/** @brief A rat comes out of the dark to where the hero's light is just reaching, ahead of the hero, and runs back from it. */
 void StartRat()
 {
 	const Point hero = MyPlayer->position.tile;
@@ -675,22 +721,20 @@ void StartRat()
 		// Lit enough to be seen as it starts, and not right at the hero's feet.
 		if (bright < 0.3F || hero.WalkingDistance(tile) < 2)
 			continue;
-		const Displacement away = tile - hero;
+		// Only one that has somewhere to go: a way along the floor to where it can't be seen.
 		Rat rat;
-		rat.from = tile;
-		rat.to = tile;
-		rat.life = 1500 + 900 * Roll();
-		// Its first step: along whichever way leads most from the hero.
-		const Displacement first = std::abs(away.deltaX) >= std::abs(away.deltaY) ? Displacement { away.deltaX >= 0 ? 1 : -1, 0 } : Displacement { 0, away.deltaY >= 0 ? 1 : -1 };
-		if (RatCanStand(tile + first)) {
-			rat.to = tile + first;
-		} else {
-			Point next;
-			rat.from = tile - first;
-			if (!NextTile(rat, next))
-				continue;
-			rat.from = tile;
-			rat.to = next;
+		if (!WayIntoTheDark(tile, rat.way))
+			continue;
+		// It comes out of the dark the same way, as far as this tile, and turns back when it gets here.
+		std::reverse(rat.way.begin(), rat.way.end());
+		rat.way.push_back(tile);
+		rat.from = rat.way[0];
+		rat.to = rat.way[1];
+		rat.taken = 2;
+		// A second one down the same way hangs back in the dark a moment, so the two don't run as one.
+		for (const Rat &other : Rats) {
+			if (other.from == rat.from)
+				rat.along = -1 - 2 * Roll();
 		}
 		Rats.push_back(rat);
 		return;
@@ -706,25 +750,51 @@ void RunRats(float ms)
 		return;
 	}
 	const float speed = std::clamp(atmosphere::Value("rat_speed", 5.F), 2.F, 14.F);
+	// A rat with no way into the dark waits this long for one to open before it fades where it is, over this long; one
+	// that has run this long fades too (all in milliseconds). Neither should happen: it starts only with a way to go.
+	constexpr float StuckFor = 2500;
+	constexpr float RunsFor = 15000;
 	for (Rat &rat : Rats) {
 		rat.age += ms;
-		if (rat.stopped)
+		if (rat.fadeFrom >= 0) {
+			rat.gone = rat.age - rat.fadeFrom >= RatFade;
 			continue;
+		}
 		rat.along += speed * ms / 1000;
-		while (rat.along >= 1 && !rat.stopped) {
-			Point next;
-			if (NextTile(rat, next)) {
-				rat.along -= 1;
-				rat.from = rat.to;
-				rat.to = next;
-			} else {
-				rat.along = 1;
-				rat.stopped = true;
-				rat.life = std::min(rat.life, rat.age + 160);
+		while (rat.along >= 1) {
+			// At the middle of a tile: once it has been out in the light, it is gone where nobody can see it.
+			if (!OutOfSight(rat.to)) {
+				rat.seen = true;
+			} else if (rat.seen) {
+				rat.gone = true;
+				break;
 			}
+			// On along its way, or by a new one if the hero's light or something in the way has closed it.
+			const bool onward = rat.taken < rat.way.size() && RatCanPass(rat.way[rat.taken]);
+			if (!onward) {
+				// One that never reached the light has nothing to run from.
+				if (!rat.seen) {
+					rat.gone = true;
+					break;
+				}
+				rat.taken = 0;
+				if (!WayIntoTheDark(rat.to, rat.way)) {
+					rat.way.clear();
+					rat.along = 1;
+					rat.stuck += ms;
+					break;
+				}
+			}
+			rat.stuck = 0;
+			rat.along -= 1;
+			rat.from = rat.to;
+			rat.to = rat.way[rat.taken++];
+		}
+		if (rat.stuck >= StuckFor || rat.age >= RunsFor) {
+			rat.fadeFrom = rat.age;
 		}
 	}
-	Rats.erase(std::remove_if(Rats.begin(), Rats.end(), [](const Rat &rat) { return rat.age >= rat.life; }), Rats.end());
+	Rats.erase(std::remove_if(Rats.begin(), Rats.end(), [](const Rat &rat) { return rat.gone; }), Rats.end());
 	// The next one waits while the hero stands, fights or lies dead: the light has to come to it.
 	bool walking = MyPlayer->isWalking();
 	if (!walking || moments::FightOn() || MyPlayerIsDead || Rats.size() >= 2)
@@ -804,9 +874,10 @@ Shape RatShape(const Rat &rat, Point tile)
 {
 	Shape shape {};
 	shape.kind = Kind::Rat;
-	const float x = static_cast<float>(rat.from.x) + static_cast<float>(rat.to.x - rat.from.x) * rat.along;
-	const float y = static_cast<float>(rat.from.y) + static_cast<float>(rat.to.y - rat.from.y) * rat.along;
-	shape.alpha = std::clamp(std::min(rat.age / 120, (rat.life - rat.age) / 220), 0.F, 1.F);
+	const float along = std::max(rat.along, 0.F);
+	const float x = static_cast<float>(rat.from.x) + static_cast<float>(rat.to.x - rat.from.x) * along;
+	const float y = static_cast<float>(rat.from.y) + static_cast<float>(rat.to.y - rat.from.y) * along;
+	shape.alpha = std::clamp(std::min(rat.age / 120, rat.fadeFrom < 0 ? 1.F : 1 - (rat.age - rat.fadeFrom) / RatFade), 0.F, 1.F);
 	shape.lightX = x;
 	shape.lightY = y;
 	shape.onWall = false;
@@ -824,7 +895,8 @@ Shape RatShape(const Rat &rat, Point tile)
 	const float size = std::clamp(atmosphere::Value("rat_size", 0.4F), 0.2F, 1.5F);
 	const float c = std::cos(slope);
 	const float s = std::sin(slope);
-	const int frame = static_cast<int>(rat.age / 55) % RatFrames;
+	// It holds still while it waits for a way to open.
+	const int frame = rat.stuck > 0 ? 1 : static_cast<int>(rat.age / 55) % RatFrames;
 	const float v0 = static_cast<float>(frame) / RatFrames;
 	const float v1 = static_cast<float>(frame + 1) / RatFrames;
 	const auto corner = [&](float cx, float cy, float u, float v) {

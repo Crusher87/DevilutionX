@@ -221,6 +221,8 @@ void TelemetrySlowWorkDone(SlowWork work, uint64_t start);
 void TelemetryGameSaved(std::string_view why, uint64_t start);
 /** @brief The HD world's cache of the game's own pictures filled up and was emptied. */
 void TelemetryHdCacheDropped(size_t pictures);
+/** @brief Notes that the HD reader's threads read that many pictures from disk, for the line on the seconds after a loading screen. */
+void TelemetryHdPicturesRead(size_t pictures);
 
 /** @brief Times slow work from here to the end of the scope. */
 class SlowWorkScope {
