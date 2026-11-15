@@ -342,8 +342,9 @@ Piece At(size_t index);
  */
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
 /**
- * @brief Idea 66: draws the shafts of light out of Tristram's bright doorways onto the floor. Called by the HD world
- * between its floor and its shadows, so the shadows fall across them and everyone stands in front of them.
+ * @brief Draws the light that lies on the floor: idea 66's shafts out of Tristram's bright doorways, and the lamps' shine
+ * on wet ground. Called by the HD world between its floor and its shadows, so the shadows fall across them and everyone
+ * stands in front of them.
  */
 void DrawFloorShafts(SDL_Renderer *renderer, float toLogical);
 #endif
