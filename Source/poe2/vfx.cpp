@@ -10330,7 +10330,7 @@ void DrawShafts(Batch &batch)
 	}
 }
 
-void DrawWetShine()
+void DrawWetShine(Batch &batch)
 {
 	const float wet = Wetness() * atmosphere::Value("wet_shine", 1.F);
 	if (wet <= 0.01F)
@@ -10365,8 +10365,8 @@ void DrawWetShine()
 		const Vec from = foot + out * (0.15F * reach);
 		const Vec middle = foot + out * (0.5F * reach);
 		const Vec to = foot + out * reach;
-		SoftLine(Ground, from, middle, half * 2.2F, colour, colour, 0, power * 0.2F);
-		SoftLine(Ground, middle, to, half * 2.2F, colour, colour, power * 0.2F, 0);
+		SoftLine(batch, from, middle, half * 2.2F, colour, colour, 0, power * 0.2F);
+		SoftLine(batch, middle, to, half * 2.2F, colour, colour, power * 0.2F, 0);
 		uint32_t seed = ((static_cast<uint32_t>(lamp.x * 16) * 73856093U) ^ (static_cast<uint32_t>(lamp.y * 16) * 19349663U)) | 1;
 		for (int k = 0; k < Glints; k++) {
 			const float f = SeededRandom(seed);
@@ -10383,8 +10383,8 @@ void DrawWetShine()
 			const Vec centre = foot + out * (reach * (0.1F + 0.85F * f)) + side * (across * (0.3F + 0.7F * f));
 			// Each glint is a small flat sparkle on the water lying on the ground.
 			const Vec lie { length * (0.8F + 0.4F * glint), 0 };
-			SoftLine(Ground, centre, centre + lie, thick, spark, spark, alpha, 0);
-			SoftLine(Ground, centre, centre - lie, thick, spark, spark, alpha, 0);
+			SoftLine(batch, centre, centre + lie, thick, spark, spark, alpha, 0);
+			SoftLine(batch, centre, centre - lie, thick, spark, spark, alpha, 0);
 		}
 	}
 }
@@ -10403,7 +10403,6 @@ void DrawWeather()
 	};
 	// With the HD light the rain darkens the sky's own light. Without it, a cold cast over the town stands in.
 	const bool skyLit = AirLit && atmosphere::Strength(atmosphere::Knob::RainSky) > 0;
-	DrawWetShine();
 	if (w.strength > 0 && WeatherSize.x > 0) {
 		if (snow) {
 			quad(Dark, { 70, 80, 100 }, 0.12F * w.strength);
@@ -11550,6 +11549,10 @@ void DrawFloorShafts(SDL_Renderer *renderer, float toLogical)
 	static Batch shafts;
 	shafts.clear();
 	DrawShafts(shafts);
+	// The lamps' shine on wet ground lies on the floor the same way. Drawn with the effects, it had to be cut away where
+	// people and walls stand, a pass over the floor's pixels each frame for as long as the ground stayed wet: some 2 ms a
+	// frame on Curtis's computer (2026-11-15 play log: 67 fps dry, 58 in and after rain).
+	DrawWetShine(shafts);
 	if (shafts.indices.empty())
 		return;
 	SDL_BlendMode before = SDL_BLENDMODE_NONE;
