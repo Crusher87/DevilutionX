@@ -909,6 +909,15 @@ Shape RatShape(const Rat &rat, Point tile)
 	shape.corners[1] = corner(RatWide, 0, 1, v0);
 	shape.corners[2] = corner(0, RatTall, 0, v1);
 	shape.corners[3] = corner(RatWide, RatTall, 1, v1);
+	// For its run's pictures (hd.cpp draws those when they are there): the eighth of the screen its way points in,
+	// counted round from straight down, and the frame of the loop it has run to (60 a second as the run was made). It
+	// stands on its first frame while it waits.
+	const float angle = std::atan2(sy * 16, sx * 32) * 180 / Pi;
+	shape.direction = (static_cast<int>(std::lround((angle - 90) / 45)) % 8 + 8) % 8;
+	const float fps = std::clamp(atmosphere::Value("rat_run_fps", 60.F), 10.F, 120.F);
+	shape.frame = rat.stuck > 0 ? 0 : static_cast<int>(rat.age * fps / 1000) % RatRunFrames;
+	shape.footX = px;
+	shape.footY = py;
 	return shape;
 }
 

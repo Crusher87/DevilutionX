@@ -80,6 +80,9 @@ cathedral	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels
 cathedral	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
 cathedral	rat_speed	5		How fast a rat runs, in tiles a second.
 cathedral	rat_size	0.4		How big a rat is. 1 is 32 game pixels from nose to tail.
+cathedral	rat_run_size	1		How big a rat is drawn from its 3D run pictures (hd\props\rat\rat_run_sheet_hd_2x.png), when they are beside the game. 1 is as made.
+cathedral	rat_run_fps	60		How fast the rat's 3D run pictures play, in frames a second. 60 is as made.
+cathedral	rat_lift	2		How many light levels brighter than its floor a rat is drawn, so it can be seen at all. 0 none.
 cathedral	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 cathedral	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
@@ -115,6 +118,9 @@ catacombs	chain_gap	9		One plain stretch of wall in this many holds a chain with
 catacombs	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
 catacombs	rat_speed	5		How fast a rat runs, in tiles a second.
 catacombs	rat_size	0.4		How big a rat is. 1 is 32 game pixels from nose to tail.
+catacombs	rat_run_size	1		How big a rat is drawn from its 3D run pictures (hd\props\rat\rat_run_sheet_hd_2x.png), when they are beside the game. 1 is as made.
+catacombs	rat_run_fps	60		How fast the rat's 3D run pictures play, in frames a second. 60 is as made.
+catacombs	rat_lift	2		How many light levels brighter than its floor a rat is drawn, so it can be seen at all. 0 none.
 catacombs	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 catacombs	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 caves	falloff	1.50	1.65	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
