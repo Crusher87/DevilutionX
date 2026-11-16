@@ -315,6 +315,8 @@ struct SpriteName {
 std::unordered_map<const uint8_t *, SpriteName> SpriteNames;
 /** @brief Each dungeon frame, by the address of its pixels: its HD art name. */
 std::unordered_map<const uint8_t *, std::string> TileNames;
+/** @brief This level's tile pictures have shape maps beside them (named with _n, as an object's: MakeShape). */
+bool TileMapsHere = false;
 std::unordered_map<std::string, HdArt> Art;
 /** @brief Whether the pack has art of each name asked about (HasArt). */
 std::unordered_map<std::string, bool> ArtExists;
@@ -352,6 +354,8 @@ struct ArtChoice {
 	HdArt *art = nullptr;
 	/** @brief The tile art shown, when lava or water flows in it. */
 	HdArt *flowing = nullptr;
+	/** @brief The tile art shown, when it has a shape map (MakeShape). */
+	const HdArt *shapes = nullptr;
 };
 struct ArtChoiceKey {
 	const uint8_t *data;
@@ -617,6 +621,22 @@ void IndexTiles()
 		TileNames[data] = name;
 		TileNames[data + ReencodedTriangleFrameSize] = name + "f";
 	}
+	// Maps are made for a whole level's tiles at once: a few of its first pictures tell whether this one has them.
+	TileMapsHere = false;
+	for (uint32_t frame = 1; frame <= std::min(count, 200U) && !TileMapsHere; frame++) {
+		const auto it = TileNames.find(GetDunFrame(CacheCels, frame));
+		TileMapsHere = it != TileNames.end() && HasArt(it->second + "_n");
+	}
+}
+
+/** @brief The shape map's name for a tile picture: a level's recoloured tiles (tiles/l1_p3/120) share its plain ones' maps. */
+std::string TileMapName(const std::string &name)
+{
+	const size_t slash = name.find('/', 6);
+	const size_t variant = name.rfind("_p", slash);
+	if (slash == std::string::npos || variant == std::string::npos || variant < 6)
+		return name;
+	return name.substr(0, variant) + name.substr(slash);
 }
 
 /** @brief HD art over the game's painted shadow counts as that shadow up to this bright; brighter there is the sprite's own edge. */
@@ -1360,7 +1380,7 @@ constexpr float ShapeLeastShare = 0.004F;
  * the screen, y left and down, z up) and shared out among the axes it leans to by the square of its lean, which adds up
  * to one: its colour goes into each axis's picture at that share of its alpha.
  */
-void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name)
+void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name, bool tile = false)
 {
 	if (picture->format->format != SDL_PIXELFORMAT_RGBA32)
 		return;
@@ -1439,7 +1459,8 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 		// Added on top of the art drawn in the least light any of its sides takes.
 		SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_ADD);
 #if SDL_VERSION_ATLEAST(2, 0, 12)
-		SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
+		// A tile's, like its art, nearest (see MaskedArt).
+		SDL_SetTextureScaleMode(texture, tile ? SDL_ScaleModeNearest : SDL_ScaleModeLinear);
 #endif
 		art.shape[k] = texture;
 		art.shaped = true;
@@ -1975,6 +1996,9 @@ HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &dr
 			// under them show through as thin lines wherever the screen isn't drawn at exactly twice the world.
 			SDL_SetTextureScaleMode(art.texture, SDL_ScaleModeNearest);
 #endif
+			// Made from the picture as cut here, so a wall cut away near the hero has its shape cut the same way.
+			if (TileMapsHere && art.flow == nullptr)
+				MakeShape(renderer, art, surface, TileMapName(name), true);
 		} else {
 			art.flow = nullptr;
 		}
@@ -2056,6 +2080,7 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 	choice.tileArt = texture != nullptr && draw.kind == DrawKind::Tile && !recoloured;
 	choice.art = choice.hdArt ? art : nullptr;
 	choice.flowing = tileArt != nullptr && tileArt->flow != nullptr ? tileArt : nullptr;
+	choice.shapes = tileArt != nullptr && tileArt->shaped && texture == tileArt->texture ? tileArt : nullptr;
 	if (texture != nullptr && draw.kind == DrawKind::Tile) {
 		if (recoloured)
 			RecolouredTileArtShown = true;
@@ -2408,7 +2433,21 @@ struct DrawTexture {
 	bool hdArt = false;
 	/** @brief In the colours the HD tiles were made in, so it's evened out to the level's palette by TileGain. */
 	bool tileColours = false;
+	/** @brief A wall's or floor's art split by the way each part of it faces, when it has a shape map. */
+	const HdArt *shapes = nullptr;
 };
+
+/**
+ * @brief How a wall or floor with a shape map is lit by its shape (TileShapeLightFor): the art drawn in `base` times
+ * the light it would take flat, and each way of facing's picture added in `extra` times that light.
+ */
+struct TileShapeLight {
+	const HdArt *art = nullptr;
+	float base = 1;
+	std::array<float, NumShapeAxes> extra {};
+};
+bool TileShapeLightFor(const Draw &draw, const DrawTexture &art, TileShapeLight &out, bool floor);
+void AddShapeLight(SDL_Renderer *renderer, const TileShapeLight &shaped, SDL_Vertex *vertices, const Colour3 *colours, int count, const int *indices, int indexCount);
 
 DrawTexture TextureFor(SDL_Renderer *renderer, const Draw &draw, bool paintedShadow)
 {
@@ -2421,6 +2460,7 @@ DrawTexture TextureFor(SDL_Renderer *renderer, const Draw &draw, bool paintedSha
 	out.texture = art.texture;
 	out.hdArt = art.hdArt;
 	out.tileColours = art.tileArt;
+	out.shapes = art.shapes;
 	// HD arches are made in the HD walls' palette, so they are evened out to this level's palette like the walls.
 	if (art.hdArt && leveltype != DTYPE_TOWN && IsArchPiece(draw))
 		out.tileColours = true;
@@ -2489,8 +2529,15 @@ void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading
 	}
 	// The game's own see-through pixels are already in the fallback's coverage.
 	const Uint8 alpha = art.hdArt && draw.style == SpriteStyle::Blended ? 128 : 255;
+	TileShapeLight shaped;
+	const bool byShape = TileShapeLightFor(draw, art, shaped, false);
 	if (shading.count == 1 && !shading.fades) {
-		const Colour3 colour = ArtColour(shading.colours[0], art);
+		const Colour3 flat = ArtColour(shading.colours[0], art);
+		Colour3 colour = flat;
+		if (byShape) {
+			for (float &part : colour)
+				part *= shaped.base;
+		}
 		SDL_SetTextureColorMod(art.texture, ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]));
 		SDL_SetTextureAlphaMod(art.texture, alpha);
 		SDL_RenderCopyF(renderer, art.texture, nullptr, &dest);
@@ -2500,6 +2547,17 @@ void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading
 			SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_ADD);
 			SDL_RenderCopyF(renderer, art.texture, nullptr, &dest);
 			SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
+		}
+		if (byShape) {
+			std::array<SDL_Vertex, 4> quad;
+			const std::array<Colour3, 4> flats { flat, flat, flat, flat };
+			for (int v = 0; v < 4; v++) {
+				const float fx = static_cast<float>(v & 1);
+				const float fy = static_cast<float>(v >> 1);
+				quad[v] = SDL_Vertex { { dest.x + fx * dest.w, dest.y + fy * dest.h }, { 255, 255, 255, alpha }, { fx, fy } };
+			}
+			static constexpr std::array<int, 6> QuadIndices { 0, 1, 2, 1, 3, 2 };
+			AddShapeLight(renderer, shaped, quad.data(), flats.data(), 4, QuadIndices.data(), 6);
 		}
 		return;
 	}
@@ -2512,14 +2570,20 @@ void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading
 	const int stops = std::max(shading.count, 2);
 	std::array<SDL_Vertex, 8> vertices;
 	std::array<Colour3, 8> colours;
+	std::array<Colour3, 8> flats;
 	bool aboveFull = false;
 	for (int s = 0; s < stops; s++) {
 		const int from = std::min(s, shading.count - 1);
 		const float fx = shading.count == 1 ? static_cast<float>(s) : shading.stops[s];
-		colours[s * 2] = ArtColour(shading.fades ? shading.top[from] : shading.colours[from], art);
-		colours[s * 2 + 1] = ArtColour(shading.colours[from], art);
+		flats[s * 2] = ArtColour(shading.fades ? shading.top[from] : shading.colours[from], art);
+		flats[s * 2 + 1] = ArtColour(shading.colours[from], art);
 		for (int edge = 0; edge < 2; edge++) {
-			const Colour3 &colour = colours[s * 2 + edge];
+			Colour3 &colour = colours[s * 2 + edge];
+			colour = flats[s * 2 + edge];
+			if (byShape) {
+				for (float &part : colour)
+					part *= shaped.base;
+			}
 			aboveFull = aboveFull || IsAboveFull(colour);
 			const SDL_Color vertexColour { ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), alpha };
 			vertices[s * 2 + edge] = SDL_Vertex { { dest.x + fx * dest.w, dest.y + static_cast<float>(edge) * dest.h }, vertexColour, { fx, static_cast<float>(edge) } };
@@ -2541,6 +2605,8 @@ void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading
 		SDL_RenderGeometry(renderer, art.texture, vertices.data(), stops * 2, indices.data(), count);
 		SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
 	}
+	if (byShape)
+		AddShapeLight(renderer, shaped, vertices.data(), flats.data(), stops * 2, indices.data(), count);
 #endif
 }
 
@@ -2941,6 +3007,19 @@ Colour3 BaseFloorLight(float x, float y, Point tile, BackWalls walls, BehindWall
 	return light;
 }
 
+/** @brief Lights the first `count` vertices (and their colours) `share` as much, for a wall or floor lit by its shape. */
+template <size_t N>
+void ScaleVertices(std::array<SDL_Vertex, N> &vertices, std::array<Colour3, N> &colours, int count, float share)
+{
+	for (int i = 0; i < count; i++) {
+		Colour3 &colour = colours[static_cast<size_t>(i)];
+		for (float &part : colour)
+			part *= share;
+		SDL_Vertex &vertex = vertices[static_cast<size_t>(i)];
+		vertex.color = SDL_Color { ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), vertex.color.a };
+	}
+}
+
 /**
  * @brief Draws shapes again with the part of their light above full added on top, where any corner has some (beside
  * a fire or a spell): `colours` are each corner's light.
@@ -3065,8 +3144,15 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 				indices[used++] = v;
 		}
 	}
+	TileShapeLight shaped;
+	const bool byShape = TileShapeLightFor(draw, art, shaped, true);
+	const std::array<Colour3, 11> flats = colours;
+	if (byShape)
+		ScaleVertices(vertices, colours, count, shaped.base);
 	SDL_RenderGeometry(renderer, art.texture, vertices.data(), count, indices.data(), used);
 	DrawAboveFull(renderer, art.texture, vertices, colours, count, indices.data(), used);
+	if (byShape)
+		AddShapeLight(renderer, shaped, vertices.data(), flats.data(), count, indices.data(), used);
 }
 
 /**
@@ -3113,8 +3199,15 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 			{ fx, fy },
 		};
 	}
+	TileShapeLight shaped;
+	const bool byShape = TileShapeLightFor(draw, art, shaped, floorOnly);
+	const std::array<Colour3, 3> flats = colours;
+	if (byShape)
+		ScaleVertices(vertices, colours, static_cast<int>(vertices.size()), shaped.base);
 	SDL_RenderGeometry(renderer, art.texture, vertices.data(), static_cast<int>(vertices.size()), nullptr, 0);
 	DrawAboveFull(renderer, art.texture, vertices, colours, static_cast<int>(vertices.size()), nullptr, 0);
+	if (byShape)
+		AddShapeLight(renderer, shaped, vertices.data(), flats.data(), static_cast<int>(vertices.size()), nullptr, 0);
 }
 
 /**
@@ -4880,11 +4973,13 @@ constexpr ObjectFacing BlockFaces { { { 0.F, 1.F, 0.F }, { 0.707F, 0.707F, 0.F }
  *
  * Each of the strongest lights there gives a face more of its light the more the face is turned to it, measured against
  * the floor under the same light; its bounce and the rest of the room's light fall on every face alike.
+ * @param middle How high the faces are, in tiles.
+ * @param given How strongly the faces differ (1 as a real thing would); below 0, as feel("objects") says.
  * @return False where no light with a direction falls on it (or feel("objects") is off): one light for all of it.
  */
-bool FacingShades(float wx, float wy, const std::array<float, 3> *faces, size_t count, float *shade)
+bool FacingShades(float wx, float wy, const std::array<float, 3> *faces, size_t count, float *shade, float middle = ObjectMiddle, float given = -1)
 {
-	const float strength = std::clamp(atmosphere::Setting(atmosphere::Knob::Objects), 0.F, 2.F);
+	const float strength = given >= 0 ? given : std::clamp(atmosphere::Setting(atmosphere::Knob::Objects), 0.F, 2.F);
 	const float total = light::LinearAt(wx, wy);
 	const float drawnTotal = light::Drawn(total);
 	if (strength <= 0 || total <= 1e-4F || drawnTotal <= 1e-4F || count > MaxFacings)
@@ -4899,7 +4994,7 @@ bool FacingShades(float wx, float wy, const std::array<float, 3> *faces, size_t 
 			return;
 		const float dx = source.x - wx;
 		const float dy = source.y - wy;
-		const float dz = std::max(source.height, 0.05F) - ObjectMiddle;
+		const float dz = std::max(source.height, 0.05F) - middle;
 		const float length = std::sqrt(dx * dx + dy * dy + dz * dz);
 		if (length < 1e-3F)
 			return;
@@ -5047,6 +5142,90 @@ bool DrawShapedObject(SDL_Renderer *renderer, const Draw &draw, float toLogical,
 		}
 	}
 	return true;
+}
+
+/** @brief How high up a wall its light by shape is worked out, in tiles (its middle, about a hero's height). */
+constexpr float WallShapeMiddle = 0.5F;
+
+/**
+ * @brief How a wall or floor whose HD picture has a shape map is lit by its shape: each of its ways of facing takes the
+ * light that way takes, against the light the piece takes flat (a floor facing up, a wall facing out of its face), which
+ * it already has. So a flat stretch of stone stays as it was, while the edges of its blocks, a pillar's sides and the
+ * cracks in the floor turn to the lights round them or away.
+ * @param floor It is drawn as the floor (lit facing up); else as the wall its tile is part of.
+ * @return False if it has no shape map, feel("tileshapes") is off or no light with a direction falls on it.
+ */
+bool TileShapeLightFor(const Draw &draw, const DrawTexture &art, TileShapeLight &out, bool floor)
+{
+	if (art.shapes == nullptr || !art.shapes->shaped || draw.kind != DrawKind::Tile || !draw.hasTile || draw.light < 0)
+		return false;
+	const float strength = std::clamp(atmosphere::Setting(atmosphere::Knob::TileShapes), 0.F, 2.F);
+	if (strength <= 0)
+		return false;
+	const bool right = IsRightColumn(draw);
+	float wx = static_cast<float>(draw.cell.x);
+	float wy = static_cast<float>(draw.cell.y);
+	std::array<std::array<float, 3>, NumShapeAxes + 1> faces;
+	std::copy(ShapeAxes.begin(), ShapeAxes.end(), faces.begin());
+	float middle = WallShapeMiddle;
+	if (floor || IsRockTop(draw.cell)) {
+		faces[NumShapeAxes] = { 0.F, 0.F, 1.F };
+		middle = 0.05F;
+	} else if (!light::Blocks(draw.cell.x, draw.cell.y)) {
+		// Something standing on an open tile, seen from the front.
+		faces[NumShapeAxes] = { 0.707F, 0.707F, 0.F };
+	} else if (right) {
+		// The wall along the tile's back right edge faces +y; along its back left edge, +x (as FaceLight).
+		faces[NumShapeAxes] = { 0.F, 1.F, 0.F };
+		wy -= 0.25F;
+	} else {
+		faces[NumShapeAxes] = { 1.F, 0.F, 0.F };
+		wx -= 0.25F;
+	}
+	std::array<float, NumShapeAxes + 1> shade;
+	if (!FacingShades(wx, wy, faces.data(), faces.size(), shade.data(), middle, 1.F))
+		return false;
+	const float flat = shade[NumShapeAxes];
+	if (flat < 0.05F)
+		return false;
+	float least = std::numeric_limits<float>::max();
+	std::array<float, NumShapeAxes> against;
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		against[k] = std::clamp(1 + (shade[k] / flat - 1) * strength, 0.15F, 2.5F);
+		if (art.shapes->shape[k] != nullptr)
+			least = std::min(least, against[k]);
+	}
+	if (least == std::numeric_limits<float>::max())
+		return false;
+	out.art = art.shapes;
+	out.base = least;
+	for (size_t k = 0; k < NumShapeAxes; k++)
+		out.extra[k] = art.shapes->shape[k] != nullptr ? against[k] - least : 0.F;
+	return true;
+}
+
+/**
+ * @brief Adds the light a wall's or floor's ways of facing take over the least of them (TileShapeLightFor), each its
+ * picture drawn over the same shape as the art, in `colours` (the light the piece takes flat) times its share.
+ */
+void AddShapeLight(SDL_Renderer *renderer, const TileShapeLight &shaped, SDL_Vertex *vertices, const Colour3 *colours, int count, const int *indices, int indexCount)
+{
+	constexpr int MostVertices = 16;
+	if (shaped.art == nullptr || count > MostVertices)
+		return;
+	std::array<SDL_Vertex, MostVertices> lit;
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		SDL_Texture *texture = shaped.art->shape[k];
+		if (texture == nullptr || shaped.extra[k] < 1.F / 255)
+			continue;
+		for (int v = 0; v < count; v++) {
+			lit[v] = vertices[v];
+			const Colour3 &c = colours[v];
+			const float more = shaped.extra[k];
+			lit[v].color = SDL_Color { ColourByte(c[0] * more), ColourByte(c[1] * more), ColourByte(c[2] * more), vertices[v].color.a };
+		}
+		SDL_RenderGeometry(renderer, texture, lit.data(), count, indices, indexCount);
+	}
 }
 
 /** @brief The colour of the edge the lava gives a body standing by it (LavaEdge). */
@@ -6081,9 +6260,14 @@ void ReadAheadTiles(Size worldSize)
 				if (PaletteVariant > 1 && slash != std::string::npos)
 					wanted.push_back(PicturePath(name.substr(0, slash) + "_p" + std::to_string(PaletteVariant) + name.substr(slash)));
 				wanted.push_back(PicturePath(name));
+				if (TileMapsHere)
+					wanted.push_back(PicturePath(name + "_n"));
 				// A floor tile with something growing over it has that in a picture of its own.
-				if (cel.type() == TileType::TransparentSquare)
+				if (cel.type() == TileType::TransparentSquare) {
 					wanted.push_back(PicturePath(name + "f"));
+					if (TileMapsHere)
+						wanted.push_back(PicturePath(name + "f_n"));
+				}
 			}
 		}
 	}

@@ -88,6 +88,7 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "glow", 1.F, "a wide soft glow round flames, lamps and lit windows; 2 twice as bright (idea 66)" },
 	{ "shafts", 1.F, "a shaft of lit air out of a bright doorway; 0.5 half as bright (idea 66)" },
 	{ "reflect", 1.F, "you show in Tristram's stream when you stand at its edge, and the water takes a little of the sky (idea 66)" },
+	{ "tileshapes", 1.F, "walls and floors that have a shape map are lit by their shape, so stone edges and pillars catch the light; 0 lights them flat (works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

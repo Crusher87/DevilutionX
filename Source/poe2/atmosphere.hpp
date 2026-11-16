@@ -120,8 +120,10 @@ enum class Knob : uint8_t {
 	Shafts,
 	/** Idea 66: who stands at the edge of Tristram's stream shows in the water, and the water takes a little of the sky. */
 	Reflect,
+	/** Walls and floors whose HD pictures have a shape map beside them are lit by their shape; at 0, flat as before. */
+	TileShapes,
 };
-inline constexpr size_t NumKnobs = 41;
+inline constexpr size_t NumKnobs = 42;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);
