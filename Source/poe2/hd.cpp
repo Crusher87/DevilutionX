@@ -230,6 +230,13 @@ struct HdArt {
 	 */
 	std::array<SDL_Texture *, NumShapeAxes> shape {};
 	bool shaped = false;
+	/**
+	 * @brief A wall's or floor's ways of facing as one picture, side by side in ShapeAxes order with a pixel between
+	 * (its `shape` stay null): drawn in one go, the many pieces of a level cost one draw each, not one per way.
+	 */
+	SDL_Texture *sheet = nullptr;
+	std::array<bool, NumShapeAxes> sheetHas {};
+	int sheetCell = 0;
 	/** @brief The picture's name, for sprite art (its outlines are made from the picture). */
 	std::string name;
 	/** @brief Its smooth outlines, by OutlineCut. */
@@ -536,6 +543,8 @@ void DestroyTextures()
 				if (shape != nullptr)
 					SDL_DestroyTexture(shape);
 			}
+			if (art.sheet != nullptr)
+				SDL_DestroyTexture(art.sheet);
 			for (const Outline &outline : art.outlines) {
 				if (outline.texture != nullptr)
 					SDL_DestroyTexture(outline.texture);
@@ -1449,6 +1458,31 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 	SDL_UnlockSurface(map);
 	SDL_UnlockSurface(picture);
 	SDL_FreeSurface(map);
+	if (tile) {
+		const int cell = width + 2;
+		std::vector<uint8_t> sheet(static_cast<size_t>(cell) * NumShapeAxes * height * 4, 0);
+		for (size_t k = 0; k < NumShapeAxes; k++) {
+			art.sheetHas[k] = static_cast<float>(faces[k]) > static_cast<float>(body) * ShapeLeastShare;
+			if (!art.sheetHas[k])
+				continue;
+			for (int y = 0; y < height; y++) {
+				std::copy_n(pixels[k].data() + static_cast<size_t>(y) * width * 4, static_cast<size_t>(width) * 4,
+				    sheet.data() + (static_cast<size_t>(y) * cell * NumShapeAxes + k * cell + 1) * 4);
+			}
+		}
+		art.sheet = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, cell * static_cast<int>(NumShapeAxes), height);
+		if (art.sheet == nullptr)
+			return;
+		SDL_UpdateTexture(art.sheet, nullptr, sheet.data(), cell * static_cast<int>(NumShapeAxes) * 4);
+		SDL_SetTextureBlendMode(art.sheet, SDL_BLENDMODE_ADD);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+		// Nearest, like the tile's own art (see MaskedArt).
+		SDL_SetTextureScaleMode(art.sheet, SDL_ScaleModeNearest);
+#endif
+		art.sheetCell = width;
+		art.shaped = true;
+		return;
+	}
 	for (size_t k = 0; k < NumShapeAxes; k++) {
 		if (static_cast<float>(faces[k]) <= static_cast<float>(body) * ShapeLeastShare)
 			continue;
@@ -1459,8 +1493,7 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 		// Added on top of the art drawn in the least light any of its sides takes.
 		SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_ADD);
 #if SDL_VERSION_ATLEAST(2, 0, 12)
-		// A tile's, like its art, nearest (see MaskedArt).
-		SDL_SetTextureScaleMode(texture, tile ? SDL_ScaleModeNearest : SDL_ScaleModeLinear);
+		SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
 #endif
 		art.shape[k] = texture;
 		art.shaped = true;
@@ -5157,7 +5190,7 @@ constexpr float WallShapeMiddle = 0.5F;
  */
 bool TileShapeLightFor(const Draw &draw, const DrawTexture &art, TileShapeLight &out, bool floor)
 {
-	if (art.shapes == nullptr || !art.shapes->shaped || draw.kind != DrawKind::Tile || !draw.hasTile || draw.light < 0)
+	if (art.shapes == nullptr || art.shapes->sheet == nullptr || draw.kind != DrawKind::Tile || !draw.hasTile || draw.light < 0)
 		return false;
 	const float strength = std::clamp(atmosphere::Setting(atmosphere::Knob::TileShapes), 0.F, 2.F);
 	if (strength <= 0)
@@ -5192,16 +5225,20 @@ bool TileShapeLightFor(const Draw &draw, const DrawTexture &art, TileShapeLight 
 	std::array<float, NumShapeAxes> against;
 	for (size_t k = 0; k < NumShapeAxes; k++) {
 		against[k] = std::clamp(1 + (shade[k] / flat - 1) * strength, 0.15F, 2.5F);
-		if (art.shapes->shape[k] != nullptr)
+		if (art.shapes->sheetHas[k])
 			least = std::min(least, against[k]);
 	}
 	if (least == std::numeric_limits<float>::max())
 		return false;
 	out.art = art.shapes;
 	out.base = least;
-	for (size_t k = 0; k < NumShapeAxes; k++)
-		out.extra[k] = art.shapes->shape[k] != nullptr ? against[k] - least : 0.F;
-	return true;
+	float most = 0;
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		out.extra[k] = art.shapes->sheetHas[k] ? against[k] - least : 0.F;
+		most = std::max(most, out.extra[k]);
+	}
+	// Where its ways of facing all take about the same light, it is drawn flat, with no draw added.
+	return most >= 0.03F;
 }
 
 /**
@@ -5211,21 +5248,39 @@ bool TileShapeLightFor(const Draw &draw, const DrawTexture &art, TileShapeLight 
 void AddShapeLight(SDL_Renderer *renderer, const TileShapeLight &shaped, SDL_Vertex *vertices, const Colour3 *colours, int count, const int *indices, int indexCount)
 {
 	constexpr int MostVertices = 16;
-	if (shaped.art == nullptr || count > MostVertices)
+	// Too little to see: a way of facing that takes about the same light as the least is left out.
+	constexpr float LeastExtra = 0.03F;
+	if (shaped.art == nullptr || shaped.art->sheet == nullptr || count > MostVertices)
 		return;
-	std::array<SDL_Vertex, MostVertices> lit;
+	const float cell = static_cast<float>(shaped.art->sheetCell);
+	const float across = (cell + 2) * NumShapeAxes;
+	std::array<SDL_Vertex, MostVertices * NumShapeAxes> lit;
+	std::array<int, MostVertices * 3 * NumShapeAxes> order;
+	int litCount = 0;
+	int orderCount = 0;
 	for (size_t k = 0; k < NumShapeAxes; k++) {
-		SDL_Texture *texture = shaped.art->shape[k];
-		if (texture == nullptr || shaped.extra[k] < 1.F / 255)
+		const float more = shaped.extra[k];
+		if (more < LeastExtra)
 			continue;
+		const float left = static_cast<float>(k) * (cell + 2) + 1;
 		for (int v = 0; v < count; v++) {
-			lit[v] = vertices[v];
+			SDL_Vertex vertex = vertices[v];
 			const Colour3 &c = colours[v];
-			const float more = shaped.extra[k];
-			lit[v].color = SDL_Color { ColourByte(c[0] * more), ColourByte(c[1] * more), ColourByte(c[2] * more), vertices[v].color.a };
+			vertex.color = SDL_Color { ColourByte(c[0] * more), ColourByte(c[1] * more), ColourByte(c[2] * more), vertices[v].color.a };
+			vertex.tex_coord.x = (left + vertices[v].tex_coord.x * cell) / across;
+			lit[static_cast<size_t>(litCount + v)] = vertex;
 		}
-		SDL_RenderGeometry(renderer, texture, lit.data(), count, indices, indexCount);
+		if (indices != nullptr) {
+			for (int i = 0; i < indexCount; i++)
+				order[static_cast<size_t>(orderCount++)] = litCount + indices[i];
+		} else {
+			for (int i = 0; i < count; i++)
+				order[static_cast<size_t>(orderCount++)] = litCount + i;
+		}
+		litCount += count;
 	}
+	if (litCount > 0)
+		SDL_RenderGeometry(renderer, shaped.art->sheet, lit.data(), litCount, order.data(), orderCount);
 }
 
 /** @brief The colour of the edge the lava gives a body standing by it (LavaEdge). */
