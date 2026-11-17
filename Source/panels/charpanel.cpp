@@ -19,6 +19,7 @@
 #include "player.h"
 #include "poe2/defenses.hpp"
 #include "poe2/effect_primitives.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/jewels.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
@@ -365,12 +366,16 @@ std::expected<void, std::string> LoadCharPanel()
 		}
 	}
 
+	hd::ForgetUiPicture(Panel);
 	Panel = SurfaceToClx(out);
+	// POE2 Mashup: the sheet, as put together here (boxes and labels), shows the HD pack's art of it.
+	hd::RegisterUiPicture("ui/char_panel", *Panel);
 	return {};
 }
 
 void FreeCharPanel()
 {
+	hd::ForgetUiPicture(Panel);
 	Panel = std::nullopt;
 }
 

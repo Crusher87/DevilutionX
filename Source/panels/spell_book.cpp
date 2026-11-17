@@ -18,6 +18,7 @@
 #include "panels/spell_icons.hpp"
 #include "panels/ui_panels.hpp"
 #include "player.h"
+#include "poe2/hd.hpp"
 #include "tables/spelldat.h"
 #include "utils/format.hpp"
 #include "utils/language.h"
@@ -122,12 +123,17 @@ std::expected<void, std::string> InitSpellBook()
 {
 	ASSIGN_OR_RETURN(spellBookBackground, LoadCelWithStatus("data\\spellbk", static_cast<uint16_t>(SidePanelSize.width)));
 	ASSIGN_OR_RETURN(spellBookButtons, LoadCelWithStatus("data\\spellbkb", SpellBookButtonWidth()));
+	// POE2 Mashup: the spell book and its tabs show the HD pack's art of them.
+	hd::RegisterUiPicture("data\\spellbk", *spellBookBackground);
+	hd::RegisterUiPicture("data\\spellbkb", *spellBookButtons);
 	return LoadSmallSpellIcons();
 }
 
 void FreeSpellBook()
 {
 	FreeSmallSpellIcons();
+	hd::ForgetUiPicture(spellBookButtons);
+	hd::ForgetUiPicture(spellBookBackground);
 	spellBookButtons = std::nullopt;
 	spellBookBackground = std::nullopt;
 }

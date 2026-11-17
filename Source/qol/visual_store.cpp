@@ -471,10 +471,19 @@ void InitVisualStore()
 	VisualStoreNavButtonArt = LoadClx("data\\tabBtnUp.clx");
 	VisualStoreRepairAllButtonArt = LoadClx("data\\repairAllBtn.clx");
 	VisualStoreRepairButtonArt = LoadClx("data\\repairSingleBtn.clx");
+	// POE2 Mashup: the store and its buttons show the HD pack's art of them.
+	hd::RegisterUiPicture("data\\store.clx", *VisualStorePanelArt);
+	hd::RegisterUiPicture("data\\tabBtnUp.clx", *VisualStoreNavButtonArt);
+	hd::RegisterUiPicture("data\\repairAllBtn.clx", *VisualStoreRepairAllButtonArt);
+	hd::RegisterUiPicture("data\\repairSingleBtn.clx", *VisualStoreRepairButtonArt);
 }
 
 void FreeVisualStoreGFX()
 {
+	hd::ForgetUiPicture(VisualStoreNavButtonArt);
+	hd::ForgetUiPicture(VisualStorePanelArt);
+	hd::ForgetUiPicture(VisualStoreRepairAllButtonArt);
+	hd::ForgetUiPicture(VisualStoreRepairButtonArt);
 	VisualStoreNavButtonArt = std::nullopt;
 	VisualStorePanelArt = std::nullopt;
 	VisualStoreRepairAllButtonArt = std::nullopt;

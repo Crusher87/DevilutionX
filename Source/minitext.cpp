@@ -18,6 +18,7 @@
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
 #include "panels/quest_log.hpp"
+#include "poe2/hd.hpp"
 #include "tables/playerdat.hpp"
 #include "tables/textdat.h"
 #include "utils/language.h"
@@ -126,12 +127,15 @@ void DrawQTextContent(const Surface &out)
 
 void FreeQuestText()
 {
+	hd::ForgetUiPicture(pTextBoxCels);
 	pTextBoxCels = std::nullopt;
 }
 
 void InitQuestText()
 {
 	pTextBoxCels = LoadCel("data\\textbox", 591);
+	// POE2 Mashup: the quest text's box shows the HD pack's art of it.
+	hd::RegisterUiPicture("data\\textbox", *pTextBoxCels);
 }
 
 void InitQTextMsg(_speech_id m)

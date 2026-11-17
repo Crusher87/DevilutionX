@@ -329,6 +329,8 @@ Point GetStashSlotCoord(Point slot)
 
 void FreeStashGFX()
 {
+	hd::ForgetUiPicture(StashNavButtonArt);
+	hd::ForgetUiPicture(StashPanelArt);
 	StashNavButtonArt = std::nullopt;
 	StashPanelArt = std::nullopt;
 }
@@ -338,6 +340,9 @@ void InitStash()
 	if (!HeadlessMode) {
 		StashPanelArt = LoadClx("data\\stash.clx");
 		StashNavButtonArt = LoadClx("data\\stashnavbtns.clx");
+		// POE2 Mashup: the stash and its buttons show the HD pack's art of them.
+		hd::RegisterUiPicture("data\\stash.clx", *StashPanelArt);
+		hd::RegisterUiPicture("data\\stashnavbtns.clx", *StashNavButtonArt);
 	}
 }
 

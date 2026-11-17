@@ -48,6 +48,7 @@
 #include "engine/dx.h"
 #include "engine/events.hpp"
 #include "engine/load_cel.hpp"
+#include "engine/load_clx.hpp"
 #include "engine/load_file.hpp"
 #include "engine/random.hpp"
 #include "engine/render/clx_render.hpp"
@@ -1674,6 +1675,46 @@ std::expected<void, std::string> LoadLvlGFX()
 	}
 }
 
+/**
+ * @brief Writes the UI panels' pictures for the HD pack maker (POE2 Mashup `--hd-export`), loaded as a game loads them,
+ * in the town's palette: each is written as it is named (hd::RegisterUiPicture), the bottom panel as put together.
+ * A hero of each class is made up for the inventories, and the game is taken as multiplayer, so the bottom panel has
+ * its chat half and the chat buttons are loaded.
+ */
+void HdExportUi()
+{
+	LoadPaletteAndInitBlending(hd::PackPalette(static_cast<uint8_t>(DTYPE_TOWN)));
+	hd::BeginUiExport(HdExportDir);
+	if (Players.empty())
+		Players.resize(1);
+	MyPlayerId = 0;
+	MyPlayer = &Players[0];
+	InspectPlayer = MyPlayer;
+	const bool wasMultiplayer = gbIsMultiplayer;
+	gbIsMultiplayer = true;
+	LoadSmallSelectionSpinner();
+	if (const std::expected<void, std::string> panel = InitMainPanel(); !panel.has_value())
+		LogError("HD export: the panels didn't load: {}", panel.error());
+	for (size_t heroClass = 0; heroClass < GetNumPlayerClasses(); heroClass++) {
+		MyPlayer->_pClass = static_cast<HeroClass>(heroClass);
+		InitInv();
+	}
+	InitQuestText();
+	InitInfoBoxGfx();
+	InitStash();
+	InitVisualStore();
+	// The experience bar's frame is loaded only with its option on.
+	if (OptionalOwnedClxSpriteList xpbar = LoadOptionalClx("data\\xpbar.clx"); xpbar) {
+		hd::RegisterUiPicture("data\\xpbar.clx", *xpbar);
+		hd::ForgetUiPicture(xpbar);
+	}
+	gmenu_init_menu();
+	if (BottomBuffer)
+		hd::ExportUiSurface("ui/bottom_panel", *BottomBuffer);
+	hd::EndUiExport();
+	gbIsMultiplayer = wasMultiplayer;
+}
+
 /** @brief Writes every dungeon type's frames for the HD pack maker (POE2 Mashup `--hd-export`). */
 void HdExportAll()
 {
@@ -1699,6 +1740,7 @@ void HdExportAll()
 	pDungeonCels = nullptr;
 	pMegaTiles = nullptr;
 	pSpecialCels = std::nullopt;
+	HdExportUi();
 }
 
 std::expected<void, std::string> LoadAllGFX()
