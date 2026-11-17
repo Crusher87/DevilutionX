@@ -31,6 +31,7 @@
 #include "engine/sound_defs.hpp"
 #include "mods/mod_identity.h"
 #include "pack.h"
+#include "poe2/atmosphere.hpp"
 #include "quick_messages.hpp"
 #include "utils/enum_traits.h"
 #include "utils/string_view_hash.hpp"
@@ -576,6 +577,8 @@ struct GraphicsOptions : OptionCategoryBase {
 	OptionEntryBoolean hdStrongMood;
 	/** @brief POE2 Mashup: the HD world's darkest shades a little lighter, for screens slow to brighten dark shades while they move. */
 	OptionEntryBoolean hdLiftDarks;
+	/** @brief POE2 Mashup: the old Diablo feel in the HD world: firelight that flickers, each floor grimmer than the last, darker screen edges, glowing stairs. */
+	OptionEntryEnum<atmosphere::Level> atmosphere;
 	/** @brief POE2 Mashup: chips of stone, sparks and drops of blood that fly, bounce off the floor and walls and settle (looks only). */
 	OptionEntryBoolean physicsDebris;
 	/** @brief Run in fullscreen or windowed mode. */

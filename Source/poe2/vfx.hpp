@@ -211,6 +211,18 @@ constexpr uint8_t ArcingSparkLook = 3;
 constexpr uint8_t SpinningBladeLook = 4;
 /** @brief The colour a missile's light shines in with HD Lighting: its effects' own colour (portals blue or red), 0-255. */
 std::array<uint8_t, 3> LightColourOf(const Missile &missile);
+
+/** @brief The seed the flame of an object at this tile flickers with (its first flame's), for its light to flicker in step. */
+uint32_t FlameSeed(Point tile);
+/** @brief How bright a flame with this seed is now against its average (about 0.7 to 1.15), as its glow flickers. */
+float FlameFlicker(uint32_t seed, bool candle);
+/** @brief The effects' clock in milliseconds: it runs while the game does and stops while it is paused. */
+float Clock();
+/**
+ * @brief How much the flame of the object at this tile flutters now (the Atmosphere option's idea 25): up to 1 (times
+ * its feel() setting) as a hero or monster hurries past it, gone again in under half a second; 0 for no flame there.
+ */
+float FlameFlutter(Point tile);
 /**
  * @brief The frame to draw of a light object: candles hold one frame (their glow sways instead) and torches run at
  * their own pace and phase, so no two flames flicker in step. Other objects draw their current frame.
@@ -245,6 +257,11 @@ bool InFrontOfEffects(Point tile);
 void BeginFront(const Surface &world);
 /** @brief Records the shape of a hero's or monster's sprite as it's drawn into the world, to draw it again over the effects. */
 void MarkFront(const Surface &out, Point position, ClxSprite sprite);
+/**
+ * @brief Idea 66: notes a hero or townsperson as they are drawn into the world, so that the stream can show them mirrored
+ * at their feet. Nothing is kept unless the stream is in view with its reflections on.
+ */
+void NoteReflection(const Surface &out, Point position, ClxSprite sprite);
 /**
  * @brief Whether the walls, pillars and arches standing on this tile are in front of a portal, so they hide it as heroes
  * do (Curtis, Rogue run 2: the town portal was drawn over the walls in front of it).
@@ -324,6 +341,12 @@ Piece At(size_t index);
  * @param worldSize The world's size in pixels; the renderer's logical size can be smaller (the UI's).
  */
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
+/**
+ * @brief Draws the light that lies on the floor: idea 66's shafts out of Tristram's bright doorways, and the lamps' shine
+ * on wet ground. Called by the HD world between its floor and its shadows, so the shadows fall across them and everyone
+ * stands in front of them.
+ */
+void DrawFloorShafts(SDL_Renderer *renderer, float toLogical);
 #endif
 
 } // namespace devilution::vfx

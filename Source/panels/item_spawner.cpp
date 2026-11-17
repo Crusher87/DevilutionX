@@ -799,6 +799,9 @@ void GiveItemToPlayer(Player &player, Item &item)
 	// Its look on the ground, or drawing and hovering it would crash.
 	RespawnItem(Items[ii], true);
 	NetSendCmdPItem(false, CMD_SPAWNITEM, Items[ii].position, Items[ii]);
+	// Said out loud, so a gem that comes out of the Skills panel into a full bag isn't lost unseen (Curtis 2026-11-11).
+	if (&player == MyPlayer)
+		EventPlrMsg(FormatRuntime(_("Your bag is full: {:s} dropped at your feet."), Items[ii].getName().str()), UiFlags::ColorRed);
 }
 
 bool IsItemSpawnerOpen()

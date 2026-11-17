@@ -307,6 +307,9 @@ void PresentLayeredFrame(SDL_Surface *surface)
 		const FramePartScope part(FramePart::Effects);
 		vfx::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
 	}
+	// POE2 Mashup: the Atmosphere option's moments darken the HD world and the effects on it.
+	if (hd::Active())
+		hd::RenderOver(renderer);
 	TelemetryDrawStep(nullptr);
 	{
 		const FramePartScope part(FramePart::UiLayer);

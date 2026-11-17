@@ -19,6 +19,7 @@
 #include "cursor.h"
 #include "missiles.h"
 #include "poe2/aim.hpp"
+#include "poe2/atmosphere.hpp"
 #include "poe2/floor_chests.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/hit_trace.hpp"
@@ -101,14 +102,24 @@ void CreateReplEnvironment()
 				weather::Force(std::nullopt);
 				return changed(std::string("Weather follows its schedule again.\n") + weather::Text());
 			}
+			if (*what == "lightning") {
+				if (!weather::Enabled() || !weather::Outdoors())
+					return std::string("Lightning needs a sky: try it in town with the Weather option on.");
+				weather::Strike();
+				return changed(std::string("Lightning."));
+			}
 			const std::optional<weather::Kind> kind = weather::KindNamed(*what);
 			if (!kind)
-				return std::string("Say weather(\"rain\"), weather(\"snow\"), weather(\"clear\") or weather(\"auto\"), with a strength 0 to 1 after rain or snow.");
+				return std::string("Say weather(\"rain\"), weather(\"snow\"), weather(\"clear\") or weather(\"auto\"), with a strength 0 to 1 after rain or snow, or weather(\"lightning\") for one strike.");
 			weather::Force(kind, static_cast<float>(strength.value_or(0.8)));
 			weather::Advance(1);
 			return changed(weather::Text());
 		}
 		return weather::Text();
+	};
+	// feel() lists the Atmosphere option's switches; feel("flicker", 0) turns one off, feel("reset") puts them back.
+	env["feel"] = [](sol::optional<std::string> name, sol::optional<double> value) {
+		return atmosphere::Feel(name ? std::optional<std::string>(*name) : std::nullopt, value ? std::optional<double>(*value) : std::nullopt);
 	};
 	env["aim"] = []() {
 		if (MyPlayer == nullptr)
