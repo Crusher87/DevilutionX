@@ -76,9 +76,23 @@ enum class Caster : uint8_t {
 	Hero,
 	/** @brief The hero being played, drawn bright whatever the light (the game's rule), still in its colour. */
 	MyHero,
+	/**
+	 * @brief A solid thing standing on the floor (a barrel, fountain, cross): with HD Lighting it takes the light on the
+	 * sides turned to it, going round it smoothly, and casts its own shadow away from each light, in place of the one
+	 * painted under it.
+	 */
+	Object,
+	/** @brief The same, for a thing with flat sides that meet at a corner in front (a sarcophagus, a chest): each side takes its own light. */
+	ObjectBlock,
 };
 
-/** @brief Set while a hero or monster is drawn. */
+/** @brief A solid object, of either kind. */
+constexpr bool IsObject(Caster caster)
+{
+	return caster == Caster::Object || caster == Caster::ObjectBlock;
+}
+
+/** @brief Set while a hero, monster or solid object is drawn. */
 extern Caster CurrentCaster;
 
 struct CasterScope {
@@ -86,6 +100,20 @@ struct CasterScope {
 	~CasterScope() { CurrentCaster = Caster::None; }
 	CasterScope(const CasterScope &) = delete;
 	CasterScope &operator=(const CasterScope &) = delete;
+};
+
+/**
+ * @brief Set while something unseen is noted for the HD world (the Atmosphere option's idea 57, the Hidden's shimmer):
+ * how much of it shows, 0 for a thing drawn as usual. It is drawn as a faint wavering trace of its own picture, casts
+ * no shadow and takes no outline.
+ */
+extern float CurrentGhost;
+
+struct GhostScope {
+	explicit GhostScope(float shown) { CurrentGhost = shown; }
+	~GhostScope() { CurrentGhost = 0; }
+	GhostScope(const GhostScope &) = delete;
+	GhostScope &operator=(const GhostScope &) = delete;
 };
 
 /**
@@ -97,7 +125,10 @@ struct OutlineLook {
 	bool glow = false;
 	/** @brief It marks the thing under the cursor, so it fades in. */
 	bool hovered = false;
-	/** @brief The thing it goes round (OutlineThing), so the cursor's outline fades in from the one it had; 0 for none. */
+	/**
+	 * @brief The thing it goes round (OutlineThing), so the cursor's outline fades in from the one it had; 0 for none.
+	 * In the UI an item picture's outline is told apart by its picture and where it is, so it can be left 0.
+	 */
 	uint32_t thing = 0;
 };
 
@@ -142,6 +173,12 @@ struct TileScope {
 	TileScope(const TileScope &) = delete;
 	TileScope &operator=(const TileScope &) = delete;
 };
+
+/**
+ * @brief Notes the small things standing on the current tile (props.hpp: chains, cobwebs, rats) at this point of the
+ * world's drawing, so they are drawn over the tile's own walls and under whatever stands in front of them.
+ */
+void RecordProps();
 
 /** @brief The HD Graphics option is on and an HD pack is installed. */
 bool Enabled();
@@ -199,11 +236,87 @@ using RecordUiSpriteFn = void (*)(const Surface &out, Point position, ClxSprite 
  */
 extern RecordUiSpriteFn RecordUiSpriteHook;
 
+using RecordUiOutlineFn = void (*)(const Surface &out, Point position, ClxSprite clx, uint8_t colour);
+
+/**
+ * @brief Notes an outline drawn in the UI (set by the HD renderer; null without it). An outline round an item picture
+ * that shows its HD art shows smooth round that art instead, in its colour, with the look CurrentOutlineLook gives it
+ * (fading in under the cursor, glowing round a unique); the game's own outline is left out under it.
+ */
+extern RecordUiOutlineFn RecordUiOutlineHook;
+
 /** @brief An item picture frame (data/inv/objcurs) and its HD art's name. */
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height);
 
 /** @brief A one-cell shrunken copy of an item picture: it shows the full picture's HD art, shrunk the same way. */
 void RegisterFittedUiSprite(ClxSprite small, ClxSprite full);
+
+using RegisterUiPictureFn = void (*)(std::string_view path, ClxSpriteList sprites);
+using ForgetUiPictureFn = void (*)(ClxSpriteList sprites);
+using RecordUiBlitFn = void (*)(const Surface &out, const Surface &src, Rectangle srcRect, Point targetPosition, std::string_view name);
+
+/** @brief RegisterUiPicture, ForgetUiPicture and RecordUiBlit when the HD renderer is linked in, otherwise null (hd_hooks.cpp). */
+extern RegisterUiPictureFn RegisterUiPictureHook;
+extern ForgetUiPictureFn ForgetUiPictureHook;
+extern RecordUiBlitFn RecordUiBlitHook;
+
+/**
+ * @brief Names a UI panel's picture (the inventory, the spell book, a button strip...) so its HD art shows over the UI
+ * where its own pixels still show, as item pictures do. Each frame's art is hd\\<name>\\d0_fNN.png, the name being the
+ * asset's path in lower case with / and no extension (data/inv/inv), or a fixed one for a picture the game puts
+ * together itself (ui/char_panel). A picture named again forgets the frames it had before.
+ */
+inline void RegisterUiPicture(std::string_view path, ClxSpriteList sprites)
+{
+	if (RegisterUiPictureHook != nullptr)
+		RegisterUiPictureHook(path, sprites);
+}
+
+/** @brief Forgets a UI panel's picture before its pixels are freed, so another picture loaded there doesn't take its art. */
+inline void ForgetUiPicture(ClxSpriteList sprites)
+{
+	if (ForgetUiPictureHook != nullptr)
+		ForgetUiPictureHook(sprites);
+}
+
+/** @brief ForgetUiPicture for a picture that may not be loaded. */
+inline void ForgetUiPicture(const OptionalOwnedClxSpriteList &sprites)
+{
+	if (sprites.has_value())
+		ForgetUiPicture(ClxSpriteList { *sprites });
+}
+
+/**
+ * @brief Notes a copy of part of a surface the game drew a panel on (the bottom panel, BottomBuffer) into the UI:
+ * that part of the HD art `<name>/d0_f00` (the whole surface's picture, at twice the size) goes under the UI there,
+ * and the UI leaves out the copied pixels that still show.
+ */
+inline void RecordUiBlit(const Surface &out, const Surface &src, Rectangle srcRect, Point targetPosition, std::string_view name)
+{
+	if (RecordUiBlitHook != nullptr)
+		RecordUiBlitHook(out, src, srcRect, targetPosition, name);
+}
+
+/**
+ * @brief While the UI overlay is made: the UI pixels to leave out (1), since a panel's HD art goes under the UI there
+ * (RenderUiPanels). Indexed by row times @p width; null when there are none, or the UI isn't that size.
+ */
+const uint8_t *UiHiddenPixels(int width, int height);
+
+/** @brief Draws the HD art of this frame's UI panels, under the UI overlay (whose panel pixels are left out there). */
+void RenderUiPanels(SDL_Renderer *renderer);
+
+/**
+ * @brief From now on each UI picture named (RegisterUiPicture) is also written as PNGs to `dir`/ui/<name>/d0_fNN.png,
+ * in full colour in the current palette, where the picture lays no pixel transparent (for the HD pack maker).
+ */
+void BeginUiExport(const std::string &dir);
+
+/** @brief Writes a surface the game puts a panel together on as `dir`/ui/<name>/d0_f00.png; colour 0 is transparent. */
+void ExportUiSurface(std::string_view name, const Surface &surface);
+
+/** @brief Stops writing UI pictures, and writes `dir`/ui/list.json: each picture's name, frame count and frame sizes. */
+void EndUiExport();
 
 /**
  * @brief Before the UI overlay is made from the UI frame: where an item picture with HD art still shows, the frame
@@ -217,6 +330,13 @@ void RenderUiSprites(SDL_Renderer *renderer);
 
 /** @brief Names every frame of a loaded sprite file, so its HD art can be found. */
 void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);
+
+/**
+ * @brief Names a unique monster's colour table (monsters\\monsters\\<name>.trn), so its sprites drawn in it find their
+ * own HD art: <sprite's art name>+<name>, e.g. monsters/skelaxe/sklaxa@skelaxe/white+br/d3_f05. A table that changes
+ * no colour (Genrl) shows the sprite's own art.
+ */
+void RegisterRecolour(const uint8_t *trn, std::string_view name);
 
 /** @brief Forgets the names of a sprite file's frames, before its pixels are freed (so other pictures don't take its art). */
 void ForgetSprites(ClxSpriteListOrSheet sprites);
@@ -246,6 +366,12 @@ extern RegisterSpritesFn RegisterSpritesHook;
 
 /** @brief Draws the recorded world in full colour. */
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
+
+/**
+ * @brief Draws the Atmosphere option's moments over the HD world and the effects on it: the dark that closes in round the
+ * hero going down a floor or dying, and the red of a death. Nothing when the HD world wasn't drawn in this present.
+ */
+void RenderOver(SDL_Renderer *renderer);
 
 /**
  * @brief This frame's HD world covers the whole world buffer of the given size, so the game's own 8-bit world

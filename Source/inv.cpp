@@ -50,6 +50,7 @@
 #include "poe2/endgame.hpp"
 #include "poe2/flasks.hpp"
 #include "poe2/gemcutting.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/hud_globes.hpp"
 #include "poe2/jewels.hpp"
 #include "poe2/modifiers.hpp"
@@ -1241,6 +1242,11 @@ item_quality SlotBackQuality(const Item &item)
 	return item._iMagical;
 }
 
+bool ItemOutlineGlows(const Item &item)
+{
+	return gbIsPoe2 && (item._iMagical == ITEM_QUALITY_UNIQUE || item._iClass == ICLASS_QUEST);
+}
+
 void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_quality itemQuality)
 {
 	SDL_Rect srcRect = MakeSdlRect(0, 0, size.width, size.height);
@@ -1304,6 +1310,7 @@ bool CanBePlacedOnBelt(const Player &player, const Item &item)
 
 void FreeInvGFX()
 {
+	hd::ForgetUiPicture(pInvCels);
 	pInvCels = std::nullopt;
 }
 
@@ -1314,7 +1321,11 @@ void InitInv()
 	if (gbIsSpawn && (playerClassData.inv == "inv_rog" || playerClassData.inv == "inv_sor")) {
 		invName = "inv";
 	}
-	pInvCels = LoadCel(StrCat("data\\inv\\", invName).c_str(), static_cast<uint16_t>(SidePanelSize.width));
+	// POE2 Mashup: the inventory shows the HD pack's art of it (hd/data/inv/<name>), and another class's goes.
+	hd::ForgetUiPicture(pInvCels);
+	const std::string path = StrCat("data\\inv\\", invName);
+	pInvCels = LoadCel(path.c_str(), static_cast<uint16_t>(SidePanelSize.width));
+	hd::RegisterUiPicture(path, *pInvCels);
 }
 
 namespace {
@@ -1418,9 +1429,11 @@ void DrawInv(const Surface &out)
 			const Point position = GetPanelPosition(UiPanels::Inventory, { screenX, screenY });
 
 			if (pcursinvitem == slot) {
-				ClxDrawOutline(out, GetOutlineColor(myPlayer.InvBody[slot], true), position, sprite);
+				// POE2 Mashup: in HD the outline of the item under the cursor shows smooth and fades in, as the world's do.
+				const hd::OutlineScope outlineLook({ .glow = ItemOutlineGlows(myPlayer.InvBody[slot]), .hovered = true });
+				DrawItemOutline(myPlayer.InvBody[slot], out, GetOutlineColor(myPlayer.InvBody[slot], true), position, sprite);
 			} else if (HeldCurrencyFits(myPlayer.InvBody[slot])) {
-				ClxDrawOutline(out, CurrencyFitsOutline, position, sprite);
+				DrawItemOutline(myPlayer.InvBody[slot], out, CurrencyFitsOutline, position, sprite);
 			}
 
 			DrawItem(myPlayer.InvBody[slot], out, position, sprite);
@@ -1454,11 +1467,13 @@ void DrawInv(const Surface &out)
 			const ClxSprite sprite = GetInvItemSprite(cursId);
 			const Point position = GetPanelPosition(UiPanels::Inventory, InvRect[j + SLOTXY_INV_FIRST].position) + Displacement { 0, InventorySlotSizeInPixels.height };
 			if (pcursinvitem == ii + INVITEM_INV_FIRST) {
-				ClxDrawOutline(out, GetOutlineColor(myPlayer.InvList[ii], true), position, sprite);
+				// POE2 Mashup: in HD the outline of the item under the cursor shows smooth and fades in, as the world's do.
+				const hd::OutlineScope outlineLook({ .glow = ItemOutlineGlows(myPlayer.InvList[ii]), .hovered = true });
+				DrawItemOutline(myPlayer.InvList[ii], out, GetOutlineColor(myPlayer.InvList[ii], true), position, sprite);
 			} else if (HeldCurrencyFits(myPlayer.InvList[ii])) {
-				ClxDrawOutline(out, CurrencyFitsOutline, position, sprite);
+				DrawItemOutline(myPlayer.InvList[ii], out, CurrencyFitsOutline, position, sprite);
 			} else if (const std::optional<uint8_t> glow = SpecBookGlow(myPlayer.InvList[ii]); glow) {
-				ClxDrawOutline(out, *glow, position, sprite);
+				DrawItemOutline(myPlayer.InvList[ii], out, *glow, position, sprite);
 			}
 
 			DrawItem(myPlayer.InvList[ii], out, position, sprite);
@@ -1512,10 +1527,12 @@ void DrawInvBelt(const Surface &out)
 
 		if (pcursinvitem == i + INVITEM_BELT_FIRST) {
 			if (ControlMode == ControlTypes::KeyboardAndMouse || invflag) {
-				ClxDrawOutline(out, GetOutlineColor(myPlayer.SpdList[i], true), position, sprite);
+				// POE2 Mashup: in HD the outline of the item under the cursor shows smooth and fades in, as the world's do.
+				const hd::OutlineScope outlineLook({ .glow = ItemOutlineGlows(myPlayer.SpdList[i]), .hovered = true });
+				DrawItemOutline(myPlayer.SpdList[i], out, GetOutlineColor(myPlayer.SpdList[i], true), position, sprite);
 			}
 		} else if (HeldCurrencyFits(myPlayer.SpdList[i])) {
-			ClxDrawOutline(out, CurrencyFitsOutline, position, sprite);
+			DrawItemOutline(myPlayer.SpdList[i], out, CurrencyFitsOutline, position, sprite);
 		}
 
 		DrawItem(myPlayer.SpdList[i], out, position, sprite);

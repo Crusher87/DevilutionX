@@ -10,6 +10,7 @@
 #include "engine/load_clx.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/render/text_render.hpp"
+#include "poe2/hd.hpp"
 #include "utils/display.h"
 #include "utils/language.h"
 #include "utils/sdl_compat.h"
@@ -94,6 +95,8 @@ std::expected<void, std::string> LoadMainPanel()
 	RenderMainButton(*out, 4, _("inv"), 1);
 	RenderMainButton(*out, 5, _("spells"), 0);
 	PanelButtonDown = SurfaceToClx(*out, NumButtonSprites);
+	// POE2 Mashup: the pressed buttons, as put together here (with their words), show the HD pack's art of them.
+	hd::RegisterUiPicture("ui/panel_buttons_down", *PanelButtonDown);
 	out = std::nullopt;
 
 	if (IsChatAvailable()) {
@@ -132,6 +135,7 @@ std::expected<void, std::string> LoadMainPanel()
 		RenderClxSprite(talkSurface.subregion((talkButtonWidth - voiceWidth) / 2, 39, voiceWidth, 9), (*PanelButtonGrime)[1], { 0, 0 });
 		DrawButtonText(talkSurface, _("voice"), { { 0, 33 }, { talkButtonWidth, 0 } }, UiFlags::ColorButtonpushed);
 		TalkButton = SurfaceToClx(talkSurface, NumTalkButtonSprites);
+		hd::RegisterUiPicture("ui/talk_button", *TalkButton);
 	}
 
 	PanelButtonDownGrime = std::nullopt;
@@ -142,6 +146,8 @@ std::expected<void, std::string> LoadMainPanel()
 
 void FreeMainPanel()
 {
+	hd::ForgetUiPicture(TalkButton);
+	hd::ForgetUiPicture(PanelButtonDown);
 	TalkButton = std::nullopt;
 	PanelButtonDown = std::nullopt;
 }

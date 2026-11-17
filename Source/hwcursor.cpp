@@ -1,6 +1,7 @@
 #include "hwcursor.hpp"
 
 #include <cstdint>
+#include <string>
 #include <tuple>
 
 #ifdef USE_SDL3
@@ -26,7 +27,10 @@
 #include "engine/clx_sprite.hpp"
 #include "engine/render/clx_render.hpp"
 #include "engine/surface.hpp"
+#include "poe2/hd.hpp"
 #include "utils/display.h"
+#include "utils/png.h"
+#include "utils/str_cat.hpp"
 #include "utils/sdl_bilinear_scale.hpp"
 #include "utils/sdl_compat.h"
 #include "utils/sdl_wrap.h"
@@ -187,11 +191,59 @@ bool SetHardwareCursorFromClxSprite(ClxSprite sprite, HotpointPosition hotpointP
 	return SetHardwareCursorFromSurface(surface.surface, hotpointPosition);
 }
 
+/**
+ * @brief POE2 Mashup: the pointer (the hand and the other non-item cursors) from its HD picture, when HD Graphics is on.
+ * The picture (hd\\data\\inv\\objcurs\\d0_fNN.png, made by the HD maker) is twice the game's pixels; it is scaled
+ * smoothly to the size the game would show the pointer at.
+ */
+bool SetHardwareCursorFromHdArt(int pcurs)
+{
+	if (!hd::Enabled() || pcurs <= CURSOR_NONE || pcurs >= CURSOR_FIRSTITEM)
+		return false;
+	const std::string name = StrCat("data/inv/objcurs/d0_f", pcurs - 1 < 10 ? "0" : "", pcurs - 1);
+	if (!hd::HasArt(name))
+		return false;
+	const std::string path = StrCat("hd\\data\\inv\\objcurs\\d0_f", pcurs - 1 < 10 ? "0" : "", pcurs - 1, ".png");
+	const SDLSurfaceUniquePtr picture { LoadPNG(path.c_str()) };
+	if (picture == nullptr) {
+		SDL_ClearError();
+		return false;
+	}
+	const Size size = GetInvItemSize(pcurs);
+	if (!IsCursorSizeAllowed(size))
+		return false;
+	const Size scaledSize = ScaledSize(size);
+	const SDLSurfaceUniquePtr converted {
+#ifdef USE_SDL3
+		SDL_ConvertSurface(picture.get(), SDL_PIXELFORMAT_ARGB8888)
+#else
+		SDL_ConvertSurfaceFormat(picture.get(), SDL_PIXELFORMAT_ARGB8888, 0)
+#endif
+	};
+	if (converted == nullptr) {
+		SDL_ClearError();
+		return false;
+	}
+	const SDLSurfaceUniquePtr scaled = SDLWrap::CreateRGBSurfaceWithFormat(0, scaledSize.width, scaledSize.height, 32, SDL_PIXELFORMAT_ARGB8888);
+	BilinearScale32(converted.get(), scaled.get());
+	SDLCursorUniquePtr newCursor { SDL_CreateColorCursor(scaled.get(), 0, 0) };
+	if (newCursor == nullptr) {
+		LogError("SDL_CreateColorCursor: {}", SDL_GetError());
+		SDL_ClearError();
+		return false;
+	}
+	SDL_SetCursor(newCursor.get());
+	CurrentCursor = std::move(newCursor);
+	return true;
+}
+
 bool SetHardwareCursorFromSprite(int pcurs)
 {
 	const bool isItem = !MyPlayer->HoldItem.isEmpty();
 	if (isItem && !*GetOptions().Graphics.hardwareCursorForItems)
 		return false;
+	if (!isItem && SetHardwareCursorFromHdArt(pcurs))
+		return true;
 
 	const int outlineWidth = isItem ? 1 : 0;
 

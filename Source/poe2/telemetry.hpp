@@ -190,6 +190,8 @@ enum class FramePart : uint8_t {
 	WorldUpload,
 	/** The HD world. */
 	Hd,
+	/** The Atmosphere option's work (flickering light, screen edges, stairs light), part of Hd. */
+	Atmosphere,
 	/** The effects layer. */
 	Effects,
 	/** The windows and panels sent to the graphics card over the world. */
@@ -197,7 +199,7 @@ enum class FramePart : uint8_t {
 	/** Showing the finished frame, waiting for the graphics card and the screen. */
 	Present,
 };
-inline constexpr size_t NumFrameParts = 7;
+inline constexpr size_t NumFrameParts = 8;
 /** @brief When a part of drawing starts (0 when nothing is logged), for TelemetryFramePartDone. */
 uint64_t TelemetryFramePartStart();
 /** @brief Adds the time since start to that part of the frame being drawn. */
@@ -219,6 +221,8 @@ void TelemetrySlowWorkDone(SlowWork work, uint64_t start);
 void TelemetryGameSaved(std::string_view why, uint64_t start);
 /** @brief The HD world's cache of the game's own pictures filled up and was emptied. */
 void TelemetryHdCacheDropped(size_t pictures);
+/** @brief Notes that the HD reader's threads read that many pictures from disk, for the line on the seconds after a loading screen. */
+void TelemetryHdPicturesRead(size_t pictures);
 
 /** @brief Times slow work from here to the end of the scope. */
 class SlowWorkScope {

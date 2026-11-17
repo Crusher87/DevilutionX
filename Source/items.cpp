@@ -18,6 +18,7 @@
 #include <string>
 #include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -73,6 +74,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/affix_glow.hpp"
 #include "poe2/area_levels.hpp"
 #include "poe2/attack_speed.hpp"
 #include "poe2/bases.hpp"
@@ -2484,17 +2486,49 @@ bool SmithItemOk(const Player & /*player*/, const ItemData &item)
 	return true;
 }
 
+/** @brief A vendor base's kind for VendorBaseFloors: its bundle item class (one_hand_sword, focus...), else its item type. */
+std::string_view VendorBaseKind(const ItemData &item)
+{
+	if (!AllItemsList.empty() && &item >= AllItemsList.data() && &item < AllItemsList.data() + AllItemsList.size()) {
+		if (const BaseMeta *meta = BaseMetaFor(static_cast<int>(&item - AllItemsList.data())); meta != nullptr && !meta->itemClass.empty())
+			return meta->itemClass;
+	}
+	return ItemTypeToString(item.itype);
+}
+
+/**
+ * @brief The lowest drop level a vendor's base of each kind may have: VendorBaseLevelWindow below the newest base of
+ * that kind at the vendors' level, so the wares are bases near the hero's level (Curtis 2026-11-11).
+ */
+std::unordered_map<std::string_view, int> VendorBaseFloors(int areaLevel)
+{
+	std::unordered_map<std::string_view, int> newest;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		const ItemData &item = AllItemsList[i];
+		if (item.dropRate == 0 || !IsItemAvailable(static_cast<int>(i)) || EquipmentClassWeight(item.itype) == 0 || item.iMinMLvl > areaLevel)
+			continue;
+		int &level = newest[VendorBaseKind(item)];
+		level = std::max<int>(level, item.iMinMLvl);
+	}
+	for (auto &[kind, floor] : newest)
+		floor = std::max(floor - VendorBaseLevelWindow, 0);
+	return newest;
+}
+
 template <bool (*Ok)(const Player &, const ItemData &), bool ConsiderDropRate = false>
 _item_indexes RndVendorItem(const Player &player, int minlvl, int maxlvl)
 {
-	// POE2 Mashup: POE2 equipment drops by area level, so vendors pick it by theirs (the premium stock from a part of
-	// it up, PremiumAreaLevelDivisor); the rest keeps Diablo's vendor level. Only the pick: CF_LEVEL keeps Diablo's level.
+	// POE2 Mashup: POE2 equipment is picked by the vendors' level (the hero's and a little above), from the newest bases
+	// up to it; the rest keeps Diablo's vendor level. Only the pick: CF_LEVEL keeps Diablo's level.
 	const int areaLevel = gbIsPoe2 ? VendorAreaLevel(player, sgGameInitInfo.nDifficulty) : 0;
-	return GetItemIndexForDroppableItem(ConsiderDropRate, [&player, &minlvl, &maxlvl, areaLevel](const ItemData &item) {
+	const std::unordered_map<std::string_view, int> floors = areaLevel > 0 ? VendorBaseFloors(areaLevel) : std::unordered_map<std::string_view, int> {};
+	return GetItemIndexForDroppableItem(ConsiderDropRate, [&player, &minlvl, &maxlvl, areaLevel, &floors](const ItemData &item) {
 		if (!Ok(player, item))
 			return false;
-		if (areaLevel > 0 && EquipmentClassWeight(item.itype) > 0)
-			return item.iMinMLvl >= (minlvl > 0 ? areaLevel / PremiumAreaLevelDivisor : 0) && item.iMinMLvl <= areaLevel;
+		if (areaLevel > 0 && EquipmentClassWeight(item.itype) > 0) {
+			const auto floor = floors.find(VendorBaseKind(item));
+			return item.iMinMLvl >= (floor != floors.end() ? floor->second : 0) && item.iMinMLvl <= areaLevel;
+		}
 		if (item.iMinMLvl < minlvl || item.iMinMLvl > maxlvl)
 			return false;
 		return true;
@@ -2610,11 +2644,23 @@ int VendorPoe2ItemLevel(int level)
 	return Poe2ItemLevel(level);
 }
 
-/** @brief Shop equipment gets a POE2 item level from the level it was stocked at. */
+/**
+ * @brief Shop equipment gets a POE2 item level from the level it was stocked at: with the area level table, the
+ * hero's level up to VendorAreaLevelBonus above it, picked by the ware's seed so a second call keeps it.
+ */
 void SetVendorPoe2ItemLevel(Item &item, int level)
 {
-	if (gbIsPoe2 && EquipmentClassWeight(item._itype) > 0)
-		SetPoe2ItemLevel(item, VendorPoe2ItemLevel(level));
+	if (!gbIsPoe2 || EquipmentClassWeight(item._itype) == 0)
+		return;
+	const int top = VendorPoe2ItemLevel(level);
+	const bool spread = MyPlayer != nullptr && VendorAreaLevel(*MyPlayer, sgGameInitInfo.nDifficulty) > 0;
+	const int low = spread ? std::max(top - VendorAreaLevelBonus, 1) : top;
+	const int current = GetPoe2ItemLevel(item);
+	if (current >= low && current <= top) {
+		SetPoe2ItemLevel(item, current);
+		return;
+	}
+	SetPoe2ItemLevel(item, low + static_cast<int>(item._iSeed % static_cast<uint32_t>(top - low + 1)));
 }
 
 void SpawnOnePremium(Item &premiumItem, int plvl, const Player &player)
@@ -2797,6 +2843,7 @@ void RecreateSmithItem(const Player &player, Item &item, _item_indexes idx, int 
 {
 	SetRndSeed(iseed);
 	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndSmithItem(player, lvl); });
+	item._iSeed = iseed; // POE2 Mashup: a base's implicits roll from it, as when the ware was stocked
 	GetItemAttrs(item, itype, lvl);
 	// POE2 Mashup: a magic or rare ware keeps its rarity in dwBuff, or the one crafting gave it; skip the rarity roll and give it its modifiers.
 	if (const std::optional<item_quality> rarity = RarityToRoll(item); rarity && *rarity != ITEM_QUALITY_NORMAL) {
@@ -2814,6 +2861,7 @@ void RecreatePremiumItem(const Player &player, Item &item, _item_indexes idx, in
 {
 	SetRndSeed(iseed);
 	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndPremiumItem(player, plvl / 4, plvl); });
+	item._iSeed = iseed; // POE2 Mashup: a base's implicits roll from it, as when the ware was stocked
 	GetItemAttrs(item, itype, plvl);
 	item._iSeed = iseed; // POE2 Mashup: the modifiers roll from it, as when the ware was stocked
 	GetItemBonus(player, item, plvl / 2, plvl, true, !gbIsHellfire);
@@ -2827,6 +2875,7 @@ void RecreateBoyItem(const Player &player, Item &item, _item_indexes idx, int lv
 {
 	SetRndSeed(iseed);
 	const _item_indexes itype = VendorItemBase(idx, [&]() { return RndBoyItem(player, lvl); });
+	item._iSeed = iseed; // POE2 Mashup: a base's implicits roll from it, as when the ware was stocked
 	GetItemAttrs(item, itype, lvl);
 	item._iSeed = iseed; // POE2 Mashup: the modifiers roll from it, as when the ware was stocked
 	GetItemBonus(player, item, lvl, 2 * lvl, true, true);
@@ -2847,6 +2896,7 @@ void RecreateWitchItem(const Player &player, Item &item, _item_indexes idx, int 
 	} else {
 		SetRndSeed(iseed);
 		const _item_indexes itype = VendorItemBase(idx, [&]() { return RndWitchItem(player, lvl); });
+		item._iSeed = iseed; // POE2 Mashup: a base's implicits roll from it, as when the ware was stocked
 		GetItemAttrs(item, itype, lvl);
 		// POE2 Mashup: a ware that rolled a vendor rarity keeps it in dwBuff, or has the one crafting gave it; skip the rarity roll and give it its modifiers.
 		if (const std::optional<item_quality> rarity = RarityToRoll(item); rarity) {
@@ -6981,7 +7031,13 @@ void PrintItemCraftState(const Item &item)
 	if (IsWaystone(item) || IsEndgameItem(item))
 		return;
 	const Poe2Craft &craft = item._iPoe2Craft;
-	for (const Poe2CraftMod &mod : craft.mods) {
+	// A line crafting just added glows for a moment (poe2/affix_glow.hpp).
+	const NewAffixLines *glowing = GlowingAffixLines(item);
+	const InfoLineStyle style = CurrentInfoLineStyle;
+	const auto styleFor = [glowing, style](bool fresh) { return fresh && glowing != nullptr && style == InfoLineStyle::Mod ? InfoLineStyle::NewMod : style; };
+	for (size_t i = 0; i < craft.mods.size(); i++) {
+		const Poe2CraftMod &mod = craft.mods[i];
+		CurrentInfoLineStyle = styleFor(glowing != nullptr && glowing->hasCraftMod(i));
 		if (mod.family == UnrevealedModFamily)
 			AddItemInfoBoxString(IsCraftPrefix(mod) ? _("Unrevealed desecrated prefix") : _("Unrevealed desecrated suffix"));
 		if (const DesecratedMod *desecrated = GetDesecratedMod(mod.family); desecrated != nullptr) {
@@ -6989,17 +7045,19 @@ void PrintItemCraftState(const Item &item)
 				AddItemInfoBoxString(StrCat(line, " (", desecrated->name, ")"));
 		}
 	}
+	CurrentInfoLineStyle = style;
 	if (const auto catalyst = static_cast<Catalyst>(craft.catalyst); catalyst != Catalyst::None)
 		AddItemInfoBoxString(FormatRuntime(_("Quality: +{:d}% ({:s} modifiers)"), ItemQuality(item), CatalystName(catalyst)));
 	if (craft.desecrated)
 		AddItemInfoBoxString(_("Desecrated"));
 	// What an Evil essence left on it (build spec step 7).
-	for (std::string &line : EssenceMarkText(item))
+	for (std::string &line : EssenceMarkText(item)) {
+		CurrentInfoLineStyle = styleFor(glowing != nullptr && glowing->hasLine(line));
 		AddItemInfoBoxString(std::move(line));
+	}
 	// A bonded line whose sockets don't match yet is greyed (build spec step 5).
-	const InfoLineStyle style = CurrentInfoLineStyle;
 	for (SocketLine &line : AugmentSocketLines(item)) {
-		CurrentInfoLineStyle = line.inactive ? InfoLineStyle::InactiveMod : style;
+		CurrentInfoLineStyle = line.inactive ? InfoLineStyle::InactiveMod : styleFor(glowing != nullptr && glowing->hasLine(line.text));
 		AddItemInfoBoxString(std::move(line.text));
 	}
 	CurrentInfoLineStyle = style;
@@ -7237,6 +7295,9 @@ void PrintItemDetails(const Item &item)
 		AddItemInfoBoxString(FormatRuntime(_("Charges: {:d}/{:d}"), item._iCharges, item._iMaxCharges));
 	}
 	CurrentInfoLineStyle = InfoLineStyle::Mod;
+	// The lines crafting just added glow for a moment (poe2/affix_glow.hpp).
+	const NewAffixLines *glowing = GlowingAffixLines(item);
+	const auto modStyle = [glowing](bool fresh) { return fresh && glowing != nullptr ? InfoLineStyle::NewMod : InfoLineStyle::Mod; };
 	if (item._iPoe2Mods[0].family != 0 || item._iPoe2Craft.explicitMods) {
 		// Holding Alt shows the prefixes, then the suffixes, each stat with the range it can roll and its tier at the
 		// end of the line, as compact as POE2's (Curtis 2026-10-18). Each affix is labelled once, so the labels count
@@ -7245,15 +7306,21 @@ void PrintItemDetails(const Item &item)
 		if (!advanced) {
 			// A stat several modifiers give shows once, added up, as in POE2 (Curtis 2026-10-30: a rare showed
 			// "12% increased Energy Shield" twice and "29% increased Energy Shield" from two hybrids and a plain one).
-			for (const std::string &line : CombinedItemModText(item._iPoe2Mods))
-				AddItemInfoBoxString(line);
+			// A stat line a new modifier adds to glows too.
+			std::vector<bool> fresh;
+			const std::vector<std::string> lines = CombinedItemModText(item._iPoe2Mods, glowing != nullptr ? glowing->poe2Mods : 0, fresh);
+			for (size_t i = 0; i < lines.size(); i++) {
+				CurrentInfoLineStyle = modStyle(fresh[i]);
+				AddItemInfoBoxString(lines[i]);
+			}
 		} else {
-			CurrentInfoLineStyle = InfoLineStyle::Affix;
 			for (const bool prefixes : { true, false }) {
-				for (const Poe2ItemMod &mod : item._iPoe2Mods) {
+				for (size_t i = 0; i < item._iPoe2Mods.size(); i++) {
+					const Poe2ItemMod &mod = item._iPoe2Mods[i];
 					const ModFamily *family = ItemModFamily(mod);
 					if (family == nullptr || family->prefix != prefixes)
 						continue;
+					CurrentInfoLineStyle = glowing != nullptr && glowing->hasPoe2Mod(i) ? InfoLineStyle::NewAffix : InfoLineStyle::Affix;
 					for (const std::string &line : AffixViewLines(prefixes ? _("Prefix") : _("Suffix"), ItemModAdvancedText(mod), mod.tier))
 						AddItemInfoBoxString(line);
 				}
@@ -7262,16 +7329,21 @@ void PrintItemDetails(const Item &item)
 		CurrentInfoLineStyle = InfoLineStyle::Mod;
 	} else if (item._iMagical == ITEM_QUALITY_RARE) {
 		for (size_t i = 0; i < item._iRarePowers.size(); i++) {
+			CurrentInfoLineStyle = modStyle(glowing != nullptr && glowing->hasRarePower(i));
 			if (item._iRarePowers[i] != IPL_INVALID)
 				AddItemInfoBoxString(PrintItemPowerWithTier(item._iRarePowers[i], item, item._iRareTiers[i]));
 		}
+		CurrentInfoLineStyle = InfoLineStyle::Mod;
 	} else {
 		if (item._iPrePower != -1) {
+			CurrentInfoLineStyle = modStyle(glowing != nullptr && glowing->prefixPower);
 			AddItemInfoBoxString(PrintItemPowerWithTier(item._iPrePower, item, item._iPreTier));
 		}
 		if (item._iSufPower != -1) {
+			CurrentInfoLineStyle = modStyle(glowing != nullptr && glowing->suffixPower);
 			AddItemInfoBoxString(PrintItemPowerWithTier(item._iSufPower, item, item._iSufTier));
 		}
+		CurrentInfoLineStyle = InfoLineStyle::Mod;
 	}
 	PrintItemCraftState(item);
 	if (item._iMagical == ITEM_QUALITY_UNIQUE && gbIsPoe2) {

@@ -33,6 +33,7 @@
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "options.h"
+#include "poe2/hd.hpp"
 #include "poe2/telemetry.hpp"
 #include "stores.h"
 #include "utils/language.h"
@@ -208,8 +209,18 @@ void gmenu_draw_pause(const Surface &out)
 	}
 }
 
+/** @brief POE2 Mashup: forgets the menu's pictures' HD art names, before their pixels go. */
+void ForgetGMenuArt()
+{
+	hd::ForgetUiPicture(sgpLogo);
+	hd::ForgetUiPicture(PentSpin_cel);
+	hd::ForgetUiPicture(option_cel);
+	hd::ForgetUiPicture(optbar_cel);
+}
+
 void FreeGMenu()
 {
+	ForgetGMenuArt();
 	sgpLogo = std::nullopt;
 	PentSpin_cel = std::nullopt;
 	option_cel = std::nullopt;
@@ -228,12 +239,21 @@ void gmenu_init_menu()
 	if (HeadlessMode)
 		return;
 
-	sgpLogo = LoadOptionalCel("data\\hf_logo3", 430);
-	if (!sgpLogo.has_value())
-		sgpLogo = LoadCel("data\\diabsmal", 296);
+	ForgetGMenuArt();
+	const char *logo = "data\\hf_logo3";
+	sgpLogo = LoadOptionalCel(logo, 430);
+	if (!sgpLogo.has_value()) {
+		logo = "data\\diabsmal";
+		sgpLogo = LoadCel(logo, 296);
+	}
 	PentSpin_cel = LoadCel("data\\pentspin", 48);
 	option_cel = LoadCel("data\\option", SliderMarkerWidth);
 	optbar_cel = LoadCel("data\\optbar", SliderValueBoxWidth);
+	// POE2 Mashup: the menu's logo, spinner and sliders show the HD pack's art of them.
+	hd::RegisterUiPicture(logo, *sgpLogo);
+	hd::RegisterUiPicture("data\\pentspin", *PentSpin_cel);
+	hd::RegisterUiPicture("data\\option", *option_cel);
+	hd::RegisterUiPicture("data\\optbar", *optbar_cel);
 }
 
 bool gmenu_is_active()

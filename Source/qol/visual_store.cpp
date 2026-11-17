@@ -35,6 +35,7 @@
 #include "panels/ui_panels.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/hd.hpp"
 #include "poe2/item_search.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/stacking.hpp"
@@ -470,10 +471,19 @@ void InitVisualStore()
 	VisualStoreNavButtonArt = LoadClx("data\\tabBtnUp.clx");
 	VisualStoreRepairAllButtonArt = LoadClx("data\\repairAllBtn.clx");
 	VisualStoreRepairButtonArt = LoadClx("data\\repairSingleBtn.clx");
+	// POE2 Mashup: the store and its buttons show the HD pack's art of them.
+	hd::RegisterUiPicture("data\\store.clx", *VisualStorePanelArt);
+	hd::RegisterUiPicture("data\\tabBtnUp.clx", *VisualStoreNavButtonArt);
+	hd::RegisterUiPicture("data\\repairAllBtn.clx", *VisualStoreRepairAllButtonArt);
+	hd::RegisterUiPicture("data\\repairSingleBtn.clx", *VisualStoreRepairButtonArt);
 }
 
 void FreeVisualStoreGFX()
 {
+	hd::ForgetUiPicture(VisualStoreNavButtonArt);
+	hd::ForgetUiPicture(VisualStorePanelArt);
+	hd::ForgetUiPicture(VisualStoreRepairAllButtonArt);
+	hd::ForgetUiPicture(VisualStoreRepairButtonArt);
 	VisualStoreNavButtonArt = std::nullopt;
 	VisualStorePanelArt = std::nullopt;
 	VisualStoreRepairAllButtonArt = std::nullopt;
@@ -878,7 +888,9 @@ void DrawVisualStore(const Surface &out)
 		// Draw highlight outline if this item is hovered
 		if (pcursstoreitem == vsItem.index) {
 			const uint8_t color = GetOutlineColor(item, true);
-			ClxDrawOutline(out, color, position, sprite);
+			// POE2 Mashup: in HD the outline of the ware under the cursor shows smooth and fades in, as the world's do.
+			const hd::OutlineScope outlineLook({ .glow = ItemOutlineGlows(item), .hovered = true });
+			DrawItemOutline(item, out, color, position, sprite);
 		}
 
 		DrawItem(item, out, position, sprite);

@@ -199,19 +199,19 @@ int AreaItemLevel(int areaLevel, int bonus = 0);
  */
 int Poe2CurrencyLevel(const Monster &monster, int difficulty);
 
-/** @brief Town vendors stock wares this far above the deepest area the player has reached. */
-constexpr int VendorAreaLevelBonus = 2;
+/** @brief Town vendors stock wares up to this many levels above the hero's (Curtis 2026-11-11: "around my level or just above"). */
+constexpr int VendorAreaLevelBonus = 3;
 
 /**
- * @brief The premium stock takes POE2 equipment from this part of the vendors' area level up (Diablo's takes a quarter
- * of its level up). A sixth, since POE2's bases step from level 1 straight to 11 or 12: a quarter left areas 8-11 none.
+ * @brief A ware's item level is the hero's level up to VendorAreaLevelBonus above it, and its base is one of the newest
+ * the hero can reach: within this many levels of the newest base of its kind at the vendors' level.
  */
-constexpr int PremiumAreaLevelDivisor = 6;
+constexpr int VendorBaseLevelWindow = 10;
 
 /**
- * @brief The area level town vendors stock for: the deepest floor the player has visited (floor 1 before any),
- * plus 15 per difficulty step, plus VendorAreaLevelBonus, at most MaxPoe2ItemLevel. It sets only the POE2 item
- * level and the POE2 base of a ware; CF_LEVEL keeps Diablo's vendor level. 0 when the area level table isn't loaded.
+ * @brief The level town vendors stock up to: the hero's level plus VendorAreaLevelBonus, at most MaxPoe2ItemLevel
+ * (Curtis 2026-11-11; it was the deepest floor visited). It sets only the POE2 item level and the POE2 base of a ware;
+ * CF_LEVEL keeps Diablo's vendor level. 0 when the area level table isn't loaded.
  */
 int VendorAreaLevel(const Player &player, int difficulty);
 

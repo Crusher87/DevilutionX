@@ -9,6 +9,10 @@ RecordTileFn RecordTileHook = nullptr;
 RecordSpriteFn RecordSpriteHook = nullptr;
 RegisterSpritesFn RegisterSpritesHook = nullptr;
 RecordUiSpriteFn RecordUiSpriteHook = nullptr;
+RecordUiOutlineFn RecordUiOutlineHook = nullptr;
+RegisterUiPictureFn RegisterUiPictureHook = nullptr;
+ForgetUiPictureFn ForgetUiPictureHook = nullptr;
+RecordUiBlitFn RecordUiBlitHook = nullptr;
 
 } // namespace hd
 

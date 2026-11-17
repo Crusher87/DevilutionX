@@ -99,6 +99,7 @@ set(poe2_mod
   txtdata/spells/spelldat.tsv
   txtdata/towners/towners.tsv
   txtdata/poe2/area_levels.tsv
+  txtdata/poe2/atmosphere.tsv
   txtdata/poe2/augments.tsv
   txtdata/poe2/base_meta.tsv
   txtdata/poe2/bound_demons.tsv

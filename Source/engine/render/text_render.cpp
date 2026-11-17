@@ -30,6 +30,7 @@
 #include "engine/surface.hpp"
 #include "engine/ticks.hpp"
 #include "game_mode.hpp"
+#include "poe2/hd.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
@@ -688,6 +689,8 @@ uint32_t DoDrawString(const Surface &out, std::string_view text, Rectangle rect,
 void LoadSmallSelectionSpinner()
 {
 	pSPentSpn2Cels = LoadCel("data\\pentspn2", 12);
+	// POE2 Mashup: the spinner shows the HD pack's art of it.
+	hd::RegisterUiPicture("data\\pentspn2", *pSPentSpn2Cels);
 }
 
 void UnloadFonts()

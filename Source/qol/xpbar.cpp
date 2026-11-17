@@ -16,6 +16,7 @@
 #include "engine/render/primitive_render.hpp"
 #include "game_mode.hpp"
 #include "options.h"
+#include "poe2/hd.hpp"
 #include "tables/playerdat.hpp"
 #include "utils/format.hpp"
 #include "utils/format_int.hpp"
@@ -68,11 +69,14 @@ void InitXPBar()
 {
 	if (*GetOptions().Gameplay.experienceBar) {
 		xpbarArt = LoadClx("data\\xpbar.clx");
+		// POE2 Mashup: the bar's frame shows the HD pack's art of it.
+		hd::RegisterUiPicture("data\\xpbar.clx", *xpbarArt);
 	}
 }
 
 void FreeXPBar()
 {
+	hd::ForgetUiPicture(xpbarArt);
 	xpbarArt = std::nullopt;
 }
 
