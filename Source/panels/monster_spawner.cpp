@@ -837,7 +837,11 @@ void OpenMonsterSpawner()
 		std::erase_if(List, [](const MonsterSpawnerEntry &entry) { return entry.unique >= 0 && !UniqueColoursExist(UniqueMonstersData[entry.unique]); });
 		for (MonsterSpawnerEntry &entry : List) {
 			// The game shows HD art for normal monsters only: a unique is drawn in its own colours.
-			entry.hdArt = entry.unique < 0 && hd::HasArt(MonsterArtName(MonstersData[entry.type], MonsterGraphic::Stand, Direction::South, 0));
+			// The golem has no standing pose, so its walk counts too.
+			const MonsterData &data = MonstersData[entry.type];
+			entry.hdArt = entry.unique < 0
+			    && (hd::HasArt(MonsterArtName(data, MonsterGraphic::Stand, Direction::South, 0))
+			        || hd::HasArt(MonsterArtName(data, MonsterGraphic::Walk, Direction::South, 0)));
 		}
 	}
 	LastFilter = MonsterSpawnerFilter::Count; // Forces a refresh, keeping the pick when the list is the same.
