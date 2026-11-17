@@ -632,7 +632,7 @@ void IndexTiles()
 	}
 	// Maps are made for a whole level's tiles at once: a few of its first pictures tell whether this one has them.
 	TileMapsHere = false;
-	for (uint32_t frame = 1; frame <= std::min(count, 200U) && !TileMapsHere; frame++) {
+	for (uint32_t frame = 1; frame <= std::min<uint32_t>(count, 200) && !TileMapsHere; frame++) {
 		const auto it = TileNames.find(GetDunFrame(CacheCels, frame));
 		TileMapsHere = it != TileNames.end() && HasArt(it->second + "_n");
 	}
