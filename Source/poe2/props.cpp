@@ -236,7 +236,8 @@ Canvas PaintWeb()
 		x = apexX + (fx - apexX) * along;
 		y = apexY + (fy - apexY) * along;
 	};
-	const Rgba thread { 222, 220, 210, 0.6F };
+	// Grey with the dust of the stone it hangs on, not white: it is part of the room, seen only where the light catches it.
+	const Rgba thread { 150, 144, 132, 0.5F };
 	// The dust it has gathered, between the strands.
 	Fill(
 	    canvas, 0, 0, static_cast<float>(WebWide), static_cast<float>(WebTall),
@@ -848,7 +849,7 @@ Shape WebShape(const Fixed &thing)
 {
 	Shape shape {};
 	shape.kind = Kind::Web;
-	shape.alpha = std::clamp(atmosphere::Value("web_alpha", 0.6F), 0.F, 1.F);
+	shape.alpha = std::clamp(atmosphere::Value("web_alpha", 0.4F), 0.F, 1.F);
 	shape.lightX = static_cast<float>(thing.tile.x) - 0.3F;
 	shape.lightY = static_cast<float>(thing.tile.y) - 0.3F;
 	shape.onWall = true;

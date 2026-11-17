@@ -74,7 +74,7 @@ cathedral	hidden_sway	1.6		How far that ripple sways from side to side, in game 
 cathedral	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
 cathedral	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
 cathedral	web_gap	2.5		One room corner in this many holds a cobweb (idea 64). 1 every corner, 0 none.
-cathedral	web_alpha	0.6		How much of a cobweb shows. 0 none, 1 solid.
+cathedral	web_alpha	0.4		How much of a cobweb shows. 0 none, 1 solid.
 cathedral	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
 cathedral	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels. 0 still.
 cathedral	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
@@ -252,7 +252,7 @@ crypt	hidden_sway	1.6		How far that ripple sways from side to side, in game pixe
 crypt	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
 crypt	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
 crypt	web_gap	2.5		One room corner in this many holds a cobweb (idea 64). 1 every corner, 0 none.
-crypt	web_alpha	0.6		How much of a cobweb shows. 0 none, 1 solid.
+crypt	web_alpha	0.4		How much of a cobweb shows. 0 none, 1 solid.
 crypt	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
 crypt	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels. 0 still.
 crypt	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
