@@ -143,6 +143,8 @@ bool UpdateUiOverlay()
 	const auto *ui = static_cast<const uint8_t *>(PalSurface->pixels);
 	const bool covers = UiCovered.size() == UiBase.size();
 	const bool tints = UiTinted.size() == UiBase.size();
+	// POE2 Mashup: a panel's pixels with its HD art under them (hd::RenderUiPanels) are left out.
+	const uint8_t *hidden = hd::UiHiddenPixels(gnScreenWidth, gnScreenHeight);
 	// The rows that changed go up in runs; a few unchanged rows between two changed ones go up with them.
 	constexpr int RunGap = 8;
 	int runStart = -1;
@@ -212,7 +214,15 @@ bool UpdateUiOverlay()
 			std::memset(row, 0, static_cast<size_t>(first) * 4);
 			std::memset(row + static_cast<size_t>(last + 1) * 4, 0, static_cast<size_t>(gnScreenWidth - last - 1) * 4);
 			uint8_t *out = row + static_cast<size_t>(first) * 4;
+			const uint8_t *hiddenLine = hidden != nullptr ? hidden + static_cast<size_t>(y) * gnScreenWidth : nullptr;
 			for (int x = first; x <= last; x++, out += 4) {
+				if (hiddenLine != nullptr && hiddenLine[x] != 0) {
+					out[0] = 0;
+					out[1] = 0;
+					out[2] = 0;
+					out[3] = 0;
+					continue;
+				}
 				// POE2 Mashup: a tint nothing has been drawn over since lies over the HD world at its own alpha, the same
 				// whatever the 8-bit world under it, so it holds steady while the world scrolls (Curtis 2026-10-29).
 				if (tinted && tintLine[x].alpha != 0 && tintLine[x].color == uiLine[x] && (!covered || coverLine[x] != UiCover::Solid)) {
@@ -317,6 +327,8 @@ void PresentLayeredFrame(SDL_Surface *surface)
 		hd::PrepareUiSprites();
 		const bool overlay = UpdateUiOverlay();
 		hd::RestoreUiSprites();
+		// POE2 Mashup: UI panels with HD art show it under the UI, which leaves out their own pixels there.
+		hd::RenderUiPanels(renderer);
 		if (overlay)
 			SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
 		hd::RenderUiSprites(renderer);

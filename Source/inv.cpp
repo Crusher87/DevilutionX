@@ -1310,6 +1310,7 @@ bool CanBePlacedOnBelt(const Player &player, const Item &item)
 
 void FreeInvGFX()
 {
+	hd::ForgetUiPicture(pInvCels);
 	pInvCels = std::nullopt;
 }
 
@@ -1320,7 +1321,11 @@ void InitInv()
 	if (gbIsSpawn && (playerClassData.inv == "inv_rog" || playerClassData.inv == "inv_sor")) {
 		invName = "inv";
 	}
-	pInvCels = LoadCel(StrCat("data\\inv\\", invName).c_str(), static_cast<uint16_t>(SidePanelSize.width));
+	// POE2 Mashup: the inventory shows the HD pack's art of it (hd/data/inv/<name>), and another class's goes.
+	hd::ForgetUiPicture(pInvCels);
+	const std::string path = StrCat("data\\inv\\", invName);
+	pInvCels = LoadCel(path.c_str(), static_cast<uint16_t>(SidePanelSize.width));
+	hd::RegisterUiPicture(path, *pInvCels);
 }
 
 namespace {

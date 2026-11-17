@@ -1,11 +1,15 @@
 #include "poe2/hd.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <functional>
 #include <memory>
+#include <map>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -23,6 +27,8 @@
 #include "engine/surface.hpp"
 #include "engine/trn.hpp"
 #include "poe2/hd_outline.hpp"
+#include "utils/file_util.h"
+#include "utils/log.hpp"
 #include "utils/png.h"
 #include "utils/sdl_compat.h"
 
@@ -47,6 +53,8 @@ struct UiSpriteName {
 	/** @brief For a shrunken copy of a picture (one inventory cell): the full picture's size; 0 for a picture of its own. */
 	uint16_t fullWidth = 0;
 	uint16_t fullHeight = 0;
+	/** @brief A UI panel's picture (RegisterUiPicture): its HD art goes under the UI, which leaves out its pixels there. */
+	bool panel = false;
 };
 
 /** @brief Each item picture frame, by the address of its pixels. */
@@ -133,8 +141,11 @@ struct UiDraw {
 	UiArt *art = nullptr;
 	/** @brief The outline the game drew round it, if it drew one. */
 	UiOutline outline;
+	/** @brief When in the frame it was drawn, among the draws and the copies (UiBlit), so panels go under in that order. */
+	uint32_t order = 0;
 };
 std::vector<UiDraw> UiDraws;
+uint32_t UiOrder = 0;
 
 /** @brief The UI pixels set to what was under an item picture while the UI overlay is made: where, and what they were. */
 std::vector<std::pair<size_t, uint8_t>> Swapped;
@@ -142,11 +153,43 @@ std::vector<std::pair<size_t, uint8_t>> Swapped;
 /** @brief Textures of pictures partly covered, by their art, colour and what of them shows. */
 std::unordered_map<uint64_t, SDL_Texture *> MaskedTextures;
 
-const UiPattern &PatternOf(ClxSprite clx, const uint8_t *trn)
+// UI panels (the inventory, the spell book, the bottom panel...) show their HD art the same way, but under the UI: the UI
+// leaves out their pixels that still show (UiHiddenPixels), so whatever was drawn over them (text, items, the cursor)
+// stays over their art.
+
+/** @brief Each UI panel picture's frames, by the address of their pixels, by its name (RegisterUiPicture). */
+std::unordered_map<std::string, std::vector<const uint8_t *>> UiPictures;
+
+/** @brief One copy of part of a surface a panel was put together on (the bottom panel) into this frame's UI. */
+struct UiBlit {
+	/** @brief The HD art of the whole surface. */
+	std::string name;
+	/** @brief The part copied, in the surface, and the surface's width (its art is that many times smaller). */
+	SDL_Rect src {};
+	int sourceWidth = 0;
+	/** @brief Where it went in the UI. */
+	SDL_Rect dest {};
+	/** @brief The pixels it copied. */
+	std::vector<uint8_t> pixels;
+	int shown = 0;
+	UiArt *art = nullptr;
+	uint32_t order = 0;
+};
+std::vector<UiBlit> UiBlits;
+
+/** @brief The UI pixels the overlay leaves out this frame (1), since a panel's HD art goes under them; and its size. */
+std::vector<uint8_t> UiHidden;
+int UiHiddenWidth = 0;
+int UiHiddenHeight = 0;
+bool UiHiddenAny = false;
+
+/** @brief Where `--hd-export` writes the UI pictures (empty when it isn't), and what it wrote: frame sizes by name. */
+std::string UiExportDir;
+std::map<std::string, std::vector<std::pair<int, int>>> UiExported;
+
+/** @brief Draws a picture on two colours to find the pixels it lays down: those that come out the same. */
+void MakePattern(UiPattern &pattern, ClxSprite clx, const uint8_t *trn)
 {
-	UiPattern &pattern = UiPatterns[trn != nullptr ? 1 : 0][clx.pixelData()];
-	if (pattern.width == clx.width() && pattern.height == clx.height() && !pattern.pixels.empty())
-		return pattern;
 	pattern.width = clx.width();
 	pattern.height = clx.height();
 	const int w = clx.width();
@@ -171,6 +214,14 @@ const UiPattern &PatternOf(ClxSprite clx, const uint8_t *trn)
 				pattern.pixels[static_cast<size_t>(y) * w + x] = a[x];
 		}
 	}
+}
+
+const UiPattern &PatternOf(ClxSprite clx, const uint8_t *trn)
+{
+	UiPattern &pattern = UiPatterns[trn != nullptr ? 1 : 0][clx.pixelData()];
+	if (pattern.width == clx.width() && pattern.height == clx.height() && !pattern.pixels.empty())
+		return pattern;
+	MakePattern(pattern, clx, trn);
 	return pattern;
 }
 
@@ -320,6 +371,7 @@ void RecordUiSpriteImpl(const Surface &out, Point position, ClxSprite clx, const
 	if (UiDraws.size() >= 512)
 		UiDraws.clear();
 	UiDraw &draw = UiDraws.emplace_back();
+	draw.order = UiOrder++;
 	draw.name = &it->second;
 	draw.pattern = &PatternOf(clx, trn);
 	draw.red = trn != nullptr;
@@ -349,6 +401,232 @@ void RecordUiSpriteImpl(const Surface &out, Point position, ClxSprite clx, const
 
 [[maybe_unused]] const bool RecordUiSpriteHookSet = (RecordUiSpriteHook = RecordUiSpriteImpl, true);
 [[maybe_unused]] const bool RecordUiOutlineHookSet = (RecordUiOutlineHook = RecordUiOutlineImpl, true);
+
+/** @brief A UI picture's HD art name from its asset's path: lower case, with / and no extension (data/inv/inv). */
+std::string UiPictureName(std::string_view path)
+{
+	std::string name(path);
+	std::replace(name.begin(), name.end(), '\\', '/');
+	std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	for (const std::string_view ext : { ".cl2", ".clx", ".cel" }) {
+		if (name.size() > ext.size() && name.ends_with(ext))
+			name.resize(name.size() - ext.size());
+	}
+	return name;
+}
+
+/** @brief Writes one frame of a UI picture for `--hd-export`: `colourAt` gives each pixel's palette colour, or -1 for none. */
+template <typename ColourAt>
+void WriteUiFrame(const std::string &name, size_t frame, int width, int height, const ColourAt &colourAt)
+{
+	const std::string dir = UiExportDir + "/ui/" + name;
+	RecursivelyCreateDir(dir.c_str());
+	SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+	if (surface == nullptr)
+		return;
+	for (int y = 0; y < height; y++) {
+		auto *row = static_cast<uint8_t *>(surface->pixels) + static_cast<ptrdiff_t>(y) * surface->pitch;
+		for (int x = 0; x < width; x++) {
+			uint8_t *p = row + static_cast<ptrdiff_t>(x) * 4;
+			const int colour = colourAt(x, y);
+			if (colour < 0) {
+				p[0] = p[1] = p[2] = p[3] = 0;
+				continue;
+			}
+			const SDL_Color &c = logical_palette[colour];
+			p[0] = c.r;
+			p[1] = c.g;
+			p[2] = c.b;
+			p[3] = 255;
+		}
+	}
+	char file[32];
+	std::snprintf(file, sizeof(file), "/d0_f%02zu.png", frame);
+	if (IMG_SavePNG(surface, (dir + file).c_str()) != 0)
+		LogError("HD export: couldn't write {}{}", dir, file);
+	SDL_FreeSurface(surface);
+	std::vector<std::pair<int, int>> &sizes = UiExported[name];
+	if (sizes.size() <= frame)
+		sizes.resize(frame + 1);
+	sizes[frame] = { width, height };
+}
+
+/** @brief Forgets the frames at these pixels, and this frame's draws (which may point at their names). */
+void ForgetUiFrames(const std::vector<const uint8_t *> &frames)
+{
+	UiDraws.clear();
+	PendingUiOutline = {};
+	for (const uint8_t *pixels : frames) {
+		const auto it = UiSpriteNames.find(pixels);
+		if (it != UiSpriteNames.end() && it->second.panel)
+			UiSpriteNames.erase(it);
+		for (auto &patterns : UiPatterns)
+			patterns.erase(pixels);
+		UiRings.erase(pixels);
+	}
+}
+
+void RegisterUiPictureImpl(std::string_view path, ClxSpriteList sprites)
+{
+	const std::string name = UiPictureName(path);
+	std::vector<const uint8_t *> &frames = UiPictures[name];
+	// A picture loaded again under its name: the old one's pixels are freed, or soon will be.
+	if (!frames.empty())
+		ForgetUiFrames(frames);
+	frames.clear();
+	for (size_t frame = 0; frame < sprites.numSprites(); frame++) {
+		const ClxSprite sprite = sprites[frame];
+		char suffix[32];
+		std::snprintf(suffix, sizeof(suffix), "/d0_f%02zu", frame);
+		RegisterUiSprite(sprite.pixelData(), name + suffix, sprite.width(), sprite.height());
+		UiSpriteNames[sprite.pixelData()].panel = true;
+		frames.push_back(sprite.pixelData());
+		if (!UiExportDir.empty()) {
+			UiPattern pattern;
+			MakePattern(pattern, sprite, nullptr);
+			WriteUiFrame(name, frame, pattern.width, pattern.height, [&](int x, int y) {
+				return static_cast<int>(pattern.pixels[static_cast<size_t>(y) * pattern.width + x]);
+			});
+		}
+	}
+}
+
+void ForgetUiPictureImpl(ClxSpriteList sprites)
+{
+	if (sprites.numSprites() == 0)
+		return;
+	const uint8_t *first = sprites[0].pixelData();
+	for (auto it = UiPictures.begin(); it != UiPictures.end(); ++it) {
+		if (!it->second.empty() && it->second.front() == first) {
+			ForgetUiFrames(it->second);
+			UiPictures.erase(it);
+			return;
+		}
+	}
+}
+
+void RecordUiBlitImpl(const Surface &out, const Surface &src, Rectangle srcRect, Point targetPosition, std::string_view name)
+{
+	if (out.surface == nullptr || out.surface != PalSurface || src.surface == nullptr)
+		return;
+	if (!Enabled())
+		return;
+	// Clipped as the copy is (Surface::BlitFrom).
+	SDL_Rect rect { srcRect.position.x, srcRect.position.y, srcRect.size.width, srcRect.size.height };
+	Point at = targetPosition;
+	out.Clip(&rect, &at);
+	if (rect.w <= 0 || rect.h <= 0 || rect.x < 0 || rect.y < 0 || rect.x + rect.w > src.w() || rect.y + rect.h > src.h())
+		return;
+	if (UiBlits.size() >= 256)
+		UiBlits.clear();
+	UiBlit &blit = UiBlits.emplace_back();
+	blit.order = UiOrder++;
+	blit.name = std::string(name) + "/d0_f00";
+	blit.src = rect;
+	blit.sourceWidth = src.w();
+	blit.dest = SDL_Rect { out.region.x + at.x, out.region.y + at.y, rect.w, rect.h };
+	// A copy: the surface can change, or go, before the frame is shown.
+	blit.pixels.resize(static_cast<size_t>(rect.w) * rect.h);
+	for (int y = 0; y < rect.h; y++) {
+		const uint8_t *line = src.at(rect.x, rect.y + y);
+		std::copy(line, line + rect.w, blit.pixels.begin() + static_cast<ptrdiff_t>(y) * rect.w);
+	}
+}
+
+[[maybe_unused]] const bool RegisterUiPictureHookSet = (RegisterUiPictureHook = RegisterUiPictureImpl, true);
+[[maybe_unused]] const bool ForgetUiPictureHookSet = (ForgetUiPictureHook = ForgetUiPictureImpl, true);
+[[maybe_unused]] const bool RecordUiBlitHookSet = (RecordUiBlitHook = RecordUiBlitImpl, true);
+
+/** @brief Leaves a UI pixel out of the overlay this frame. */
+void HideUiPixel(int ux, int uy)
+{
+	UiHidden[static_cast<size_t>(uy) * UiHiddenWidth + ux] = 1;
+	UiHiddenAny = true;
+}
+
+/**
+ * @brief Where a UI panel's picture still shows (its own pixels still there), leaves the UI out, as its HD art goes
+ * under it there. Item pictures with HD art over it have already been taken out, so the panel shows under them.
+ */
+void PrepareUiPanel(UiDraw &draw, const SDL_Surface *ui)
+{
+	draw.shown = 0;
+	draw.whole = false;
+	const int w = draw.rect.w;
+	int laid = 0;
+	for (int y = 0; y < draw.rect.h; y++) {
+		const int uy = draw.rect.y + y;
+		const auto *line = uy >= 0 && uy < ui->h ? static_cast<const uint8_t *>(ui->pixels) + static_cast<ptrdiff_t>(uy) * ui->pitch : nullptr;
+		for (int x = 0; x < w; x++) {
+			const size_t i = static_cast<size_t>(y) * w + x;
+			const int16_t own = draw.pattern->pixels[i];
+			if (own < 0) {
+				draw.shows[i] = 0;
+				continue;
+			}
+			laid++;
+			draw.shows[i] = line != nullptr && draw.shows[i] != 0 && line[draw.rect.x + x] == own ? 1 : 0;
+			draw.shown += draw.shows[i];
+		}
+	}
+	// A panel all but covered keeps the game's own few pixels.
+	if (draw.shown * 10 < laid) {
+		draw.shown = 0;
+		return;
+	}
+	for (int y = 0; y < draw.rect.h; y++) {
+		for (int x = 0; x < w; x++) {
+			if (draw.shows[static_cast<size_t>(y) * w + x] != 0)
+				HideUiPixel(draw.rect.x + x, draw.rect.y + y);
+		}
+	}
+}
+
+/** @brief As PrepareUiPanel, for a copy of part of a panel's surface. Its colour 0 stays: the art has none there. */
+void PrepareUiBlit(UiBlit &blit, const SDL_Surface *ui)
+{
+	blit.shown = 0;
+	blit.art = ArtFor(blit.name);
+	if (blit.art == nullptr || blit.sourceWidth <= 0)
+		return;
+	int laid = 0;
+	for (int y = 0; y < blit.dest.h; y++) {
+		const int uy = blit.dest.y + y;
+		if (uy < 0 || uy >= ui->h)
+			continue;
+		const auto *line = static_cast<const uint8_t *>(ui->pixels) + static_cast<ptrdiff_t>(uy) * ui->pitch;
+		for (int x = 0; x < blit.dest.w; x++) {
+			const int ux = blit.dest.x + x;
+			const uint8_t own = blit.pixels[static_cast<size_t>(y) * blit.dest.w + x];
+			if (ux < 0 || ux >= ui->w || own == 0)
+				continue;
+			laid++;
+			if (line[ux] != own)
+				continue;
+			HideUiPixel(ux, uy);
+			blit.shown++;
+		}
+	}
+	if (laid == 0)
+		blit.shown = 0;
+}
+
+/** @brief The renderer the textures are made for: a new one took the old one's textures with it. */
+void UseRenderer(SDL_Renderer *renderer)
+{
+	if (renderer != UiArtRenderer) {
+		ForgetTextures();
+		UiArtRenderer = renderer;
+	}
+}
+
+/** @brief An HD art's whole picture as a texture, made the first time it shows. */
+SDL_Texture *TextureOf(SDL_Renderer *renderer, UiArt &art)
+{
+	if (art.texture == nullptr)
+		art.texture = MakeTexture(renderer, art.picture);
+	return art.texture;
+}
 
 /**
  * @brief Before any item picture is taken out of the UI: where the outline round a draw may show. That is where the UI
@@ -380,7 +658,7 @@ void FindWhereOutlineShows(size_t index)
 	std::vector<const UiDraw *> later;
 	for (size_t i = index + 1; i < UiDraws.size(); i++) {
 		const UiDraw &other = UiDraws[i];
-		if (other.art != nullptr && other.rect.x < area.x + area.w && other.rect.y < area.y + area.h && other.rect.x + other.rect.w > area.x && other.rect.y + other.rect.h > area.y)
+		if (other.art != nullptr && !other.name->panel && other.rect.x < area.x + area.w && other.rect.y < area.y + area.h && other.rect.x + other.rect.w > area.x && other.rect.y + other.rect.h > area.y)
 			later.push_back(&other);
 	}
 	outline.shows.assign(left.size(), 0);
@@ -635,8 +913,16 @@ void PrepareUiSprites()
 {
 	Swapped.clear();
 	SDL_Surface *ui = PalSurface;
-	if (ui == nullptr || UiDraws.empty())
+	if (UiHiddenAny)
+		std::fill(UiHidden.begin(), UiHidden.end(), 0);
+	UiHiddenAny = false;
+	if (ui == nullptr || (UiDraws.empty() && UiBlits.empty()))
 		return;
+	if (UiHiddenWidth != ui->w || UiHiddenHeight != ui->h) {
+		UiHiddenWidth = ui->w;
+		UiHiddenHeight = ui->h;
+		UiHidden.assign(static_cast<size_t>(ui->w) * ui->h, 0);
+	}
 	for (UiDraw &draw : UiDraws) {
 		draw.art = ArtFor(draw.name->name);
 		draw.outline.smooth = false;
@@ -648,7 +934,7 @@ void PrepareUiSprites()
 	for (UiDraw &draw : UiDraws) {
 		draw.shown = 0;
 		draw.whole = false;
-		if (draw.art == nullptr)
+		if (draw.art == nullptr || draw.name->panel)
 			continue;
 		const int w = draw.rect.w;
 		int laid = 0;
@@ -693,6 +979,105 @@ void PrepareUiSprites()
 		if (draw.shown != 0 && draw.art != nullptr && draw.outline.pixels != nullptr)
 			HideGameOutline(draw);
 	}
+	// After the item pictures are taken out, so a panel shows its art under theirs.
+	for (UiDraw &draw : UiDraws) {
+		if (draw.art != nullptr && draw.name->panel)
+			PrepareUiPanel(draw, ui);
+	}
+	for (UiBlit &blit : UiBlits)
+		PrepareUiBlit(blit, ui);
+}
+
+const uint8_t *UiHiddenPixels(int width, int height)
+{
+	if (!UiHiddenAny || width != UiHiddenWidth || height != UiHiddenHeight)
+		return nullptr;
+	return UiHidden.data();
+}
+
+void RenderUiPanels(SDL_Renderer *renderer)
+{
+	if (renderer == nullptr)
+		return;
+	UseRenderer(renderer);
+	const auto drawPanel = [&](const UiDraw &draw) {
+		if (draw.shown == 0 || draw.art == nullptr || !draw.name->panel)
+			return;
+		const SDL_FRect dest = DestOf(draw);
+		if (SDL_Texture *texture = TextureOf(renderer, *draw.art); texture != nullptr)
+			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+	};
+	// In the order the game drew them: a button drawn over the bottom panel goes over its art.
+	size_t nextDraw = 0;
+	for (const UiBlit &blit : UiBlits) {
+		while (nextDraw < UiDraws.size() && UiDraws[nextDraw].order < blit.order)
+			drawPanel(UiDraws[nextDraw++]);
+		if (blit.shown == 0 || blit.art == nullptr)
+			continue;
+		SDL_Texture *texture = TextureOf(renderer, *blit.art);
+		if (texture == nullptr)
+			continue;
+		// The art is of the whole surface, at its own size (twice the game's).
+		const float scale = static_cast<float>(blit.art->picture->w) / static_cast<float>(blit.sourceWidth);
+		const SDL_Rect src {
+			static_cast<int>(std::lround(blit.src.x * scale)),
+			static_cast<int>(std::lround(blit.src.y * scale)),
+			static_cast<int>(std::lround(blit.src.w * scale)),
+			static_cast<int>(std::lround(blit.src.h * scale)),
+		};
+		if (src.x + src.w > blit.art->picture->w || src.y + src.h > blit.art->picture->h)
+			continue;
+		const SDL_FRect dest { static_cast<float>(blit.dest.x), static_cast<float>(blit.dest.y), static_cast<float>(blit.dest.w), static_cast<float>(blit.dest.h) };
+		SDL_RenderCopyF(renderer, texture, &src, &dest);
+	}
+	while (nextDraw < UiDraws.size())
+		drawPanel(UiDraws[nextDraw++]);
+	UiBlits.clear();
+}
+
+void BeginUiExport(const std::string &dir)
+{
+	UiExportDir = dir;
+	UiExported.clear();
+}
+
+void ExportUiSurface(std::string_view name, const Surface &surface)
+{
+	if (UiExportDir.empty() || surface.surface == nullptr)
+		return;
+	WriteUiFrame(UiPictureName(name), 0, surface.w(), surface.h(), [&](int x, int y) {
+		const uint8_t colour = *surface.at(x, y);
+		return colour == 0 ? -1 : static_cast<int>(colour);
+	});
+}
+
+void EndUiExport()
+{
+	if (UiExportDir.empty())
+		return;
+	std::string json = "{\"pictures\":[";
+	bool first = true;
+	for (const auto &[name, sizes] : UiExported) {
+		json += first ? "\n" : ",\n";
+		first = false;
+		json += "{\"name\":\"" + name + "\",\"frames\":" + std::to_string(sizes.size()) + ",\"sizes\":[";
+		for (size_t i = 0; i < sizes.size(); i++) {
+			if (i != 0)
+				json += ",";
+			json += "[" + std::to_string(sizes[i].first) + "," + std::to_string(sizes[i].second) + "]";
+		}
+		json += "]}";
+	}
+	json += "\n]}\n";
+	const std::string dir = UiExportDir + "/ui";
+	RecursivelyCreateDir(dir.c_str());
+	if (FILE *f = std::fopen((dir + "/list.json").c_str(), "wb"); f != nullptr) {
+		std::fwrite(json.data(), 1, json.size(), f);
+		std::fclose(f);
+	}
+	LogInfo("HD export: wrote {} UI pictures", UiExported.size());
+	UiExportDir.clear();
+	UiExported.clear();
 }
 
 void RestoreUiSprites()
@@ -708,18 +1093,15 @@ void RestoreUiSprites()
 
 void RenderUiSprites(SDL_Renderer *renderer)
 {
-	if (renderer != UiArtRenderer) {
-		// The old renderer took its textures with it.
-		ForgetTextures();
-		UiArtRenderer = renderer;
-	}
+	UseRenderer(renderer);
 	if (MaskedTextures.size() > 256) {
 		for (auto &[key, texture] : MaskedTextures)
 			SDL_DestroyTexture(texture);
 		MaskedTextures.clear();
 	}
 	for (UiDraw &draw : UiDraws) {
-		if (draw.shown == 0 || draw.art == nullptr || renderer == nullptr)
+		// Panels went under the UI (RenderUiPanels).
+		if (draw.shown == 0 || draw.art == nullptr || renderer == nullptr || draw.name->panel)
 			continue;
 		UiArt &art = *draw.art;
 		const SDL_FRect dest = DestOf(draw);
@@ -771,6 +1153,8 @@ void RenderUiSprites(SDL_Renderer *renderer)
 			DrawUiOutline(renderer, draw, dest);
 	}
 	UiDraws.clear();
+	UiBlits.clear();
+	UiOrder = 0;
 	PendingUiOutline = {};
 	UiOutlines.Prune(SDL_GetTicks());
 }
@@ -782,6 +1166,11 @@ void RegisterFittedUiSprite(ClxSprite, ClxSprite) { }
 void PrepareUiSprites() { }
 void RestoreUiSprites() { }
 void RenderUiSprites(SDL_Renderer *) { }
+const uint8_t *UiHiddenPixels(int, int) { return nullptr; }
+void RenderUiPanels(SDL_Renderer *) { }
+void BeginUiExport(const std::string &) { }
+void ExportUiSurface(std::string_view, const Surface &) { }
+void EndUiExport() { }
 
 #endif
 

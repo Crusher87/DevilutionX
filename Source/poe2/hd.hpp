@@ -261,6 +261,73 @@ void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t w
 /** @brief A one-cell shrunken copy of an item picture: it shows the full picture's HD art, shrunk the same way. */
 void RegisterFittedUiSprite(ClxSprite small, ClxSprite full);
 
+using RegisterUiPictureFn = void (*)(std::string_view path, ClxSpriteList sprites);
+using ForgetUiPictureFn = void (*)(ClxSpriteList sprites);
+using RecordUiBlitFn = void (*)(const Surface &out, const Surface &src, Rectangle srcRect, Point targetPosition, std::string_view name);
+
+/** @brief RegisterUiPicture, ForgetUiPicture and RecordUiBlit when the HD renderer is linked in, otherwise null (hd_hooks.cpp). */
+extern RegisterUiPictureFn RegisterUiPictureHook;
+extern ForgetUiPictureFn ForgetUiPictureHook;
+extern RecordUiBlitFn RecordUiBlitHook;
+
+/**
+ * @brief Names a UI panel's picture (the inventory, the spell book, a button strip...) so its HD art shows over the UI
+ * where its own pixels still show, as item pictures do. Each frame's art is hd\\<name>\\d0_fNN.png, the name being the
+ * asset's path in lower case with / and no extension (data/inv/inv), or a fixed one for a picture the game puts
+ * together itself (ui/char_panel). A picture named again forgets the frames it had before.
+ */
+inline void RegisterUiPicture(std::string_view path, ClxSpriteList sprites)
+{
+	if (RegisterUiPictureHook != nullptr)
+		RegisterUiPictureHook(path, sprites);
+}
+
+/** @brief Forgets a UI panel's picture before its pixels are freed, so another picture loaded there doesn't take its art. */
+inline void ForgetUiPicture(ClxSpriteList sprites)
+{
+	if (ForgetUiPictureHook != nullptr)
+		ForgetUiPictureHook(sprites);
+}
+
+/** @brief ForgetUiPicture for a picture that may not be loaded. */
+inline void ForgetUiPicture(const OptionalOwnedClxSpriteList &sprites)
+{
+	if (sprites.has_value())
+		ForgetUiPicture(ClxSpriteList { *sprites });
+}
+
+/**
+ * @brief Notes a copy of part of a surface the game drew a panel on (the bottom panel, BottomBuffer) into the UI:
+ * that part of the HD art `<name>/d0_f00` (the whole surface's picture, at twice the size) goes under the UI there,
+ * and the UI leaves out the copied pixels that still show.
+ */
+inline void RecordUiBlit(const Surface &out, const Surface &src, Rectangle srcRect, Point targetPosition, std::string_view name)
+{
+	if (RecordUiBlitHook != nullptr)
+		RecordUiBlitHook(out, src, srcRect, targetPosition, name);
+}
+
+/**
+ * @brief While the UI overlay is made: the UI pixels to leave out (1), since a panel's HD art goes under the UI there
+ * (RenderUiPanels). Indexed by row times @p width; null when there are none, or the UI isn't that size.
+ */
+const uint8_t *UiHiddenPixels(int width, int height);
+
+/** @brief Draws the HD art of this frame's UI panels, under the UI overlay (whose panel pixels are left out there). */
+void RenderUiPanels(SDL_Renderer *renderer);
+
+/**
+ * @brief From now on each UI picture named (RegisterUiPicture) is also written as PNGs to `dir`/ui/<name>/d0_fNN.png,
+ * in full colour in the current palette, where the picture lays no pixel transparent (for the HD pack maker).
+ */
+void BeginUiExport(const std::string &dir);
+
+/** @brief Writes a surface the game puts a panel together on as `dir`/ui/<name>/d0_f00.png; colour 0 is transparent. */
+void ExportUiSurface(std::string_view name, const Surface &surface);
+
+/** @brief Stops writing UI pictures, and writes `dir`/ui/list.json: each picture's name, frame count and frame sizes. */
+void EndUiExport();
+
 /**
  * @brief Before the UI overlay is made from the UI frame: where an item picture with HD art still shows, the frame
  * shows what was under it instead, since its HD art goes over the UI (RenderUiSprites). RestoreUiSprites puts it back.
