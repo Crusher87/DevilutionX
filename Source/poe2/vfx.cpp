@@ -12011,7 +12011,7 @@ struct LensLook {
 	/** @brief How dark the top of a drop's rim is, 0 to 1. */
 	float rim = 0.7F;
 	/** @brief How bright the sky's light lies in a drop's foot. */
-	float sky = 0.3F;
+	float sky = 0.4F;
 	/** @brief How solid the drops are, 0 to 1. */
 	float seen = 1;
 	float flash = 0;
@@ -12287,7 +12287,7 @@ void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	look.textured = fresh && Scene.eighth != nullptr;
 	look.bend = std::clamp(atmosphere::Value("lens_bend", 10.F), 0.F, 30.F);
 	look.rim = std::clamp(atmosphere::Value("lens_rim", 0.7F) * strong, 0.F, 1.F);
-	look.sky = std::clamp(atmosphere::Value("lens_sky", 0.5F) * strong, 0.F, 1.F);
+	look.sky = std::clamp(atmosphere::Value("lens_sky", 0.4F) * strong, 0.F, 1.F);
 	look.seen = std::clamp(alpha * std::min(knob, 1.F), 0.F, 1.F);
 	look.flash = sky.flash;
 	look.tint = atmosphere::Colour("rain_colour", { 0.74F, 0.82F, 0.95F });
