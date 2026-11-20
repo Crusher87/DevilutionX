@@ -10,6 +10,11 @@ town	rain_splash	1		How many drops throw up a splash where they land: 1 normal, 
 town	rain_colour	0.74 0.82 0.95		The rain's own colour, red green blue, before the light on it colours it.
 town	rain_veil	0.05		How much a downpour lifts the far dark towards grey, the air being full of water: 0 none, 0.1 a clear haze.
 town	rain_veil_colour	0.30 0.35 0.43		That haze's colour, red green blue.
+town	lens_drops	1		Raindrops on the screen in a storm (Curtis 2026-11-20): how many land. 1 normal, 2 twice as many, 0 none.
+town	lens_alpha	1		How easy the drops on the screen are to see: 1 normal, 0.5 half.
+town	lens_size	1		How big the drops on the screen are: 1 normal, 1.5 half as big again.
+town	lens_runs	1		How often a big drop on the screen runs down it, leaving a wet trail: 1 normal, 0 never, 2 twice as often.
+town	lens_middle	0.15		How many drops land in the middle of the screen, where the hero is, against the edges: 0 none, 1 as many as at the edges.
 town	wet_shine	1		How bright the lamps and lit windows shine back off wet ground (ideas 23 and 14): 0 none, 1 strong. The ground gets wet as it rains and dries in a few minutes after.
 town	roof_drips	1.2		How many drops a second fall from the roof edge over each lamp or lit window while the ground is wet.
 town	town_fog	30		How many patches of low mist lie by the stream and between the graves at once (idea 18); half as many again when the ground is wet. 0 none.

@@ -122,8 +122,10 @@ enum class Knob : uint8_t {
 	Reflect,
 	/** Walls and floors whose HD pictures have a shape map beside them are lit by their shape; at 0, flat as before. */
 	TileShapes,
+	/** In a Tristram storm, raindrops land on the screen as on a window: they sit, dry off, and now and then run down. */
+	Lens,
 };
-inline constexpr size_t NumKnobs = 42;
+inline constexpr size_t NumKnobs = 43;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

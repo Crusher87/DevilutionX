@@ -290,6 +290,8 @@ size_t PortalCount();
 size_t ThornsCueCount();
 /** @brief How many raindrops and snowflakes are falling (tests). */
 size_t DropCount();
+/** @brief How many raindrops sit on (or run down) the screen (tests). */
+size_t LensDropCount();
 
 /** @brief What a piece of physics debris is: a chip of stone, a spark off steel, or a drop of blood. */
 enum class DebrisKind : uint8_t {
@@ -347,6 +349,11 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
  * stands in front of them.
  */
 void DrawFloorShafts(SDL_Renderer *renderer, float toLogical);
+/**
+ * @brief Draws the raindrops on the screen, over the world and its effects and under the UI (in a Tristram storm, as on a
+ * window). Called every frame: it also notes the UI's size, where the drops land.
+ */
+void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
 #endif
 
 } // namespace devilution::vfx
