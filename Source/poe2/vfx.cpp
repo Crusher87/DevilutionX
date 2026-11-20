@@ -4503,7 +4503,11 @@ void AdvanceWeather(float ms)
 
 /**
  * @brief A raindrop on the screen, as on a window between the eye and Tristram (Curtis 2026-11-20: "enough to tell it's
- * raining, but not enough to distract", dripping down the screen now and then). Kept in the UI's pixels.
+ * raining, but not enough to distract"; then, of drops painted from one picture, "the exact same water blob", wanting them
+ * to blend into the screen "as realistic as possible"). So a drop is drawn as the small lens it is: the town behind it
+ * shows through it upside down and shrunk (Garg and Nayar, "Photometric Model of a Rain Drop"), which makes every drop
+ * out of the very picture it sits on. Water on glass is held by its edge and is never a circle, so each has its own
+ * uneven outline. Kept in the UI's pixels.
  */
 struct LensDrop {
 	float x = 0;
@@ -4513,25 +4517,37 @@ struct LensDrop {
 	/** @brief How long it has sat there and how long it lasts before it has dried, in milliseconds. */
 	float age = 0;
 	float life = 0;
-	/** @brief The brightness of the town behind it, eased from frame to frame so a drop never flickers. */
+	/** @brief Its outline: three waves round it (two, three and four bumps), how deep each is and where it starts. */
+	std::array<float, 3> wave {};
+	std::array<float, 3> phase {};
+	/** @brief How long it still quivers after landing or taking in another drop, in milliseconds. */
+	float quiver = 0;
+	/** @brief Its own number, 0 to 1: how hard it bends the view and how dark its rim is differ from drop to drop. */
+	float own = 0;
+	/** @brief The brightness of the town behind it, eased so a drop never flickers, and when it was last looked up. */
 	float light = -1;
+	uint8_t lightWait = 0;
 	/** @brief Running down the screen: how fast, how long it stays caught before it slips on, and where it wanders. */
 	bool running = false;
 	float vx = 0;
 	float vy = 0;
 	float stuck = 0;
 	float wander = 0;
-	/** @brief How far it runs before its trail goes on, and before it leaves a bead of itself behind. */
+	/** @brief How far it runs before its trail goes on, and where and how wide the trail's end is. */
 	float toTrail = 0;
-	float toBead = 0;
 	float trailX = 0;
 	float trailY = 0;
+	float trailWidth = 0;
 };
 
-/** @brief The wet streak a running drop leaves behind it, one short piece of it. */
+/**
+ * @brief The film of water a running drop leaves behind it, one short piece of it. A film that thin doesn't last: each
+ * piece draws itself together in under a second, and some leave a small bead where they were.
+ */
 struct LensStreak {
 	float x0, y0, x1, y1;
-	float width;
+	/** @brief Its width at each end. */
+	float w0, w1;
 	float age;
 	float life;
 };
@@ -4543,9 +4559,9 @@ float LensWidth = 0;
 float LensHeight = 0;
 
 /** @brief No more than this many sit on the screen, and no more than this many run at once: a window, not a waterfall. */
-constexpr size_t LensMostDrops = 90;
-constexpr int LensMostRunning = 4;
-constexpr size_t LensMostStreaks = 700;
+constexpr size_t LensMostDrops = 260;
+constexpr int LensMostRunning = 3;
+constexpr size_t LensMostStreaks = 400;
 
 /** @brief A rate a second made into how many this time, rounded at random (not scaled by the spells' Effect Intensity). */
 int LensOccurrences(float perSecond, float ms)
@@ -4566,7 +4582,7 @@ float LensSmoothStep(float edge0, float edge1, float x)
 /** @brief The UI's pixels a "unit" of drop size is, so the drops look the same at any window size. */
 float LensUnit()
 {
-	return LensHeight / 620.F * std::clamp(atmosphere::Value("lens_size", 1.F), 0.3F, 3.F);
+	return LensHeight / 520.F * std::clamp(atmosphere::Value("lens_size", 1.F), 0.3F, 3.F);
 }
 
 /** @brief Somewhere on the screen for a drop to land, mostly towards the edges: the hero in the middle stays clear. */
@@ -4585,20 +4601,43 @@ bool LensSpot(float &x, float &y)
 	return false;
 }
 
+/** @brief Gives a drop its own outline: the bigger the drop, the more its edge catches on the glass and the less round it is. */
+void LensShape(LensDrop &drop, float unit)
+{
+	const float uneven = std::clamp(0.45F + 0.11F * drop.r / std::max(unit, 0.01F), 0.5F, 1.25F);
+	drop.wave = { Random(0.03F, 0.15F) * uneven, Random(0.02F, 0.09F) * uneven, Random(0.F, 0.05F) * uneven };
+	drop.phase = { Random(0, 2 * Pi), Random(0, 2 * Pi), Random(0, 2 * Pi) };
+	drop.own = Random(0, 1);
+}
+
+/** @brief Two drops' water in one: the radius of a drop holding both. */
+float LensJoined(float a, float b)
+{
+	return std::pow(a * a * a + b * b * b, 1.F / 3);
+}
+
 /** @brief A drop lands: it joins one it lands on (the water of both in one bigger drop), or sits by itself. */
-LensDrop *LensLand(float x, float y, float r, float life)
+LensDrop *LensLand(float x, float y, float r, float life, float unit)
 {
 	for (LensDrop &drop : LensDrops) {
 		if (drop.running)
 			continue;
 		const float dx = drop.x - x;
 		const float dy = drop.y - y;
-		if (dx * dx + dy * dy < (drop.r + r) * (drop.r + r) * 0.6F) {
+		if (dx * dx + dy * dy < (drop.r + r) * (drop.r + r) * 0.7F) {
 			const float a = drop.r * drop.r * drop.r;
 			const float b = r * r * r;
 			drop.x = (drop.x * a + x * b) / (a + b);
 			drop.y = (drop.y * a + y * b) / (a + b);
-			drop.r = std::pow(a + b, 1.F / 3);
+			const float before = drop.r;
+			drop.r = LensJoined(drop.r, r);
+			// Its edge is pulled out where the new water came in: a new outline once it has grown by a fair bit.
+			if (drop.r > before * 1.12F) {
+				const float own = drop.own;
+				LensShape(drop, unit);
+				drop.own = own;
+			}
+			drop.quiver = 260;
 			// Fresh water: it lasts as long as the newer of the two.
 			drop.life = std::max(drop.life - drop.age, life) + std::min(drop.age, 200.F);
 			drop.age = std::min(drop.age, 200.F);
@@ -4612,26 +4651,33 @@ LensDrop *LensLand(float x, float y, float r, float life)
 	drop.y = y;
 	drop.r = r;
 	drop.life = life;
+	drop.quiver = 180;
+	LensShape(drop, unit);
 	LensDrops.push_back(drop);
 	return &LensDrops.back();
 }
 
-/** @brief A drop starts to run down the screen, after a moment caught where it sits. */
+/** @brief A drop too heavy for the glass to hold starts to run down the screen, after a moment caught where it sits. */
 void LensStartRunning(LensDrop &drop, float unit)
 {
 	drop.running = true;
 	drop.vx = 0;
 	drop.vy = 0;
-	drop.stuck = Random(0, 260);
-	drop.wander = Random(-1, 1) * unit * 14;
+	drop.stuck = Random(0, 400);
+	drop.wander = Random(-1, 1) * unit * 9;
 	drop.toTrail = 0;
-	drop.toBead = Random(unit * 12, unit * 34);
 	drop.trailX = drop.x;
-	drop.trailY = drop.y - drop.r * 0.4F;
-	drop.life = std::max(drop.life, drop.age + 4000);
+	drop.trailY = drop.y - drop.r * 0.5F;
+	drop.trailWidth = drop.r * 0.9F;
+	drop.life = std::max(drop.life, drop.age + 6000);
 }
 
-/** @brief Drops land on the screen while it rains in town, sit, dry off, and the big ones now and then run down it. */
+/**
+ * @brief Drops land on the screen while it rains in town and behave as water does on a window: most are specks too light
+ * to move, which sit and dry; they grow by taking in what lands on them; one grown too heavy for the glass to hold slips
+ * and runs in fits and starts (a drop has to get over the glass's grip before it moves, and the grip is weaker once it
+ * slides), sweeping up the drops in its way and leaving a film that draws itself into beads.
+ */
 void AdvanceLens(float ms)
 {
 	const weather::State &w = weather::Current();
@@ -4643,117 +4689,113 @@ void AdvanceLens(float ms)
 	}
 	const float unit = LensUnit();
 	const float dt = ms / 1000.F;
+	const float runs = std::max(atmosphere::Value("lens_runs", 1.F), 0.F);
 	const bool raining = w.kind == weather::Kind::Rain && w.strength > 0 && weather::Outdoors();
+	int running = 0;
+	for (const LensDrop &drop : LensDrops)
+		running += drop.running ? 1 : 0;
 	if (raining) {
 		const float s = w.strength;
 		const float many = knob * std::max(atmosphere::Value("lens_drops", 1.F), 0.F);
-		// Fine specks most of the time; a heavy drop now and then, in a downpour more often.
-		for (int i = LensOccurrences((1.2F + 6.8F * s) * many, ms); i > 0; i--) {
-			float x;
-			float y;
+		float x;
+		float y;
+		// Specks, far the most of what lands.
+		for (int i = LensOccurrences((3.F + 15.F * s) * many, ms); i > 0; i--) {
+			if (LensSpot(x, y))
+				LensLand(x, y, unit * Random(1.F, 2.2F), Random(3000, 9000), unit);
+		}
+		// Beads big enough to see the town through.
+		for (int i = LensOccurrences((0.5F + 2.8F * s) * many, ms); i > 0; i--) {
 			if (LensSpot(x, y)) {
 				const float size = Random(0, 1);
-				LensLand(x, y, unit * (2.6F + 4.4F * size * size), Random(2500, 7000));
+				LensLand(x, y, unit * (2.4F + 3.1F * size * size), Random(7000, 15000), unit);
 			}
 		}
-		for (int i = LensOccurrences((0.06F + 0.55F * s * s) * many, ms); i > 0; i--) {
-			float x;
-			float y;
+		// A heavy drop now and then, in a downpour more often: it throws a few specks round it as it lands.
+		for (int i = LensOccurrences((0.03F + 0.22F * s * s) * many, ms); i > 0; i--) {
 			if (!LensSpot(x, y))
 				continue;
-			const float r = unit * Random(8.5F, 14.5F);
-			int running = 0;
-			for (const LensDrop &drop : LensDrops)
-				running += drop.running ? 1 : 0;
-			LensDrop *landed = LensLand(x, y, r, Random(6000, 11000));
-			// Now and then one lands heavy enough to run straight off down the screen.
-			if (landed != nullptr && !landed->running && running < LensMostRunning && Random(0, 1) < 0.22F * std::max(atmosphere::Value("lens_runs", 1.F), 0.F))
-				LensStartRunning(*landed, unit);
-			// It hits hard enough to throw a few fine beads round it.
-			for (int n = static_cast<int>(Random(1, 4.99F)); n > 0; n--) {
+			const float r = unit * Random(5.5F, 8.F);
+			LensLand(x, y, r, Random(9000, 16000), unit);
+			for (int n = static_cast<int>(Random(0, 3.99F)); n > 0; n--) {
 				const float angle = Random(0, 2 * Pi);
-				const float far = r * Random(1.3F, 2.3F);
-				LensLand(x + std::cos(angle) * far, y + std::sin(angle) * far, unit * Random(1.0F, 2.2F), Random(1500, 3500));
+				const float far = r * Random(1.5F, 2.8F);
+				LensLand(x + std::cos(angle) * far, y + std::sin(angle) * far, unit * Random(0.7F, 1.4F), Random(2000, 5000), unit);
 			}
 		}
 	}
 
 	// Away from the rain (in the dungeon, or after a storm) the screen dries off faster.
 	const float drying = raining ? 1.F : (weather::Outdoors() ? 1.6F : 5.F);
-	const float runMin = unit * 8.F;
-	const float runStop = unit * 4.2F;
-	const float runs = std::max(atmosphere::Value("lens_runs", 1.F), 0.F);
-	int running = 0;
-	for (const LensDrop &drop : LensDrops)
-		running += drop.running ? 1 : 0;
+	const float runMin = unit * 5.8F;
+	const float runStop = unit * 2.6F;
 	std::vector<LensDrop> left;
 	for (size_t i = 0; i < LensDrops.size();) {
 		LensDrop &drop = LensDrops[i];
 		drop.age += ms * drying;
+		drop.quiver = std::max(drop.quiver - ms, 0.F);
 		if (!drop.running) {
-			// A big drop gets heavy enough to slip: the bigger, the sooner.
-			if (raining && drop.r >= runMin && running < LensMostRunning && Random(0, 1) < dt * 0.32F * runs * (drop.r / runMin - 0.55F)) {
+			// A big drop gets too heavy for the glass to hold: the bigger, the sooner it slips.
+			if (drop.r >= runMin && running < LensMostRunning && Random(0, 1) < dt * 0.5F * runs * (drop.r / runMin - 0.6F)) {
 				LensStartRunning(drop, unit);
 				running++;
 			}
 		} else if (drop.stuck > 0) {
 			drop.stuck -= ms;
 		} else {
-			// It slides in fits and starts, held back by the glass, wandering a little and leaning with the wind.
-			const float fastest = unit * (55 + 7.5F * drop.r / unit);
-			drop.vy = std::min(drop.vy + unit * 950 * dt, fastest);
-			drop.vx += ((w.wind * unit * 22 + drop.wander) - drop.vx) * std::min(dt * 3, 1.F);
-			if (Random(0, 1) < dt * 1.6F) {
-				drop.stuck = Random(50, 380);
-				drop.vy *= 0.15F;
-				drop.wander = Random(-1, 1) * unit * 16;
+			// It slides in fits and starts, wandering a little and leaning with the wind; a heavier drop goes faster.
+			const float fastest = unit * (45 + 17 * drop.r / unit);
+			drop.vy = std::min(drop.vy + unit * 480 * dt, fastest);
+			drop.vx += ((w.wind * unit * 14 + drop.wander) - drop.vx) * std::min(dt * 3, 1.F);
+			if (Random(0, 1) < dt * 1.2F) {
+				drop.stuck = Random(90, 750);
+				drop.vy *= 0.1F;
+				drop.wander = Random(-1, 1) * unit * 10;
 			}
 			const float mx = drop.vx * dt;
 			const float my = drop.vy * dt;
 			const float moved = std::sqrt(mx * mx + my * my);
 			drop.x += mx;
 			drop.y += my;
-			// Its water goes into the trail and the beads it leaves.
-			drop.r = std::max(drop.r - moved * 0.0095F, 0.F);
+			// Its water goes into the film it leaves.
+			drop.r = std::max(drop.r - moved * 0.0055F, 0.F);
 			drop.toTrail -= moved;
 			if (drop.toTrail <= 0) {
-				drop.toTrail = unit * 3.5F;
+				drop.toTrail = unit * 2.6F;
 				const float tailX = drop.x;
-				const float tailY = drop.y - drop.r * 0.4F;
+				const float tailY = drop.y - drop.r * 0.5F;
+				const float width = drop.r * Random(0.5F, 0.85F);
 				if (LensStreaks.size() < LensMostStreaks)
-					LensStreaks.push_back({ drop.trailX, drop.trailY, tailX, tailY, drop.r * 0.62F, 0, Random(1800, 3200) });
+					LensStreaks.push_back({ drop.trailX, drop.trailY, tailX, tailY, drop.trailWidth, width, 0, Random(250, 950) });
 				drop.trailX = tailX;
 				drop.trailY = tailY;
+				drop.trailWidth = width;
 			}
-			drop.toBead -= moved;
-			if (drop.toBead <= 0) {
-				drop.toBead = Random(unit * 12, unit * 34);
-				LensDrop bead;
-				bead.x = drop.x + Random(-0.25F, 0.25F) * drop.r;
-				bead.y = drop.y - drop.r * Random(0.9F, 1.6F);
-				bead.r = drop.r * Random(0.2F, 0.38F);
-				bead.life = Random(2000, 5000);
-				left.push_back(bead);
-			}
-			// It gathers up the beads in its way.
+			// It takes in the drops in its way, which pull it a little to their side and send it on faster.
 			for (size_t n = 0; n < LensDrops.size(); n++) {
 				LensDrop &other = LensDrops[n];
 				if (n == i || other.running || other.life <= 0)
 					continue;
 				const float dx = other.x - drop.x;
 				const float dy = other.y - drop.y;
-				if (dy > -drop.r && dx * dx + dy * dy < (drop.r + other.r) * (drop.r + other.r) * 0.8F) {
-					drop.r = std::pow(drop.r * drop.r * drop.r + other.r * other.r * other.r, 1.F / 3);
+				if (dy > -drop.r && dx * dx + dy * dy < (drop.r + other.r) * (drop.r + other.r) * 0.85F) {
+					const float a = drop.r * drop.r * drop.r;
+					const float b = other.r * other.r * other.r;
+					drop.x += std::clamp(dx * b / (a + b), -drop.r * 0.6F, drop.r * 0.6F);
+					drop.r = LensJoined(drop.r, other.r);
+					drop.vy += unit * 26 * std::min(other.r / drop.r, 1.F);
+					if (other.r > drop.r * 0.35F)
+						drop.quiver = 200;
 					other.life = 0;
 				}
 			}
 			if (drop.r < runStop) {
 				// Too little water left to go on: it stays where it stopped and dries.
 				drop.running = false;
-				drop.life = drop.age + Random(2000, 4000);
+				drop.life = drop.age + Random(2500, 5000);
 			}
 		}
-		const bool gone = drop.age >= drop.life || drop.y - drop.r * 2 > LensHeight || drop.r <= 0.2F;
+		const bool gone = drop.age >= drop.life || drop.y - drop.r * 3 > LensHeight || drop.r <= 0.2F;
 		if (gone) {
 			if (drop.running)
 				running--;
@@ -4763,18 +4805,30 @@ void AdvanceLens(float ms)
 			i++;
 		}
 	}
-	for (const LensDrop &bead : left) {
-		if (LensDrops.size() < LensMostDrops)
-			LensDrops.push_back(bead);
-	}
 	for (size_t i = 0; i < LensStreaks.size();) {
-		LensStreaks[i].age += ms * drying;
-		if (LensStreaks[i].age >= LensStreaks[i].life) {
-			LensStreaks[i] = LensStreaks.back();
+		LensStreak &streak = LensStreaks[i];
+		streak.age += ms * drying;
+		if (streak.age >= streak.life) {
+			// The film has drawn itself together: now and then into a bead that stays a while.
+			if (Random(0, 1) < 0.42F) {
+				const float along = Random(0, 1);
+				LensDrop bead;
+				bead.x = streak.x0 + (streak.x1 - streak.x0) * along + Random(-0.2F, 0.2F) * streak.w1;
+				bead.y = streak.y0 + (streak.y1 - streak.y0) * along;
+				bead.r = std::max(streak.w1 * Random(0.22F, 0.5F), unit * 0.6F);
+				bead.life = Random(2000, 6500);
+				LensShape(bead, unit);
+				left.push_back(bead);
+			}
+			streak = LensStreaks.back();
 			LensStreaks.pop_back();
 		} else {
 			i++;
 		}
+	}
+	for (const LensDrop &bead : left) {
+		if (LensDrops.size() < LensMostDrops)
+			LensDrops.push_back(bead);
 	}
 }
 
@@ -10829,6 +10883,90 @@ struct Targets {
 
 Targets Layer;
 
+/**
+ * @brief The world as a picture of its own. The drops on the screen (RenderLens) are lenses on the town behind them, and
+ * SDL can't read back what it has drawn to the window. So while there are drops, the world and its effects are drawn into
+ * this picture (BeginScene), which is then copied to the window whole (EndScene) and looked through by every drop.
+ */
+struct SceneTargets {
+	SDL_Renderer *renderer = nullptr;
+	/** @brief The world, the window's pixels one for one. Without alpha: whatever was blended into it, it is solid. */
+	SDL_Texture *full = nullptr;
+	/**
+	 * @brief The same at a quarter and an eighth of the size, each made from the one before. The drops look through the
+	 * smallest: a drop takes in a view many times its own width, and shrinking the full picture that far in one go
+	 * would glitter as the view moves. (It is also a little out of focus, as a drop's view is.)
+	 */
+	SDL_Texture *quarter = nullptr;
+	SDL_Texture *eighth = nullptr;
+	int width = 0;
+	int height = 0;
+	/** @brief The window's scale from the UI's pixels to its own, which the picture is drawn at. */
+	float scaleX = 1;
+	float scaleY = 1;
+	/** @brief The world is being drawn into the picture right now. */
+	bool open = false;
+	/** @brief The picture holds this frame's world. */
+	bool fresh = false;
+
+	void release()
+	{
+		for (SDL_Texture *texture : { full, quarter, eighth }) {
+			if (texture != nullptr)
+				SDL_DestroyTexture(texture);
+		}
+		full = quarter = eighth = nullptr;
+	}
+
+	bool ensure(SDL_Renderer *wanted, int wantedWidth, int wantedHeight)
+	{
+		// (Asked again for a size it couldn't be made at, it isn't tried again every frame.)
+		if (wanted == renderer && wantedWidth == width && wantedHeight == height)
+			return full != nullptr;
+		if (wanted == renderer)
+			release();
+		renderer = wanted;
+		width = wantedWidth;
+		height = wantedHeight;
+		full = quarter = eighth = nullptr; // (Another renderer's went with it.)
+		SDL_RendererInfo info;
+		if (width <= 0 || height <= 0 || !SDL_RenderTargetSupported(renderer) || SDL_GetRendererInfo(renderer, &info) != 0)
+			return false;
+		if ((info.max_texture_width > 0 && width > info.max_texture_width) || (info.max_texture_height > 0 && height > info.max_texture_height))
+			return false;
+		const auto make = [&](int divisor) {
+			SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_TARGET, std::max(width / divisor, 1), std::max(height / divisor, 1));
+			if (texture != nullptr)
+				SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
+			return texture;
+		};
+		full = make(1);
+		quarter = make(4);
+		eighth = make(8);
+		if (full == nullptr || quarter == nullptr || eighth == nullptr) {
+			release();
+			return false;
+		}
+		return true;
+	}
+};
+
+SceneTargets Scene;
+
+/**
+ * @brief After drawing into a texture of the effects' own: back to where the world is being drawn, the window or the
+ * world's picture (which, unlike the window, doesn't take its scale back by itself).
+ */
+void WorldTarget(SDL_Renderer *renderer)
+{
+	if (!Scene.open) {
+		SDL_SetRenderTarget(renderer, nullptr);
+		return;
+	}
+	SDL_SetRenderTarget(renderer, Scene.full);
+	SDL_RenderSetScale(renderer, Scene.scaleX, Scene.scaleY);
+}
+
 void Submit(SDL_Renderer *renderer, Batch &batch, float scale)
 {
 	if (batch.indices.empty())
@@ -11038,7 +11176,7 @@ void SubmitGlow(SDL_Renderer *renderer, Batch &batch)
 	SDL_RenderCopy(renderer, Layer.half, nullptr, nullptr);
 	SDL_SetRenderTarget(renderer, Layer.eighth);
 	SDL_RenderCopy(renderer, Layer.quarter, nullptr, nullptr);
-	SDL_SetRenderTarget(renderer, nullptr);
+	WorldTarget(renderer);
 
 	const float bloom = std::clamp(Intensity(), 0.F, 1.5F);
 	SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_ADD);
@@ -11751,7 +11889,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 		Submit(renderer, GroundDark, 1);
 		SDL_RenderCopy(renderer, Layer.mask, &*cut, &*cut);
-		SDL_SetRenderTarget(renderer, nullptr);
+		WorldTarget(renderer);
 		SDL_RenderCopy(renderer, Layer.ground, nullptr, nullptr);
 	} else {
 		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
@@ -11796,7 +11934,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		SDL_Rect part;
 		if (cut && SDL_IntersectRect(&*cut, &cleared, &part))
 			SDL_RenderCopy(renderer, Layer.mask, &part, &part);
-		SDL_SetRenderTarget(renderer, nullptr);
+		WorldTarget(renderer);
 		SDL_SetTextureBlendMode(Layer.full, SDL_BLENDMODE_ADD);
 		const SDL_FRect dest { static_cast<float>(shown.x) * toLogical, static_cast<float>(shown.y) * toLogical, static_cast<float>(shown.w) * toLogical, static_cast<float>(shown.h) * toLogical };
 		SDL_RenderCopyF(renderer, Layer.full, &shown, &dest);
@@ -11833,202 +11971,381 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 namespace {
 
-/** @brief The drops' picture: one drop at the left, a strip of wet streak across at the right, with gaps between. */
-constexpr int LensPictureWidth = 96;
-constexpr int LensPictureHeight = 64;
-constexpr int LensStreakLeft = 72;
-constexpr int LensStreakWidth = 16;
-SDL_Texture *LensTexture = nullptr;
-SDL_Renderer *LensRenderer = nullptr;
+/** @brief What the drops are drawn with: one mesh of glass (each piece a view of the world's picture), one of light added on it. */
+struct LensMesh {
+	std::vector<SDL_Vertex> vertices;
+	std::vector<int> indices;
 
-/** @brief Lays one colour over another, see-through by its alpha (both straight, not premultiplied). */
-void LensOver(std::array<float, 4> &under, float r, float g, float b, float alpha)
+	void clear()
+	{
+		vertices.clear();
+		indices.clear();
+	}
+
+	int add(float x, float y, SDL_Color colour, float u = 0, float v = 0)
+	{
+		vertices.push_back({ { x, y }, colour, { u, v } });
+		return static_cast<int>(vertices.size()) - 1;
+	}
+
+	void triangle(int a, int b, int c)
+	{
+		indices.push_back(a);
+		indices.push_back(b);
+		indices.push_back(c);
+	}
+
+	void quad(int a, int b, int c, int d)
+	{
+		triangle(a, b, c);
+		triangle(a, c, d);
+	}
+};
+
+/** @brief How the drops look this frame. */
+struct LensLook {
+	/** @brief The world's picture is there to look through; without it only a drop's dark rim and its light are drawn. */
+	bool textured = false;
+	/** @brief How wide a view a drop takes in: how far its edge looks across to the other side of itself, in its own radii. */
+	float bend = 10;
+	/** @brief How dark the top of a drop's rim is, 0 to 1. */
+	float rim = 0.7F;
+	/** @brief How bright the sky's light lies in a drop's foot. */
+	float sky = 0.3F;
+	/** @brief How solid the drops are, 0 to 1. */
+	float seen = 1;
+	float flash = 0;
+	std::array<float, 3> tint {};
+	/** @brief How wide the soft edge round every piece of glass is, in the UI's pixels: about a pixel of the window. */
+	float feather = 0.6F;
+};
+
+uint8_t LensByte(float value)
 {
-	if (alpha <= 0)
-		return;
-	const float out = alpha + under[3] * (1 - alpha);
-	if (out <= 0)
-		return;
-	under[0] = (r * alpha + under[0] * under[3] * (1 - alpha)) / out;
-	under[1] = (g * alpha + under[1] * under[3] * (1 - alpha)) / out;
-	under[2] = (b * alpha + under[2] * under[3] * (1 - alpha)) / out;
-	under[3] = out;
+	return static_cast<uint8_t>(std::clamp(value, 0.F, 1.F) * 255.F + 0.5F);
 }
 
 /**
- * @brief Paints the drop as water on glass is seen, lit from above: the town behind it shows a little dimmer through it,
- * its rim goes dark where the glass bends the light away (most at the top), the light it gathers lies as a bright
- * crescent inside its foot, and a small sharp highlight sits high on its left.
+ * @brief A point of the glass at (x, y) that shows the screen at (fromX, fromY), dimmed to `shade` and as solid as
+ * `alpha`. Without the world's picture it only darkens what is under it.
  */
-std::vector<uint8_t> PaintLensPicture()
+int LensGlass(LensMesh &mesh, const LensLook &look, float x, float y, float fromX, float fromY, float shade, float alpha)
 {
-	std::vector<uint8_t> pixels(static_cast<size_t>(LensPictureWidth) * LensPictureHeight * 4, 0);
-	const auto put = [&](int x, int y, const std::array<float, 4> &c) {
-		uint8_t *p = &pixels[(static_cast<size_t>(y) * LensPictureWidth + static_cast<size_t>(x)) * 4];
-		p[0] = static_cast<uint8_t>(std::clamp(c[0], 0.F, 255.F));
-		p[1] = static_cast<uint8_t>(std::clamp(c[1], 0.F, 255.F));
-		p[2] = static_cast<uint8_t>(std::clamp(c[2], 0.F, 255.F));
-		p[3] = static_cast<uint8_t>(std::clamp(c[3] * 255.F, 0.F, 255.F));
+	if (!look.textured)
+		return mesh.add(x, y, { 0, 0, 0, LensByte(alpha * (1 - shade)) });
+	const uint8_t c = LensByte(shade);
+	return mesh.add(x, y, { c, c, c, LensByte(alpha) }, std::clamp(fromX / LensWidth, 0.002F, 0.998F), std::clamp(fromY / LensHeight, 0.002F, 0.998F));
+}
+
+/**
+ * @brief One drop. It is a lens: each point of it shows the screen on the far side of its middle, the further across the
+ * nearer the point is to the edge, so the town behind it stands in it upside down and small. Its rim goes dark where it
+ * bends the light right away (most at the top), and the light of the sky, which a drop gathers from above, lies as a
+ * faint crescent inside its foot.
+ */
+void LensDrawDrop(LensMesh &glass, LensMesh &glow, const LensLook &look, const LensDrop &drop, float unit, uint32_t now)
+{
+	// Drying, it draws in and is gone.
+	const float alpha = std::min(drop.age / 60.F, 1.F) * (1 - LensSmoothStep(drop.life - 500, drop.life, drop.age)) * look.seen;
+	const float r = drop.r * (1 - 0.4F * LensSmoothStep(drop.life * 0.55F, drop.life, drop.age));
+	if (alpha <= 0.01F || r <= 0.15F)
+		return;
+	const bool small = r < unit * 2.F;
+	// A speck is an oval; a bead has room for an edge with three or four bumps in it.
+	const int n = small ? 6 : std::clamp(10 + 2 * static_cast<int>(r / unit * 0.5F), 10, 16);
+	const float quiver = 0.11F * std::min(drop.quiver / 200.F, 1.F) * std::sin(static_cast<float>(now % 100000) * 0.05F + drop.own * 6);
+	// Running, it is drawn out behind itself; sitting, a heavy one hangs a little into its foot.
+	const float tail = drop.running ? 0.25F + 0.75F * std::clamp(drop.vy / std::max(unit * 140, 1.F), 0.F, 1.F) : 0.F;
+	const float sag = drop.running ? 0.06F : std::clamp((drop.r / unit - 2.5F) * 0.04F, 0.F, 0.14F);
+	std::array<float, 16> rho;
+	std::array<float, 16> cosine;
+	std::array<float, 16> sine;
+	for (int k = 0; k < n; k++) {
+		const float angle = 2 * Pi * static_cast<float>(k) / static_cast<float>(n) + drop.phase[2];
+		cosine[k] = std::cos(angle);
+		sine[k] = std::sin(angle);
+		float shape = 1 + (drop.wave[0] + quiver) * std::cos(2 * angle + drop.phase[0]);
+		if (!small)
+			shape += drop.wave[1] * std::cos(3 * angle + drop.phase[1]);
+		if (n >= 14)
+			shape += drop.wave[2] * std::cos(4 * angle + drop.phase[2]);
+		// (Down the screen is where the sine is 1.)
+		const float up = 0.5F - 0.5F * sine[k];
+		shape *= 1 + sag * sine[k];
+		shape *= 1 + tail * up * up * up;
+		rho[k] = r * std::max(shape, 0.35F);
+	}
+	const float bend = look.bend * (0.8F + 0.45F * drop.own);
+	const float rim = std::min(look.rim * (0.8F + 0.4F * drop.own), 1.F);
+	const auto point = [&](int k, float f, float shade, float a, float grow = 0) {
+		const float across = rho[k] * f * bend * (0.55F + 0.45F * f * f);
+		const float out = rho[k] * f + grow;
+		return LensGlass(glass, look, drop.x + cosine[k] * out, drop.y + sine[k] * out, drop.x - cosine[k] * across, drop.y - sine[k] * across, shade, a);
 	};
-	// The drop fills a circle 28 pixels across its middle, inside a 64 pixel square.
-	for (int y = 0; y < LensPictureHeight; y++) {
-		for (int x = 0; x < 64; x++) {
-			const float cx = (static_cast<float>(x) + 0.5F - 32) / 28;
-			const float cy = (static_cast<float>(y) + 0.5F - 32) / 28;
-			const float r = std::sqrt(cx * cx + cy * cy);
-			const float inside = 1 - LensSmoothStep(0.96F, 1.03F, r);
-			std::array<float, 4> c { 0, 0, 0, 0 };
-			// A faint shadow just outside the rim, where the drop's edge throws the light off.
-			LensOver(c, 6, 8, 12, 0.09F * LensSmoothStep(1.16F, 1.0F, r) * (1 - inside));
-			// The town seen through it: a drop takes in a wider view than the bit of town behind it, sky and lamps with
-			// it, so in the dark it shows a little lighter than its background.
-			LensOver(c, 150, 162, 180, 0.07F * inside);
-			// The dark rim, heaviest at the top.
-			const float rim = LensSmoothStep(0.62F, 0.97F, r) * (0.62F + 0.38F * std::clamp(-cy, 0.F, 1.F));
-			LensOver(c, 8, 10, 15, 0.55F * rim * inside);
-			// The light it gathers, a crescent inside its foot.
-			const float crescent = LensSmoothStep(0.30F, 0.78F, r) * (1 - LensSmoothStep(0.84F, 0.97F, r)) * LensSmoothStep(0.0F, 0.75F, cy);
-			LensOver(c, 228, 238, 252, 0.58F * crescent * inside);
-			// A broad soft sheen on the upper left, and the sharp highlight in it.
-			const float sx = cx + 0.22F;
-			const float sy = cy + 0.28F;
-			LensOver(c, 235, 242, 255, 0.10F * std::exp(-(sx * sx + sy * sy) / (0.42F * 0.42F)) * inside);
-			const float hx = cx + 0.36F;
-			const float hy = cy + 0.42F;
-			LensOver(c, 255, 255, 255, 0.92F * std::exp(-(hx * hx + hy * hy) / (0.12F * 0.12F)) * inside);
-			const float gx = cx - 0.30F;
-			const float gy = cy - 0.50F;
-			LensOver(c, 255, 255, 255, 0.30F * std::exp(-(gx * gx + gy * gy) / (0.07F * 0.07F)) * inside);
-			put(x, y, c);
+	const int centre = LensGlass(glass, look, drop.x, drop.y, drop.x, drop.y, 1, alpha);
+	// Rings of points from the middle out: a speck has its edge only, a bead two rings inside it; then the soft edge.
+	// The rim is dark over the top of the drop and round its shoulders, and not at its foot, where the light comes out.
+	std::array<int, 16> inner;
+	std::array<int, 16> between;
+	std::array<int, 16> edge;
+	std::array<int, 16> soft;
+	for (int k = 0; k < n; k++) {
+		const float top = 0.5F - 0.5F * sine[k];
+		const float dark = top * std::sqrt(top);
+		if (small) {
+			const float shade = 1 - rim * 0.6F * dark;
+			inner[k] = between[k] = edge[k] = point(k, 1, shade, alpha);
+			soft[k] = point(k, 1, shade, 0, look.feather);
+			continue;
 		}
+		const float shade = 1 - rim * 0.9F * dark;
+		inner[k] = point(k, 0.5F, 1, alpha);
+		between[k] = point(k, 0.8F, 1 - rim * 0.3F * dark, alpha);
+		edge[k] = point(k, 1, shade, alpha);
+		soft[k] = point(k, 1, shade, 0, look.feather);
 	}
-	// The streak: a thin film of water, darker along its edges, with a fine line of light down one side.
-	for (int y = 0; y < LensPictureHeight; y++) {
-		for (int x = 0; x < LensStreakWidth; x++) {
-			const float u = (static_cast<float>(x) + 0.5F - LensStreakWidth / 2.F) / (LensStreakWidth / 2.F - 1);
-			const float a = std::abs(u);
-			const float inside = 1 - LensSmoothStep(0.9F, 1.0F, a);
-			std::array<float, 4> c { 0, 0, 0, 0 };
-			LensOver(c, 18, 22, 28, 0.07F * inside);
-			LensOver(c, 8, 10, 15, 0.30F * LensSmoothStep(0.45F, 0.9F, a) * inside);
-			const float line = (u + 0.28F) / 0.2F;
-			LensOver(c, 225, 235, 250, 0.22F * std::exp(-line * line) * inside);
-			put(LensStreakLeft + x, y, c);
+	for (int k = 0; k < n; k++) {
+		const int next = (k + 1) % n;
+		glass.triangle(centre, inner[k], inner[next]);
+		if (!small) {
+			glass.quad(inner[k], between[k], between[next], inner[next]);
+			glass.quad(between[k], edge[k], edge[next], between[next]);
 		}
+		glass.quad(edge[k], soft[k], soft[next], edge[next]);
 	}
-	return pixels;
+
+	// The light a drop gathers: it takes in far more of the sky than the bit of town behind it does, so it is a little
+	// brighter than what it sits on, and brightest in its foot, where the sky above comes out upside down. Brighter over
+	// a lit street than over the dark, and in a lightning flash.
+	const float amount = std::clamp(look.sky * (0.5F + 0.5F * std::min(std::max(drop.light, 0.F), 1.F)) + 0.9F * look.flash, 0.F, 0.9F) * alpha;
+	if (amount <= 0.012F)
+		return;
+	const SDL_Color lit { LensByte(look.tint[0]), LensByte(look.tint[1]), LensByte(look.tint[2]), 0 };
+	const auto light = [&](float a) { return SDL_Color { lit.r, lit.g, lit.b, LensByte(amount * a) }; };
+	const float tilt = (drop.own - 0.5F) * 0.7F;
+	const float tiltCos = std::cos(tilt);
+	const float tiltSin = std::sin(tilt);
+	if (small) {
+		// A speck: one soft point of light low in it.
+		const float cx = drop.x - tiltSin * r * 0.3F;
+		const float cy = drop.y + tiltCos * r * 0.3F;
+		const int middle = glow.add(cx, cy, light(1.F));
+		const int first = static_cast<int>(glow.vertices.size());
+		for (int k = 0; k < 5; k++) {
+			const float angle = 2 * Pi * static_cast<float>(k) / 5.F + drop.phase[1];
+			glow.add(cx + std::cos(angle) * r * 0.75F, cy + std::sin(angle) * r * 0.75F, lit);
+		}
+		for (int k = 0; k < 5; k++)
+			glow.triangle(middle, first + k, first + (k + 1) % 5);
+		return;
+	}
+	const int middle = glow.add(drop.x, drop.y, light(0.12F));
+	std::array<int, 16> low;
+	for (int k = 0; k < n; k++) {
+		// sin(angle - tilt), from what is already worked out: 1 at the drop's foot.
+		const float foot = std::max(sine[k] * tiltCos - cosine[k] * tiltSin, 0.F);
+		const float crescent = foot * std::sqrt(foot);
+		const auto at = [&](float f, float a) {
+			return glow.add(drop.x + cosine[k] * rho[k] * f, drop.y + sine[k] * rho[k] * f, light(a));
+		};
+		low[k] = at(0.45F, 0.12F + 0.1F * crescent);
+		at(0.76F, 0.1F + 0.9F * crescent);
+		at(0.93F, 0.06F + 0.6F * crescent);
+		at(1.F, 0);
+	}
+	for (int k = 0; k < n; k++) {
+		const int next = (k + 1) % n;
+		glow.triangle(middle, low[k], low[next]);
+		for (int ring = 0; ring < 3; ring++)
+			glow.quad(low[k] + ring, low[k] + ring + 1, low[next] + ring + 1, low[next] + ring);
+	}
 }
 
-bool EnsureLensTexture(SDL_Renderer *renderer)
+/**
+ * @brief One piece of the film a running drop leaves. Thin water bends the view only a little: what lies under one side
+ * of it shows on the other. It draws itself together as it goes.
+ */
+void LensDrawStreak(LensMesh &glass, LensMesh &glow, const LensLook &look, const LensStreak &streak)
 {
-	if (LensTexture != nullptr && LensRenderer == renderer)
-		return true;
-	if (LensTexture != nullptr && LensRenderer != renderer)
-		LensTexture = nullptr; // It went with its renderer.
-	LensRenderer = renderer;
-	SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, LensPictureWidth, LensPictureHeight);
-	if (texture == nullptr)
-		return false;
-	const std::vector<uint8_t> pixels = PaintLensPicture();
-	if (SDL_UpdateTexture(texture, nullptr, pixels.data(), LensPictureWidth * 4) != 0 || SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND) != 0) {
-		SDL_DestroyTexture(texture);
-		return false;
+	const float dx = streak.x1 - streak.x0;
+	const float dy = streak.y1 - streak.y0;
+	const float length = std::sqrt(dx * dx + dy * dy);
+	if (length < 0.01F)
+		return;
+	const float t = streak.age / streak.life;
+	const float narrow = 1 - 0.75F * LensSmoothStep(0.1F, 1.F, t);
+	const float alpha = 0.75F * (1 - LensSmoothStep(0.6F, 1.F, t)) * look.seen;
+	if (alpha <= 0.01F)
+		return;
+	const float nx = -dy / length;
+	const float ny = dx / length;
+	const float across = look.bend * 0.3F;
+	const float shade = 1 - look.rim * 0.25F;
+	std::array<int, 2> first;
+	for (int end = 0; end < 2; end++) {
+		const float px = end == 0 ? streak.x0 : streak.x1;
+		const float py = end == 0 ? streak.y0 : streak.y1;
+		const float half = (end == 0 ? streak.w0 : streak.w1) * narrow / 2;
+		const auto at = [&](float side, float grow, float dim, float a) {
+			const float out = side * (half + grow);
+			return LensGlass(glass, look, px + nx * out, py + ny * out, px - nx * side * half * across, py - ny * side * half * across, dim, a);
+		};
+		first[end] = at(-1, look.feather, shade, 0);
+		at(-1, 0, shade, alpha);
+		at(0, 0, 1, alpha);
+		at(1, 0, shade, alpha);
+		at(1, look.feather, shade, 0);
 	}
-	SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
-	LensTexture = texture;
-	return true;
-}
-
-/** @brief A quad of the drops' picture, from four corners and the picture's own pixels. */
-void LensQuad(std::vector<SDL_Vertex> &vertices, std::vector<int> &indices, const std::array<SDL_FPoint, 4> &corners, float u0, float v0, float u1, float v1, SDL_Color colour)
-{
-	const int first = static_cast<int>(vertices.size());
-	const float w = LensPictureWidth;
-	const float h = LensPictureHeight;
-	vertices.push_back({ corners[0], colour, { u0 / w, v0 / h } });
-	vertices.push_back({ corners[1], colour, { u1 / w, v0 / h } });
-	vertices.push_back({ corners[2], colour, { u1 / w, v1 / h } });
-	vertices.push_back({ corners[3], colour, { u0 / w, v1 / h } });
-	for (int k : { 0, 1, 2, 0, 2, 3 })
-		indices.push_back(first + k);
+	for (int k = 0; k < 4; k++)
+		glass.quad(first[0] + k, first[0] + k + 1, first[1] + k + 1, first[1] + k);
+	// A thread of the sky's light down its middle, as wet glass catches it.
+	const float amount = look.sky * 0.22F * alpha;
+	if (amount <= 0.012F)
+		return;
+	const SDL_Color lit { LensByte(look.tint[0]), LensByte(look.tint[1]), LensByte(look.tint[2]), LensByte(amount) };
+	const SDL_Color none { lit.r, lit.g, lit.b, 0 };
+	const float half0 = streak.w0 * narrow / 2;
+	const float half1 = streak.w1 * narrow / 2;
+	const int thread = glow.add(streak.x0 - nx * half0, streak.y0 - ny * half0, none);
+	glow.add(streak.x0, streak.y0, lit);
+	glow.add(streak.x0 + nx * half0, streak.y0 + ny * half0, none);
+	glow.add(streak.x1 - nx * half1, streak.y1 - ny * half1, none);
+	glow.add(streak.x1, streak.y1, lit);
+	glow.add(streak.x1 + nx * half1, streak.y1 + ny * half1, none);
+	glow.quad(thread, thread + 1, thread + 4, thread + 3);
+	glow.quad(thread + 1, thread + 2, thread + 5, thread + 4);
 }
 
 } // namespace
+
+bool BeginScene(SDL_Renderer *renderer, Size logicalSize)
+{
+	Scene.open = false;
+	Scene.fresh = false;
+	if (renderer == nullptr || (LensDrops.empty() && LensStreaks.empty()) || logicalSize.width <= 0 || logicalSize.height <= 0)
+		return false;
+	if (SDL_GetRenderTarget(renderer) != nullptr)
+		return false;
+	float scaleX = 1;
+	float scaleY = 1;
+	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+	const int width = static_cast<int>(std::floor(static_cast<float>(logicalSize.width) * scaleX));
+	const int height = static_cast<int>(std::floor(static_cast<float>(logicalSize.height) * scaleY));
+	if (!Scene.ensure(renderer, width, height) || SDL_SetRenderTarget(renderer, Scene.full) != 0)
+		return false;
+	// The picture is drawn at the window's own scale, so it is the window's pixels one for one.
+	SDL_RenderSetScale(renderer, scaleX, scaleY);
+	Scene.scaleX = scaleX;
+	Scene.scaleY = scaleY;
+	Scene.open = true;
+	return true;
+}
+
+void ResumeScene(SDL_Renderer *renderer, const SDL_Rect *clip)
+{
+	if (!Scene.open)
+		return;
+	SDL_RenderSetScale(renderer, Scene.scaleX, Scene.scaleY);
+	SDL_RenderSetClipRect(renderer, clip);
+}
+
+void EndScene(SDL_Renderer *renderer)
+{
+	if (!Scene.open)
+		return;
+	Scene.open = false;
+	SDL_SetTextureBlendMode(Scene.full, SDL_BLENDMODE_NONE);
+	SDL_SetTextureBlendMode(Scene.quarter, SDL_BLENDMODE_NONE);
+	SDL_SetRenderTarget(renderer, Scene.quarter);
+	SDL_RenderCopy(renderer, Scene.full, nullptr, nullptr);
+	SDL_SetRenderTarget(renderer, Scene.eighth);
+	SDL_RenderCopy(renderer, Scene.quarter, nullptr, nullptr);
+	// (The window takes back its own scale and size here.) The picture goes on it at exactly its own size, each of its
+	// pixels on one of the window's, so the world is no softer for having gone through it.
+	SDL_SetRenderTarget(renderer, nullptr);
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+	SDL_RenderClear(renderer);
+	const SDL_FRect whole { 0, 0, static_cast<float>(Scene.width) / Scene.scaleX, static_cast<float>(Scene.height) / Scene.scaleY };
+	SDL_RenderCopyF(renderer, Scene.full, nullptr, &whole);
+	Scene.fresh = true;
+}
 
 void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
 	LensWidth = static_cast<float>(logicalSize.width);
 	LensHeight = static_cast<float>(logicalSize.height);
+	const bool fresh = Scene.fresh;
+	Scene.fresh = false;
 	if (renderer == nullptr || (LensDrops.empty() && LensStreaks.empty()) || worldSize.width <= 0 || logicalSize.width <= 0)
-		return;
-	if (!EnsureLensTexture(renderer))
 		return;
 	const weather::State &sky = weather::Current();
 	const float knob = std::min(atmosphere::Strength(atmosphere::Knob::Lens), 3.F);
-	const float seen = std::clamp(atmosphere::Value("lens_alpha", 1.F), 0.F, 3.F) * std::min(knob, 1.F);
-	const std::array<float, 3> tint = atmosphere::Colour("rain_colour", { 0.74F, 0.82F, 0.95F });
+	const float alpha = std::max(atmosphere::Value("lens_alpha", 1.F), 0.F);
+	// Past 1 the drops can't get more solid, so their rim and their light get stronger.
+	const float strong = std::clamp(alpha, 1.F, 3.F);
+	LensLook look;
+	look.textured = fresh && Scene.eighth != nullptr;
+	look.bend = std::clamp(atmosphere::Value("lens_bend", 10.F), 0.F, 30.F);
+	look.rim = std::clamp(atmosphere::Value("lens_rim", 0.7F) * strong, 0.F, 1.F);
+	look.sky = std::clamp(atmosphere::Value("lens_sky", 0.5F) * strong, 0.F, 1.F);
+	look.seen = std::clamp(alpha * std::min(knob, 1.F), 0.F, 1.F);
+	look.flash = sky.flash;
+	look.tint = atmosphere::Colour("rain_colour", { 0.74F, 0.82F, 0.95F });
+	float scaleX = 1;
+	float scaleY = 1;
+	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+	look.feather = std::clamp(1.1F / std::max(scaleY, 0.1F), 0.3F, 1.2F);
+	const float unit = LensUnit();
+	// The town behind a drop: how bright it is there says how bright the sky's light in the drop may be.
 	const float toWorld = static_cast<float>(worldSize.width) / static_cast<float>(logicalSize.width) / CameraScale;
-	// The town behind a drop lights it: a drop over a lamp's light catches it, one over the dark stays dim. Lightning
-	// lights them all for a moment.
-	const auto lightBehind = [&](float x, float y) {
-		if (!AirLit)
-			return 0.55F;
-		const hd::light::Rgb light = LightOf(CameraOrigin + Vec { x * toWorld, y * toWorld });
-		return BrightnessOf(light);
-	};
-	const auto colourFor = [&](float light, float alpha) -> SDL_Color {
-		const float bright = std::clamp(0.55F + 0.6F * light + 1.4F * sky.flash, 0.55F, 1.F);
-		return {
-			static_cast<uint8_t>(255 * std::min(tint[0] * bright / 0.95F, 1.F)),
-			static_cast<uint8_t>(255 * std::min(tint[1] * bright / 0.95F, 1.F)),
-			static_cast<uint8_t>(255 * std::min(tint[2] * bright / 0.95F, 1.F)),
-			static_cast<uint8_t>(255 * std::clamp(alpha * seen, 0.F, 1.F)),
-		};
-	};
-
-	static std::vector<SDL_Vertex> vertices;
-	static std::vector<int> indices;
-	vertices.clear();
-	indices.clear();
-	// The wet streaks first, under the drops.
-	for (const LensStreak &streak : LensStreaks) {
-		const float dx = streak.x1 - streak.x0;
-		const float dy = streak.y1 - streak.y0;
-		const float length = std::sqrt(dx * dx + dy * dy);
-		if (length < 0.01F)
-			continue;
-		const float fade = 1 - LensSmoothStep(0.25F, 1.F, streak.age / streak.life);
-		// It narrows as it dries.
-		const float half = streak.width * (0.55F + 0.45F * fade) / 2;
-		const float nx = -dy / length * half;
-		const float ny = dx / length * half;
-		const float light = lightBehind(streak.x0, streak.y0);
-		LensQuad(vertices, indices, { SDL_FPoint { streak.x0 + nx, streak.y0 + ny }, SDL_FPoint { streak.x0 - nx, streak.y0 - ny }, SDL_FPoint { streak.x1 - nx, streak.y1 - ny }, SDL_FPoint { streak.x1 + nx, streak.y1 + ny } },
-		    LensStreakLeft, 2, LensStreakLeft + LensStreakWidth, LensPictureHeight - 2, colourFor(light, 0.85F * fade));
-	}
 	for (LensDrop &drop : LensDrops) {
-		const float target = lightBehind(drop.x, drop.y);
-		drop.light = drop.light < 0 ? target : drop.light + (target - drop.light) * 0.12F;
-		// It lands with a little spread that settles, and shrinks and fades as it dries.
-		const float landed = std::min(drop.age / 90.F, 1.F);
-		const float drying = LensSmoothStep(drop.life - 1600, drop.life, drop.age);
-		const float alpha = std::min(drop.age / 35.F, 1.F) * (1 - drying);
-		if (alpha <= 0.004F)
+		if (drop.light >= 0 && !drop.running && drop.lightWait > 0) {
+			drop.lightWait--;
 			continue;
-		float r = drop.r * (1 + 0.22F * (1 - landed)) * (1 - 0.3F * drying);
-		// Running, it pulls out long; the picture's circle is 28 of its 32 pixel half-width.
-		const float pull = drop.running ? 1 + 0.35F * std::min(drop.vy / std::max(LensUnit() * 60, 1.F), 1.F) : 1.F;
-		const float halfW = r * 32.F / 28.F;
-		const float halfH = r * pull * 32.F / 28.F;
-		const float cy = drop.y - (pull - 1) * r * 0.5F;
-		LensQuad(vertices, indices, { SDL_FPoint { drop.x - halfW, cy - halfH }, SDL_FPoint { drop.x + halfW, cy - halfH }, SDL_FPoint { drop.x + halfW, cy + halfH }, SDL_FPoint { drop.x - halfW, cy + halfH } },
-		    0, 0, 64, 64, colourFor(drop.light, alpha));
+		}
+		const float target = AirLit ? BrightnessOf(LightOf(CameraOrigin + Vec { drop.x * toWorld, drop.y * toWorld })) : 0.55F;
+		drop.light = drop.light < 0 ? target : drop.light + (target - drop.light) * (drop.running ? 0.15F : 0.5F);
+		drop.lightWait = static_cast<uint8_t>(6 + drop.own * 8);
 	}
-	if (indices.empty())
-		return;
-	SDL_RenderGeometry(renderer, LensTexture, vertices.data(), static_cast<int>(vertices.size()), indices.data(), static_cast<int>(indices.size()));
+
+	static LensMesh glass;
+	static LensMesh glow;
+	glass.clear();
+	glow.clear();
+	const uint32_t now = SDL_GetTicks();
+	for (const LensStreak &streak : LensStreaks)
+		LensDrawStreak(glass, glow, look, streak);
+	for (const LensDrop &drop : LensDrops)
+		LensDrawDrop(glass, glow, look, drop, unit, now);
+	if (!glass.indices.empty()) {
+		if (look.textured) {
+			SDL_SetTextureBlendMode(Scene.eighth, SDL_BLENDMODE_BLEND);
+			SDL_RenderGeometry(renderer, Scene.eighth, glass.vertices.data(), static_cast<int>(glass.vertices.size()), glass.indices.data(), static_cast<int>(glass.indices.size()));
+		} else {
+			SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+			SDL_RenderGeometry(renderer, nullptr, glass.vertices.data(), static_cast<int>(glass.vertices.size()), glass.indices.data(), static_cast<int>(glass.indices.size()));
+		}
+	}
+	if (!glow.indices.empty()) {
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+		SDL_RenderGeometry(renderer, nullptr, glow.vertices.data(), static_cast<int>(glow.vertices.size()), glow.indices.data(), static_cast<int>(glow.indices.size()));
+	}
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 #else
+bool BeginScene(SDL_Renderer *, Size)
+{
+	return false;
+}
+
+void ResumeScene(SDL_Renderer *, const SDL_Rect *)
+{
+}
+
+void EndScene(SDL_Renderer *)
+{
+}
+
 void RenderLens(SDL_Renderer *, Size, Size logicalSize)
 {
 	LensWidth = static_cast<float>(logicalSize.width);

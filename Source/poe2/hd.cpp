@@ -2524,6 +2524,8 @@ SDL_FRect DestOf(const Draw &draw, float toLogical)
 
 /** @brief The view on screen, in the renderer's logical pixels. */
 SDL_FRect ViewOnScreen;
+/** @brief The same in whole pixels: what the world's drawing is clipped to while it is drawn. */
+SDL_Rect ViewClip {};
 
 bool OnScreen(const SDL_FRect &rect, float margin)
 {
@@ -4781,6 +4783,8 @@ bool DrawJoinedShadows(SDL_Renderer *renderer, Size worldSize, float toLogical)
 			DrawCasterShadows(renderer, Draws[jobs[job].draw], toLogical, &pass);
 		}
 		SDL_SetRenderTarget(renderer, screen);
+		// (In a storm the world goes to a picture of its own, which doesn't take its scale and clip back by itself.)
+		vfx::ResumeScene(renderer, &ViewClip);
 		// With room for the soft edges round the shapes drawn.
 		if (pass.x1 >= pass.x0) {
 			ShadeUsed = ShadeRect(pass.x0 - BlockMostSoft, pass.y0 - BlockMostSoft, pass.x1 + BlockMostSoft, pass.y1 + BlockMostSoft);
@@ -6395,6 +6399,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		static_cast<int>(ClipRect.size.height * toLogical) + 1,
 	};
 	SDL_RenderSetClipRect(renderer, &clip);
+	ViewClip = clip;
 	// The game's own world is underneath; the HD one replaces it entirely.
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 	SDL_RenderFillRect(renderer, &clip);
