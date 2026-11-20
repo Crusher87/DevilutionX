@@ -1,3 +1,5 @@
+#include <algorithm>
+
 #include <gtest/gtest.h>
 
 #include "game_mode.hpp"
@@ -217,6 +219,37 @@ TEST_F(Poe2WeatherTest, TheEffectsDropNothingWithoutAView)
 	EXPECT_EQ(vfx::DropCount(), 0U);
 	EXPECT_GT(weather::Current().strength, 0.F);
 }
+
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+TEST_F(Poe2WeatherTest, RainLandsOnTheScreenAndDriesOff)
+{
+	GraphicsOptions &graphics = GetOptions().Graphics;
+	const bool hd = *graphics.hdGraphics;
+	const bool lit = *graphics.hdLighting;
+	const bool rain = *graphics.weather;
+	graphics.hdGraphics.SetValue(true);
+	graphics.hdLighting.SetValue(true);
+	graphics.weather.SetValue(true);
+	// Drawing a frame (here without a renderer) tells the drops how big the screen is.
+	vfx::RenderLens(nullptr, { 640, 480 }, { 1280, 720 });
+	weather::Force(weather::Kind::Rain, 1);
+	size_t most = 0;
+	for (int i = 0; i < 400; i++) {
+		vfx::Advance(40);
+		most = std::max(most, vfx::LensDropCount());
+		ASSERT_LE(vfx::LensDropCount(), 90U) << "more drops on the screen than it holds";
+	}
+	EXPECT_GT(most, 10U) << "a downpour put hardly any drops on the screen";
+	// In the dungeon the screen dries off within seconds.
+	leveltype = DTYPE_CATHEDRAL;
+	for (int i = 0; i < 100; i++)
+		vfx::Advance(40);
+	EXPECT_EQ(vfx::LensDropCount(), 0U);
+	graphics.hdGraphics.SetValue(hd);
+	graphics.hdLighting.SetValue(lit);
+	graphics.weather.SetValue(rain);
+}
+#endif
 
 } // namespace
 } // namespace devilution
