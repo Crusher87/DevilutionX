@@ -350,8 +350,22 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
  */
 void DrawFloorShafts(SDL_Renderer *renderer, float toLogical);
 /**
+ * @brief The drops on the screen show the world through themselves, so while there are any the world is drawn into a
+ * picture of its own and not straight to the window. Called before the world is drawn: true when everything up to
+ * EndScene goes into that picture (drawn in the UI's pixels, as the window is).
+ */
+bool BeginScene(SDL_Renderer *renderer, Size logicalSize);
+/**
+ * @brief For whoever draws into a texture of their own while the world is drawn and then goes back: the world's picture
+ * doesn't take its scale and clip back by itself as the window does. Does nothing outside BeginScene and EndScene.
+ * @param clip The clip the world's drawing had, or null for none.
+ */
+void ResumeScene(SDL_Renderer *renderer, const SDL_Rect *clip);
+/** @brief The world is drawn: its picture goes to the window, and drawing with it. Does nothing if BeginScene said no. */
+void EndScene(SDL_Renderer *renderer);
+/**
  * @brief Draws the raindrops on the screen, over the world and its effects and under the UI (in a Tristram storm, as on a
- * window). Called every frame: it also notes the UI's size, where the drops land.
+ * window). Called every frame, after EndScene: it also notes the UI's size, where the drops land.
  */
 void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
 #endif
