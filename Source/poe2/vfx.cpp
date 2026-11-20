@@ -12057,9 +12057,9 @@ void LensDrawDrop(LensMesh &glass, LensMesh &glow, const LensLook &look, const L
 	// Running, it is drawn out behind itself; sitting, a heavy one hangs a little into its foot.
 	const float tail = drop.running ? 0.25F + 0.75F * std::clamp(drop.vy / std::max(unit * 140, 1.F), 0.F, 1.F) : 0.F;
 	const float sag = drop.running ? 0.06F : std::clamp((drop.r / unit - 2.5F) * 0.04F, 0.F, 0.14F);
-	std::array<float, 16> rho;
-	std::array<float, 16> cosine;
-	std::array<float, 16> sine;
+	std::array<float, 16> rho {};
+	std::array<float, 16> cosine {};
+	std::array<float, 16> sine {};
 	for (int k = 0; k < n; k++) {
 		const float angle = 2 * Pi * static_cast<float>(k) / static_cast<float>(n) + drop.phase[2];
 		cosine[k] = std::cos(angle);
@@ -12085,10 +12085,10 @@ void LensDrawDrop(LensMesh &glass, LensMesh &glow, const LensLook &look, const L
 	const int centre = LensGlass(glass, look, drop.x, drop.y, drop.x, drop.y, 1, alpha);
 	// Rings of points from the middle out: a speck has its edge only, a bead two rings inside it; then the soft edge.
 	// The rim is dark over the top of the drop and round its shoulders, and not at its foot, where the light comes out.
-	std::array<int, 16> inner;
-	std::array<int, 16> between;
-	std::array<int, 16> edge;
-	std::array<int, 16> soft;
+	std::array<int, 16> inner {};
+	std::array<int, 16> between {};
+	std::array<int, 16> edge {};
+	std::array<int, 16> soft {};
 	for (int k = 0; k < n; k++) {
 		const float top = 0.5F - 0.5F * sine[k];
 		const float dark = top * std::sqrt(top);
@@ -12116,8 +12116,8 @@ void LensDrawDrop(LensMesh &glass, LensMesh &glow, const LensLook &look, const L
 
 	// The light a drop gathers: it takes in far more of the sky than the bit of town behind it does, so it is a little
 	// brighter than what it sits on, and brightest in its foot, where the sky above comes out upside down. Brighter over
-	// a lit street than over the dark, and in a lightning flash.
-	const float amount = std::clamp(look.sky * (0.5F + 0.5F * std::min(std::max(drop.light, 0.F), 1.F)) + 0.9F * look.flash, 0.F, 0.9F) * alpha;
+	// a lit street than over the dark, and for a moment in a lightning flash.
+	const float amount = std::clamp(look.sky * (0.5F + 0.5F * std::min(std::max(drop.light, 0.F), 1.F)) + 0.4F * look.flash, 0.F, 0.9F) * alpha;
 	if (amount <= 0.012F)
 		return;
 	const SDL_Color lit { LensByte(look.tint[0]), LensByte(look.tint[1]), LensByte(look.tint[2]), 0 };
@@ -12140,7 +12140,7 @@ void LensDrawDrop(LensMesh &glass, LensMesh &glow, const LensLook &look, const L
 		return;
 	}
 	const int middle = glow.add(drop.x, drop.y, light(0.12F));
-	std::array<int, 16> low;
+	std::array<int, 16> low {};
 	for (int k = 0; k < n; k++) {
 		// sin(angle - tilt), from what is already worked out: 1 at the drop's foot.
 		const float foot = std::max(sine[k] * tiltCos - cosine[k] * tiltSin, 0.F);
@@ -12181,7 +12181,7 @@ void LensDrawStreak(LensMesh &glass, LensMesh &glow, const LensLook &look, const
 	const float ny = dx / length;
 	const float across = look.bend * 0.3F;
 	const float shade = 1 - look.rim * 0.25F;
-	std::array<int, 2> first;
+	std::array<int, 2> first {};
 	for (int end = 0; end < 2; end++) {
 		const float px = end == 0 ? streak.x0 : streak.x1;
 		const float py = end == 0 ? streak.y0 : streak.y1;
