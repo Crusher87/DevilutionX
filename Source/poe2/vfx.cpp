@@ -4598,7 +4598,7 @@ LensDrop *LensLand(float x, float y, float r, float life)
 			const float b = r * r * r;
 			drop.x = (drop.x * a + x * b) / (a + b);
 			drop.y = (drop.y * a + y * b) / (a + b);
-			drop.r = std::cbrt(a + b);
+			drop.r = std::pow(a + b, 1.F / 3);
 			// Fresh water: it lasts as long as the newer of the two.
 			drop.life = std::max(drop.life - drop.age, life) + std::min(drop.age, 200.F);
 			drop.age = std::min(drop.age, 200.F);
@@ -4743,7 +4743,7 @@ void AdvanceLens(float ms)
 				const float dx = other.x - drop.x;
 				const float dy = other.y - drop.y;
 				if (dy > -drop.r && dx * dx + dy * dy < (drop.r + other.r) * (drop.r + other.r) * 0.8F) {
-					drop.r = std::cbrt(drop.r * drop.r * drop.r + other.r * other.r * other.r);
+					drop.r = std::pow(drop.r * drop.r * drop.r + other.r * other.r * other.r, 1.F / 3);
 					other.life = 0;
 				}
 			}
