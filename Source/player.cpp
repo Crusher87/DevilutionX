@@ -1948,8 +1948,6 @@ void GetPlayerGraphicsPath(std::string_view path, std::string_view prefix, std::
 	*BufCopy(out, "plrgfx\\", path, "\\", prefix, "\\", prefix, type) = '\0';
 }
 
-namespace {
-
 /**
  * POE2 Mashup: whether the hero's files hold a death for the weapon they hold. The Monk's do, for every
  * weapon and armour look; the other heroes only have the empty-handed one.
@@ -1974,16 +1972,13 @@ bool HasDeathForWeapon(const Player &player)
 	return found;
 }
 
-/** Drops the weapon from the hero's look for a death, unless their files hold a death with that weapon. */
+} // namespace
+
 void UseDeathLook(Player &player)
 {
 	if (!HasDeathForWeapon(player))
 		player._pgfxnum &= ~0xFU;
 }
-
-} // namespace
-
-} // namespace
 
 bool FinishSkillCast(Player &player)
 {
