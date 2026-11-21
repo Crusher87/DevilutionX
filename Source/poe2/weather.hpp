@@ -30,8 +30,13 @@ struct State {
 	float strength = 0;
 	/** @brief The wind, -1 (hard from the right) to 1 (hard from the left); drops lean with it. */
 	float wind = 0;
-	/** @brief A lightning flash lighting the screen, 1 at the strike fading to 0. */
+	/** @brief Lightning lighting the sky, 1 at the strike fading to 0 (the HD light shines it on the town; nothing is drawn over the screen). */
 	float flash = 0;
+	/** @brief How wet the ground is, 0 (dry) to 1 (soaked): it builds while it rains and dries off slowly afterwards. */
+	float wet = 0; /** @brief How dark this shower's sky is against a plain one, 1 to 3: each shower draws its own. */
+	float gloom = 1;
+	/** @brief How much lightning this shower has in it against a plain one, 1 to 3: each shower draws its own. */
+	float charge = 1;
 };
 
 /** @brief Whether this level has a sky: today, the town. Dungeons stay dry. */
@@ -53,6 +58,8 @@ void Request(Kind kind, float strength, float seconds);
  * back to the schedule, which eases into its own weather.
  */
 void Force(std::optional<Kind> kind, float strength = 1);
+/** @brief Lightning now: the sky lights up for a moment and thunder follows (a storm does this by itself; the console can ask). */
+void Strike();
 /** @brief Moves the weather on by the given real time: its schedule, wind, lightning and sound. */
 void Advance(float ms);
 /** @brief Starts the schedule over from the given seed (tests, and a future seeded multiplayer weather). */

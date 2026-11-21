@@ -1,3 +1,8 @@
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
+#include <vector>
+
 #include <gtest/gtest.h>
 
 #include "game_mode.hpp"
@@ -217,6 +222,139 @@ TEST_F(Poe2WeatherTest, TheEffectsDropNothingWithoutAView)
 	EXPECT_EQ(vfx::DropCount(), 0U);
 	EXPECT_GT(weather::Current().strength, 0.F);
 }
+
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+TEST_F(Poe2WeatherTest, RainLandsOnTheScreenAndDriesOff)
+{
+	GraphicsOptions &graphics = GetOptions().Graphics;
+	const bool hd = *graphics.hdGraphics;
+	const bool lit = *graphics.hdLighting;
+	const bool rain = *graphics.weather;
+	graphics.hdGraphics.SetValue(true);
+	graphics.hdLighting.SetValue(true);
+	graphics.weather.SetValue(true);
+	// Drawing a frame (here without a renderer) tells the drops how big the screen is.
+	vfx::RenderLens(nullptr, { 640, 480 }, { 1280, 720 });
+	weather::Force(weather::Kind::Rain, 1);
+	size_t most = 0;
+	for (int i = 0; i < 400; i++) {
+		vfx::Advance(40);
+		most = std::max(most, vfx::LensDropCount());
+		ASSERT_LE(vfx::LensDropCount(), 523U) << "more water on the screen than it holds";
+	}
+	EXPECT_GT(most, 100U) << "a downpour put hardly any water on the screen";
+	// In the dungeon the screen dries off within seconds.
+	leveltype = DTYPE_CATHEDRAL;
+	for (int i = 0; i < 100; i++)
+		vfx::Advance(40);
+	EXPECT_EQ(vfx::LensDropCount(), 0U);
+	graphics.hdGraphics.SetValue(hd);
+	graphics.hdLighting.SetValue(lit);
+	graphics.weather.SetValue(rain);
+}
+
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+/** @brief What a window that is only a picture in memory shows now, without its alpha. */
+std::vector<uint32_t> Shown(SDL_Renderer *renderer, const SDL_Surface *window)
+{
+	SDL_RenderFlush(renderer);
+	std::vector<uint32_t> shown(static_cast<size_t>(window->w) * window->h);
+	for (int y = 0; y < window->h; y++)
+		std::memcpy(&shown[static_cast<size_t>(y) * window->w], static_cast<const uint8_t *>(window->pixels) + static_cast<size_t>(y) * window->pitch, static_cast<size_t>(window->w) * 4);
+	for (uint32_t &pixel : shown)
+		pixel &= 0xFFFFFFU;
+	return shown;
+}
+
+/**
+ * @brief Draws a world the way the game does: the window cleared, then a picture that reaches past every edge of the UI
+ * (as the HD world's tiles do), and over it things at the UI's own pixels: bars across it and a line along its edge.
+ */
+void DrawWorld(SDL_Renderer *renderer, Size ui)
+{
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+	SDL_RenderClear(renderer);
+	SDL_SetRenderDrawColor(renderer, 120, 100, 80, 255);
+	const SDL_Rect past { -8, -8, ui.width + 16, ui.height + 16 };
+	SDL_RenderFillRect(renderer, &past);
+	SDL_SetRenderDrawColor(renderer, 30, 60, 110, 255);
+	for (int x = 0; x < ui.width; x += 24) {
+		const SDL_Rect bar { x, 0, 9, ui.height };
+		SDL_RenderFillRect(renderer, &bar);
+	}
+	SDL_SetRenderDrawColor(renderer, 230, 220, 190, 255);
+	const SDL_Rect edge { 0, 0, ui.width, ui.height };
+	SDL_RenderDrawRect(renderer, &edge);
+}
+
+TEST_F(Poe2WeatherTest, TheWetScreenShowsTheWorldPixelForPixel)
+{
+	// A window that is only a picture in memory. It is never closed: the effects keep pictures of their own for a
+	// renderer, and count on it living as long as the game does.
+	constexpr Size WindowSize { 1478, 768 };
+	static SDL_Surface *window = SDL_CreateRGBSurfaceWithFormat(0, WindowSize.width, WindowSize.height, 32, SDL_PIXELFORMAT_ARGB8888);
+	static SDL_Renderer *renderer = window != nullptr ? SDL_CreateSoftwareRenderer(window) : nullptr;
+	ASSERT_NE(renderer, nullptr) << SDL_GetError();
+	GraphicsOptions &graphics = GetOptions().Graphics;
+	const bool hd = *graphics.hdGraphics;
+	const bool lit = *graphics.hdLighting;
+	const bool rain = *graphics.weather;
+	graphics.hdGraphics.SetValue(true);
+	graphics.hdLighting.SetValue(true);
+	graphics.weather.SetValue(true);
+	weather::Force(weather::Kind::Rain, 1);
+	// While there is water on the screen the world is drawn into a picture of its own, which then goes to the window:
+	// it has to land there exactly as the world drawn straight to the window does, to the last line of pixels. Three UIs
+	// that SDL fits into the window in its three ways. The game's own at a UI scale of 125, fitted by its width, which
+	// times the scale comes out a hair under the window's. One with the window's shape as near as SDL cares, which fills
+	// the window both ways though its height times the scale is short of the window's. And one that fits exactly twice.
+	for (const Size ui : { Size { 1182, 614 }, Size { 1453, 755 }, Size { 739, 384 } }) {
+		SCOPED_TRACE(::testing::Message() << "a UI of " << ui.width << " by " << ui.height);
+		ASSERT_EQ(SDL_RenderSetLogicalSize(renderer, ui.width, ui.height), 0) << SDL_GetError();
+		// Dry, the world goes straight to the window.
+		vfx::Clear();
+		ASSERT_FALSE(vfx::BeginScene(renderer, ui));
+		DrawWorld(renderer, ui);
+		vfx::EndScene(renderer);
+		vfx::RenderLens(renderer, ui, ui);
+		const std::vector<uint32_t> straight = Shown(renderer, window);
+		for (int i = 0; i < 400 && vfx::LensDropCount() < 100; i++)
+			vfx::Advance(40);
+		ASSERT_GE(vfx::LensDropCount(), 100U) << "a downpour put hardly any water on the screen";
+		float fitX = 0;
+		float fitY = 0;
+		SDL_RenderGetScale(renderer, &fitX, &fitY);
+		ASSERT_TRUE(vfx::BeginScene(renderer, ui));
+		DrawWorld(renderer, ui);
+		vfx::EndScene(renderer);
+		// (The UI is drawn next, at the window's own scale.)
+		float scaleX = 0;
+		float scaleY = 0;
+		SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+		EXPECT_EQ(scaleX, fitX);
+		EXPECT_EQ(scaleY, fitY);
+		const std::vector<uint32_t> through = Shown(renderer, window);
+		size_t different = 0;
+		size_t first = 0;
+		for (size_t i = 0; i < straight.size(); i++) {
+			if (through[i] != straight[i] && different++ == 0)
+				first = i;
+		}
+		EXPECT_EQ(different, 0U) << "drawn through its picture the world differs from itself drawn straight, first at " << first % WindowSize.width << ", " << first / WindowSize.width;
+		// And then the water is drawn over it, which shows.
+		vfx::RenderLens(renderer, ui, ui);
+		const std::vector<uint32_t> wet = Shown(renderer, window);
+		size_t watered = 0;
+		for (size_t i = 0; i < straight.size(); i++)
+			watered += wet[i] != through[i] ? 1 : 0;
+		EXPECT_GT(watered, 0U) << "no water shows on the wet screen";
+	}
+	graphics.hdGraphics.SetValue(hd);
+	graphics.hdLighting.SetValue(lit);
+	graphics.weather.SetValue(rain);
+}
+#endif
+#endif
 
 } // namespace
 } // namespace devilution

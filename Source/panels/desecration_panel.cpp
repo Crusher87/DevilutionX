@@ -19,6 +19,7 @@
 #include "panels/skill_bar.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/affix_glow.hpp"
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/desecration.hpp"
@@ -124,8 +125,11 @@ Layout ComputeLayout(const Surface &out, const Item &item)
 void Reveal(Item &item, const Poe2CraftMod &choice)
 {
 	Player &player = *MyPlayer;
+	const Item before = item;
 	if (!RevealDesecratedMod(player, item, choice))
 		return;
+	// The revealed modifier glows in the tooltip like any other new one.
+	MarkNewAffixes(before, item);
 	if (Kinship) {
 		for (int i = 0; i < player._pNumInv; i++) {
 			if (GetOmenId(player.InvList[i]) == OmenId::Kinship) {

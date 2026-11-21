@@ -89,6 +89,9 @@ float Drawn(float linear);
  */
 bool Update(const Look &look, float x0, float y0, float x1, float y1, float heroX, float heroY);
 
+/** @brief Goes up each time Update works the light out: when it moved since the last frame, At and the rest are this frame's. */
+uint32_t UpdateCount();
+
 /** @brief The light over the rectangle as a picture: one ARGB pixel per sample, row by row, up to full. */
 int FieldWidth();
 int FieldHeight();
@@ -163,6 +166,47 @@ Rgb Boost(const Rgb &light, float levels);
 
 /** @brief This tile is a wall or rock (walls, pillars, closed doors, and the ground outside the rooms). */
 bool Blocks(int x, int y);
+
+/** @brief A lamp, lit window, doorway or fire that stays where it is, for effects that show it on the ground (its shine on wet ground). */
+struct Lamp {
+	/** @brief Where its light starts out, in tiles (for a lamp on a wall, just in front of the wall). */
+	float x = 0;
+	float y = 0;
+	/** @brief How high it hangs, in tiles. */
+	float height = 1;
+	/** @brief The open side it shines out of, as a direction in tiles; 0, 0 for all round. */
+	float outX = 0;
+	float outY = 0;
+	/** @brief How wide its flame or glow is, in tiles. */
+	float size = 0.2F;
+	std::array<float, 3> colour {};
+	/** @brief How bright it shines this frame against the hero's own glow (1), flicker and all. */
+	float strength = 1;
+	/** @brief It is the cathedral's doorway in town. */
+	bool door = false;
+	/** @brief How far its light reaches, in tiles. */
+	float reach = 0;
+	/**
+	 * @brief How much of a shaft of lit air it throws out of its opening (idea 66): 1 for a doorway with a fire behind it,
+	 * less for a fire set back under a roof, 0 for a lamp or a window.
+	 */
+	float shaft = 0;
+	/** @brief How far out from the opening that shaft comes down to the ground, in tiles. */
+	float shaftLength = 0;
+};
+
+/** @brief The level's lamps and fires (not its lava). Returns how many were written to out. */
+int Lamps(Lamp *out, int maxCount);
+
+/** @brief Whether this level has lava (or a glowing pool) that lights itself, and whether a tile is such lava. */
+bool HasLava();
+bool IsLava(int x, int y);
+
+/**
+ * @brief The daylight down the stairs from town on the Cathedral's first floor (the Atmosphere option's idea 24): where
+ * it falls and how far it reaches, in tiles. False where there is none.
+ */
+bool Daylight(float &x, float &y, float &reach);
 
 /**
  * @brief The renderer's test for ground outside the rooms that nothing stands on but light passes over (the Cathedral's

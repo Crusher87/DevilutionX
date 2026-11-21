@@ -5,6 +5,7 @@
 #include "engine/random.hpp"
 #include "player.h"
 #include "plrmsg.h"
+#include "poe2/affix_glow.hpp"
 #include "poe2/bases.hpp"
 #include "poe2/craft_state.hpp"
 #include "poe2/crafting_items.hpp"
@@ -1287,7 +1288,37 @@ void ConsumeCraftOmens(Player &player)
 	PendingOmens.clear();
 }
 
+namespace {
+
+/**
+ * @brief Orbs that add modifiers, whose new lines glow in the tooltip (poe2/affix_glow.hpp). Divine, Vaal and quality
+ * currency change the values of the modifiers already there, which would make them all look new.
+ */
+bool AddsAffixes(CurrencyOrb orb)
+{
+	return IsAnyOf(orb, CurrencyOrb::Transmutation, CurrencyOrb::Augmentation, CurrencyOrb::Regal, CurrencyOrb::Alchemy,
+	    CurrencyOrb::Exalted, CurrencyOrb::GreaterExalted, CurrencyOrb::PerfectExalted, CurrencyOrb::Chaos,
+	    CurrencyOrb::GreaterChaos, CurrencyOrb::PerfectChaos, CurrencyOrb::Essence, CurrencyOrb::Desecrate, CurrencyOrb::Augment);
+}
+
+bool ApplyCurrencyOrbToItem(CurrencyOrb orb, Player &player, Item &item, uint8_t variant);
+
+} // namespace
+
 bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t variant)
+{
+	if (&player != MyPlayer || !AddsAffixes(orb) || !IsCraftableKind(item))
+		return ApplyCurrencyOrbToItem(orb, player, item, variant);
+	const Item before = item;
+	const bool applied = ApplyCurrencyOrbToItem(orb, player, item, variant);
+	if (applied && !CurrencyDestroyedItem)
+		MarkNewAffixes(before, item);
+	return applied;
+}
+
+namespace {
+
+bool ApplyCurrencyOrbToItem(CurrencyOrb orb, Player &player, Item &item, uint8_t variant)
 {
 	PendingOmens.clear();
 	CurrencyDestroyedItem = false;
@@ -1579,5 +1610,7 @@ bool ApplyCurrencyOrb(CurrencyOrb orb, Player &player, Item &item, uint8_t varia
 	EventPlrMsg(FormatRuntime(_("Crafted: {:s}"), item.getName().str()));
 	return true;
 }
+
+} // namespace
 
 } // namespace devilution

@@ -260,6 +260,25 @@ struct LevelVisit {
 	int hardFights = 0;
 };
 LevelVisit CurrentLevel;
+
+/**
+ * @brief The seconds after a loading screen: how many frames each had, where their time went, and how much HD art was
+ * read and made meanwhile. Written as one line when they are over; the minute's averages hide a dip that short.
+ */
+struct AfterLoad {
+	static constexpr size_t Seconds = 10;
+	/** When the loading screen ended; 0 while nothing is watched. */
+	uint32_t startMs = 0;
+	std::array<int, Seconds> frames {};
+	uint32_t worstFrameMs = 0;
+	/** The frames of the first three seconds and of the last five, for their parts' averages. */
+	TelemetryCounts early;
+	TelemetryCounts late;
+	size_t picturesRead = 0;
+	int picturesMade = 0;
+	uint64_t picturesMadeNs = 0;
+};
+AfterLoad AfterLoading;
 /** When the last level was entered, for the time between areas. */
 uint32_t LastAreaMs = 0;
 
@@ -1001,8 +1020,8 @@ std::string FramePartsText(const TelemetryCounts &counts)
 	if (counts.frames <= 0)
 		return {};
 	const auto part = [&](FramePart which) { return counts.framePartMs[static_cast<size_t>(which)] / counts.frames; };
-	return std::format(", frame ms: drawing {:.1f} (world {:.1f}), world upload {:.1f}, hd {:.1f}, effects {:.1f}, ui layer {:.1f}, present {:.1f}",
-	    part(FramePart::Drawing), part(FramePart::World), part(FramePart::WorldUpload), part(FramePart::Hd), part(FramePart::Effects),
+	return std::format(", frame ms: drawing {:.1f} (world {:.1f}), world upload {:.1f}, hd {:.1f} (atmosphere {:.2f}), effects {:.1f}, ui layer {:.1f}, present {:.1f}",
+	    part(FramePart::Drawing), part(FramePart::World), part(FramePart::WorldUpload), part(FramePart::Hd), part(FramePart::Atmosphere), part(FramePart::Effects),
 	    part(FramePart::UiLayer), part(FramePart::Present));
 }
 
@@ -1036,6 +1055,7 @@ void WriteStatsLine(uint32_t now)
 	    .add("worldMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::World)] / Window.frames : 0.0)
 	    .add("worldUploadMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::WorldUpload)] / Window.frames : 0.0)
 	    .add("hdMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Hd)] / Window.frames : 0.0)
+	    .add("atmosphereMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Atmosphere)] / Window.frames : 0.0)
 	    .add("effectsMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Effects)] / Window.frames : 0.0)
 	    .add("uiLayerMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::UiLayer)] / Window.frames : 0.0)
 	    .add("presentMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Present)] / Window.frames : 0.0)
@@ -2592,6 +2612,19 @@ uint64_t TelemetryFramePartStart()
 	return LogFile != nullptr && GameStartMs != 0 ? FrameClockNs() : 0;
 }
 
+/** @brief Writes how the frames ran in the seconds after the last loading screen, if those were watched to the end. */
+void WriteAfterLoad(uint32_t now)
+{
+	const AfterLoad watched = std::exchange(AfterLoading, {});
+	if (watched.startMs == 0 || now - watched.startMs < AfterLoad::Seconds * 1000)
+		return;
+	std::string bySecond;
+	for (const int frames : watched.frames)
+		StrAppend(bySecond, bySecond.empty() ? "" : " ", frames);
+	WriteText("load", std::format("the {:d} s after it, fps each second: {:s} (slowest frame {:d} ms); HD pictures read {:d}, made {:d} in {:.0f} ms; first 3 s{:s}; last 5 s{:s}", AfterLoad::Seconds, bySecond, watched.worstFrameMs, watched.picturesRead, watched.picturesMade, static_cast<double>(watched.picturesMadeNs) / 1e6, FramePartsText(watched.early), FramePartsText(watched.late)));
+	Event(LogChannel::Perf, LogLevel::Normal, "after_load").add("fps", bySecond).add("slowest", static_cast<int>(watched.worstFrameMs)).add("read", static_cast<int>(watched.picturesRead)).add("made", watched.picturesMade);
+}
+
 void TelemetryFramePartDone(FramePart part, uint64_t start)
 {
 	if (start == 0)
@@ -2603,8 +2636,13 @@ void TelemetrySlowWorkDone(SlowWork work, uint64_t start)
 {
 	if (start == 0)
 		return;
-	SlowWorkNsSinceTick[static_cast<size_t>(work)] += FrameClockNs() - start;
+	const uint64_t took = FrameClockNs() - start;
+	SlowWorkNsSinceTick[static_cast<size_t>(work)] += took;
 	SlowWorkCountSinceTick[static_cast<size_t>(work)]++;
+	if (work == SlowWork::HdArt && AfterLoading.startMs != 0) {
+		AfterLoading.picturesMade++;
+		AfterLoading.picturesMadeNs += took;
+	}
 }
 
 void TelemetryGameSaved(std::string_view why, uint64_t start)
@@ -2626,6 +2664,12 @@ void TelemetryHdCacheDropped(size_t pictures)
 	Event(LogChannel::Perf, LogLevel::Normal, "hd_cache_dropped").add("pictures", static_cast<int>(pictures));
 }
 
+void TelemetryHdPicturesRead(size_t pictures)
+{
+	if (AfterLoading.startMs != 0)
+		AfterLoading.picturesRead += pictures;
+}
+
 void TelemetryFrameDrawn()
 {
 	DrawStep = nullptr;
@@ -2641,8 +2685,25 @@ void TelemetryFrameDrawn()
 	LastFrameMs = now;
 	FrameGapSinceTick = std::max(FrameGapSinceTick, gap);
 	// Longer gaps are pauses, menus and loading screens; the stall line covers those.
-	if (gap > 1000)
+	if (gap > 1000) {
+		AfterLoading = {};
 		return;
+	}
+	if (AfterLoading.startMs != 0) {
+		const size_t second = (now - AfterLoading.startMs) / 1000;
+		if (second >= AfterLoad::Seconds) {
+			WriteAfterLoad(now);
+		} else {
+			AfterLoading.frames[second]++;
+			AfterLoading.worstFrameMs = std::max(AfterLoading.worstFrameMs, gap);
+			if (second < 3 || second >= AfterLoad::Seconds - 5) {
+				TelemetryCounts &counts = second < 3 ? AfterLoading.early : AfterLoading.late;
+				counts.frames++;
+				for (size_t i = 0; i < NumFrameParts; i++)
+					counts.framePartMs[i] += static_cast<double>(parts[i]) / 1e6;
+			}
+		}
+	}
 	Count([gap, &parts](TelemetryCounts &counts) {
 		counts.frames++;
 		counts.frameMs += gap;
@@ -2660,6 +2721,8 @@ void TelemetryLoadingStarted(std::string_view what)
 		return;
 	LoadingWhat = what;
 	LoadingStartMs = LoadingFadedOutMs = LoadingFadingInMs = Now();
+	// Another loading screen before the seconds after the last one were over: nothing to say of those.
+	AfterLoading = {};
 }
 
 void TelemetryLoadingFadedOut()
@@ -2692,6 +2755,8 @@ void TelemetryLoadingDone()
 	const uint32_t loading = LoadingFadingInMs - LoadingFadedOutMs;
 	const uint32_t fadeIn = now - LoadingFadingInMs;
 	WriteText("load", std::format("{:s} took {:d} ms: fade out {:d} ms, loading {:d} ms, fade in {:d} ms", LoadingWhat, now - start, fadeOut, loading, fadeIn));
+	AfterLoading = {};
+	AfterLoading.startMs = now;
 	Event(LogChannel::Perf, LogLevel::Normal, "loading").add("what", LoadingWhat).add("ms", now - start).add("fadeOut", fadeOut).add("loading", loading).add("fadeIn", fadeIn);
 }
 

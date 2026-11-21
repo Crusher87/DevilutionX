@@ -25,5 +25,10 @@ enum class AugmentId : uint8_t;
  * @param dim Greyed, for a Runes tab slot with none stored: the glyph shows, but neither colour nor glow.
  */
 void DrawRuneIcon(const Surface &out, const Rectangle &box, AugmentId id, bool dim);
+/**
+ * @brief Draws the outline round a rune DrawRuneIcon draws in the same box (the one under the cursor, or one the held
+ * currency fits): a ring just outside the stone and its glow, as the game's outlines go just outside an item picture.
+ */
+void DrawRuneOutline(const Surface &out, const Rectangle &box, AugmentId id, uint8_t color);
 
 } // namespace devilution
