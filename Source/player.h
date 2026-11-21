@@ -970,6 +970,8 @@ ClxSprite GetPlayerPortraitSprite(Player &player);
 bool IsPlayerUnarmed(Player &player);
 
 void LoadPlrGFX(Player &player, player_graphic graphic);
+/** Drops the weapon from the hero's look for a death, unless their files hold a death with that weapon (the Monk's do). */
+void UseDeathLook(Player &player);
 void InitPlayerGFX(Player &player);
 void ResetPlayerGFX(Player &player);
 

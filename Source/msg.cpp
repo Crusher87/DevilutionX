@@ -2358,7 +2358,7 @@ size_t OnPlayerJoinLevel(const TCmdLocParam2 &message, Player &player)
 			if (!player.hasNoLife()) {
 				StartStand(player, Direction::South);
 			} else {
-				player._pgfxnum &= ~0xFU;
+				UseDeathLook(player);
 				player._pmode = PM_DEATH;
 				NewPlrAnim(player, player_graphic::Death, Direction::South);
 				player.AnimInfo.currentFrame = static_cast<int8_t>(player.AnimInfo.numberOfFrames - 2);
