@@ -290,7 +290,7 @@ size_t PortalCount();
 size_t ThornsCueCount();
 /** @brief How many raindrops and snowflakes are falling (tests). */
 size_t DropCount();
-/** @brief How many raindrops sit on (or run down) the screen (tests). */
+/** @brief How many pieces of water lie on (or run down) the screen (tests). */
 size_t LensDropCount();
 
 /** @brief What a piece of physics debris is: a chip of stone, a spark off steel, or a drop of blood. */
@@ -350,7 +350,7 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
  */
 void DrawFloorShafts(SDL_Renderer *renderer, float toLogical);
 /**
- * @brief The drops on the screen show the world through themselves, so while there are any the world is drawn into a
+ * @brief The water on the screen shows the world through itself, so while there is any the world is drawn into a
  * picture of its own and not straight to the window. Called before the world is drawn: true when everything up to
  * EndScene goes into that picture (drawn in the UI's pixels, as the window is).
  */
@@ -364,8 +364,8 @@ void ResumeScene(SDL_Renderer *renderer, const SDL_Rect *clip);
 /** @brief The world is drawn: its picture goes to the window, and drawing with it. Does nothing if BeginScene said no. */
 void EndScene(SDL_Renderer *renderer);
 /**
- * @brief Draws the raindrops on the screen, over the world and its effects and under the UI (in a Tristram storm, as on a
- * window). Called every frame, after EndScene: it also notes the UI's size, where the drops land.
+ * @brief Draws the rain lying on the screen, over the world and its effects and under the UI (in a Tristram storm, as on
+ * a window). Called every frame, after EndScene: it also notes the UI's size, where the rain lands.
  */
 void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
 #endif

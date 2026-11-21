@@ -4502,66 +4502,130 @@ void AdvanceWeather(float ms)
 }
 
 /**
- * @brief A raindrop on the screen, as on a window between the eye and Tristram (Curtis 2026-11-20: "enough to tell it's
- * raining, but not enough to distract"; then, of drops painted from one picture, "the exact same water blob", wanting them
- * to blend into the screen "as realistic as possible"). So a drop is drawn as the small lens it is: the town behind it
- * shows through it upside down and shrunk (Garg and Nayar, "Photometric Model of a Rain Drop"), which makes every drop
- * out of the very picture it sits on. Water on glass is held by its edge and is never a circle, so each has its own
- * uneven outline. Kept in the UI's pixels.
+ * @brief Water on the screen, as on a window between the eye and Tristram (Curtis 2026-11-20: "enough to tell it's
+ * raining, but not enough to distract"; of drops painted from one picture, "the exact same water blob"; and 2026-11-21, of
+ * drops each drawn as a lens of its own: "very visible globs", "each isn't organic enough", "the drip down part looks
+ * terrible", "all of it needs to be much smoother", "rain should pool together in areas when it lands on the screen
+ * close to each other").
+ *
+ * So the water is one sheet, and all that is kept here is where it lies: round pieces, each a middle and a radius.
+ * RenderLens adds them up into one surface, so pieces that touch are one pool with whatever outline the water makes and
+ * no piece has an edge of its own. Whatever a piece does it does smoothly: it spreads as it lands, is drawn towards
+ * water it touches, and shrinks away as it dries. Kept in the UI's pixels.
  */
-struct LensDrop {
+enum class LensKind : uint8_t {
+	/** @brief A droplet too small to do anything but sit and dry. */
+	Speck,
+	/** @brief A drop, or one lobe of a pool. */
+	Drop,
+	/** @brief A bead left where the track of a run drew itself together. */
+	Pearl,
+	/** @brief The film just behind a run: it thins and is gone in a moment. */
+	Thread,
+	/** @brief Water on its way into a bigger piece: it shrinks as it is drawn in. */
+	Ghost,
+};
+
+struct LensWater {
 	float x = 0;
 	float y = 0;
-	/** @brief Its radius, in the UI's pixels. */
+	/** @brief Its radius now, the radius it is settling to, and how fast it is changing (it overshoots a little). */
 	float r = 0;
-	/** @brief How long it has sat there and how long it lasts before it has dried, in milliseconds. */
+	float want = 0;
+	float swell = 0;
+	/** @brief How long it has lain there and how long it lasts before it has dried, in milliseconds. */
 	float age = 0;
 	float life = 0;
-	/** @brief Its outline: three waves round it (two, three and four bumps), how deep each is and where it starts. */
-	std::array<float, 3> wave {};
-	std::array<float, 3> phase {};
-	/** @brief How long it still quivers after landing or taking in another drop, in milliseconds. */
-	float quiver = 0;
-	/** @brief Its own number, 0 to 1: how hard it bends the view and how dark its rim is differ from drop to drop. */
-	float own = 0;
-	/** @brief The brightness of the town behind it, eased so a drop never flickers, and when it was last looked up. */
-	float light = -1;
-	uint8_t lightWait = 0;
-	/** @brief Running down the screen: how fast, how long it stays caught before it slips on, and where it wanders. */
-	bool running = false;
-	float vx = 0;
-	float vy = 0;
-	float stuck = 0;
-	float wander = 0;
-	/** @brief How far it runs before its trail goes on, and where and how wide the trail's end is. */
-	float toTrail = 0;
-	float trailX = 0;
-	float trailY = 0;
-	float trailWidth = 0;
+	/** @brief Where it is being drawn to: its own place, or (Ghost) the water that is taking it in. */
+	float toX = 0;
+	float toY = 0;
+	/** @brief Ghost: where it set off from and how big it was. */
+	float fromX = 0;
+	float fromY = 0;
+	float fromR = 0;
+	/** @brief Ghost: the run taking it in. Pearl, Thread: the run that left it. -1: none. */
+	int8_t run = -1;
+	LensKind kind = LensKind::Speck;
+	/** @brief The pool it is part of: a number shared by the drops that touch each other (LensGather). */
+	uint16_t pool = 0;
 };
 
 /**
- * @brief The film of water a running drop leaves behind it, one short piece of it. A film that thin doesn't last: each
- * piece draws itself together in under a second, and some leave a small bead where they were.
+ * @brief Water too heavy for the glass to hold, on its way down the screen. It is drawn as a few pieces along the way it
+ * came (LensRunLobes), so it is round while it creeps and drawn out into a tail when it runs.
  */
-struct LensStreak {
-	float x0, y0, x1, y1;
-	/** @brief Its width at each end. */
-	float w0, w1;
-	float age;
-	float life;
+struct LensRun {
+	bool live = false;
+	/** @brief Too little water left to go on: it slows to a stop and is a drop again. */
+	bool stopping = false;
+	float x = 0;
+	float y = 0;
+	float speed = 0;
+	/** @brief How long it has been going, in seconds. */
+	float age = 0;
+	/** @brief Its water as a radius, and the radius it shows, which follows softly. */
+	float r = 0;
+	float shown = 0;
+	float swell = 0;
+	/** @brief How far it has come: where on the glass it is, for what holds it back and where it wanders. */
+	float travelled = 0;
+	uint32_t seed = 0;
+	/** @brief How hard water below it draws it to one side, eased. */
+	float pull = 0;
+	/** @brief It goes in darts: how far until the glass next catches it, and for how many seconds more it is held. */
+	float goLeft = 0;
+	float holdLeft = 0;
+	/** @brief How much of its radius it leaves in its track for each pixel it runs. */
+	float loss = 0;
+	/** @brief How far it goes before the next piece of its track is laid, and how many pieces until the next bead. */
+	float toThread = 0;
+	int toPearl = 0;
+	/** @brief Where it has been, newest last, a point every so often: its tail lies along this. */
+	static constexpr int PathSize = 48;
+	std::array<float, PathSize> pathX {};
+	std::array<float, PathSize> pathY {};
+	int pathAt = 0;
+	int pathCount = 0;
+	float pathGap = 0;
 };
 
-std::vector<LensDrop> LensDrops;
-std::vector<LensStreak> LensStreaks;
-/** @brief The UI's size when the drops were last drawn: they land on what the screen shows. */
+/** @brief No more than this many pieces of water lie on the screen, and no more than this many run at once. */
+constexpr size_t LensMostWater = 520;
+constexpr int LensMostRunning = 3;
+
+std::vector<LensWater> LensWaters;
+std::array<LensRun, LensMostRunning> LensRuns;
+/** @brief Milliseconds until the drops are next looked over for pools (LensGather). */
+float LensGatherWait = 0;
+/** @brief The water's own clock, in milliseconds (it starts again every minute). */
+float LensClock = 0;
+/** @brief The UI's size when the water was last drawn: it lands on what the screen shows. */
 float LensWidth = 0;
 float LensHeight = 0;
 
-/** @brief No more than this many sit on the screen, and no more than this many run at once: a window, not a waterfall. */
-constexpr size_t LensMostDrops = 260;
-constexpr int LensMostRunning = 3;
-constexpr size_t LensMostStreaks = 400;
+bool LensSits(LensKind kind)
+{
+	return kind != LensKind::Ghost && kind != LensKind::Thread;
+}
+
+/** @brief There is water on the screen. */
+bool LensWet()
+{
+	if (!LensWaters.empty())
+		return true;
+	for (const LensRun &run : LensRuns) {
+		if (run.live)
+			return true;
+	}
+	return false;
+}
+
+void LensClear()
+{
+	LensWaters.clear();
+	for (LensRun &run : LensRuns)
+		run.live = false;
+}
 
 /** @brief A rate a second made into how many this time, rounded at random (not scaled by the spells' Effect Intensity). */
 int LensOccurrences(float perSecond, float ms)
@@ -4579,7 +4643,27 @@ float LensSmoothStep(float edge0, float edge1, float x)
 	return t * t * (3 - 2 * t);
 }
 
-/** @brief The UI's pixels a "unit" of drop size is, so the drops look the same at any window size. */
+/** @brief A number from 0 to 1 that changes smoothly along `at`, a different way for every `seed`. */
+float LensDrift(uint32_t seed, float at)
+{
+	const float whole = std::floor(at);
+	const float t = at - whole;
+	const auto knot = [seed](int32_t n) {
+		uint32_t h = static_cast<uint32_t>(n) * 0x9E3779B1U ^ seed * 0x85EBCA77U;
+		h ^= h >> 15;
+		h *= 0x2C1B3C6DU;
+		h ^= h >> 12;
+		h *= 0x297A2D39U;
+		h ^= h >> 15;
+		return static_cast<float>(h & 0xFFFFFF) / 16777215.F;
+	};
+	const int32_t n = static_cast<int32_t>(whole);
+	const float a = knot(n);
+	const float b = knot(n + 1);
+	return a + (b - a) * t * t * (3 - 2 * t);
+}
+
+/** @brief The UI's pixels a "unit" of water is, so the water looks the same at any window size. */
 float LensUnit()
 {
 	return LensHeight / 520.F * std::clamp(atmosphere::Value("lens_size", 1.F), 0.3F, 3.F);
@@ -4601,235 +4685,601 @@ bool LensSpot(float &x, float &y)
 	return false;
 }
 
-/** @brief Gives a drop its own outline: the bigger the drop, the more its edge catches on the glass and the less round it is. */
-void LensShape(LensDrop &drop, float unit)
-{
-	const float uneven = std::clamp(0.45F + 0.11F * drop.r / std::max(unit, 0.01F), 0.5F, 1.25F);
-	drop.wave = { Random(0.03F, 0.15F) * uneven, Random(0.02F, 0.09F) * uneven, Random(0.F, 0.05F) * uneven };
-	drop.phase = { Random(0, 2 * Pi), Random(0, 2 * Pi), Random(0, 2 * Pi) };
-	drop.own = Random(0, 1);
-}
-
-/** @brief Two drops' water in one: the radius of a drop holding both. */
+/** @brief Two pieces' water in one: the radius of a piece holding both. */
 float LensJoined(float a, float b)
 {
 	return std::pow(a * a * a + b * b * b, 1.F / 3);
 }
 
-/** @brief A drop lands: it joins one it lands on (the water of both in one bigger drop), or sits by itself. */
-LensDrop *LensLand(float x, float y, float r, float life, float unit)
+/** @brief How long a piece takes to shrink away at the end of its life, in milliseconds. */
+float LensDryTime(LensKind kind)
 {
-	for (LensDrop &drop : LensDrops) {
-		if (drop.running)
-			continue;
-		const float dx = drop.x - x;
-		const float dy = drop.y - y;
-		if (dx * dx + dy * dy < (drop.r + r) * (drop.r + r) * 0.7F) {
-			const float a = drop.r * drop.r * drop.r;
-			const float b = r * r * r;
-			drop.x = (drop.x * a + x * b) / (a + b);
-			drop.y = (drop.y * a + y * b) / (a + b);
-			const float before = drop.r;
-			drop.r = LensJoined(drop.r, r);
-			// Its edge is pulled out where the new water came in: a new outline once it has grown by a fair bit.
-			if (drop.r > before * 1.12F) {
-				const float own = drop.own;
-				LensShape(drop, unit);
-				drop.own = own;
-			}
-			drop.quiver = 260;
-			// Fresh water: it lasts as long as the newer of the two.
-			drop.life = std::max(drop.life - drop.age, life) + std::min(drop.age, 200.F);
-			drop.age = std::min(drop.age, 200.F);
-			return &drop;
-		}
+	switch (kind) {
+	case LensKind::Speck:
+		return 900;
+	case LensKind::Pearl:
+		return 1300;
+	default:
+		return 1700;
 	}
-	if (LensDrops.size() >= LensMostDrops)
-		return nullptr;
-	LensDrop drop;
-	drop.x = x;
-	drop.y = y;
-	drop.r = r;
-	drop.life = life;
-	drop.quiver = 180;
-	LensShape(drop, unit);
-	LensDrops.push_back(drop);
-	return &LensDrops.back();
 }
 
-/** @brief A drop too heavy for the glass to hold starts to run down the screen, after a moment caught where it sits. */
-void LensStartRunning(LensDrop &drop, float unit)
+/** @brief A new piece of water as it is, with no landing: where there is no room for it, nothing. */
+LensWater *LensPut(float x, float y, float r, float life, LensKind kind)
 {
-	drop.running = true;
-	drop.vx = 0;
-	drop.vy = 0;
-	drop.stuck = Random(0, 400);
-	drop.wander = Random(-1, 1) * unit * 9;
-	drop.toTrail = 0;
-	drop.trailX = drop.x;
-	drop.trailY = drop.y - drop.r * 0.5F;
-	drop.trailWidth = drop.r * 0.9F;
-	drop.life = std::max(drop.life, drop.age + 6000);
+	if (LensWaters.size() >= LensMostWater)
+		return nullptr;
+	LensWater piece;
+	piece.x = piece.toX = x;
+	piece.y = piece.toY = y;
+	piece.r = piece.want = r;
+	piece.life = life;
+	piece.kind = kind;
+	LensWaters.push_back(piece);
+	return &LensWaters.back();
+}
+
+/** @brief Turns a piece into water on its way into another: to a run (its head moves), or to the spot given. */
+void LensDrawIn(LensWater &piece, float toX, float toY, int run, float ms)
+{
+	piece.fromX = piece.x;
+	piece.fromY = piece.y;
+	piece.fromR = piece.r;
+	piece.toX = toX;
+	piece.toY = toY;
+	piece.run = static_cast<int8_t>(run);
+	piece.kind = LensKind::Ghost;
+	piece.age = 0;
+	piece.life = ms;
 }
 
 /**
- * @brief Drops land on the screen while it rains in town and behave as water does on a window: most are specks too light
- * to move, which sit and dry; they grow by taking in what lands on them; one grown too heavy for the glass to hold slips
- * and runs in fits and starts (a drop has to get over the glass's grip before it moves, and the grip is weaker once it
- * slides), sweeping up the drops in its way and leaving a film that draws itself into beads.
+ * @brief A raindrop lands. On dry glass it is a drop of its own, which spreads from where it hit. On water it joins it:
+ * a small drop on a big one is drawn into it, and two of a size stay two lobes of one pool, drawn a little together.
+ */
+void LensLand(float x, float y, float r, float life, float unit)
+{
+	// The biggest piece of water it touches.
+	int onto = -1;
+	float ontoFar = 0;
+	int lobes = 0;
+	for (size_t i = 0; i < LensWaters.size(); i++) {
+		const LensWater &other = LensWaters[i];
+		if (!LensSits(other.kind))
+			continue;
+		const float dx = other.x - x;
+		const float dy = other.y - y;
+		const float reach = (other.want + r) * 1.05F;
+		const float far2 = dx * dx + dy * dy;
+		if (far2 >= reach * reach)
+			continue;
+		lobes++;
+		if (onto < 0 || other.want > LensWaters[onto].want) {
+			onto = static_cast<int>(i);
+			ontoFar = std::sqrt(far2);
+		}
+	}
+	const LensKind kind = r < unit * 2.75F ? LensKind::Speck : LensKind::Drop;
+	if (onto < 0) {
+		if (LensWater *piece = LensPut(x, y, r, life, kind))
+			piece->r = r * 0.45F;
+		return;
+	}
+	const float mine = r * r * r;
+	{
+		LensWater &big = LensWaters[onto];
+		const float its = big.want * big.want * big.want;
+		if (r < big.want * 0.6F || ontoFar < big.want * 0.5F || lobes >= 4 || LensWaters.size() + 2 >= LensMostWater) {
+			// Its water goes into the bigger one, which leans towards where it came in and quivers.
+			big.want = LensJoined(big.want, r);
+			big.toX += (x - big.toX) * mine / (its + mine);
+			big.toY += (y - big.toY) * mine / (its + mine);
+			big.swell += unit * 16 * std::min(r / big.want, 1.F);
+			// Fresh water: it lasts as long as the newer of the two would.
+			big.life = big.age + std::max(big.life - big.age, life);
+			if (big.kind == LensKind::Speck && big.want >= unit * 2.75F)
+				big.kind = LensKind::Drop;
+			const float toX = big.toX;
+			const float toY = big.toY;
+			// Where it hit shows for a moment as a bump on the edge, drawn in.
+			if (ontoFar > big.want * 0.5F) {
+				if (LensWater *piece = LensPut(x, y, r * 0.85F, life, kind))
+					LensDrawIn(*piece, toX, toY, -1, 210);
+			}
+			return;
+		}
+	}
+	// Two of a size: both are drawn a little towards each other, the lighter one further.
+	LensWater *piece = LensPut(x, y, r, life, LensKind::Drop);
+	if (piece == nullptr)
+		return;
+	piece->r = r * 0.45F;
+	LensWater &big = LensWaters[onto];
+	const float its = big.want * big.want * big.want;
+	const float share = mine / (its + mine);
+	const float gather = 0.3F;
+	piece->toX = x + (big.toX - x) * gather * (1 - share);
+	piece->toY = y + (big.toY - y) * gather * (1 - share);
+	big.toX += (x - big.toX) * gather * share;
+	big.toY += (y - big.toY) * gather * share;
+	big.swell += unit * 8 * share;
+	big.life = big.age + std::max(big.life - big.age, life);
+	if (big.kind == LensKind::Speck)
+		big.kind = LensKind::Drop;
+}
+
+/** @brief The point `distance` back along the way a run has come. */
+void LensRunBehind(const LensRun &run, float distance, float &x, float &y)
+{
+	float px = run.x;
+	float py = run.y;
+	distance = std::min(distance, run.travelled);
+	for (int n = 0; n < run.pathCount && distance > 0; n++) {
+		const int at = (run.pathAt - 1 - n + LensRun::PathSize * 2) % LensRun::PathSize;
+		const float dx = run.pathX[at] - px;
+		const float dy = run.pathY[at] - py;
+		const float length = std::sqrt(dx * dx + dy * dy);
+		if (length >= distance) {
+			x = px + dx * distance / length;
+			y = py + dy * distance / length;
+			return;
+		}
+		distance -= length;
+		px = run.pathX[at];
+		py = run.pathY[at];
+	}
+	x = px;
+	y = py - std::max(distance, 0.F);
+}
+
+struct LensLobe {
+	float x;
+	float y;
+	float r;
+};
+
+/** @brief How far a run is drawn out behind itself: hardly at all while it creeps, into a long tail at speed. */
+float LensRunStretch(const LensRun &run, float unit)
+{
+	return 0.45F + 0.8F * LensSmoothStep(0, unit * 130, run.speed);
+}
+
+/** @brief The pieces a run is made of this moment: its head, and three smaller ones behind it along the way it came. */
+void LensRunLobes(const LensRun &run, float unit, std::array<LensLobe, 4> &lobes)
+{
+	constexpr std::array<float, 3> Behind { 0.62F, 1.2F, 1.74F };
+	constexpr std::array<float, 3> Size { 0.8F, 0.58F, 0.38F };
+	const float stretch = LensRunStretch(run, unit);
+	// (Drawn out, the same water is narrower.)
+	const float r = run.shown * (1 - 0.14F * (stretch - 0.45F));
+	lobes[0] = { run.x, run.y, r };
+	for (size_t k = 0; k < 3; k++) {
+		lobes[k + 1].r = r * Size[k];
+		LensRunBehind(run, r * stretch * Behind[k], lobes[k + 1].x, lobes[k + 1].y);
+	}
+}
+
+/** @brief A pool has grown too heavy for the glass: it lets go, as a run that starts at its biggest drop and takes the rest with it. */
+void LensStartRun(size_t biggest, uint16_t pool)
+{
+	int slot = -1;
+	for (int i = 0; i < LensMostRunning; i++) {
+		if (!LensRuns[i].live) {
+			slot = i;
+			break;
+		}
+	}
+	if (slot < 0)
+		return;
+	LensRun &run = LensRuns[slot];
+	run = {};
+	run.live = true;
+	run.x = LensWaters[biggest].x;
+	run.y = LensWaters[biggest].y;
+	// (It starts as that drop. The rest of the pool's water is its own once it has been drawn in: LensStep.)
+	run.shown = LensWaters[biggest].r;
+	run.r = LensWaters[biggest].want;
+	run.seed = NextRandom();
+	run.toPearl = static_cast<int>(Random(2, 5.99F));
+	run.goLeft = LensUnit() * Random(30, 150);
+	run.loss = Random(0.006F, 0.014F);
+	for (size_t i = 0; i < LensWaters.size(); i++) {
+		LensWater &piece = LensWaters[i];
+		if (i != biggest && piece.pool == pool && (piece.kind == LensKind::Drop || piece.kind == LensKind::Pearl))
+			LensDrawIn(piece, run.x, run.y, slot, Random(260, 520));
+	}
+	LensWaters[biggest] = LensWaters.back();
+	LensWaters.pop_back();
+}
+
+/**
+ * @brief Looks the drops over, a few times a second: which touch and so are one pool; which lie so far inside another
+ * that they are one drop; and which pool has grown too heavy to stay where it is. A heavy pool sags a while first.
+ */
+void LensGather(float unit, float runs, bool raining)
+{
+	static std::vector<uint16_t> drops;
+	static std::vector<uint16_t> parent;
+	drops.clear();
+	for (size_t i = 0; i < LensWaters.size(); i++) {
+		LensWaters[i].pool = 0;
+		if (LensWaters[i].kind == LensKind::Drop || LensWaters[i].kind == LensKind::Pearl)
+			drops.push_back(static_cast<uint16_t>(i));
+	}
+	const size_t count = drops.size();
+	parent.resize(count);
+	for (size_t i = 0; i < count; i++)
+		parent[i] = static_cast<uint16_t>(i);
+	const auto find = [&](size_t i) {
+		while (parent[i] != i) {
+			parent[i] = parent[parent[i]];
+			i = parent[i];
+		}
+		return i;
+	};
+	for (size_t i = 0; i < count; i++) {
+		for (size_t j = i + 1; j < count; j++) {
+			LensWater &a = LensWaters[drops[i]];
+			LensWater &b = LensWaters[drops[j]];
+			if (a.kind == LensKind::Ghost || b.kind == LensKind::Ghost)
+				continue;
+			const float dx = a.x - b.x;
+			const float dy = a.y - b.y;
+			const float reach = (a.r + b.r) * 1.08F;
+			const float far2 = dx * dx + dy * dy;
+			if (far2 >= reach * reach)
+				continue;
+			LensWater &big = a.want >= b.want ? a : b;
+			LensWater &small = a.want >= b.want ? b : a;
+			if (far2 < big.r * big.r * 0.2F) {
+				// One lies all but inside the other: they are one drop.
+				big.want = LensJoined(big.want, small.want);
+				big.life = big.age + std::max(big.life - big.age, small.life - small.age);
+				LensDrawIn(small, big.toX, big.toY, -1, 240);
+				continue;
+			}
+			parent[find(i)] = static_cast<uint16_t>(find(j));
+		}
+	}
+	// Each pool: how much water it holds and which is its biggest drop.
+	static std::vector<float> volume;
+	static std::vector<uint16_t> biggest;
+	volume.assign(count, 0.F);
+	biggest.assign(count, 0xFFFF);
+	for (size_t i = 0; i < count; i++) {
+		LensWater &piece = LensWaters[drops[i]];
+		if (piece.kind == LensKind::Ghost)
+			continue;
+		const size_t root = find(i);
+		piece.pool = static_cast<uint16_t>(root + 1);
+		volume[root] += piece.want * piece.want * piece.want;
+		if (biggest[root] == 0xFFFF || piece.want > LensWaters[biggest[root]].want)
+			biggest[root] = drops[i];
+	}
+	int running = 0;
+	for (const LensRun &run : LensRuns)
+		running += run.live ? 1 : 0;
+	const float runMin = unit * 5.8F;
+	constexpr size_t None = std::numeric_limits<size_t>::max();
+	size_t start = None;
+	uint16_t startPool = 0;
+	for (size_t root = 0; root < count; root++) {
+		if (biggest[root] == 0xFFFF)
+			continue;
+		const float heavy = std::pow(volume[root], 1.F / 3) / runMin;
+		if (heavy < 0.75F)
+			continue;
+		// Water that is nearly too heavy creeps: the whole pool sags down the glass.
+		const float sag = unit * 0.11F * std::min(heavy - 0.6F, 1.F) * runs;
+		for (size_t i = 0; i < count; i++) {
+			LensWater &piece = LensWaters[drops[i]];
+			if (piece.pool == root + 1)
+				piece.toY += sag;
+		}
+		// (Only rain sets it off: once the rain is over, or left behind, the water that hasn't let go by now dries where it is.)
+		if (raining && heavy >= 1 && start == None && running < LensMostRunning && Random(0, 1) < 0.12F * 0.5F * runs * (heavy - 0.6F)) {
+			start = biggest[root];
+			startPool = static_cast<uint16_t>(root + 1);
+		}
+	}
+	if (start != None)
+		LensStartRun(start, startPool);
+}
+
+/** @brief A run is over. Water still on its way into it goes on to where the run last was. */
+void LensEndRun(LensRun &run, int slot)
+{
+	run.live = false;
+	for (LensWater &piece : LensWaters) {
+		if (piece.kind == LensKind::Ghost && piece.run == slot)
+			piece.run = -1;
+	}
+}
+
+/** @brief One run, a moment on. */
+void LensAdvanceRun(LensRun &run, int slot, float dt, float unit, float drying, float wind)
+{
+	run.age += dt;
+	// Water runs down glass in darts: it goes a stretch, quicker and slower as the glass lets it, then is caught and
+	// all but stands for a moment (longer the lighter it is) before its weight pulls it free again.
+	const float fastest = unit * (70 + 22 * run.r / unit);
+	const float ease = LensDrift(run.seed, run.travelled / (unit * 30));
+	float target = fastest * (0.55F + 0.45F * ease);
+	if (run.holdLeft > 0) {
+		run.holdLeft -= dt;
+		target = fastest * 0.04F;
+		if (run.holdLeft <= 0)
+			run.goLeft = unit * Random(25, 150);
+	} else if (run.goLeft <= 0) {
+		run.holdLeft = Random(0.12F, 0.5F) * std::clamp(unit * 6 / std::max(run.r, unit), 0.7F, 1.7F);
+	}
+	if (run.stopping)
+		target = 0;
+	run.speed += (target - run.speed) * (1 - std::exp(-dt / (target > run.speed ? 0.24F : 0.1F)));
+
+	// It wanders, leans with the wind, and is drawn towards water lying a little below it.
+	float pull = 0;
+	for (const LensWater &other : LensWaters) {
+		if (!LensSits(other.kind) || other.kind == LensKind::Speck)
+			continue;
+		const float dy = other.y - run.y;
+		if (dy < run.shown * 0.3F || dy > unit * 16)
+			continue;
+		const float dx = other.x - run.x;
+		if (std::abs(dx) > unit * 9)
+			continue;
+		const float far2 = dx * dx + dy * dy + 0.01F;
+		pull += dx / std::sqrt(far2) * other.r * other.r / (far2 + unit * unit * 4);
+	}
+	run.pull += (std::clamp(pull * 1.3F, -0.6F, 0.6F) - run.pull) * (1 - std::exp(-dt / 0.2F));
+	const float wander = (LensDrift(run.seed ^ 0x5BD1E995U, run.travelled / (unit * 36)) - 0.5F) * 0.6F;
+	const float heading = std::clamp(wander + wind * 0.08F + run.pull, -0.9F, 0.9F);
+	const float moved = run.speed * dt;
+	run.x += std::sin(heading) * moved;
+	run.y += std::cos(heading) * moved;
+	run.travelled += moved;
+	run.goLeft -= moved;
+	run.pathGap += moved;
+	if (run.pathGap >= unit * 0.7F) {
+		run.pathGap = 0;
+		run.pathX[run.pathAt] = run.x;
+		run.pathY[run.pathAt] = run.y;
+		run.pathAt = (run.pathAt + 1) % LensRun::PathSize;
+		run.pathCount = std::min(run.pathCount + 1, LensRun::PathSize);
+	}
+	// Its water goes into the track it leaves (and out of the rain's reach, in the dungeon, it dries up as it goes).
+	run.r = std::max(run.r - moved * run.loss - unit * 3 * std::max(drying - 2, 0.F) * dt, 0.F);
+	// The radius it shows follows its water softly, with a quiver when it has just taken some in.
+	run.swell += ((run.r - run.shown) * 2600 - run.swell * 62) * dt;
+	run.shown = std::max(run.shown + run.swell * dt, 0.F);
+
+	// It takes in the water it touches, which sends it on faster.
+	std::array<LensLobe, 4> lobes;
+	LensRunLobes(run, unit, lobes);
+	for (LensWater &other : LensWaters) {
+		if (!LensSits(other.kind))
+			continue;
+		if (other.kind == LensKind::Pearl && other.run == slot && other.age < 2500)
+			continue;
+		for (size_t k = 0; k < lobes.size(); k++) {
+			const float dx = other.x - lobes[k].x;
+			const float dy = other.y - lobes[k].y;
+			const float reach = (lobes[k].r + other.r) * (k == 0 ? 0.86F : 0.7F);
+			if (dx * dx + dy * dy >= reach * reach)
+				continue;
+			run.speed += unit * 22 * std::min(other.r / std::max(run.r, 0.01F), 1.F);
+			// (Water enough frees it.)
+			if (other.r > run.r * 0.35F)
+				run.holdLeft = std::min(run.holdLeft, 0.05F);
+			LensDrawIn(other, run.x, run.y, slot, 150 + 14 * other.r / unit);
+			break;
+		}
+	}
+
+	// The track: a thin line of water laid where its tail ends. It doesn't last: each bit of it thins in its own time,
+	// so the line narrows, breaks into a row of beads of all sizes, and those dry one by one, a few of them slowly.
+	run.toThread -= moved;
+	if (run.toThread <= 0 && run.speed > unit * 5) {
+		const float thick = std::max(lobes[0].r * 0.26F, unit * 0.9F);
+		float x;
+		float y;
+		LensRunBehind(run, lobes[0].r * LensRunStretch(run, unit) * 2.05F, x, y);
+		run.toThread = thick * Random(1.2F, 1.75F);
+		run.toPearl--;
+		LensWater *piece = nullptr;
+		if (run.toPearl <= 0) {
+			// (No two alike, and no even row of them: some close together, then a long gap.)
+			run.toPearl = static_cast<int>(Random(2, 7.99F)) + (Random(0, 1) < 0.3F ? 6 : 0);
+			const float size = Random(0, 1);
+			piece = LensPut(x + Random(-0.3F, 0.3F) * thick, y, thick * (0.7F + 0.9F * size * size * size), Random(1200, 2600) + 3600 * size * size, LensKind::Pearl);
+		} else {
+			piece = LensPut(x + Random(-0.12F, 0.12F) * thick, y, thick * Random(0.8F, 1.1F), Random(380, 1300), LensKind::Thread);
+		}
+		if (piece != nullptr)
+			piece->run = static_cast<int8_t>(slot);
+	}
+
+	if (!run.stopping && run.age > 0.8F && run.r < unit * 2.6F)
+		run.stopping = true;
+	if (run.stopping && run.speed < unit * 2.5F) {
+		// Too little water left to go on: it stays where it stopped, a drop again, and takes its tail in.
+		LensEndRun(run, slot);
+		const float x = run.x;
+		const float y = run.y;
+		for (size_t k = 1; k < lobes.size(); k++) {
+			if (LensWater *piece = LensPut(lobes[k].x, lobes[k].y, lobes[k].r, 400, LensKind::Drop))
+				LensDrawIn(*piece, x, y, -1, 260);
+		}
+		LensPut(x, y, lobes[0].r, Random(2500, 5000) + LensDryTime(LensKind::Drop), LensKind::Drop);
+	} else if (run.y - run.shown * 3.2F > LensHeight) {
+		LensEndRun(run, slot);
+	}
+}
+
+/** @brief All the water, a moment on. */
+void LensStep(float ms, float unit, float drying, float wind)
+{
+	const float dt = ms / 1000.F;
+	for (int slot = 0; slot < LensMostRunning; slot++) {
+		if (LensRuns[slot].live)
+			LensAdvanceRun(LensRuns[slot], slot, dt, unit, drying, wind);
+	}
+	const float settle = 1 - std::exp(-dt / 0.085F);
+	const bool thin = std::floor((LensClock + ms) / 50) != std::floor(LensClock / 50);
+	LensClock = std::fmod(LensClock + ms, 60000.F);
+	for (size_t i = 0; i < LensWaters.size();) {
+		LensWater &piece = LensWaters[i];
+		bool gone = false;
+		if (piece.kind == LensKind::Ghost) {
+			piece.age += ms;
+			const float t = std::min(piece.age / piece.life, 1.F);
+			if (piece.run >= 0 && LensRuns[piece.run].live) {
+				piece.toX = LensRuns[piece.run].x;
+				piece.toY = LensRuns[piece.run].y;
+			}
+			const float ease = t * t * (3 - 2 * t);
+			piece.x = piece.fromX + (piece.toX - piece.fromX) * ease;
+			piece.y = piece.fromY + (piece.toY - piece.fromY) * ease;
+			piece.r = piece.fromR * (1 - t * t);
+			gone = t >= 1;
+			// Drawn into a run, its water is the run's.
+			if (gone && piece.run >= 0 && LensRuns[piece.run].live)
+				LensRuns[piece.run].r = LensJoined(LensRuns[piece.run].r, piece.fromR);
+		} else if (piece.kind == LensKind::Thread) {
+			piece.age += ms;
+			const float t = std::min(piece.age / piece.life, 1.F);
+			// (All of a track thins at the same moments, twenty times a second: the sheet then has it to work out again
+			// only that often.)
+			if (thin || t >= 1)
+				piece.r = piece.want * (1 - t * std::sqrt(t));
+			gone = t >= 1;
+		} else {
+			piece.age += ms * drying;
+			// Drying, it shrinks away: slowly at first, then quickly, as a drop does.
+			const float left = piece.life - piece.age;
+			const float dry = LensDryTime(piece.kind);
+			const float target = left >= dry ? piece.want : piece.want * std::sqrt(std::max(left / dry, 0.F));
+			if (std::abs(target - piece.r) < 0.02F && std::abs(piece.swell) < unit * 0.6F) {
+				piece.r = target;
+				piece.swell = 0;
+			} else {
+				piece.swell += ((target - piece.r) * 3200 - piece.swell * 68) * dt;
+				piece.r = std::max(piece.r + piece.swell * dt, 0.F);
+			}
+			const float dx = piece.toX - piece.x;
+			const float dy = piece.toY - piece.y;
+			if (dx * dx + dy * dy < 0.0004F) {
+				piece.x = piece.toX;
+				piece.y = piece.toY;
+			} else {
+				piece.x += dx * settle;
+				piece.y += dy * settle;
+			}
+			gone = left <= 0 || piece.y - piece.r > LensHeight + unit * 4;
+		}
+		if (gone) {
+			LensWaters[i] = LensWaters.back();
+			LensWaters.pop_back();
+		} else {
+			i++;
+		}
+	}
+}
+
+/**
+ * @brief Rain lands on the screen while it rains in town and gathers as water does on a window. Most of it is droplets
+ * too light to move, which sit and dry. Drops grow by what lands on them and beside them, so here and there a pool
+ * builds up; one grown too heavy for the glass sags, lets go and runs down, slow where the glass grips and quick where
+ * it doesn't, taking in the water in its way and leaving a thin track that breaks into beads.
  */
 void AdvanceLens(float ms)
 {
 	const weather::State &w = weather::Current();
 	const float knob = std::min(atmosphere::Strength(atmosphere::Knob::Lens), 3.F);
 	if (knob <= 0 || LensWidth <= 0 || LensHeight <= 0) {
-		LensDrops.clear();
-		LensStreaks.clear();
+		LensClear();
 		return;
 	}
 	const float unit = LensUnit();
-	const float dt = ms / 1000.F;
 	const float runs = std::max(atmosphere::Value("lens_runs", 1.F), 0.F);
 	const bool raining = w.kind == weather::Kind::Rain && w.strength > 0 && weather::Outdoors();
-	int running = 0;
-	for (const LensDrop &drop : LensDrops)
-		running += drop.running ? 1 : 0;
+	ms = std::min(ms, 120.F);
 	if (raining) {
 		const float s = w.strength;
 		const float many = knob * std::max(atmosphere::Value("lens_drops", 1.F), 0.F);
+		const float pools = std::clamp(atmosphere::Value("lens_pools", 0.45F), 0.F, 1.F);
 		float x;
 		float y;
-		// Specks, far the most of what lands.
-		for (int i = LensOccurrences((3.F + 15.F * s) * many, ms); i > 0; i--) {
-			if (LensSpot(x, y))
-				LensLand(x, y, unit * Random(1.F, 2.2F), Random(3000, 9000), unit);
-		}
-		// Beads big enough to see the town through.
-		for (int i = LensOccurrences((0.5F + 2.8F * s) * many, ms); i > 0; i--) {
-			if (LensSpot(x, y)) {
+		// Droplets, far the most of what lands (and the first to be left out when the screen is full).
+		for (int i = LensOccurrences((6.F + 27.F * s) * many, ms); i > 0; i--) {
+			if (LensWaters.size() + 150 < LensMostWater && LensSpot(x, y)) {
 				const float size = Random(0, 1);
-				LensLand(x, y, unit * (2.4F + 3.1F * size * size), Random(7000, 15000), unit);
+				LensLand(x, y, unit * (1.F + 1.7F * size * size), Random(3000, 7000) + 3000 * size, unit);
 			}
 		}
-		// A heavy drop now and then, in a downpour more often: it throws a few specks round it as it lands.
-		for (int i = LensOccurrences((0.03F + 0.22F * s * s) * many, ms); i > 0; i--) {
+		// Drops. Rain doesn't fall evenly: a good part of it lands on or beside water that is already there, which
+		// is how pools build up.
+		for (int i = LensOccurrences((0.6F + 3.F * s) * many, ms); i > 0; i--) {
+			const float size = Random(0, 1);
+			const float r = unit * (2.75F + 2.7F * size * size);
+			bool placed = false;
+			if (Random(0, 1) < pools && !LensWaters.empty()) {
+				for (int tries = 0; tries < 5 && !placed; tries++) {
+					const LensWater &near = LensWaters[NextRandom() % LensWaters.size()];
+					if (near.kind != LensKind::Drop && near.kind != LensKind::Pearl)
+						continue;
+					const float angle = Random(0, 2 * Pi);
+					const float far = (near.want + r) * Random(0.5F, 1.F);
+					x = near.x + std::cos(angle) * far;
+					y = near.y + std::sin(angle) * far * 0.8F;
+					placed = true;
+				}
+			}
+			if (!placed && !LensSpot(x, y))
+				continue;
+			const float life = Random(7000, 15000);
+			LensLand(x, y, r, life, unit);
+			// Water on glass is never round: most drops land as two or three lobes run together.
+			for (int n = static_cast<int>(Random(0, 2.8F)); n > 0; n--) {
+				const float angle = Random(0, 2 * Pi);
+				const float lobe = r * Random(0.5F, 0.8F);
+				const float far = (r + lobe) * Random(0.45F, 0.62F);
+				if (LensWater *piece = LensPut(x + std::cos(angle) * far, y + std::sin(angle) * far, lobe, life * Random(0.85F, 1.1F), LensKind::Drop))
+					piece->r = lobe * 0.45F;
+			}
+		}
+		// A heavy drop now and then, in a downpour more often: it throws a few droplets round it as it lands.
+		for (int i = LensOccurrences((0.045F + 0.33F * s * s) * many, ms); i > 0; i--) {
 			if (!LensSpot(x, y))
 				continue;
-			const float r = unit * Random(5.5F, 8.F);
-			LensLand(x, y, r, Random(9000, 16000), unit);
+			const float r = unit * Random(4.6F, 6.6F);
+			const float life = Random(9000, 16000);
+			LensLand(x, y, r, life, unit);
+			for (int n = 1 + static_cast<int>(Random(0, 2.99F)); n > 0; n--) {
+				const float angle = Random(0, 2 * Pi);
+				const float lobe = r * Random(0.45F, 0.75F);
+				const float far = (r + lobe) * Random(0.45F, 0.6F);
+				if (LensWater *piece = LensPut(x + std::cos(angle) * far, y + std::sin(angle) * far, lobe, life, LensKind::Drop))
+					piece->r = lobe * 0.45F;
+			}
 			for (int n = static_cast<int>(Random(0, 3.99F)); n > 0; n--) {
 				const float angle = Random(0, 2 * Pi);
-				const float far = r * Random(1.5F, 2.8F);
+				const float far = r * Random(1.9F, 3.2F);
 				LensLand(x + std::cos(angle) * far, y + std::sin(angle) * far, unit * Random(0.7F, 1.4F), Random(2000, 5000), unit);
 			}
 		}
 	}
 
+	LensGatherWait -= ms;
+	if (LensGatherWait <= 0) {
+		LensGatherWait = 120;
+		LensGather(unit, runs, raining);
+	}
 	// Away from the rain (in the dungeon, or after a storm) the screen dries off faster.
 	const float drying = raining ? 1.F : (weather::Outdoors() ? 1.6F : 5.F);
-	const float runMin = unit * 5.8F;
-	const float runStop = unit * 2.6F;
-	std::vector<LensDrop> left;
-	for (size_t i = 0; i < LensDrops.size();) {
-		LensDrop &drop = LensDrops[i];
-		drop.age += ms * drying;
-		drop.quiver = std::max(drop.quiver - ms, 0.F);
-		if (!drop.running) {
-			// A big drop gets too heavy for the glass to hold: the bigger, the sooner it slips.
-			if (drop.r >= runMin && running < LensMostRunning && Random(0, 1) < dt * 0.5F * runs * (drop.r / runMin - 0.6F)) {
-				LensStartRunning(drop, unit);
-				running++;
-			}
-		} else if (drop.stuck > 0) {
-			drop.stuck -= ms;
-		} else {
-			// It slides in fits and starts, wandering a little and leaning with the wind; a heavier drop goes faster.
-			const float fastest = unit * (45 + 17 * drop.r / unit);
-			drop.vy = std::min(drop.vy + unit * 480 * dt, fastest);
-			drop.vx += ((w.wind * unit * 14 + drop.wander) - drop.vx) * std::min(dt * 3, 1.F);
-			if (Random(0, 1) < dt * 1.2F) {
-				drop.stuck = Random(90, 750);
-				drop.vy *= 0.1F;
-				drop.wander = Random(-1, 1) * unit * 10;
-			}
-			const float mx = drop.vx * dt;
-			const float my = drop.vy * dt;
-			const float moved = std::sqrt(mx * mx + my * my);
-			drop.x += mx;
-			drop.y += my;
-			// Its water goes into the film it leaves.
-			drop.r = std::max(drop.r - moved * 0.0055F, 0.F);
-			drop.toTrail -= moved;
-			if (drop.toTrail <= 0) {
-				drop.toTrail = unit * 2.6F;
-				const float tailX = drop.x;
-				const float tailY = drop.y - drop.r * 0.5F;
-				const float width = drop.r * Random(0.5F, 0.85F);
-				if (LensStreaks.size() < LensMostStreaks)
-					LensStreaks.push_back({ drop.trailX, drop.trailY, tailX, tailY, drop.trailWidth, width, 0, Random(250, 950) });
-				drop.trailX = tailX;
-				drop.trailY = tailY;
-				drop.trailWidth = width;
-			}
-			// It takes in the drops in its way, which pull it a little to their side and send it on faster.
-			for (size_t n = 0; n < LensDrops.size(); n++) {
-				LensDrop &other = LensDrops[n];
-				if (n == i || other.running || other.life <= 0)
-					continue;
-				const float dx = other.x - drop.x;
-				const float dy = other.y - drop.y;
-				if (dy > -drop.r && dx * dx + dy * dy < (drop.r + other.r) * (drop.r + other.r) * 0.85F) {
-					const float a = drop.r * drop.r * drop.r;
-					const float b = other.r * other.r * other.r;
-					drop.x += std::clamp(dx * b / (a + b), -drop.r * 0.6F, drop.r * 0.6F);
-					drop.r = LensJoined(drop.r, other.r);
-					drop.vy += unit * 26 * std::min(other.r / drop.r, 1.F);
-					if (other.r > drop.r * 0.35F)
-						drop.quiver = 200;
-					other.life = 0;
-				}
-			}
-			if (drop.r < runStop) {
-				// Too little water left to go on: it stays where it stopped and dries.
-				drop.running = false;
-				drop.life = drop.age + Random(2500, 5000);
-			}
-		}
-		const bool gone = drop.age >= drop.life || drop.y - drop.r * 3 > LensHeight || drop.r <= 0.2F;
-		if (gone) {
-			if (drop.running)
-				running--;
-			LensDrops[i] = LensDrops.back();
-			LensDrops.pop_back();
-		} else {
-			i++;
-		}
-	}
-	for (size_t i = 0; i < LensStreaks.size();) {
-		LensStreak &streak = LensStreaks[i];
-		streak.age += ms * drying;
-		if (streak.age >= streak.life) {
-			// The film has drawn itself together: now and then into a bead that stays a while.
-			if (Random(0, 1) < 0.42F) {
-				const float along = Random(0, 1);
-				LensDrop bead;
-				bead.x = streak.x0 + (streak.x1 - streak.x0) * along + Random(-0.2F, 0.2F) * streak.w1;
-				bead.y = streak.y0 + (streak.y1 - streak.y0) * along;
-				bead.r = std::max(streak.w1 * Random(0.22F, 0.5F), unit * 0.6F);
-				bead.life = Random(2000, 6500);
-				LensShape(bead, unit);
-				left.push_back(bead);
-			}
-			streak = LensStreaks.back();
-			LensStreaks.pop_back();
-		} else {
-			i++;
-		}
-	}
-	for (const LensDrop &bead : left) {
-		if (LensDrops.size() < LensMostDrops)
-			LensDrops.push_back(bead);
-	}
+	const int steps = std::clamp(static_cast<int>(std::ceil(ms / 12.F)), 1, 10);
+	for (int i = 0; i < steps; i++)
+		LensStep(ms / static_cast<float>(steps), unit, drying, w.wind);
 }
 
 /** @brief A colour as bytes, as bright as the light on it (full at 1 and above). */
@@ -5367,8 +5817,7 @@ Surface FrontMask()
 
 void Clear()
 {
-	LensDrops.clear();
-	LensStreaks.clear();
+	LensClear();
 	Particles.clear();
 	Debris.clear();
 	LootBeams.clear();
@@ -7224,11 +7673,10 @@ void Advance(float ms)
 	if (weather::Enabled()) {
 		AdvanceWeather(ms);
 		AdvanceLens(ms);
-	} else if (!Drops.empty() || !Splashes.empty() || !LensDrops.empty() || !LensStreaks.empty()) {
+	} else if (!Drops.empty() || !Splashes.empty() || LensWet()) {
 		Drops.clear();
 		Splashes.clear();
-		LensDrops.clear();
-		LensStreaks.clear();
+		LensClear();
 	}
 	EmitAmbient(ms);
 	for (auto &[missile, trail] : Trails) {
@@ -7302,7 +7750,10 @@ size_t DropCount()
 
 size_t LensDropCount()
 {
-	return LensDrops.size();
+	size_t count = LensWaters.size();
+	for (const LensRun &run : LensRuns)
+		count += run.live ? 1 : 0;
+	return count;
 }
 
 namespace debris_test {
@@ -10883,22 +11334,37 @@ struct Targets {
 
 Targets Layer;
 
+/** @brief How high the band of sky over the far view of the town is, in screens. */
+constexpr float LensSkyBand = 0.5F;
+
 /**
- * @brief The world as a picture of its own. The drops on the screen (RenderLens) are lenses on the town behind them, and
- * SDL can't read back what it has drawn to the window. So while there are drops, the world and its effects are drawn into
- * this picture (BeginScene), which is then copied to the window whole (EndScene) and looked through by every drop.
+ * @brief The world as a picture of its own. The water on the screen (RenderLens) bends the town behind it as water on a
+ * window does, and SDL can't read back what it has drawn to the window. So while there is water, the world and its effects
+ * are drawn into this picture (BeginScene), which is then copied to the window whole (EndScene) and looked through by
+ * the water.
  */
 struct SceneTargets {
 	SDL_Renderer *renderer = nullptr;
 	/** @brief The world, the window's pixels one for one. Without alpha: whatever was blended into it, it is solid. */
 	SDL_Texture *full = nullptr;
 	/**
-	 * @brief The same at a quarter and an eighth of the size, each made from the one before. The drops look through the
-	 * smallest: a drop takes in a view many times its own width, and shrinking the full picture that far in one go
-	 * would glitter as the view moves. (It is also a little out of focus, as a drop's view is.)
+	 * @brief The same at a quarter and an eighth of the size, each made from the one before. The water looks through one
+	 * of them (lens_blur): along its edges it squeezes a wide strip of the picture into a narrow one, and the full
+	 * picture squeezed that far would glitter as the view moves. (It is also a little out of focus, as water's view is.)
 	 */
 	SDL_Texture *quarter = nullptr;
 	SDL_Texture *eighth = nullptr;
+	/**
+	 * @brief What is bright in the town, at a sixteenth of the size: the picture times itself, which leaves the lamps and
+	 * the lit windows and all but loses the dark ground between them.
+	 */
+	SDL_Texture *lamps = nullptr;
+	/**
+	 * @brief The town from far off: its lights at a thirty-second of the size, under a band of the night sky half as
+	 * high again (LensSkyBand). Water gathers its light from this: every piece of it shows, small and upside down, what
+	 * lies far round it, so a lamp glints in the drops near it and the sky lies along their lower edges.
+	 */
+	SDL_Texture *far = nullptr;
 	int width = 0;
 	int height = 0;
 	/** @brief The window's scale from the UI's pixels to its own, which the picture is drawn at. */
@@ -10911,11 +11377,11 @@ struct SceneTargets {
 
 	void release()
 	{
-		for (SDL_Texture *texture : { full, quarter, eighth }) {
+		for (SDL_Texture *texture : { full, quarter, eighth, lamps, far }) {
 			if (texture != nullptr)
 				SDL_DestroyTexture(texture);
 		}
-		full = quarter = eighth = nullptr;
+		full = quarter = eighth = lamps = far = nullptr;
 	}
 
 	bool ensure(SDL_Renderer *wanted, int wantedWidth, int wantedHeight)
@@ -10928,14 +11394,14 @@ struct SceneTargets {
 		renderer = wanted;
 		width = wantedWidth;
 		height = wantedHeight;
-		full = quarter = eighth = nullptr; // (Another renderer's went with it.)
+		full = quarter = eighth = lamps = far = nullptr; // (Another renderer's went with it.)
 		SDL_RendererInfo info;
 		if (width <= 0 || height <= 0 || !SDL_RenderTargetSupported(renderer) || SDL_GetRendererInfo(renderer, &info) != 0)
 			return false;
 		if ((info.max_texture_width > 0 && width > info.max_texture_width) || (info.max_texture_height > 0 && height > info.max_texture_height))
 			return false;
-		const auto make = [&](int divisor) {
-			SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_TARGET, std::max(width / divisor, 1), std::max(height / divisor, 1));
+		const auto make = [&](int divisor, float tall = 1) {
+			SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_TARGET, std::max(width / divisor, 1), std::max(static_cast<int>(static_cast<float>(height / divisor) * tall), 1));
 			if (texture != nullptr)
 				SDL_SetTextureScaleMode(texture, SDL_ScaleModeLinear);
 			return texture;
@@ -10943,7 +11409,9 @@ struct SceneTargets {
 		full = make(1);
 		quarter = make(4);
 		eighth = make(8);
-		if (full == nullptr || quarter == nullptr || eighth == nullptr) {
+		lamps = make(16);
+		far = make(32, 1 + LensSkyBand);
+		if (full == nullptr || quarter == nullptr || eighth == nullptr || lamps == nullptr || far == nullptr) {
 			release();
 			return false;
 		}
@@ -11971,249 +12439,516 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 namespace {
 
-/** @brief What the drops are drawn with: one mesh of glass (each piece a view of the world's picture), one of light added on it. */
-struct LensMesh {
-	std::vector<SDL_Vertex> vertices;
-	std::vector<int> indices;
-
-	void clear()
-	{
-		vertices.clear();
-		indices.clear();
-	}
-
-	int add(float x, float y, SDL_Color colour, float u = 0, float v = 0)
-	{
-		vertices.push_back({ { x, y }, colour, { u, v } });
-		return static_cast<int>(vertices.size()) - 1;
-	}
-
-	void triangle(int a, int b, int c)
-	{
-		indices.push_back(a);
-		indices.push_back(b);
-		indices.push_back(c);
-	}
-
-	void quad(int a, int b, int c, int d)
-	{
-		triangle(a, b, c);
-		triangle(a, c, d);
-	}
-};
-
-/** @brief How the drops look this frame. */
-struct LensLook {
-	/** @brief The world's picture is there to look through; without it only a drop's dark rim and its light are drawn. */
-	bool textured = false;
-	/** @brief How wide a view a drop takes in: how far its edge looks across to the other side of itself, in its own radii. */
-	float bend = 10;
-	/** @brief How dark the top of a drop's rim is, 0 to 1. */
-	float rim = 0.7F;
-	/** @brief How bright the sky's light lies in a drop's foot. */
-	float sky = 0.4F;
-	/** @brief How solid the drops are, 0 to 1. */
-	float seen = 1;
-	float flash = 0;
-	std::array<float, 3> tint {};
-	/** @brief How wide the soft edge round every piece of glass is, in the UI's pixels: about a pixel of the window. */
-	float feather = 0.6F;
-};
-
 uint8_t LensByte(float value)
 {
 	return static_cast<uint8_t>(std::clamp(value, 0.F, 1.F) * 255.F + 0.5F);
 }
 
 /**
- * @brief A point of the glass at (x, y) that shows the screen at (fromX, fromY), dimmed to `shade` and as solid as
- * `alpha`. Without the world's picture it only darkens what is under it.
+ * @brief The water on the screen is drawn as one sheet. Every piece of water (LensWater) adds a smooth round hump to a
+ * sum worked out on a grid of small squares over the screen. Where the sum is over LensEdge there is water, so pieces
+ * that touch run together into one outline with no seam, and the sum is also how the water's surface lies: it stands
+ * highest over the middles of its pieces and falls to the glass at its edge, the same for a pool of many pieces as for
+ * one drop. The game's picture is seen through it shifted by that slope, as water on glass bends what is behind it.
+ * Only the squares with water in them are drawn.
+ *
+ * A hump reaches further than the piece's own radius (this many radii), falling away smoothly to nothing; for a piece
+ * by itself the sum is LensEdge at its radius. Two pieces close together push the sum up between them, so their
+ * outlines reach for each other and join before the pieces themselves meet.
  */
-int LensGlass(LensMesh &mesh, const LensLook &look, float x, float y, float fromX, float fromY, float shade, float alpha)
+constexpr float LensShapeReach = 1.5F;
+constexpr float LensEdge = 0.17147F;
+/**
+ * @brief How soon the water's surface levels off inside its edge: the higher, the narrower the band along its outline
+ * where it slopes (and so bends the view and takes the light), and the flatter and clearer its middle.
+ */
+constexpr float LensDome = 2.5F;
+/**
+ * @brief How far off the water looks for the light it gathers where it is steepest, in screen heights; and how much of
+ * that it already looks off where it lies all but flat.
+ */
+constexpr float LensFarReach = 1.2F;
+constexpr float LensFarNear = 0.5F;
+
+/**
+ * @brief The grid is kept in tiles of this many squares a side. A tile whose water hasn't changed since it was last
+ * drawn keeps its mesh, so a screen of still drops costs next to nothing to draw again; only where water moves, lands or
+ * dries is anything worked out.
+ */
+constexpr int LensTileCells = 8;
+constexpr int LensTilePoints = LensTileCells + 1;
+/** @brief (The sums are needed a point further out all round, for their slopes.) */
+constexpr int LensTileSpan = LensTileCells + 3;
+
+/** @brief One piece of water as the sheet sees it this frame. */
+struct LensSeen {
+	float x;
+	float y;
+	/** @brief How far its hump reaches. */
+	float reach;
+	float reachInverse;
+	/** @brief How much it adds to the sum at its middle, and the same times its radius (which says how big the water is there). */
+	float shape;
+	float size;
+	/** @brief The same again if it is the thin film of a run's track, which takes the light differently (else 0). */
+	float film;
+	/** @brief The tiles it reaches. */
+	int16_t left;
+	int16_t right;
+	int16_t top;
+	int16_t bottom;
+	/** @brief A number that changes whenever it does (LensTile::made). */
+	uint64_t mark;
+};
+
+struct LensTile {
+	/** @brief The frame it last had water in. */
+	uint32_t frame = 0;
+	/** @brief How many pieces of water reach it this frame, and where they are in LensSheet::pieces. */
+	uint32_t count = 0;
+	uint32_t first = 0;
+	uint32_t filled = 0;
+	/** @brief The marks of the water reaching it this frame, added up; and of the water its mesh was made from. */
+	uint64_t mark = 0;
+	uint64_t made = 0;
+	int mesh = -1;
+};
+
+/**
+ * @brief The squares of one tile that have water in them, as two views of the game's picture at the same points: what
+ * lies behind the water, shifted a little (glass), and what lies far round it (light, added on top).
+ */
+struct LensTileMesh {
+	std::vector<SDL_Vertex> glass;
+	std::vector<SDL_Vertex> light;
+	std::vector<int> indices;
+};
+
+/** @brief How the water looks this frame. */
+struct LensLook {
+	/** @brief The side of a square of the grid, in the UI's pixels. */
+	float cell = 1;
+	float width = 1;
+	float height = 1;
+	/** @brief How far the view is shifted where the water's surface slopes one in one, in the UI's pixels. */
+	float bend = 0;
+	/** @brief How dark the fine outline of the water is, 0 to 1. */
+	float rim = 0;
+	/** @brief How far off the edge of water looks for its light, in the UI's pixels, and how bright that light is (1 as it is). */
+	float far = 0;
+	float gain = 0;
+	/** @brief How much the thin film of a run's track shines, 0 to 1. */
+	float film = 0;
+	/** @brief The radius from which water gathers its full light, in the UI's pixels. */
+	float full = 1;
+	/** @brief How solid the water is, 0 to 1. */
+	float seen = 1;
+	/** @brief How wide the soft edge of the water is, in the UI's pixels: of the sheet, and of a droplet by itself. */
+	float soft = 1;
+	float speckSoft = 1;
+};
+
+struct LensSheet {
+	float cell = 0;
+	int columns = 0;
+	int rows = 0;
+	uint32_t frame = 0;
+	std::vector<LensTile> tiles;
+	/** @brief The tiles with water in them this frame and the frame before. */
+	std::vector<int> touched;
+	std::vector<int> touchedBefore;
+	/** @brief Which pieces of water reach each tile, tile after tile. */
+	std::vector<uint16_t> pieces;
+	std::vector<LensTileMesh> meshes;
+	std::vector<int> spare;
+	std::vector<LensSeen> seen;
+	/**
+	 * @brief The whole sheet this frame, put together from its tiles, and after them the droplets (LensDrawSpeck). (The
+	 * tiles' points are copied here every frame, changed or not: kept in place they would lie scattered through a far
+	 * bigger list, and SDL looks every point of the list over each time it is drawn, used or not, which costs more than
+	 * the copying.)
+	 */
+	std::vector<SDL_Vertex> glass;
+	std::vector<SDL_Vertex> light;
+	std::vector<int> indices;
+};
+
+LensSheet Sheet;
+
+uint64_t LensMix(uint64_t h)
 {
-	if (!look.textured)
-		return mesh.add(x, y, { 0, 0, 0, LensByte(alpha * (1 - shade)) });
-	const uint8_t c = LensByte(shade);
-	return mesh.add(x, y, { c, c, c, LensByte(alpha) }, std::clamp(fromX / LensWidth, 0.002F, 0.998F), std::clamp(fromY / LensHeight, 0.002F, 0.998F));
+	h ^= h >> 30;
+	h *= 0xBF58476D1CE4E5B9ULL;
+	h ^= h >> 27;
+	h *= 0x94D049BB133111EBULL;
+	h ^= h >> 31;
+	return h;
+}
+
+uint32_t LensBits(float value)
+{
+	uint32_t bits;
+	std::memcpy(&bits, &value, sizeof(bits));
+	return bits;
 }
 
 /**
- * @brief One drop. It is a lens: each point of it shows the screen on the far side of its middle, the further across the
- * nearer the point is to the edge, so the town behind it stands in it upside down and small. Its rim goes dark where it
- * bends the light right away (most at the top), and the light of the sky, which a drop gathers from above, lies as a
- * faint crescent inside its foot.
+ * @brief Shows the sheet a piece of water. One lying still has its radius and its place rounded to a quarter of a
+ * square (less than a pixel), so that while it dries or creeps slowly the tiles it lies in are only worked out again
+ * now and then.
  */
-void LensDrawDrop(LensMesh &glass, LensMesh &glow, const LensLook &look, const LensDrop &drop, float unit, uint32_t now)
+void LensSee(LensSheet &sheet, float x, float y, float r, bool still, bool film = false)
 {
-	// Drying, it draws in and is gone.
-	const float alpha = std::min(drop.age / 60.F, 1.F) * (1 - LensSmoothStep(drop.life - 500, drop.life, drop.age)) * look.seen;
-	const float r = drop.r * (1 - 0.4F * LensSmoothStep(drop.life * 0.55F, drop.life, drop.age));
-	if (alpha <= 0.01F || r <= 0.15F)
-		return;
-	const bool small = r < unit * 2.F;
-	// A speck is an oval; a bead has room for an edge with three or four bumps in it.
-	const int n = small ? 6 : std::clamp(10 + 2 * static_cast<int>(r / unit * 0.5F), 10, 16);
-	const float quiver = 0.11F * std::min(drop.quiver / 200.F, 1.F) * std::sin(static_cast<float>(now % 100000) * 0.05F + drop.own * 6);
-	// Running, it is drawn out behind itself; sitting, a heavy one hangs a little into its foot.
-	const float tail = drop.running ? 0.25F + 0.75F * std::clamp(drop.vy / std::max(unit * 140, 1.F), 0.F, 1.F) : 0.F;
-	const float sag = drop.running ? 0.06F : std::clamp((drop.r / unit - 2.5F) * 0.04F, 0.F, 0.14F);
-	std::array<float, 16> rho {};
-	std::array<float, 16> cosine {};
-	std::array<float, 16> sine {};
-	for (int k = 0; k < n; k++) {
-		const float angle = 2 * Pi * static_cast<float>(k) / static_cast<float>(n) + drop.phase[2];
-		cosine[k] = std::cos(angle);
-		sine[k] = std::sin(angle);
-		float shape = 1 + (drop.wave[0] + quiver) * std::cos(2 * angle + drop.phase[0]);
-		if (!small)
-			shape += drop.wave[1] * std::cos(3 * angle + drop.phase[1]);
-		if (n >= 14)
-			shape += drop.wave[2] * std::cos(4 * angle + drop.phase[2]);
-		// (Down the screen is where the sine is 1.)
-		const float up = 0.5F - 0.5F * sine[k];
-		shape *= 1 + sag * sine[k];
-		shape *= 1 + tail * up * up * up;
-		rho[k] = r * std::max(shape, 0.35F);
+	const float cell = sheet.cell;
+	if (still) {
+		r = std::round(r * 4 / cell) * cell / 4;
+		x = std::round(x * 4 / cell) * cell / 4;
+		y = std::round(y * 4 / cell) * cell / 4;
 	}
-	const float bend = look.bend * (0.8F + 0.45F * drop.own);
-	const float rim = std::min(look.rim * (0.8F + 0.4F * drop.own), 1.F);
-	const auto point = [&](int k, float f, float shade, float a, float grow = 0) {
-		const float across = rho[k] * f * bend * (0.55F + 0.45F * f * f);
-		const float out = rho[k] * f + grow;
-		return LensGlass(glass, look, drop.x + cosine[k] * out, drop.y + sine[k] * out, drop.x - cosine[k] * across, drop.y - sine[k] * across, shade, a);
+	if (r <= 0.01F)
+		return;
+	// The grid can't show a hump narrower than its squares: a piece smaller than one is drawn a square wide and
+	// fainter, down to nothing, so the last of a drying drop fades instead of flickering.
+	const float wide = std::max(r, cell);
+	float weight = 1;
+	if (r < cell)
+		weight = LensEdge + (1 - LensEdge) * (r / cell) * (r / cell);
+	LensSeen lobe;
+	lobe.x = x;
+	lobe.y = y;
+	lobe.reach = wide * LensShapeReach;
+	lobe.reachInverse = 1 / (lobe.reach * lobe.reach);
+	lobe.shape = weight;
+	lobe.size = weight * r;
+	lobe.film = film ? weight : 0;
+	const float tile = cell * LensTileCells;
+	lobe.left = static_cast<int16_t>(std::clamp(static_cast<int>(std::ceil((x - lobe.reach - cell) / tile)) - 1, 0, sheet.columns - 1));
+	lobe.right = static_cast<int16_t>(std::clamp(static_cast<int>(std::floor((x + lobe.reach + cell) / tile)), 0, sheet.columns - 1));
+	lobe.top = static_cast<int16_t>(std::clamp(static_cast<int>(std::ceil((y - lobe.reach - cell) / tile)) - 1, 0, sheet.rows - 1));
+	lobe.bottom = static_cast<int16_t>(std::clamp(static_cast<int>(std::floor((y + lobe.reach + cell) / tile)), 0, sheet.rows - 1));
+	if (x + lobe.reach < -cell || y + lobe.reach < -cell || x - lobe.reach > cell * static_cast<float>(sheet.columns * LensTileCells + 1) || y - lobe.reach > cell * static_cast<float>(sheet.rows * LensTileCells + 1))
+		return;
+	lobe.mark = LensMix((static_cast<uint64_t>(LensBits(x)) << 32 | LensBits(y)) + LensMix(LensBits(r)));
+	sheet.seen.push_back(lobe);
+}
+
+/**
+ * @brief One point of the water as the two views of the game's picture there (LensTileMesh), from how its surface slopes
+ * (hx, hy: one in one at the edge of a drop, flat in its middle), how solid it is, how small (thin: 1 a full drop) and
+ * how much of it is the film of a run's track.
+ */
+void LensPoint(std::vector<SDL_Vertex> &glass, std::vector<SDL_Vertex> &light, const LensLook &look, float x, float y, float hx, float hy, float solid, float thin, float filmy)
+{
+	// What shows through the water is the game's picture behind it, shifted up its slope: not at all in its middle,
+	// where it lies flat, and well to the other side at its edge, as through a lens.
+	const float u = std::clamp((x + look.bend * hx) / look.width, 0.002F, 0.998F);
+	const float v = std::clamp((y + look.bend * hy) / look.height, 0.002F, 0.998F);
+	const float tilt = std::sqrt(hx * hx + hy * hy);
+	const float rise = std::min(tilt * tilt, 1.F);
+	// On top of that it gathers light from all round, as every drop on a window holds the whole view small and upside
+	// down: the same view in each, looked at further off the steeper the water. So the sky lies in the lower part of
+	// every drop and a lamp glints at the same spot in each. Its upper edge, which looks down at the dark ground, is a
+	// shade darker than what is behind it. Thin water (a droplet, the track of a run) gathers less than a full drop.
+	// (The film a run leaves is too thin and flat for any of that: it only shines a little all over, with the sky's
+	// light.)
+	const float away = std::max(rise * thin, look.film * filmy) * look.gain;
+	const float off = look.far * (LensFarNear + (1 - LensFarNear) * rise);
+	float farU = std::clamp((look.width * 0.5F + off * hx) / look.width, 0.01F, 0.99F);
+	float farV = std::clamp(((LensSkyBand + 0.5F) * look.height + off * hy) / ((1 + LensSkyBand) * look.height), 0.01F, 0.99F);
+	farU += (0.5F - farU) * filmy;
+	farV += ((LensSkyBand - 0.06F) / (1 + LensSkyBand) - farV) * filmy;
+	const float down = 0.5F + 0.5F * hy / std::max(tilt, 0.001F);
+	const uint8_t shade = LensByte(1 - look.rim * rise * rise * down * thin);
+	const uint8_t lit = LensByte(away);
+	glass.push_back({ { x, y }, { shade, shade, shade, LensByte(solid) }, { u, v } });
+	// (The light stops a little short of the water's soft outer fringe.)
+	light.push_back({ { x, y }, { lit, lit, lit, LensByte(solid * (0.3F + 0.7F * solid)) }, { farU, farV } });
+}
+
+/** @brief How steep a drop by itself is, `at` of the way from its middle to its edge (LensMakeTile works out the same from the sums). */
+float LensDomeSlope(float at)
+{
+	const float in = 1 - at * at / (LensShapeReach * LensShapeReach);
+	const float deep = LensDome * std::max(in * in * in - LensEdge, 0.F);
+	return 1.215F * 6 * in * in * at / (LensShapeReach * LensShapeReach) / (1 + deep * (1 + deep * (0.5F + deep * (1.F / 6))));
+}
+
+/** @brief A droplet with a radius under this many units is too small to bend the view to any effect: only its light is drawn. */
+constexpr float LensSpeckBends = 1.9F;
+
+/**
+ * @brief A droplet by itself, drawn as a small disc of its own, a little out of round. Droplets are most of the water on
+ * the screen and the smallest, a few squares of the grid across: there, each would cost as much to draw as a drop many
+ * times its size. (One that water lands on or beside is a drop from then on and joins the sheet.)
+ */
+void LensDrawSpeck(LensSheet &sheet, const LensLook &look, const LensWater &piece, int sides)
+{
+	// (Six corners for the smallest, eight for the rest.)
+	static const std::array<std::array<float, 16>, 2> AllCorners = [] {
+		std::array<std::array<float, 16>, 2> corners {};
+		for (int which = 0; which < 2; which++) {
+			const int count = which == 0 ? 6 : 8;
+			for (int n = 0; n < count; n++) {
+				const float angle = 2 * Pi * static_cast<float>(n) / static_cast<float>(count);
+				corners[which][2 * n] = std::cos(angle);
+				corners[which][2 * n + 1] = std::sin(angle);
+			}
+		}
+		return corners;
+	}();
+	const int Sides = sides;
+	const std::array<float, 16> &Corners = AllCorners[sides == 6 ? 0 : 1];
+	if (piece.r <= 0.01F)
+		return;
+	// Smaller than its own soft edge it is drawn that wide and fainter, down to nothing: the last of a drying droplet
+	// fades instead of flickering.
+	const float least = look.speckSoft * 0.85F;
+	const float r = std::max(piece.r, least);
+	const float solid = look.seen * (piece.r < least ? (piece.r / least) * (piece.r / least) : 1.F);
+	const float inner = std::max(r - 0.5F * look.speckSoft, r * 0.45F);
+	const float outer = r + 0.5F * look.speckSoft;
+	// Its surface at the inner ring of corners and at the outer one, which is the same all the way round (LensPoint
+	// has it point by point).
+	const float thin = std::clamp(piece.r / look.full, 0.25F, 1.F);
+	const float steep = std::min(LensDomeSlope(inner / r), 1.F);
+	const float rise = steep * steep;
+	const float bendIn = look.bend * steep / look.width;
+	const float bendOut = look.bend * 1.15F / look.width;
+	const float tall = look.width / look.height;
+	const float offIn = look.far * (LensFarNear + (1 - LensFarNear) * rise) * steep / look.width;
+	const float offOut = look.far * 1.15F / look.width;
+	const float skyV = (LensSkyBand + 0.5F) / (1 + LensSkyBand);
+	const float skyTall = look.width / ((1 + LensSkyBand) * look.height);
+	const uint8_t litIn = LensByte(rise * thin * look.gain);
+	const uint8_t litOut = LensByte(thin * look.gain);
+	const uint8_t alpha = LensByte(solid);
+	// (Each corner a little nearer or further than the last: no two droplets the same shape.)
+	uint32_t shape = (LensBits(piece.toX) ^ LensBits(piece.toY) * 0x9E3779B1U) * 0x85EBCA77U;
+	const int base = static_cast<int>(sheet.glass.size());
+	const float u = piece.x / look.width;
+	const float v = piece.y / look.height;
+	sheet.glass.push_back({ { piece.x, piece.y }, { 255, 255, 255, alpha }, { std::clamp(u, 0.002F, 0.998F), std::clamp(v, 0.002F, 0.998F) } });
+	sheet.light.push_back({ { piece.x, piece.y }, { 0, 0, 0, alpha }, { 0.5F, skyV } });
+	for (int n = 0; n < Sides; n++) {
+		const float reach = 0.86F + 0.28F * static_cast<float>(shape >> 28) / 15.F;
+		shape = shape << 4 | shape >> 28;
+		const float cx = Corners[2 * n];
+		const float cy = Corners[2 * n + 1];
+		const float xIn = piece.x + cx * inner * reach;
+		const float yIn = piece.y + cy * inner * reach;
+		const float xOut = piece.x + cx * outer * reach;
+		const float yOut = piece.y + cy * outer * reach;
+		// (The surface slopes up towards the middle, so the views are shifted that way: inwards.)
+		sheet.glass.push_back({ { xIn, yIn }, { 255, 255, 255, alpha }, { std::clamp(xIn / look.width - cx * bendIn, 0.002F, 0.998F), std::clamp(yIn / look.height - cy * bendIn * tall, 0.002F, 0.998F) } });
+		sheet.light.push_back({ { xIn, yIn }, { litIn, litIn, litIn, alpha }, { std::clamp(0.5F - cx * offIn, 0.01F, 0.99F), std::clamp(skyV - cy * offIn * skyTall, 0.01F, 0.99F) } });
+		sheet.glass.push_back({ { xOut, yOut }, { 255, 255, 255, 0 }, { std::clamp(xOut / look.width - cx * bendOut, 0.002F, 0.998F), std::clamp(yOut / look.height - cy * bendOut * tall, 0.002F, 0.998F) } });
+		sheet.light.push_back({ { xOut, yOut }, { litOut, litOut, litOut, 0 }, { std::clamp(0.5F - cx * offOut, 0.01F, 0.99F), std::clamp(skyV - cy * offOut * skyTall, 0.01F, 0.99F) } });
+	}
+	const size_t before = sheet.indices.size();
+	sheet.indices.resize(before + static_cast<size_t>(Sides) * 9);
+	int *to = sheet.indices.data() + before;
+	for (int n = 0; n < Sides; n++) {
+		const int a = base + 1 + 2 * n;
+		const int b = base + 1 + 2 * ((n + 1) % Sides);
+		for (const int corner : { base, a, b, a, a + 1, b + 1, a, b + 1, b })
+			*to++ = corner;
+	}
+}
+
+/** @brief Works out one tile: the two sums at its grid points from the water reaching it, then the squares that are wet. */
+void LensMakeTile(LensTileMesh &mesh, const LensSheet &sheet, const LensLook &look, int tileX, int tileY, const uint16_t *pieces, uint32_t count)
+{
+	static std::array<float, LensTileSpan * LensTileSpan> shape;
+	static std::array<float, LensTileSpan * LensTileSpan> size;
+	static std::array<float, LensTileSpan * LensTileSpan> film;
+	static std::array<float, LensTilePoints * LensTilePoints> alpha;
+	static std::array<int16_t, LensTilePoints * LensTilePoints> slot;
+	mesh.glass.clear();
+	mesh.light.clear();
+	mesh.indices.clear();
+	shape.fill(0);
+	size.fill(0);
+	film.fill(0);
+	const float cell = look.cell;
+	// (The sums' first point is one out from the tile's own first.)
+	const int firstX = tileX * LensTileCells - 1;
+	const int firstY = tileY * LensTileCells - 1;
+	for (uint32_t n = 0; n < count; n++) {
+		const LensSeen &lobe = sheet.seen[pieces[n]];
+		const int i0 = std::max(static_cast<int>(std::ceil((lobe.x - lobe.reach) / cell)) - firstX, 0);
+		const int i1 = std::min(static_cast<int>(std::floor((lobe.x + lobe.reach) / cell)) - firstX, LensTileSpan - 1);
+		const int j0 = std::max(static_cast<int>(std::ceil((lobe.y - lobe.reach) / cell)) - firstY, 0);
+		const int j1 = std::min(static_cast<int>(std::floor((lobe.y + lobe.reach) / cell)) - firstY, LensTileSpan - 1);
+		for (int j = j0; j <= j1; j++) {
+			const float dy = static_cast<float>(firstY + j) * cell - lobe.y;
+			float *shapeRow = shape.data() + j * LensTileSpan;
+			float *sizeRow = size.data() + j * LensTileSpan;
+			float *filmRow = film.data() + j * LensTileSpan;
+			for (int i = i0; i <= i1; i++) {
+				const float dx = static_cast<float>(firstX + i) * cell - lobe.x;
+				const float in = 1 - (dx * dx + dy * dy) * lobe.reachInverse;
+				if (in <= 0)
+					continue;
+				const float hump = in * in * in;
+				shapeRow[i] += lobe.shape * hump;
+				sizeRow[i] += lobe.size * hump;
+				filmRow[i] += lobe.film * hump;
+			}
+		}
+	}
+
+	// How solid the sheet is at each point: from none to all across its soft edge, which lies where the first sum is
+	// LensEdge (how far off that is, is the sum's distance from it over its slope).
+	const float half = 0.5F / cell;
+	const float least = LensEdge / (3 * look.soft);
+	bool wet = false;
+	for (int j = 0; j < LensTilePoints; j++) {
+		for (int i = 0; i < LensTilePoints; i++) {
+			const float *at = shape.data() + (j + 1) * LensTileSpan + i + 1;
+			float solid = 0;
+			if (at[0] > 0 || at[-1] > 0 || at[1] > 0 || at[-LensTileSpan] > 0 || at[LensTileSpan] > 0) {
+				const float gx = (at[1] - at[-1]) * half;
+				const float gy = (at[LensTileSpan] - at[-LensTileSpan]) * half;
+				const float slope = std::max(std::sqrt(gx * gx + gy * gy), least);
+				solid = std::clamp(0.5F + (at[0] - LensEdge) / (slope * look.soft), 0.F, 1.F) * look.seen;
+			}
+			alpha[j * LensTilePoints + i] = solid;
+			wet = wet || solid > 0;
+		}
+	}
+	if (!wet)
+		return;
+	slot.fill(-1);
+	const auto point = [&](int i, int j) {
+		int16_t &made = slot[j * LensTilePoints + i];
+		if (made >= 0)
+			return static_cast<int>(made);
+		const float *at = shape.data() + (j + 1) * LensTileSpan + i + 1;
+		const float x = static_cast<float>(tileX * LensTileCells + i) * cell;
+		const float y = static_cast<float>(tileY * LensTileCells + j) * cell;
+		const float solid = alpha[j * LensTilePoints + i];
+		const float gx = (at[1] - at[-1]) * half;
+		const float gy = (at[LensTileSpan] - at[-LensTileSpan]) * half;
+		// How the water's surface slopes here. It rises from the glass at the water's edge and flattens further in, the
+		// more the higher the sum: so it is a dome over a drop by itself and one smooth surface over a pool, however
+		// many pieces lie under it. Times how big the water is here (a radius), it slopes one in one at the edge of a
+		// drop of any size.
+		const float sum = std::max(at[0], 0.02F);
+		const float deep = LensDome * std::max(sum - LensEdge, 0.F);
+		const float steepness = 1.215F * size[(j + 1) * LensTileSpan + i + 1] / (sum * (1 + deep * (1 + deep * (0.5F + deep * (1.F / 6)))));
+		float hx = steepness * gx;
+		float hy = steepness * gy;
+		const float most = hx * hx + hy * hy;
+		if (most > 1.69F) {
+			hx *= 1.3F / std::sqrt(most);
+			hy *= 1.3F / std::sqrt(most);
+		}
+		const float thin = std::clamp(size[(j + 1) * LensTileSpan + i + 1] / (sum * look.full), 0.25F, 1.F);
+		const float filmy = std::clamp(film[(j + 1) * LensTileSpan + i + 1] / sum, 0.F, 1.F);
+		made = static_cast<int16_t>(mesh.glass.size());
+		LensPoint(mesh.glass, mesh.light, look, x, y, hx, hy, solid, thin, filmy);
+		return static_cast<int>(made);
 	};
-	const int centre = LensGlass(glass, look, drop.x, drop.y, drop.x, drop.y, 1, alpha);
-	// Rings of points from the middle out: a speck has its edge only, a bead two rings inside it; then the soft edge.
-	// The rim is dark over the top of the drop and round its shoulders, and not at its foot, where the light comes out.
-	std::array<int, 16> inner {};
-	std::array<int, 16> between {};
-	std::array<int, 16> edge {};
-	std::array<int, 16> soft {};
-	for (int k = 0; k < n; k++) {
-		const float top = 0.5F - 0.5F * sine[k];
-		const float dark = top * std::sqrt(top);
-		if (small) {
-			const float shade = 1 - rim * 0.6F * dark;
-			inner[k] = between[k] = edge[k] = point(k, 1, shade, alpha);
-			soft[k] = point(k, 1, shade, 0, look.feather);
-			continue;
+	for (int j = 0; j < LensTileCells; j++) {
+		for (int i = 0; i < LensTileCells; i++) {
+			const float a = alpha[j * LensTilePoints + i];
+			const float b = alpha[j * LensTilePoints + i + 1];
+			const float c = alpha[(j + 1) * LensTilePoints + i + 1];
+			const float d = alpha[(j + 1) * LensTilePoints + i];
+			if (a <= 0 && b <= 0 && c <= 0 && d <= 0)
+				continue;
+			const int pa = point(i, j);
+			const int pb = point(i + 1, j);
+			const int pc = point(i + 1, j + 1);
+			const int pd = point(i, j + 1);
+			// Each square is two triangles: cut along the diagonal whose ends are more alike, which follows the edge.
+			const bool along = std::abs(a - c) <= std::abs(b - d);
+			const std::array<int, 6> corners = along ? std::array<int, 6> { pa, pb, pc, pa, pc, pd } : std::array<int, 6> { pa, pb, pd, pb, pc, pd };
+			mesh.indices.insert(mesh.indices.end(), corners.begin(), corners.end());
 		}
-		const float shade = 1 - rim * 0.9F * dark;
-		inner[k] = point(k, 0.5F, 1, alpha);
-		between[k] = point(k, 0.8F, 1 - rim * 0.3F * dark, alpha);
-		edge[k] = point(k, 1, shade, alpha);
-		soft[k] = point(k, 1, shade, 0, look.feather);
-	}
-	for (int k = 0; k < n; k++) {
-		const int next = (k + 1) % n;
-		glass.triangle(centre, inner[k], inner[next]);
-		if (!small) {
-			glass.quad(inner[k], between[k], between[next], inner[next]);
-			glass.quad(between[k], edge[k], edge[next], between[next]);
-		}
-		glass.quad(edge[k], soft[k], soft[next], edge[next]);
-	}
-
-	// The light a drop gathers: it takes in far more of the sky than the bit of town behind it does, so it is a little
-	// brighter than what it sits on, and brightest in its foot, where the sky above comes out upside down. Brighter over
-	// a lit street than over the dark, and for a moment in a lightning flash.
-	const float amount = std::clamp(look.sky * (0.5F + 0.5F * std::min(std::max(drop.light, 0.F), 1.F)) + 0.4F * look.flash, 0.F, 0.9F) * alpha;
-	if (amount <= 0.012F)
-		return;
-	const SDL_Color lit { LensByte(look.tint[0]), LensByte(look.tint[1]), LensByte(look.tint[2]), 0 };
-	const auto light = [&](float a) { return SDL_Color { lit.r, lit.g, lit.b, LensByte(amount * a) }; };
-	const float tilt = (drop.own - 0.5F) * 0.7F;
-	const float tiltCos = std::cos(tilt);
-	const float tiltSin = std::sin(tilt);
-	if (small) {
-		// A speck: one soft point of light low in it.
-		const float cx = drop.x - tiltSin * r * 0.3F;
-		const float cy = drop.y + tiltCos * r * 0.3F;
-		const int middle = glow.add(cx, cy, light(1.F));
-		const int first = static_cast<int>(glow.vertices.size());
-		for (int k = 0; k < 5; k++) {
-			const float angle = 2 * Pi * static_cast<float>(k) / 5.F + drop.phase[1];
-			glow.add(cx + std::cos(angle) * r * 0.75F, cy + std::sin(angle) * r * 0.75F, lit);
-		}
-		for (int k = 0; k < 5; k++)
-			glow.triangle(middle, first + k, first + (k + 1) % 5);
-		return;
-	}
-	const int middle = glow.add(drop.x, drop.y, light(0.12F));
-	std::array<int, 16> low {};
-	for (int k = 0; k < n; k++) {
-		// sin(angle - tilt), from what is already worked out: 1 at the drop's foot.
-		const float foot = std::max(sine[k] * tiltCos - cosine[k] * tiltSin, 0.F);
-		const float crescent = foot * std::sqrt(foot);
-		const auto at = [&](float f, float a) {
-			return glow.add(drop.x + cosine[k] * rho[k] * f, drop.y + sine[k] * rho[k] * f, light(a));
-		};
-		low[k] = at(0.45F, 0.12F + 0.1F * crescent);
-		at(0.76F, 0.1F + 0.9F * crescent);
-		at(0.93F, 0.06F + 0.6F * crescent);
-		at(1.F, 0);
-	}
-	for (int k = 0; k < n; k++) {
-		const int next = (k + 1) % n;
-		glow.triangle(middle, low[k], low[next]);
-		for (int ring = 0; ring < 3; ring++)
-			glow.quad(low[k] + ring, low[k] + ring + 1, low[next] + ring + 1, low[next] + ring);
 	}
 }
 
-/**
- * @brief One piece of the film a running drop leaves. Thin water bends the view only a little: what lies under one side
- * of it shows on the other. It draws itself together as it goes.
- */
-void LensDrawStreak(LensMesh &glass, LensMesh &glow, const LensLook &look, const LensStreak &streak)
+/** @brief Puts the sheet together for this frame from the water shown to it (LensSee): which tiles changed are made again. */
+int LensBuild(LensSheet &sheet, const LensLook &look, uint64_t lookMark)
 {
-	const float dx = streak.x1 - streak.x0;
-	const float dy = streak.y1 - streak.y0;
-	const float length = std::sqrt(dx * dx + dy * dy);
-	if (length < 0.01F)
-		return;
-	const float t = streak.age / streak.life;
-	const float narrow = 1 - 0.75F * LensSmoothStep(0.1F, 1.F, t);
-	const float alpha = 0.75F * (1 - LensSmoothStep(0.6F, 1.F, t)) * look.seen;
-	if (alpha <= 0.01F)
-		return;
-	const float nx = -dy / length;
-	const float ny = dx / length;
-	const float across = look.bend * 0.3F;
-	const float shade = 1 - look.rim * 0.25F;
-	std::array<int, 2> first {};
-	for (int end = 0; end < 2; end++) {
-		const float px = end == 0 ? streak.x0 : streak.x1;
-		const float py = end == 0 ? streak.y0 : streak.y1;
-		const float half = (end == 0 ? streak.w0 : streak.w1) * narrow / 2;
-		const auto at = [&](float side, float grow, float dim, float a) {
-			const float out = side * (half + grow);
-			return LensGlass(glass, look, px + nx * out, py + ny * out, px - nx * side * half * across, py - ny * side * half * across, dim, a);
-		};
-		first[end] = at(-1, look.feather, shade, 0);
-		at(-1, 0, shade, alpha);
-		at(0, 0, 1, alpha);
-		at(1, 0, shade, alpha);
-		at(1, look.feather, shade, 0);
+	sheet.frame++;
+	std::swap(sheet.touched, sheet.touchedBefore);
+	sheet.touched.clear();
+	for (const LensSeen &lobe : sheet.seen) {
+		for (int ty = lobe.top; ty <= lobe.bottom; ty++) {
+			for (int tx = lobe.left; tx <= lobe.right; tx++) {
+				LensTile &tile = sheet.tiles[ty * sheet.columns + tx];
+				if (tile.frame != sheet.frame) {
+					tile.frame = sheet.frame;
+					tile.count = 0;
+					tile.mark = lookMark;
+					sheet.touched.push_back(ty * sheet.columns + tx);
+				}
+				tile.count++;
+				tile.mark += lobe.mark;
+			}
+		}
 	}
-	for (int k = 0; k < 4; k++)
-		glass.quad(first[0] + k, first[0] + k + 1, first[1] + k + 1, first[1] + k);
-	// A thread of the sky's light down its middle, as wet glass catches it.
-	const float amount = look.sky * 0.22F * alpha;
-	if (amount <= 0.012F)
-		return;
-	const SDL_Color lit { LensByte(look.tint[0]), LensByte(look.tint[1]), LensByte(look.tint[2]), LensByte(amount) };
-	const SDL_Color none { lit.r, lit.g, lit.b, 0 };
-	const float half0 = streak.w0 * narrow / 2;
-	const float half1 = streak.w1 * narrow / 2;
-	const int thread = glow.add(streak.x0 - nx * half0, streak.y0 - ny * half0, none);
-	glow.add(streak.x0, streak.y0, lit);
-	glow.add(streak.x0 + nx * half0, streak.y0 + ny * half0, none);
-	glow.add(streak.x1 - nx * half1, streak.y1 - ny * half1, none);
-	glow.add(streak.x1, streak.y1, lit);
-	glow.add(streak.x1 + nx * half1, streak.y1 + ny * half1, none);
-	glow.quad(thread, thread + 1, thread + 4, thread + 3);
-	glow.quad(thread + 1, thread + 2, thread + 5, thread + 4);
+	uint32_t total = 0;
+	for (const int index : sheet.touched) {
+		LensTile &tile = sheet.tiles[index];
+		tile.first = total;
+		tile.filled = 0;
+		total += tile.count;
+	}
+	sheet.pieces.resize(total);
+	for (size_t n = 0; n < sheet.seen.size(); n++) {
+		const LensSeen &lobe = sheet.seen[n];
+		for (int ty = lobe.top; ty <= lobe.bottom; ty++) {
+			for (int tx = lobe.left; tx <= lobe.right; tx++) {
+				LensTile &tile = sheet.tiles[ty * sheet.columns + tx];
+				sheet.pieces[tile.first + tile.filled++] = static_cast<uint16_t>(n);
+			}
+		}
+	}
+	// A tile the water has left gives its mesh back.
+	for (const int index : sheet.touchedBefore) {
+		LensTile &tile = sheet.tiles[index];
+		if (tile.frame != sheet.frame && tile.mesh >= 0) {
+			sheet.spare.push_back(tile.mesh);
+			tile.mesh = -1;
+		}
+	}
+	int made = 0;
+	sheet.glass.clear();
+	sheet.light.clear();
+	sheet.indices.clear();
+	for (const int index : sheet.touched) {
+		LensTile &tile = sheet.tiles[index];
+		if (tile.mesh < 0 || tile.made != tile.mark) {
+			if (tile.mesh < 0) {
+				if (sheet.spare.empty()) {
+					tile.mesh = static_cast<int>(sheet.meshes.size());
+					sheet.meshes.emplace_back();
+				} else {
+					tile.mesh = sheet.spare.back();
+					sheet.spare.pop_back();
+				}
+			}
+			tile.made = tile.mark;
+			LensMakeTile(sheet.meshes[tile.mesh], sheet, look, index % sheet.columns, index / sheet.columns, sheet.pieces.data() + tile.first, tile.count);
+			made++;
+		}
+		const LensTileMesh &mesh = sheet.meshes[tile.mesh];
+		if (mesh.indices.empty())
+			continue;
+		const int base = static_cast<int>(sheet.glass.size());
+		sheet.glass.insert(sheet.glass.end(), mesh.glass.begin(), mesh.glass.end());
+		sheet.light.insert(sheet.light.end(), mesh.light.begin(), mesh.light.end());
+		const size_t before = sheet.indices.size();
+		sheet.indices.resize(before + mesh.indices.size());
+		int *to = sheet.indices.data() + before;
+		const int *from = mesh.indices.data();
+		for (size_t n = mesh.indices.size(); n > 0; n--)
+			*to++ = base + *from++;
+	}
+	return made;
 }
 
 } // namespace
@@ -12222,7 +12957,7 @@ bool BeginScene(SDL_Renderer *renderer, Size logicalSize)
 {
 	Scene.open = false;
 	Scene.fresh = false;
-	if (renderer == nullptr || (LensDrops.empty() && LensStreaks.empty()) || logicalSize.width <= 0 || logicalSize.height <= 0)
+	if (renderer == nullptr || !LensWet() || logicalSize.width <= 0 || logicalSize.height <= 0)
 		return false;
 	if (SDL_GetRenderTarget(renderer) != nullptr)
 		return false;
@@ -12260,6 +12995,49 @@ void EndScene(SDL_Renderer *renderer)
 	SDL_RenderCopy(renderer, Scene.full, nullptr, nullptr);
 	SDL_SetRenderTarget(renderer, Scene.eighth);
 	SDL_RenderCopy(renderer, Scene.quarter, nullptr, nullptr);
+	// What is bright in the town: the picture times itself.
+	SDL_SetRenderTarget(renderer, Scene.lamps);
+	SDL_SetTextureBlendMode(Scene.eighth, SDL_BLENDMODE_NONE);
+	SDL_RenderCopy(renderer, Scene.eighth, nullptr, nullptr);
+	SDL_SetTextureBlendMode(Scene.eighth, SDL_BLENDMODE_MOD);
+	SDL_RenderCopy(renderer, Scene.eighth, nullptr, nullptr);
+	SDL_SetTextureBlendMode(Scene.eighth, SDL_BLENDMODE_NONE);
+	// The far view: the town's lights small, under a band of the night sky (which lightning lights).
+	{
+		const weather::State &sky = weather::Current();
+		const std::array<float, 3> tint = atmosphere::Colour("rain_colour", { 0.74F, 0.82F, 0.95F });
+		const float bright = std::clamp(atmosphere::Value("lens_sky", 0.34F) + 0.6F * sky.flash, 0.F, 1.F);
+		int farWidth = 1;
+		int farHeight = 1;
+		SDL_QueryTexture(Scene.far, nullptr, nullptr, &farWidth, &farHeight);
+		const int town = std::max(static_cast<int>(static_cast<float>(farHeight) / (1 + LensSkyBand) + 0.5F), 1);
+		const SDL_Rect below { 0, farHeight - town, farWidth, town };
+		SDL_SetTextureBlendMode(Scene.lamps, SDL_BLENDMODE_NONE);
+		SDL_SetRenderTarget(renderer, Scene.far);
+		// (The sky is lightest overhead and darkens towards the roofs.)
+		const SDL_Color high { LensByte(tint[0] * bright), LensByte(tint[1] * bright), LensByte(tint[2] * bright), 255 };
+		const float dim = bright * 0.6F;
+		const SDL_Color low { LensByte(tint[0] * dim), LensByte(tint[1] * dim), LensByte(tint[2] * dim), 255 };
+		const float right = static_cast<float>(farWidth);
+		const float horizon = static_cast<float>(farHeight - town);
+		const std::array<SDL_Vertex, 4> band { { { { 0, 0 }, high, { 0, 0 } }, { { right, 0 }, high, { 0, 0 } }, { { right, horizon }, low, { 0, 0 } }, { { 0, horizon }, low, { 0, 0 } } } };
+		const std::array<int, 6> corners { 0, 1, 2, 0, 2, 3 };
+		SDL_BlendMode before = SDL_BLENDMODE_NONE;
+		SDL_GetRenderDrawBlendMode(renderer, &before);
+		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
+		SDL_RenderGeometry(renderer, nullptr, band.data(), 4, corners.data(), 6);
+		// Below it the wet ground, which gives back a little of the sky's light, and the town's lamps on that. (They are
+		// small and far off: shrunk this much they would all but vanish, so they are laid on several times over.)
+		const float ground = bright * std::clamp(atmosphere::Value("lens_ground", 0.32F), 0.F, 1.F);
+		SDL_SetRenderDrawColor(renderer, LensByte(tint[0] * ground), LensByte(tint[1] * ground), LensByte(tint[2] * ground), 255);
+		SDL_RenderFillRect(renderer, &below);
+		const int lamps = std::clamp(static_cast<int>(atmosphere::Value("lens_lamps", 3.F)), 0, 8);
+		SDL_SetTextureBlendMode(Scene.lamps, SDL_BLENDMODE_ADD);
+		for (int i = 0; i < lamps; i++)
+			SDL_RenderCopy(renderer, Scene.lamps, nullptr, &below);
+		SDL_SetTextureBlendMode(Scene.lamps, SDL_BLENDMODE_NONE);
+		SDL_SetRenderDrawBlendMode(renderer, before);
+	}
 	// (The window takes back its own scale and size here.) The picture goes on it at exactly its own size, each of its
 	// pixels on one of the window's, so the world is no softer for having gone through it.
 	SDL_SetRenderTarget(renderer, nullptr);
@@ -12272,65 +13050,95 @@ void EndScene(SDL_Renderer *renderer)
 
 void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
+	(void)worldSize;
 	LensWidth = static_cast<float>(logicalSize.width);
 	LensHeight = static_cast<float>(logicalSize.height);
 	const bool fresh = Scene.fresh;
 	Scene.fresh = false;
-	if (renderer == nullptr || (LensDrops.empty() && LensStreaks.empty()) || worldSize.width <= 0 || logicalSize.width <= 0)
+	// (Water is a view of the game's picture: on the frame it first lands there is none yet, and it shows from the next.)
+	if (renderer == nullptr || !fresh || !LensWet() || logicalSize.width <= 0 || logicalSize.height <= 0)
 		return;
-	const weather::State &sky = weather::Current();
 	const float knob = std::min(atmosphere::Strength(atmosphere::Knob::Lens), 3.F);
 	const float alpha = std::max(atmosphere::Value("lens_alpha", 1.F), 0.F);
-	// Past 1 the drops can't get more solid, so their rim and their light get stronger.
+	// Past 1 the water can't get more solid, so its edge and its light get stronger.
 	const float strong = std::clamp(alpha, 1.F, 3.F);
-	LensLook look;
-	look.textured = fresh && Scene.eighth != nullptr;
-	look.bend = std::clamp(atmosphere::Value("lens_bend", 10.F), 0.F, 30.F);
-	look.rim = std::clamp(atmosphere::Value("lens_rim", 0.7F) * strong, 0.F, 1.F);
-	look.sky = std::clamp(atmosphere::Value("lens_sky", 0.4F) * strong, 0.F, 1.F);
-	look.seen = std::clamp(alpha * std::min(knob, 1.F), 0.F, 1.F);
-	look.flash = sky.flash;
-	look.tint = atmosphere::Colour("rain_colour", { 0.74F, 0.82F, 0.95F });
+	const float unit = LensUnit();
 	float scaleX = 1;
 	float scaleY = 1;
 	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-	look.feather = std::clamp(1.1F / std::max(scaleY, 0.1F), 0.3F, 1.2F);
-	const float unit = LensUnit();
-	// The town behind a drop: how bright it is there says how bright the sky's light in the drop may be.
-	const float toWorld = static_cast<float>(worldSize.width) / static_cast<float>(logicalSize.width) / CameraScale;
-	for (LensDrop &drop : LensDrops) {
-		if (drop.light >= 0 && !drop.running && drop.lightWait > 0) {
-			drop.lightWait--;
-			continue;
-		}
-		const float target = AirLit ? BrightnessOf(LightOf(CameraOrigin + Vec { drop.x * toWorld, drop.y * toWorld })) : 0.55F;
-		drop.light = drop.light < 0 ? target : drop.light + (target - drop.light) * (drop.running ? 0.15F : 0.5F);
-		drop.lightWait = static_cast<uint8_t>(6 + drop.own * 8);
-	}
+	LensLook look;
+	// A square of the grid is a little under a unit of water, and never finer than the window's own pixels.
+	look.cell = std::max(unit * std::clamp(atmosphere::Value("lens_cell", 1.F), 0.5F, 2.F), 1.F / std::max(scaleY, 0.1F));
+	look.width = LensWidth;
+	look.height = LensHeight;
+	look.bend = std::clamp(atmosphere::Value("lens_bend", 12.F), 0.F, 40.F) * unit;
+	look.rim = std::clamp(atmosphere::Value("lens_rim", 0.5F) * strong, 0.F, 1.F);
+	look.far = LensFarReach * LensHeight;
+	look.gain = strong;
+	look.full = unit * 3;
+	look.film = std::clamp(atmosphere::Value("lens_film", 0.3F), 0.F, 1.F);
+	look.seen = std::clamp(alpha * std::min(knob, 1.F), 0.F, 1.F);
+	look.soft = look.cell * 1.2F;
+	look.speckSoft = std::max(unit * 0.96F, 1.2F / std::max(scaleY, 0.1F));
+	// How out of focus the view through the water is: 0 sharp, 1 a little, 2 well out.
+	const float blur = atmosphere::Value("lens_blur", 1.F);
+	SDL_Texture *view = blur >= 1.5F ? Scene.eighth : (blur >= 0.5F ? Scene.quarter : Scene.full);
 
-	static LensMesh glass;
-	static LensMesh glow;
-	glass.clear();
-	glow.clear();
-	const uint32_t now = SDL_GetTicks();
-	for (const LensStreak &streak : LensStreaks)
-		LensDrawStreak(glass, glow, look, streak);
-	for (const LensDrop &drop : LensDrops)
-		LensDrawDrop(glass, glow, look, drop, unit, now);
-	if (!glass.indices.empty()) {
-		if (look.textured) {
-			SDL_SetTextureBlendMode(Scene.eighth, SDL_BLENDMODE_BLEND);
-			SDL_RenderGeometry(renderer, Scene.eighth, glass.vertices.data(), static_cast<int>(glass.vertices.size()), glass.indices.data(), static_cast<int>(glass.indices.size()));
-		} else {
-			SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-			SDL_RenderGeometry(renderer, nullptr, glass.vertices.data(), static_cast<int>(glass.vertices.size()), glass.indices.data(), static_cast<int>(glass.indices.size()));
+	LensSheet &sheet = Sheet;
+	const int columns = static_cast<int>(std::ceil(LensWidth / (look.cell * LensTileCells))) + 1;
+	const int rows = static_cast<int>(std::ceil(LensHeight / (look.cell * LensTileCells))) + 1;
+	if (sheet.cell != look.cell || sheet.columns != columns || sheet.rows != rows) {
+		sheet.cell = look.cell;
+		sheet.columns = columns;
+		sheet.rows = rows;
+		sheet.tiles.assign(static_cast<size_t>(columns) * rows, {});
+		sheet.touched.clear();
+		sheet.touchedBefore.clear();
+		sheet.spare.clear();
+		for (size_t i = 0; i < sheet.meshes.size(); i++)
+			sheet.spare.push_back(static_cast<int>(i));
+		sheet.frame = 0;
+	}
+	uint64_t lookMark = 0;
+	for (const float value : { look.cell, look.width, look.height, look.bend, look.rim, look.far, look.film, look.gain, look.full, look.seen, look.soft, look.speckSoft })
+		lookMark = LensMix(lookMark + LensBits(value));
+
+	sheet.seen.clear();
+	for (const LensWater &piece : LensWaters) {
+		if (piece.kind != LensKind::Speck)
+			LensSee(sheet, piece.x, piece.y, piece.r, piece.kind != LensKind::Ghost, piece.kind == LensKind::Thread);
+	}
+	std::array<LensLobe, 4> lobes;
+	for (const LensRun &run : LensRuns) {
+		if (!run.live)
+			continue;
+		LensRunLobes(run, unit, lobes);
+		for (const LensLobe &lobe : lobes)
+			LensSee(sheet, lobe.x, lobe.y, lobe.r, false);
+	}
+	LensBuild(sheet, look, lookMark);
+	// The droplets by themselves: the bigger ones first, then the smallest, of which only the light is drawn.
+	for (const LensWater &piece : LensWaters) {
+		if (piece.kind == LensKind::Speck && piece.r >= unit * LensSpeckBends)
+			LensDrawSpeck(sheet, look, piece, 8);
+	}
+	const int bending = static_cast<int>(sheet.indices.size());
+	for (const LensWater &piece : LensWaters) {
+		if (piece.kind == LensKind::Speck && piece.r < unit * LensSpeckBends)
+			LensDrawSpeck(sheet, look, piece, 6);
+	}
+	if (!sheet.indices.empty()) {
+		if (bending > 0) {
+			SDL_SetTextureBlendMode(view, SDL_BLENDMODE_BLEND);
+			SDL_RenderGeometry(renderer, view, sheet.glass.data(), static_cast<int>(sheet.glass.size()), sheet.indices.data(), bending);
+			SDL_SetTextureBlendMode(view, SDL_BLENDMODE_NONE);
+		}
+		if (look.gain > 0) {
+			SDL_SetTextureBlendMode(Scene.far, SDL_BLENDMODE_ADD);
+			SDL_RenderGeometry(renderer, Scene.far, sheet.light.data(), static_cast<int>(sheet.light.size()), sheet.indices.data(), static_cast<int>(sheet.indices.size()));
+			SDL_SetTextureBlendMode(Scene.far, SDL_BLENDMODE_NONE);
 		}
 	}
-	if (!glow.indices.empty()) {
-		SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
-		SDL_RenderGeometry(renderer, nullptr, glow.vertices.data(), static_cast<int>(glow.vertices.size()), glow.indices.data(), static_cast<int>(glow.indices.size()));
-	}
-	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_NONE);
 }
 #else
 bool BeginScene(SDL_Renderer *, Size)

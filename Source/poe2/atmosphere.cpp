@@ -89,7 +89,7 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "shafts", 1.F, "a shaft of lit air out of a bright doorway; 0.5 half as bright (idea 66)" },
 	{ "reflect", 1.F, "you show in Tristram's stream when you stand at its edge, and the water takes a little of the sky (idea 66)" },
 	{ "tileshapes", 1.F, "walls and floors that have a shape map are lit by their shape, so stone edges and pillars catch the light; 0 lights them flat (works with Atmosphere off)" },
-	{ "lens", 1.F, "in a Tristram storm raindrops land on the screen, dry off, and now and then run down it; 2 twice as many" },
+	{ "lens", 1.F, "in a Tristram storm rain gathers on the screen as on a window: droplets, pools where it lands close together, and now and then a run down the glass; 2 twice as much" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
