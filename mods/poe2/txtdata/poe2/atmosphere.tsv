@@ -20,10 +20,12 @@ town	lens_bend	12		How strongly the water bends the picture behind it along its 
 town	lens_rim	0.5		How dark the upper edge of the water on the screen is: 0 not at all, 1 darkest.
 town	lens_sky	0.34		How bright the night sky's light lies along the lower edges of the water on the screen (lightning lifts it for a moment): 0 none, 0.8 bright.
 town	lens_ground	0.32		How much of that light the rest of the water's outline gets, from the wet ground: it is what makes a drop a whole shape and not only a bright foot. 0 none, 1 as bright as the sky.
-town	lens_lamps	3		How strongly the town's lamps and lit windows glint in the water near them: 0 not at all, 3 normal, 8 strongest (whole numbers).
+town	lens_lamps	3		How strongly the town's lamps and lit windows glint in the water on the screen (every drop holds the same small view of them): 0 not at all, 3 normal, 8 strongest (whole numbers).
 town	lens_film	0.3		How much the thin track behind a running drop shines before it breaks into beads: 0 not at all, 1 as bright as a drop's edge.
 town	lens_blur	1		How out of focus the picture seen through the water is: 0 sharp, 1 a little, 2 well out.
 town	lens_cell	1		How fine the grid is that the water is worked out on: 1 normal, 0.7 finer outlines for more work each frame, 1.5 coarser and cheaper.
+town	lens_storm_low	0.35		Rain on the screen follows the storm (Curtis 2026-11-21): how much of it there is in the lightest drizzle, as a share of the lens switch. 0.35 normal; 1 as much as the switch says.
+town	lens_storm_high	2		And in the heaviest downpour: 2 twice what the switch says, 3 the most there can be. Between the two it rises with the storm, slowly at first.
 town	wet_shine	1		How bright the lamps and lit windows shine back off wet ground (ideas 23 and 14): 0 none, 1 strong. The ground gets wet as it rains and dries in a few minutes after.
 town	roof_drips	1.2		How many drops a second fall from the roof edge over each lamp or lit window while the ground is wet.
 town	town_fog	30		How many patches of low mist lie by the stream and between the graves at once (idea 18); half as many again when the ground is wet. 0 none.

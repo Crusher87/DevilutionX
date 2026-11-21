@@ -4602,6 +4602,21 @@ float LensClock = 0;
 /** @brief The UI's size when the water was last drawn: it lands on what the screen shows. */
 float LensWidth = 0;
 float LensHeight = 0;
+/**
+ * @brief How much the storm puts on the screen, as a share of what the `lens` switch asks for: little in a drizzle, up
+ * to lens_storm_high times as much in a downpour (Curtis 2026-11-21). It follows the storm's strength over a few
+ * seconds, and holds while the rain is over, so the water left behind dries looking as it did.
+ */
+float LensStorm = 1;
+
+/** @brief What LensStorm heads for in rain of this strength (0 to 1). */
+float LensStormFor(float strength)
+{
+	const float low = std::clamp(atmosphere::Value("lens_storm_low", 0.35F), 0.F, 3.F);
+	const float high = std::clamp(atmosphere::Value("lens_storm_high", 2.F), low, 3.F);
+	const float s = std::clamp(strength, 0.F, 1.F);
+	return low + (high - low) * s * std::sqrt(s);
+}
 
 bool LensSits(LensKind kind)
 {
@@ -5195,18 +5210,25 @@ void LensStep(float ms, float unit, float drying, float wind)
 void AdvanceLens(float ms)
 {
 	const weather::State &w = weather::Current();
-	const float knob = std::min(atmosphere::Strength(atmosphere::Knob::Lens), 3.F);
-	if (knob <= 0 || LensWidth <= 0 || LensHeight <= 0) {
+	const float setting = std::min(atmosphere::Strength(atmosphere::Knob::Lens), 3.F);
+	if (setting <= 0 || LensWidth <= 0 || LensHeight <= 0) {
 		LensClear();
 		return;
 	}
 	const float unit = LensUnit();
-	const float runs = std::max(atmosphere::Value("lens_runs", 1.F), 0.F);
+	// (More than twenty times the usual is a slip in the table, and would only keep the game busy.)
+	const float runs = std::clamp(atmosphere::Value("lens_runs", 1.F), 0.F, 20.F);
 	const bool raining = w.kind == weather::Kind::Rain && w.strength > 0 && weather::Outdoors();
 	ms = std::min(ms, 120.F);
 	if (raining) {
+		// (On a dry screen the first rain sets it at once.)
+		const float toward = LensStormFor(w.strength);
+		LensStorm = LensWet() ? LensStorm + (toward - LensStorm) * std::min(ms / 3000.F, 1.F) : toward;
+	}
+	const float knob = std::min(setting * LensStorm, 3.F);
+	if (raining) {
 		const float s = w.strength;
-		const float many = knob * std::max(atmosphere::Value("lens_drops", 1.F), 0.F);
+		const float many = knob * std::clamp(atmosphere::Value("lens_drops", 1.F), 0.F, 20.F);
 		const float pools = std::clamp(atmosphere::Value("lens_pools", 0.45F), 0.F, 1.F);
 		float x;
 		float y;
@@ -11361,8 +11383,8 @@ struct SceneTargets {
 	SDL_Texture *lamps = nullptr;
 	/**
 	 * @brief The town from far off: its lights at a thirty-second of the size, under a band of the night sky half as
-	 * high again (LensSkyBand). Water gathers its light from this: every piece of it shows, small and upside down, what
-	 * lies far round it, so a lamp glints in the drops near it and the sky lies along their lower edges.
+	 * high again (LensSkyBand). Water gathers its light from this: every piece of it shows, small and upside down, the
+	 * same view of what lies far round, so the sky lies along the lower edge of every drop and the lamps glint in each.
 	 */
 	SDL_Texture *far = nullptr;
 	int width = 0;
@@ -12964,9 +12986,16 @@ bool BeginScene(SDL_Renderer *renderer, Size logicalSize)
 	float scaleX = 1;
 	float scaleY = 1;
 	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-	const int width = static_cast<int>(std::floor(static_cast<float>(logicalSize.width) * scaleX));
-	const int height = static_cast<int>(std::floor(static_cast<float>(logicalSize.height) * scaleY));
-	if (!Scene.ensure(renderer, width, height) || SDL_SetRenderTarget(renderer, Scene.full) != 0)
+	// The picture has to be exactly as big as the part of the window the game is drawn to: a pixel short, and a dark line
+	// shows along an edge of the screen while it rains. That size is SDL's to say, and can't be had from the UI's size and
+	// the scale: SDL fits the UI into the window by one of its sides, and that side's length times the scale can come out a
+	// hair under the window's, which rounded down is a pixel short. (SDL gives the size in the UI's pixels: asked with the
+	// scale at 1, in the window's own.)
+	SDL_Rect view { 0, 0, 0, 0 };
+	SDL_RenderSetScale(renderer, 1, 1);
+	SDL_RenderGetViewport(renderer, &view);
+	SDL_RenderSetScale(renderer, scaleX, scaleY);
+	if (!Scene.ensure(renderer, view.w, view.h) || SDL_SetRenderTarget(renderer, Scene.full) != 0)
 		return false;
 	// The picture is drawn at the window's own scale, so it is the window's pixels one for one.
 	SDL_RenderSetScale(renderer, scaleX, scaleY);
@@ -13039,12 +13068,15 @@ void EndScene(SDL_Renderer *renderer)
 		SDL_SetRenderDrawBlendMode(renderer, before);
 	}
 	// (The window takes back its own scale and size here.) The picture goes on it at exactly its own size, each of its
-	// pixels on one of the window's, so the world is no softer for having gone through it.
+	// pixels on one of the window's, so the world is no softer for having gone through it. It is laid down at a scale of
+	// 1: its size turned into the UI's pixels and back by the window's scale needn't come out whole.
 	SDL_SetRenderTarget(renderer, nullptr);
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 	SDL_RenderClear(renderer);
-	const SDL_FRect whole { 0, 0, static_cast<float>(Scene.width) / Scene.scaleX, static_cast<float>(Scene.height) / Scene.scaleY };
-	SDL_RenderCopyF(renderer, Scene.full, nullptr, &whole);
+	const SDL_Rect whole { 0, 0, Scene.width, Scene.height };
+	SDL_RenderSetScale(renderer, 1, 1);
+	SDL_RenderCopy(renderer, Scene.full, nullptr, &whole);
+	SDL_RenderSetScale(renderer, Scene.scaleX, Scene.scaleY);
 	Scene.fresh = true;
 }
 
@@ -13058,7 +13090,7 @@ void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	// (Water is a view of the game's picture: on the frame it first lands there is none yet, and it shows from the next.)
 	if (renderer == nullptr || !fresh || !LensWet() || logicalSize.width <= 0 || logicalSize.height <= 0)
 		return;
-	const float knob = std::min(atmosphere::Strength(atmosphere::Knob::Lens), 3.F);
+	const float knob = std::min(atmosphere::Strength(atmosphere::Knob::Lens) * LensStorm, 3.F);
 	const float alpha = std::max(atmosphere::Value("lens_alpha", 1.F), 0.F);
 	// Past 1 the water can't get more solid, so its edge and its light get stronger.
 	const float strong = std::clamp(alpha, 1.F, 3.F);
