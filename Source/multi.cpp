@@ -968,7 +968,7 @@ void recv_plrinfo(Player &player, const TCmdPlrInfoHdr &header, bool recv)
 		return;
 	}
 
-	player._pgfxnum &= ~0xFU;
+	UseDeathLook(player);
 	player._pmode = PM_DEATH;
 	NewPlrAnim(player, player_graphic::Death, player._pdir);
 	player.AnimInfo.currentFrame = player.AnimInfo.numberOfFrames - 2;
