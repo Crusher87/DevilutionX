@@ -237,9 +237,9 @@ TEST_F(Poe2WeatherTest, RainLandsOnTheScreenAndDriesOff)
 	for (int i = 0; i < 400; i++) {
 		vfx::Advance(40);
 		most = std::max(most, vfx::LensDropCount());
-		ASSERT_LE(vfx::LensDropCount(), 260U) << "more drops on the screen than it holds";
+		ASSERT_LE(vfx::LensDropCount(), 523U) << "more water on the screen than it holds";
 	}
-	EXPECT_GT(most, 10U) << "a downpour put hardly any drops on the screen";
+	EXPECT_GT(most, 100U) << "a downpour put hardly any water on the screen";
 	// In the dungeon the screen dries off within seconds.
 	leveltype = DTYPE_CATHEDRAL;
 	for (int i = 0; i < 100; i++)

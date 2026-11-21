@@ -10,14 +10,20 @@ town	rain_splash	1		How many drops throw up a splash where they land: 1 normal, 
 town	rain_colour	0.74 0.82 0.95		The rain's own colour, red green blue, before the light on it colours it.
 town	rain_veil	0.05		How much a downpour lifts the far dark towards grey, the air being full of water: 0 none, 0.1 a clear haze.
 town	rain_veil_colour	0.30 0.35 0.43		That haze's colour, red green blue.
-town	lens_drops	1		Raindrops on the screen in a storm (Curtis 2026-11-20): how many land. 1 normal, 2 twice as many, 0 none.
-town	lens_alpha	1		How easy the drops on the screen are to see: 1 normal, 0.5 half see-through; above 1 their rims and their light get stronger.
+town	lens_drops	1		Rain on the screen in a storm (Curtis 2026-11-20; since 11-21 one sheet of water, not drops each by itself): how much lands. 1 normal, 2 twice as much, 0 none.
+town	lens_alpha	1		How easy the water on the screen is to see: 1 normal, 0.5 half see-through; above 1 its edges and its light get stronger.
 town	lens_size	1		How big the drops on the screen are: 1 normal, 1.5 half as big again.
-town	lens_runs	1		How readily a drop grown heavy runs down the screen, leaving a film that breaks into beads: 1 normal, 0 never, 2 twice as readily.
-town	lens_middle	0.15		How many drops land in the middle of the screen, where the hero is, against the edges: 0 none, 1 as many as at the edges.
-town	lens_bend	10		How wide a view each drop on the screen takes in. A drop is a small lens: the town round it shows in it upside down and small. 10 = an area ten times its own width; 0 flat (only its rim and its light show).
-town	lens_rim	0.7		How dark the top of the rim of a drop on the screen is: 0 none, 1 darkest.
-town	lens_sky	0.4		How bright the sky's light lies in the foot of a drop on the screen: 0 none, 0.8 bright.
+town	lens_runs	1		How readily a pool grown heavy lets go and runs down the screen: 1 normal, 0 never, 2 twice as readily.
+town	lens_pools	0.45		How many of the bigger drops land on or right beside water already on the screen, which is what builds pools: 0 none (they land anywhere), 1 all of them.
+town	lens_middle	0.15		How much lands in the middle of the screen, where the hero is, against the edges: 0 none, 1 as much as at the edges.
+town	lens_bend	12		How strongly the water bends the picture behind it along its edges (its middle lies flat and clear): 0 not at all, 12 normal, 20 strongly.
+town	lens_rim	0.5		How dark the upper edge of the water on the screen is: 0 not at all, 1 darkest.
+town	lens_sky	0.34		How bright the night sky's light lies along the lower edges of the water on the screen (lightning lifts it for a moment): 0 none, 0.8 bright.
+town	lens_ground	0.32		How much of that light the rest of the water's outline gets, from the wet ground: it is what makes a drop a whole shape and not only a bright foot. 0 none, 1 as bright as the sky.
+town	lens_lamps	3		How strongly the town's lamps and lit windows glint in the water near them: 0 not at all, 3 normal, 8 strongest (whole numbers).
+town	lens_film	0.3		How much the thin track behind a running drop shines before it breaks into beads: 0 not at all, 1 as bright as a drop's edge.
+town	lens_blur	1		How out of focus the picture seen through the water is: 0 sharp, 1 a little, 2 well out.
+town	lens_cell	1		How fine the grid is that the water is worked out on: 1 normal, 0.7 finer outlines for more work each frame, 1.5 coarser and cheaper.
 town	wet_shine	1		How bright the lamps and lit windows shine back off wet ground (ideas 23 and 14): 0 none, 1 strong. The ground gets wet as it rains and dries in a few minutes after.
 town	roof_drips	1.2		How many drops a second fall from the roof edge over each lamp or lit window while the ground is wet.
 town	town_fog	30		How many patches of low mist lie by the stream and between the graves at once (idea 18); half as many again when the ground is wet. 0 none.
