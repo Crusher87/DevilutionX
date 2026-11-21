@@ -5201,12 +5201,13 @@ void AdvanceLens(float ms)
 		return;
 	}
 	const float unit = LensUnit();
-	const float runs = std::max(atmosphere::Value("lens_runs", 1.F), 0.F);
+	// (More than twenty times the usual is a slip in the table, and would only keep the game busy.)
+	const float runs = std::clamp(atmosphere::Value("lens_runs", 1.F), 0.F, 20.F);
 	const bool raining = w.kind == weather::Kind::Rain && w.strength > 0 && weather::Outdoors();
 	ms = std::min(ms, 120.F);
 	if (raining) {
 		const float s = w.strength;
-		const float many = knob * std::max(atmosphere::Value("lens_drops", 1.F), 0.F);
+		const float many = knob * std::clamp(atmosphere::Value("lens_drops", 1.F), 0.F, 20.F);
 		const float pools = std::clamp(atmosphere::Value("lens_pools", 0.45F), 0.F, 1.F);
 		float x;
 		float y;
@@ -12964,9 +12965,16 @@ bool BeginScene(SDL_Renderer *renderer, Size logicalSize)
 	float scaleX = 1;
 	float scaleY = 1;
 	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
-	const int width = static_cast<int>(std::floor(static_cast<float>(logicalSize.width) * scaleX));
-	const int height = static_cast<int>(std::floor(static_cast<float>(logicalSize.height) * scaleY));
-	if (!Scene.ensure(renderer, width, height) || SDL_SetRenderTarget(renderer, Scene.full) != 0)
+	// The picture has to be exactly as big as the part of the window the game is drawn to: a pixel short, and a dark line
+	// shows along an edge of the screen while it rains. That size is SDL's to say, and can't be had from the UI's size and
+	// the scale: SDL fits the UI into the window by one of its sides, and that side's length times the scale can come out a
+	// hair under the window's, which rounded down is a pixel short. (SDL gives the size in the UI's pixels: asked with the
+	// scale at 1, in the window's own.)
+	SDL_Rect view { 0, 0, 0, 0 };
+	SDL_RenderSetScale(renderer, 1, 1);
+	SDL_RenderGetViewport(renderer, &view);
+	SDL_RenderSetScale(renderer, scaleX, scaleY);
+	if (!Scene.ensure(renderer, view.w, view.h) || SDL_SetRenderTarget(renderer, Scene.full) != 0)
 		return false;
 	// The picture is drawn at the window's own scale, so it is the window's pixels one for one.
 	SDL_RenderSetScale(renderer, scaleX, scaleY);
@@ -13039,12 +13047,15 @@ void EndScene(SDL_Renderer *renderer)
 		SDL_SetRenderDrawBlendMode(renderer, before);
 	}
 	// (The window takes back its own scale and size here.) The picture goes on it at exactly its own size, each of its
-	// pixels on one of the window's, so the world is no softer for having gone through it.
+	// pixels on one of the window's, so the world is no softer for having gone through it. It is laid down at a scale of
+	// 1: its size turned into the UI's pixels and back by the window's scale needn't come out whole.
 	SDL_SetRenderTarget(renderer, nullptr);
 	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 	SDL_RenderClear(renderer);
-	const SDL_FRect whole { 0, 0, static_cast<float>(Scene.width) / Scene.scaleX, static_cast<float>(Scene.height) / Scene.scaleY };
-	SDL_RenderCopyF(renderer, Scene.full, nullptr, &whole);
+	const SDL_Rect whole { 0, 0, Scene.width, Scene.height };
+	SDL_RenderSetScale(renderer, 1, 1);
+	SDL_RenderCopy(renderer, Scene.full, nullptr, &whole);
+	SDL_RenderSetScale(renderer, Scene.scaleX, Scene.scaleY);
 	Scene.fresh = true;
 }
 
