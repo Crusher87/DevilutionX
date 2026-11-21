@@ -11361,8 +11361,8 @@ struct SceneTargets {
 	SDL_Texture *lamps = nullptr;
 	/**
 	 * @brief The town from far off: its lights at a thirty-second of the size, under a band of the night sky half as
-	 * high again (LensSkyBand). Water gathers its light from this: every piece of it shows, small and upside down, what
-	 * lies far round it, so a lamp glints in the drops near it and the sky lies along their lower edges.
+	 * high again (LensSkyBand). Water gathers its light from this: every piece of it shows, small and upside down, the
+	 * same view of what lies far round, so the sky lies along the lower edge of every drop and the lamps glint in each.
 	 */
 	SDL_Texture *far = nullptr;
 	int width = 0;
