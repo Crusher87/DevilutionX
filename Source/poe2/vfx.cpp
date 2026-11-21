@@ -4602,6 +4602,21 @@ float LensClock = 0;
 /** @brief The UI's size when the water was last drawn: it lands on what the screen shows. */
 float LensWidth = 0;
 float LensHeight = 0;
+/**
+ * @brief How much the storm puts on the screen, as a share of what the `lens` switch asks for: little in a drizzle, up
+ * to lens_storm_high times as much in a downpour (Curtis 2026-11-21). It follows the storm's strength over a few
+ * seconds, and holds while the rain is over, so the water left behind dries looking as it did.
+ */
+float LensStorm = 1;
+
+/** @brief What LensStorm heads for in rain of this strength (0 to 1). */
+float LensStormFor(float strength)
+{
+	const float low = std::clamp(atmosphere::Value("lens_storm_low", 0.35F), 0.F, 3.F);
+	const float high = std::clamp(atmosphere::Value("lens_storm_high", 2.F), low, 3.F);
+	const float s = std::clamp(strength, 0.F, 1.F);
+	return low + (high - low) * s * std::sqrt(s);
+}
 
 bool LensSits(LensKind kind)
 {
@@ -5195,8 +5210,8 @@ void LensStep(float ms, float unit, float drying, float wind)
 void AdvanceLens(float ms)
 {
 	const weather::State &w = weather::Current();
-	const float knob = std::min(atmosphere::Strength(atmosphere::Knob::Lens), 3.F);
-	if (knob <= 0 || LensWidth <= 0 || LensHeight <= 0) {
+	const float setting = std::min(atmosphere::Strength(atmosphere::Knob::Lens), 3.F);
+	if (setting <= 0 || LensWidth <= 0 || LensHeight <= 0) {
 		LensClear();
 		return;
 	}
@@ -5205,6 +5220,12 @@ void AdvanceLens(float ms)
 	const float runs = std::clamp(atmosphere::Value("lens_runs", 1.F), 0.F, 20.F);
 	const bool raining = w.kind == weather::Kind::Rain && w.strength > 0 && weather::Outdoors();
 	ms = std::min(ms, 120.F);
+	if (raining) {
+		// (On a dry screen the first rain sets it at once.)
+		const float toward = LensStormFor(w.strength);
+		LensStorm = LensWet() ? LensStorm + (toward - LensStorm) * std::min(ms / 3000.F, 1.F) : toward;
+	}
+	const float knob = std::min(setting * LensStorm, 3.F);
 	if (raining) {
 		const float s = w.strength;
 		const float many = knob * std::clamp(atmosphere::Value("lens_drops", 1.F), 0.F, 20.F);
@@ -13069,7 +13090,7 @@ void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	// (Water is a view of the game's picture: on the frame it first lands there is none yet, and it shows from the next.)
 	if (renderer == nullptr || !fresh || !LensWet() || logicalSize.width <= 0 || logicalSize.height <= 0)
 		return;
-	const float knob = std::min(atmosphere::Strength(atmosphere::Knob::Lens), 3.F);
+	const float knob = std::min(atmosphere::Strength(atmosphere::Knob::Lens) * LensStorm, 3.F);
 	const float alpha = std::max(atmosphere::Value("lens_alpha", 1.F), 0.F);
 	// Past 1 the water can't get more solid, so its edge and its light get stronger.
 	const float strong = std::clamp(alpha, 1.F, 3.F);

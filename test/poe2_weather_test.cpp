@@ -253,6 +253,37 @@ TEST_F(Poe2WeatherTest, RainLandsOnTheScreenAndDriesOff)
 	graphics.weather.SetValue(rain);
 }
 
+TEST_F(Poe2WeatherTest, AHarderStormPutsMoreWaterOnTheScreen)
+{
+	GraphicsOptions &graphics = GetOptions().Graphics;
+	const bool hd = *graphics.hdGraphics;
+	const bool lit = *graphics.hdLighting;
+	const bool rain = *graphics.weather;
+	graphics.hdGraphics.SetValue(true);
+	graphics.hdLighting.SetValue(true);
+	graphics.weather.SetValue(true);
+	vfx::RenderLens(nullptr, { 640, 480 }, { 1280, 720 });
+	// How much lies on the screen, on average, over half a minute of rain this strong.
+	const auto waterIn = [](float strength) {
+		vfx::Clear();
+		weather::Force(weather::Kind::Rain, strength);
+		size_t total = 0;
+		for (int i = 0; i < 750; i++) {
+			vfx::Advance(40);
+			total += vfx::LensDropCount();
+		}
+		return total / 750;
+	};
+	const size_t drizzle = waterIn(0.15F);
+	const size_t shower = waterIn(0.5F);
+	const size_t downpour = waterIn(1);
+	EXPECT_LT(drizzle * 2, shower) << "a drizzle puts nearly as much on the screen as a shower";
+	EXPECT_LT(shower, downpour) << "a downpour puts no more on the screen than a shower";
+	graphics.hdGraphics.SetValue(hd);
+	graphics.hdLighting.SetValue(lit);
+	graphics.weather.SetValue(rain);
+}
+
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 /** @brief What a window that is only a picture in memory shows now, without its alpha. */
 std::vector<uint32_t> Shown(SDL_Renderer *renderer, const SDL_Surface *window)
