@@ -39,6 +39,13 @@ TEST(HdSpellIcons, EachTintHasItsPlate)
 	EXPECT_EQ(hd::SpellIconPlateName(SpellType::Charges), "spellicons/plate_charges");
 	EXPECT_EQ(hd::SpellIconPlateName(SpellType::Invalid), "spellicons/plate_invalid");
 	EXPECT_TRUE(hd::SpellIconPlateName(static_cast<SpellType>(200)).empty());
+	// Small icons have their own plates, and fall back to the large ones.
+	EXPECT_EQ(hd::SpellIconPlateName(SpellType::Spell, false), "spellicons/small/plate_spell");
+	EXPECT_EQ(hd::SpellIconPlateFallback("spellicons/small/plate_spell"), "spellicons/plate_spell");
+	EXPECT_EQ(hd::SpellIconPlateFallback("spellicons/small/plate_charges"), "spellicons/plate_charges");
+	EXPECT_TRUE(hd::SpellIconPlateFallback("spellicons/plate_spell").empty());
+	EXPECT_TRUE(hd::SpellIconPlateFallback("spellicons/small/07").empty());
+	EXPECT_TRUE(hd::SpellIconPlateFallback("spellicons/small/plate_none").empty());
 }
 
 TEST(HdSpellIcons, AFrameHasItsTwoDigitLayer)
@@ -60,7 +67,7 @@ TEST(HdSpellIcons, TheBlankIconIsThePlateAlone)
 	EXPECT_TRUE(hd::SpellIconLayerName(hd::SpellIconEmptyFrame, true).empty());
 	EXPECT_TRUE(hd::SpellIconLayerName(hd::SpellIconEmptyFrame, false).empty());
 	EXPECT_EQ(hd::SpellIconArtName(hd::SpellIconEmptyFrame, true, SpellType::Spell), "spellicons/plate_spell");
-	EXPECT_EQ(hd::SpellIconArtName(hd::SpellIconEmptyFrame, false, SpellType::Invalid), "spellicons/plate_invalid");
+	EXPECT_EQ(hd::SpellIconArtName(hd::SpellIconEmptyFrame, false, SpellType::Invalid), "spellicons/small/plate_invalid");
 }
 
 TEST(HdSpellIcons, LabelFramesKeepTheGamesOwnDrawing)
@@ -76,7 +83,7 @@ TEST(HdSpellIcons, LabelFramesKeepTheGamesOwnDrawing)
 
 TEST(HdSpellIcons, AnIconsArtIsItsPlateAndItsLayer)
 {
-	EXPECT_EQ(hd::SpellIconArtName(11, false, SpellType::Spell), "spellicons/plate_spell+spellicons/small/11");
+	EXPECT_EQ(hd::SpellIconArtName(11, false, SpellType::Spell), "spellicons/small/plate_spell+spellicons/small/11");
 	EXPECT_EQ(hd::SpellIconArtName(11, true, SpellType::Skill), "spellicons/plate_skill+spellicons/big/11");
 	EXPECT_EQ(hd::SpellIconArtName(11, true, SpellType::Charges), "spellicons/plate_charges+spellicons/big/11");
 	// Colours with no plate: no HD art.

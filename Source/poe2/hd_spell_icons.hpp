@@ -26,8 +26,15 @@ constexpr bool SpellIconHasHdArt(uint8_t frame)
 	return frame <= SpellIconLastFrame;
 }
 
-/** @brief The plate's HD art name for the colours SetSpellTrans sets (spellicons/plate_spell); empty for a type it has none for. */
-std::string_view SpellIconPlateName(SpellType tint);
+/**
+ * @brief The plate's HD art name for the colours SetSpellTrans sets; empty for a type it has none for. Large icons have
+ * the plate with the wide frame (spellicons/plate_spell), small ones their own with a thin frame like the game's small
+ * icons (spellicons/small/plate_spell).
+ */
+std::string_view SpellIconPlateName(SpellType tint, bool large = true);
+
+/** @brief The plate to use when a small icon's own plate is missing from the HD art: the large one. Empty for any other name. */
+std::string_view SpellIconPlateFallback(std::string_view plate);
 
 /**
  * @brief The HD art name of an icon frame's symbol layer (spellicons/big/07, spellicons/small/07); empty for the blank
