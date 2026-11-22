@@ -150,6 +150,48 @@ TEST(Poe2OverheadBarsTest, HeroBarIsDrawnInFullColourOverTheWorld)
 	EXPECT_EQ(bright.color, out[Point(1, 2)]) << "the palette's nearest still drawn under it";
 }
 
+TEST(Poe2OverheadBarsTest, EveryTintWrittenMarksItsRow)
+{
+	// The frame's code clears and reads only the rows marked here, so a tint on an unmarked row would be lost or left
+	// behind: every row holding a tint has to be marked, whichever way the tint was written.
+	constexpr int Width = 6;
+	constexpr int Height = 8;
+	OwnedSurface out(Width, Height);
+	Fill(out, 0);
+	std::vector<UiCover> cells(static_cast<size_t>(Width) * Height);
+	std::vector<UiTint> tints(cells.size());
+	std::vector<uint8_t> rows(Height, 0);
+	SetUiCoverTarget(out.surface, cells.data(), tints.data(), rows.data());
+	TintUiPixel(out, { 2, 1 }, 7, 128);
+	DrawUiTrueColourPixel(out, { 3, 4 }, 9, 10, 200, 30);
+	// Through a part of the surface: the row is the whole surface's.
+	const Surface lower = out.subregionY(6, 2);
+	TintUiPixel(lower, { 0, 1 }, 5, 40);
+	// Nothing is written for these: no opacity, and outside the surface.
+	TintUiPixel(out, { 1, 2 }, 7, 0);
+	TintUiPixel(out, { Width, 3 }, 7, 255);
+	DrawUiTrueColourPixel(out, { -1, 5 }, 9, 1, 2, 3);
+	CoverUi(out, { { 0, 0 }, { Width, 1 } });
+	SetUiCoverTarget(nullptr, nullptr);
+
+	for (int y = 0; y < Height; y++) {
+		bool any = false;
+		for (int x = 0; x < Width; x++)
+			any = any || tints[static_cast<size_t>(y) * Width + x].alpha != 0;
+		EXPECT_EQ(rows[static_cast<size_t>(y)] != 0, any) << "row " << y;
+	}
+	EXPECT_NE(rows[1], 0);
+	EXPECT_NE(rows[4], 0);
+	EXPECT_NE(rows[7], 0);
+	EXPECT_EQ(tints[static_cast<size_t>(7) * Width].alpha, 40);
+
+	// With the target taken away nothing is marked (or written) any more.
+	std::fill(rows.begin(), rows.end(), uint8_t { 0 });
+	TintUiPixel(out, { 2, 2 }, 7, 128);
+	EXPECT_EQ(rows[2], 0);
+	EXPECT_EQ(tints[static_cast<size_t>(2) * Width + 2].alpha, 0);
+}
+
 void MakeMonster(Monster &monster, uint32_t seed)
 {
 	LevelMonsterTypes[0].type = MT_NZOMBIE;

@@ -129,9 +129,10 @@ void SpreadPlague(const HeraldTrigger &trigger)
 		state.poisonSource = static_cast<int8_t>(MyPlayerId);
 		monster.tag(player);
 		AddVisualEffect(monster.position.tile, MissileGraphicID::Acid);
-		if (GenerateRnd(100) < hinderChance)
+		if (GenerateRnd(100) < hinderChance) {
 			state.hinderTicks = std::max<uint8_t>(state.hinderTicks, HeraldOfPlagueHinderTicks);
 			state.hinderPercent = 0;
+		}
 		spread++;
 	}
 	if (spread > 0)

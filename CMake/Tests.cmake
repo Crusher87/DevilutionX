@@ -32,6 +32,7 @@ set(tests
   pack_test
   poe2_admin_tools_test
   poe2_area_levels_test
+  poe2_atmosphere_test
   poe2_attributes_test
   poe2_bare_fists_test
   poe2_breakables_test
@@ -192,6 +193,7 @@ set(benchmarks
   light_render_benchmark
   palette_blending_benchmark
   path_benchmark
+  poe2_hd_light_benchmark
 )
 
 include(test/Fixtures.cmake)
@@ -292,6 +294,7 @@ target_link_dependencies(parse_int_test PRIVATE libdevilutionx_parse_int)
 target_link_dependencies(path_test PRIVATE libdevilutionx_pathfinding libdevilutionx_direction app_fatal_for_testing)
 target_link_dependencies(vision_test PRIVATE libdevilutionx_vision)
 target_link_dependencies(path_benchmark PRIVATE libdevilutionx_pathfinding app_fatal_for_testing)
+target_link_dependencies(poe2_hd_light_benchmark PRIVATE libdevilutionx_so)
 target_link_dependencies(random_test PRIVATE libdevilutionx_random)
 target_link_dependencies(static_vector_test PRIVATE libdevilutionx_random app_fatal_for_testing)
 target_link_dependencies(str_cat_test PRIVATE libdevilutionx_strings)

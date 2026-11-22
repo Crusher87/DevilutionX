@@ -79,6 +79,12 @@ std::vector<uint8_t> UiBase;
 std::vector<UiCover> UiCovered;
 /** POE2 Mashup: UI pixels laid over the world with real alpha, such as the Tab map's floor (Curtis 2026-10-29). */
 std::vector<UiTint> UiTinted;
+/**
+ * One byte per row of UiTinted, set when a tint is written on the row (SetUiCoverTarget): a row whose byte is clear
+ * holds no tints, so it needn't be cleared again or looked through. UiTinted is six bytes a pixel, and clearing and
+ * reading all of it every frame cost more than the rest of the UI layer's bookkeeping together.
+ */
+std::vector<uint8_t> UiTintedRows;
 /** For each full-size column and row, the UI column and row it shows. */
 std::vector<uint16_t> UiColumnOf;
 std::vector<uint16_t> UiRowOf;
@@ -147,7 +153,7 @@ bool UpdateUiOverlay()
 	const SDL_Color *colors = Palette->colors;
 	const auto *ui = static_cast<const uint8_t *>(PalSurface->pixels);
 	const bool covers = UiCovered.size() == UiBase.size();
-	const bool tints = UiTinted.size() == UiBase.size();
+	const bool tints = UiTinted.size() == UiBase.size() && UiTintedRows.size() == static_cast<size_t>(gnScreenHeight);
 	// POE2 Mashup: a panel's pixels with its HD art under them (hd::RenderUiPanels) are left out.
 	const uint8_t *hidden = hd::UiHiddenPixels(gnScreenWidth, gnScreenHeight);
 	// The rows that changed go up in runs; a few unchanged rows between two changed ones go up with them.
@@ -193,7 +199,7 @@ bool UpdateUiOverlay()
 			}
 		}
 		bool tinted = false;
-		if (tintLine != nullptr && std::memcmp(tintLine, UiOverlayZeros.data(), static_cast<size_t>(gnScreenWidth) * sizeof(UiTint)) != 0) {
+		if (tintLine != nullptr && UiTintedRows[y] != 0 && std::memcmp(tintLine, UiOverlayZeros.data(), static_cast<size_t>(gnScreenWidth) * sizeof(UiTint)) != 0) {
 			int from = 0;
 			while (from < gnScreenWidth && tintLine[from].alpha == 0)
 				from++;
@@ -361,6 +367,7 @@ void CreateWorldSurface()
 	UiBase.clear();
 	UiCovered.clear();
 	UiTinted.clear();
+	UiTintedRows.clear();
 	HaveScaledWorld = false;
 	if (!IsUiScaled())
 		return;
@@ -374,6 +381,7 @@ void CreateWorldSurface()
 	UiBase.assign(static_cast<size_t>(gnScreenWidth) * gnScreenHeight, 0);
 	UiCovered.assign(UiBase.size(), UiCover::None);
 	UiTinted.assign(UiBase.size(), UiTint {});
+	UiTintedRows.assign(gnScreenHeight, 0);
 	UiColumnOf.resize(gnRenderWidth);
 	for (int x = 0; x < gnRenderWidth; x++)
 		UiColumnOf[x] = static_cast<uint16_t>(std::min(x * gnScreenWidth / gnRenderWidth, gnScreenWidth - 1));
@@ -399,7 +407,8 @@ void ComposeScaledFrame()
 			continue;
 		}
 		const uint8_t *baseLine = UiBase.data() + static_cast<size_t>(uiRow) * gnScreenWidth;
-		const UiTint *tintLine = UiTinted.size() == UiBase.size() ? UiTinted.data() + static_cast<size_t>(uiRow) * gnScreenWidth : nullptr;
+		const bool tintsKept = UiTinted.size() == UiBase.size() && UiTintedRows.size() == static_cast<size_t>(gnScreenHeight) && UiTintedRows[uiRow] != 0;
+		const UiTint *tintLine = tintsKept ? UiTinted.data() + static_cast<size_t>(uiRow) * gnScreenWidth : nullptr;
 		const bool tinted = tintLine != nullptr && std::any_of(tintLine, tintLine + gnScreenWidth, [](UiTint tint) { return tint.alpha != 0; });
 		if (!tinted && std::memcmp(uiLine, baseLine, gnScreenWidth) == 0)
 			continue;
@@ -528,10 +537,21 @@ void PrepareScaledUi()
 	HaveScaledWorld = true;
 	// The UI drawn from here on notes where it covers the world.
 	std::fill(UiCovered.begin(), UiCovered.end(), UiCover::None);
-	std::fill(UiTinted.begin(), UiTinted.end(), UiTint {});
 	const bool fits = PalSurface->w == gnScreenWidth && PalSurface->h == gnScreenHeight && UiCovered.size() == UiBase.size();
-	const bool tintFits = fits && UiTinted.size() == UiBase.size();
-	SetUiCoverTarget(PalSurface, fits ? UiCovered.data() : nullptr, tintFits ? UiTinted.data() : nullptr);
+	const bool tintFits = fits && UiTinted.size() == UiBase.size() && UiTintedRows.size() == static_cast<size_t>(gnScreenHeight);
+	if (UiTinted.size() == UiBase.size() && UiTintedRows.size() == static_cast<size_t>(gnScreenHeight)) {
+		// Only the rows a tint was written on since they were last cleared hold any.
+		for (int y = 0; y < gnScreenHeight; y++) {
+			if (UiTintedRows[y] == 0)
+				continue;
+			std::fill_n(UiTinted.begin() + static_cast<ptrdiff_t>(y) * gnScreenWidth, gnScreenWidth, UiTint {});
+			UiTintedRows[y] = 0;
+		}
+	} else {
+		std::fill(UiTinted.begin(), UiTinted.end(), UiTint {});
+		std::fill(UiTintedRows.begin(), UiTintedRows.end(), uint8_t { 0 });
+	}
+	SetUiCoverTarget(PalSurface, fits ? UiCovered.data() : nullptr, tintFits ? UiTinted.data() : nullptr, tintFits ? UiTintedRows.data() : nullptr);
 }
 
 void ClearScaledWorld()

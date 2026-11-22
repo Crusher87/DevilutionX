@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 
 #include "engine/assets.hpp"
+#include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "items.h"
 #include "levels/gendung.h"
@@ -332,6 +333,43 @@ TEST_F(Poe2SpiritBuffsTest, HeraldOfPlagueSpreadsTheDeadMonstersPoison)
 	EXPECT_EQ(next.poe2.poisonTicks, 60);
 	EXPECT_EQ(next.poe2.poisonDamagePerTick, 128);
 	EXPECT_EQ(away.poe2.poisonTicks, 0);
+}
+
+TEST_F(Poe2SpiritBuffsTest, HeraldOfPlagueKeepsAStrongerHinderUnlessItHindersItself)
+{
+	Player &player = *MyPlayer;
+	Monster dead = MakeMonster(1);
+	dead.position.tile = { 43, 40 };
+	dead.maxHitPoints = Fixed26_6::fromInt(100);
+	dead.poe2.poisonTicks = 60;
+	dead.poe2.poisonDamagePerTick = 128;
+	Monster &next = PlaceMonster(0, { 44, 40 });
+	Socket(PersistentSkill::HeraldOfPlague);
+	int hindered = 0;
+	int spared = 0;
+	for (uint32_t seed = 1; seed <= 200; seed++) {
+		// Slowed more than the herald slows (by Thornvine Arrow's vine, say), with a little of it left.
+		next.poe2.poisonTicks = 0;
+		next.poe2.poisonDamagePerTick = 0;
+		next.poe2.hinderTicks = 10;
+		next.poe2.hinderPercent = 60;
+		SetRndSeed(seed);
+		QueueHeraldTriggers(player, dead);
+		ProcessHeralds();
+		ASSERT_EQ(next.poe2.poisonTicks, 60) << "the poison spreads either way";
+		if (next.poe2.hinderTicks == HeraldOfPlagueHinderTicks) {
+			// The herald's own hinder took over, at its own strength.
+			EXPECT_EQ(next.poe2.hinderPercent, 0);
+			hindered++;
+		} else {
+			// It didn't hinder: the hinder already on the monster is as it was (it used to lose its strength).
+			EXPECT_EQ(next.poe2.hinderTicks, 10);
+			EXPECT_EQ(next.poe2.hinderPercent, 60);
+			spared++;
+		}
+	}
+	EXPECT_GT(hindered, 0);
+	EXPECT_GT(spared, hindered) << "it hinders one time in ten at gem level 1";
 }
 
 TEST_F(Poe2SpiritBuffsTest, BlinkReplacesTheDodgeRoll)

@@ -52,11 +52,6 @@ bool HidesItsMods(const Item &item)
 	return !item._iIdentified && item._iMagical != ITEM_QUALITY_NORMAL;
 }
 
-bool CanTakeCurrency(const Item &item)
-{
-	return IsCraftableKind(item) && item._iMagical != ITEM_QUALITY_UNIQUE;
-}
-
 bool HasPower(const Item &item, item_effect_type power)
 {
 	if (power == IPL_INVALID)

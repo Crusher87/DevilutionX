@@ -280,6 +280,9 @@ bool IsAreaOk(Rectangle rect)
 
 bool CanPlaceWallTrap(Point pos)
 {
+	// The search for a wall walks off the map on a floor with no wall on that side.
+	if (!InDungeonBounds(pos))
+		return false;
 	if (dObject[pos.x][pos.y] != 0)
 		return false;
 	if (TileContainsSetPiece(pos))

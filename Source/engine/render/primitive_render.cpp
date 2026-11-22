@@ -17,6 +17,7 @@ namespace {
 SDL_Surface *UiCoverSurface = nullptr;
 UiCover *UiCoverCells = nullptr;
 UiTint *UiTintCells = nullptr;
+uint8_t *UiTintRows = nullptr;
 
 void DrawHalfTransparentUnalignedBlendedRectTo(const Surface &out, unsigned sx, unsigned sy, unsigned width, unsigned height, uint8_t color)
 {
@@ -258,11 +259,12 @@ void UnsafeDrawBorder2px(const Surface &out, Rectangle rect, uint8_t color)
 	CoverUi(out, { rect.position + Displacement { w - 2, 2 }, { 2, h - 4 } });
 }
 
-void SetUiCoverTarget(SDL_Surface *surface, UiCover *cells, UiTint *tints)
+void SetUiCoverTarget(SDL_Surface *surface, UiCover *cells, UiTint *tints, uint8_t *tintRows)
 {
 	UiCoverSurface = cells != nullptr ? surface : nullptr;
 	UiCoverCells = cells;
 	UiTintCells = cells != nullptr ? tints : nullptr;
+	UiTintRows = UiTintCells != nullptr ? tintRows : nullptr;
 }
 
 bool CanTintUi(const Surface &out)
@@ -283,6 +285,8 @@ void TintUiPixel(const Surface &out, Point position, uint8_t color, uint8_t alph
 			if (tint.alpha != 0 && tint.color == pixel)
 				alpha = static_cast<uint8_t>(255 - ((255 - tint.alpha) * (255 - alpha) / 255));
 			tint = { color, alpha };
+			if (UiTintRows != nullptr)
+				UiTintRows[y] = 1;
 		}
 	}
 	pixel = color;
@@ -295,8 +299,11 @@ void DrawUiTrueColourPixel(const Surface &out, Point position, uint8_t color, ui
 	if (CanTintUi(out)) {
 		const int x = position.x + out.region.x;
 		const int y = position.y + out.region.y;
-		if (x >= 0 && y >= 0 && x < UiCoverSurface->w && y < UiCoverSurface->h)
+		if (x >= 0 && y >= 0 && x < UiCoverSurface->w && y < UiCoverSurface->h) {
 			UiTintCells[(static_cast<ptrdiff_t>(y) * UiCoverSurface->w) + x] = { color, 255, r, g, b, true };
+			if (UiTintRows != nullptr)
+				UiTintRows[y] = 1;
+		}
 	}
 	*out.at(position.x, position.y) = color;
 }
