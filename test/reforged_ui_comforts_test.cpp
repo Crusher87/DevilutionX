@@ -213,5 +213,108 @@ TEST_F(ReforgedBannerTest, APacksMinionIsBlue)
 	EXPECT_EQ(ReforgedMonsterBannerText(minion).nameColor, UiFlags::ColorBlue);
 }
 
+// --- 2. The newer item tooltip and Shift to compare -------------------------------------------------------------
+
+TEST_F(ReforgedUiComfortsTest, TooltipsOfDiablosItemsHaveDiablosLinesOnly)
+{
+	Item sword = MakeItem(IDI_WARRIOR);
+	const std::string swordText = Tooltip(sword);
+	EXPECT_NE(swordText.find(StrCat("damage: ", sword._iMinDam, "-", sword._iMaxDam, "  Dur: ")), std::string::npos) << swordText;
+	ExpectNoPoe2Lines(swordText);
+
+	const Item shield = MakeItem(IDI_WARRSHLD);
+	const std::string shieldText = Tooltip(shield);
+	EXPECT_NE(shieldText.find(StrCat("armor: ", shield._iAC)), std::string::npos) << shieldText;
+	ExpectNoPoe2Lines(shieldText);
+
+	// A magic sword shows Diablo's affix text, without tiers even with Alt held.
+	Item magic = MakeItem(IDI_WARRIOR);
+	magic._iMagical = ITEM_QUALITY_MAGIC;
+	magic._iPrePower = IPL_TOHIT;
+	magic._iPLToHit = 10;
+	magic._iPreTier = 3;
+	SDL_SetModState(KMOD_ALT);
+	const std::string magicText = Tooltip(magic);
+	EXPECT_NE(magicText.find(std::string(PrintItemPower(IPL_TOHIT, magic).str())), std::string::npos) << magicText;
+	ExpectNoPoe2Lines(magicText);
+	SDL_SetModState(KMOD_NONE);
+
+	// An unidentified one hides it, as in Diablo.
+	magic._iIdentified = false;
+	const std::string hiddenText = Tooltip(magic);
+	EXPECT_NE(hiddenText.find("Not Identified"), std::string::npos) << hiddenText;
+	EXPECT_EQ(hiddenText.find(std::string(PrintItemPower(IPL_TOHIT, magic).str())), std::string::npos) << hiddenText;
+
+	const Item potion = MakeItem(IDI_HEAL);
+	ExpectNoPoe2Lines(Tooltip(potion));
+}
+
+TEST_F(ReforgedUiComfortsTest, AUniquesPowersAreInItsTooltipInDiablosWords)
+{
+	ASSERT_FALSE(UniqueItems.empty());
+	Item unique = MakeItem(IDI_CLEAVER);
+	unique._iMagical = ITEM_QUALITY_UNIQUE;
+	unique._iUid = 0;
+	ShowUniqueItemInfoBox = false;
+	const std::string text = Tooltip(unique);
+	int powers = 0;
+	for (const auto &power : UniqueItems[0].powers) {
+		if (power.type == IPL_INVALID)
+			break;
+		powers++;
+		EXPECT_NE(text.find(std::string(PrintItemPower(power.type, unique).str())), std::string::npos) << text;
+	}
+	EXPECT_GT(powers, 0);
+	EXPECT_EQ(text.find("unique item"), std::string::npos) << text;
+	// The powers are in the tooltip, so Diablo's separate unique window stays shut.
+	EXPECT_FALSE(ShowUniqueItemInfoBox);
+	ExpectNoPoe2Lines(text);
+}
+
+TEST_F(ReforgedUiComfortsTest, ShiftComparesWithTheWornItemOfTheSameSlotInDiablosNumbers)
+{
+	Player &player = *MyPlayer;
+	Item worn = MakeItem(IDI_WARRIOR);
+	worn._iMinDam = 2;
+	worn._iMaxDam = 6;
+	player.InvBody[INVLOC_HAND_LEFT] = worn;
+	player.InvBody[INVLOC_HAND_RIGHT] = MakeItem(IDI_WARRSHLD);
+	Item better = MakeItem(IDI_WARRCLUB);
+	better._iMinDam = 5;
+	better._iMaxDam = 8;
+
+	// Without Shift, nothing is compared.
+	Tooltip(better);
+	PrintItemComparison(better);
+	EXPECT_TRUE(CompareTooltips.empty());
+
+	SDL_SetModState(KMOD_SHIFT);
+	std::string text = Tooltip(better);
+	PrintItemComparison(better);
+	text = std::string(FloatingInfoString.str());
+	ASSERT_EQ(CompareTooltips.size(), 1U);
+	// The weapon in hand, not the shield.
+	EXPECT_EQ(std::string(CompareTooltips[0].text.str()).rfind(worn.getName(), 0), 0U) << CompareTooltips[0].text.str();
+	EXPECT_NE(text.find("+3 to minimum Damage"), std::string::npos) << text;
+	EXPECT_NE(text.find("+2 to maximum Damage"), std::string::npos) << text;
+	ExpectNoPoe2Lines(text);
+
+	// A shield is compared with the shield.
+	Item shield = MakeItem(IDI_WARRSHLD);
+	shield._iAC = player.InvBody[INVLOC_HAND_RIGHT]._iAC + 4;
+	Tooltip(shield);
+	PrintItemComparison(shield);
+	text = std::string(FloatingInfoString.str());
+	ASSERT_EQ(CompareTooltips.size(), 1U);
+	EXPECT_NE(text.find("+4 Armor Class"), std::string::npos) << text;
+	EXPECT_EQ(text.find("Damage"), std::string::npos) << text;
+
+	// Without the mod, plain Diablo has no comparison.
+	gbIsReforged = false;
+	Tooltip(shield);
+	PrintItemComparison(shield);
+	EXPECT_TRUE(CompareTooltips.empty());
+}
+
 } // namespace
 } // namespace devilution
