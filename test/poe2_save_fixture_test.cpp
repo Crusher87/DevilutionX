@@ -667,7 +667,7 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 	// of today.
 	EXPECT_EQ(WithoutCraftingNames(WithoutCraftBytes(loaded)), WithoutCraftingNames(WithoutCraftBytes(expected)));
 	EXPECT_NE(WithoutCraftingNames(WithoutCraftBytes(loaded)), WithoutCraftingNames(WithoutCraftBytes(saved)));
-	EXPECT_NE(loaded.find("\"Lesser Ort Rune\""), std::string::npos);
+	EXPECT_NE(loaded.find("\"Ort Rune\""), std::string::npos);
 	EXPECT_EQ(loaded.find("\"Storm Rune\""), std::string::npos);
 	EXPECT_NE(loaded.find("\"Greater Essence of Enhancement\""), std::string::npos);
 	// And today's ids.
@@ -680,7 +680,7 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 		EXPECT_EQ(PackCraftState(item._iPoe2Craft)[0], 0xC6) << item._iIName;
 	};
 	expectSockets(player.InvBody[INVLOC_CHEST], { AugmentId::LesserShael, AugmentId::LordOfThePit });
-	expectSockets(player.InvBody[INVLOC_HAND_LEFT], { AugmentId::LesserRal, AugmentId::RelicOfRakkis });
+	expectSockets(player.InvBody[INVLOC_HAND_LEFT], { AugmentId::Ral, AugmentId::RelicOfRakkis });
 	std::vector<AugmentId> augments;
 	std::vector<uint8_t> essences;
 	bool sawHelmet = false;
@@ -696,7 +696,7 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 		}
 	}
 	EXPECT_TRUE(sawHelmet);
-	EXPECT_NE(std::find(augments.begin(), augments.end(), AugmentId::LesserOhm), augments.end());
+	EXPECT_NE(std::find(augments.begin(), augments.end(), AugmentId::Ohm), augments.end());
 	EXPECT_NE(std::find(augments.begin(), augments.end(), AugmentId::RelicOfAkarat), augments.end());
 	EXPECT_NE(std::find(essences.begin(), essences.end(), EssenceVariant(EssenceKind::Body, EssenceTier::Lesser)), essences.end());
 	EXPECT_NE(std::find(essences.begin(), essences.end(), EssenceVariant(EssenceKind::Command, EssenceTier::Perfect)), essences.end());
@@ -726,11 +726,11 @@ TEST_F(Poe2SaveFixtureTest, OldCraftingIdsConvertOnLoad)
 			EXPECT_EQ(StashTabItems(0).size(), 1u) << "The vest stays on its blank tab";
 		}
 	}
-	EXPECT_EQ(GetAugmentId(Stash.stashList[1]), AugmentId::LesserOrt);
+	EXPECT_EQ(GetAugmentId(Stash.stashList[1]), AugmentId::Ort);
 	EXPECT_EQ(GetEssenceKind(Stash.stashList[2]), EssenceKind::Enhancement);
 	ASSERT_EQ(ActiveItemCount, 2);
-	EXPECT_EQ(GetAugmentId(Items[ActiveItems[0]]), AugmentId::LesserThul);
-	expectSockets(Items[ActiveItems[1]], { AugmentId::LesserOhm });
+	EXPECT_EQ(GetAugmentId(Items[ActiveItems[0]]), AugmentId::Thul);
+	expectSockets(Items[ActiveItems[1]], { AugmentId::Ohm });
 
 	// Saved in the wide layout, it loads the same again.
 	SaveAgain();
@@ -945,7 +945,7 @@ TEST_F(Poe2SaveFixtureTest, SoulstonesSavedBeforeTheirNumbersMoveOnLoad)
 			item._iPoe2Craft.augments[i] = static_cast<uint8_t>(CurrentAugmentId(static_cast<AugmentId>(item._iPoe2Craft.augments[i])));
 		return item;
 	};
-	player.InvBody[INVLOC_CHEST] = asStepFive(Make("Full Plate", 102, ITEM_QUALITY_RARE, 70), { AugmentId::LesserRal, AugmentId::HeartCore });
+	player.InvBody[INVLOC_CHEST] = asStepFive(Make("Full Plate", 102, ITEM_QUALITY_RARE, 70), { AugmentId::Ral, AugmentId::HeartCore });
 	player.InvBody[INVLOC_HEAD] = asStepFive(Make("Iron Cap", 101, ITEM_QUALITY_RARE, 60), { AugmentId::KeenCore });
 	player.InvBody[INVLOC_HAND_LEFT] = asStepFive(Make("Gelid Staff", 201, ITEM_QUALITY_RARE, 80), { AugmentId::HunterTalisman });
 	ASSERT_TRUE(AutoPlaceItemInInventory(player, asStepFive(Make("Iron Cap", 103, ITEM_QUALITY_RARE, 60), { AugmentId::MindCore })));
@@ -1035,13 +1035,13 @@ TEST_F(Poe2SaveFixtureTest, RunesInAWhiteOldBaseSurviveASave)
 
 	constexpr size_t Leech = static_cast<size_t>(Poe2ItemStat::LifeLeech);
 	// A white Short Sword as a drop makes it, worn, and another in the bag.
-	const Item worn = Socketed(Make("Short Sword", 202, ITEM_QUALITY_NORMAL, 10), { AugmentId::LesserAmn });
-	const Item bagged = Socketed(Make("Short Sword", 203, ITEM_QUALITY_NORMAL, 10), { AugmentId::LesserAmn });
+	const Item worn = Socketed(Make("Short Sword", 202, ITEM_QUALITY_NORMAL, 10), { AugmentId::Amn });
+	const Item bagged = Socketed(Make("Short Sword", 203, ITEM_QUALITY_NORMAL, 10), { AugmentId::Amn });
 	for (const Item *item : { &worn, &bagged }) {
 		ASSERT_EQ(item->_iMagical, ITEM_QUALITY_NORMAL);
 		ASSERT_EQ(ItemBaseMeta(*item), nullptr);
 		ASSERT_EQ(item->_iPoe2Craft.sockets, 1);
-		ASSERT_EQ(item->_iPoe2Stats[Leech], 2);
+		ASSERT_EQ(item->_iPoe2Stats[Leech], 3);
 	}
 	player.InvBody[INVLOC_HAND_LEFT] = worn;
 	player.InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
@@ -1064,7 +1064,7 @@ TEST_F(Poe2SaveFixtureTest, RunesInAWhiteOldBaseSurviveASave)
 
 	Load();
 	EXPECT_EQ(Snapshot(), saved);
-	EXPECT_EQ(MyPlayer->InvBody[INVLOC_HAND_LEFT]._iPoe2Stats[Leech], 2);
+	EXPECT_EQ(MyPlayer->InvBody[INVLOC_HAND_LEFT]._iPoe2Stats[Leech], 3);
 	MyPlayer->InvBody[INVLOC_HAND_LEFT]._iStatFlag = true;
 	CalcPlrItemVals(*MyPlayer, false);
 	EXPECT_EQ(MyPlayer->poe2.itemStats[Leech], heroLeech);
@@ -1074,7 +1074,7 @@ TEST_F(Poe2SaveFixtureTest, RunesInAWhiteOldBaseSurviveASave)
 		if (item.IDidx != bagged.IDidx)
 			continue;
 		found = true;
-		EXPECT_EQ(item._iPoe2Stats[Leech], 2);
+		EXPECT_EQ(item._iPoe2Stats[Leech], 3);
 	}
 	EXPECT_TRUE(found);
 }
@@ -1100,9 +1100,9 @@ TEST_F(Poe2SaveFixtureTest, StartingGearKeepsItsRunesThroughASave)
 	Item &sword = player.InvBody[INVLOC_HAND_LEFT];
 	ASSERT_FALSE(sword.isEmpty());
 	ASSERT_EQ(sword._iCreateInfo, 0);
-	sword = Socketed(sword, { AugmentId::LesserAmn });
+	sword = Socketed(sword, { AugmentId::Amn });
 	ASSERT_EQ(sword._iPoe2Craft.sockets, 1);
-	ASSERT_EQ(sword._iPoe2Stats[Leech], 2);
+	ASSERT_EQ(sword._iPoe2Stats[Leech], 3);
 	Stash = {};
 	StashTabs.reset();
 	Stash.dirty = true;
@@ -1119,7 +1119,7 @@ TEST_F(Poe2SaveFixtureTest, StartingGearKeepsItsRunesThroughASave)
 	const Item &loaded = MyPlayer->InvBody[INVLOC_HAND_LEFT];
 	EXPECT_EQ(loaded._iCreateInfo, 0);
 	EXPECT_EQ(loaded._iPoe2Craft.sockets, 1);
-	EXPECT_EQ(loaded._iPoe2Stats[Leech], 2);
+	EXPECT_EQ(loaded._iPoe2Stats[Leech], 3);
 }
 
 } // namespace

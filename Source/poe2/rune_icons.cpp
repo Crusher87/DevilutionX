@@ -77,6 +77,8 @@ Glow GlowFor(AugmentId id)
 	if (!rune)
 		return { 0, 0, 0, 0 };
 	switch (rune->strength) {
+	case RuneStrength::Lesser:
+		// The one-strength Shael and Venom runes, which sit in the old Lesser column, glow as the other base runes do.
 	case RuneStrength::Normal:
 		return { 1, PAL16_BLUE + 3, 0, 0 };
 	case RuneStrength::Greater:
@@ -84,7 +86,6 @@ Glow GlowFor(AugmentId id)
 	case RuneStrength::Perfect:
 		return { 2, PAL16_RED + 3, PAL16_ORANGE + 8, PAL16_ORANGE + 2 };
 	default:
-		// Lesser runes are plain stone.
 		return { 0, 0, 0, 0 };
 	}
 }

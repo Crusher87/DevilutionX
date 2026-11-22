@@ -1296,9 +1296,9 @@ TEST_F(Poe2StashTabsTest, RunesAndEssencesHaveTheirOwnTabs)
 	EXPECT_EQ(StashTabs.affinityTabFor(MakeRune(AugmentId::GreaterOrt)), runes);
 	EXPECT_EQ(StashTabs.affinityTabFor(MakeEssence(EssenceKind::Flames, EssenceTier::Perfect)), essences);
 	EXPECT_EQ(StashTabs.affinityTabFor(MakeOrb()), currency);
-	EXPECT_FALSE(StashTabs.accepts(currency, MakeRune(AugmentId::LesserRal)));
+	EXPECT_FALSE(StashTabs.accepts(currency, MakeRune(AugmentId::Ral)));
 	EXPECT_FALSE(StashTabs.accepts(runes, MakeOrb()));
-	EXPECT_FALSE(StashTabs.accepts(essences, MakeRune(AugmentId::LesserRal)));
+	EXPECT_FALSE(StashTabs.accepts(essences, MakeRune(AugmentId::Ral)));
 
 	Stash.SetPage(runes);
 	ASSERT_TRUE(AutoPlaceItemInStash(MakeRune(AugmentId::GreaterOrt, 30), true));
@@ -1328,7 +1328,7 @@ TEST_F(Poe2StashTabsTest, OldCurrencyTabRunesAndEssencesMoveToTheirTabs)
 {
 	// What a stash saved before version 4 holds: augments in Currency slots 40-49, essences in 70-119.
 	const unsigned currency = PageOf(StashTabKind::Currency);
-	PutInSlotAsSaved(currency, 42, MakeRune(AugmentId::LesserOrt, 4000));
+	PutInSlotAsSaved(currency, 42, MakeRune(AugmentId::Ort, 4000));
 	PutInSlotAsSaved(currency, 49, MakeRune(AugmentId::RelicOfAkarat, 2));
 	PutInSlotAsSaved(currency, 70, MakeEssence(EssenceKind::Body, EssenceTier::Lesser, 7));
 	PutInSlotAsSaved(currency, 117, MakeEssence(EssenceKind::Command, EssenceTier::Greater, 3));
@@ -1341,7 +1341,7 @@ TEST_F(Poe2StashTabsTest, OldCurrencyTabRunesAndEssencesMoveToTheirTabs)
 		const StashStruct::StashCell index = StashTabSlotItem(page, slotOf(item).value());
 		return index == StashStruct::EmptyCell ? 0 : StoredStackCount(Stash.stashList[index]);
 	};
-	EXPECT_EQ(countIn(runes, MakeRune(AugmentId::LesserOrt), RuneTabSlot), 4000) << "A big stack moves whole";
+	EXPECT_EQ(countIn(runes, MakeRune(AugmentId::Ort), RuneTabSlot), 4000) << "A big stack moves whole";
 	EXPECT_EQ(countIn(runes, MakeRune(AugmentId::RelicOfAkarat), RuneTabSlot), 2);
 	EXPECT_EQ(countIn(essences, MakeEssence(EssenceKind::Body, EssenceTier::Lesser), EssenceTabSlot), 7);
 	EXPECT_EQ(countIn(essences, MakeEssence(EssenceKind::Command, EssenceTier::Greater), EssenceTabSlot), 3);
@@ -1357,7 +1357,7 @@ TEST_F(Poe2StashTabsTest, OldCurrencyTabRunesKeepFewCellsWithoutARunesTab)
 	const unsigned runesPage = PageOf(StashTabKind::Runes);
 	StashTabs.tabs.erase(StashTabs.tabs.begin() + runesPage);
 	const unsigned currency = PageOf(StashTabKind::Currency);
-	PutInSlotAsSaved(currency, 42, MakeRune(AugmentId::LesserOrt, 85));
+	PutInSlotAsSaved(currency, 42, MakeRune(AugmentId::Ort, 85));
 	RepairStashTabs();
 	EXPECT_TRUE(StashTabItems(currency).empty());
 	int total = 0;
@@ -1465,7 +1465,7 @@ TEST_F(Poe2StashSaveTest, AVersionThreeStashMovesItsRunesAndEssencesToTheirTabs)
 	StashTabs.tabs.resize(DefaultBlankStashTabs + 4);
 	const unsigned currency = PageOf(StashTabKind::Currency);
 	const unsigned gems = PageOf(StashTabKind::Gems);
-	PutInSlotAsSaved(currency, 40, MakeRune(AugmentId::LesserRal, 120));
+	PutInSlotAsSaved(currency, 40, MakeRune(AugmentId::Ral, 120));
 	PutInSlotAsSaved(currency, 45, MakeRune(AugmentId::LordOfThePit, 3));
 	PutInSlotAsSaved(currency, 70 + 5, MakeEssence(EssenceKind::Mind, EssenceTier::Normal, 11));
 	PutInSlotAsSaved(currency, 70 + 47, MakeEssence(EssenceKind::Command, EssenceTier::Perfect, 1));
@@ -1492,7 +1492,7 @@ TEST_F(Poe2StashSaveTest, AVersionThreeStashMovesItsRunesAndEssencesToTheirTabs)
 		const StashStruct::StashCell index = StashTabSlotItem(page, slot.value());
 		return index == StashStruct::EmptyCell ? 0 : StoredStackCount(Stash.stashList[index]);
 	};
-	EXPECT_EQ(stored(runes, RuneTabSlot(MakeRune(AugmentId::LesserRal))), 120);
+	EXPECT_EQ(stored(runes, RuneTabSlot(MakeRune(AugmentId::Ral))), 120);
 	EXPECT_EQ(stored(runes, RuneTabSlot(MakeRune(AugmentId::LordOfThePit))), 3);
 	EXPECT_EQ(stored(essences, EssenceTabSlot(MakeEssence(EssenceKind::Mind, EssenceTier::Normal))), 11);
 	EXPECT_EQ(stored(essences, EssenceTabSlot(MakeEssence(EssenceKind::Command, EssenceTier::Perfect))), 1);
