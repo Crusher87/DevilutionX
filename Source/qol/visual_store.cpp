@@ -989,7 +989,8 @@ void PrintWareInfo(int itemIndex)
 		PrintItemDur(item);
 	}
 
-	if (gbIsPoe2) {
+	// POE2 Mashup and Sanctuary Reforged: Shift compares the ware with what the hero wears, and the price is a note.
+	if (HasEnhancements()) {
 		PrintItemComparison(item);
 		CurrentInfoLineStyle = InfoLineStyle::Note;
 		AddInfoBoxString(StrCat(FormatInteger(price), " Gold"), true);
