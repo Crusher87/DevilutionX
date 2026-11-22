@@ -77,6 +77,7 @@ void DiscoverMods()
 	if (HaveHellfire()) {
 		modNames.insert("hf");
 		modNames.insert("poe2");
+		modNames.insert("reforged");
 	}
 
 	// Check if the mods directory exists.
@@ -1659,6 +1660,13 @@ const PadmapperOptions::Action *PadmapperOptions::findAction(ControllerButton bu
 	return nullptr;
 }
 
+void DropReforgedBesidePoe2(std::vector<std::string_view> &mods)
+{
+	if (std::find(mods.begin(), mods.end(), std::string_view("poe2")) == mods.end())
+		return;
+	mods.erase(std::remove(mods.begin(), mods.end(), std::string_view("reforged")), mods.end());
+}
+
 ModOptions::ModOptions()
     : OptionCategoryBase("Mods", N_("Mods"), N_("Mod Settings"))
 {
@@ -1671,6 +1679,7 @@ std::vector<std::string_view> ModOptions::GetActiveModList()
 		if (*modEntry.enabled)
 			modList.emplace_back(modEntry.name);
 	}
+	DropReforgedBesidePoe2(modList);
 	return modList;
 }
 
@@ -1725,14 +1734,31 @@ bool ModOptions::SwitchOnHellfireForPoe2()
 	bool poe2 = false;
 	ModEntry *hellfire = nullptr;
 	for (auto &modEntry : GetModEntries()) {
-		if (modEntry.name == "poe2")
-			poe2 = *modEntry.enabled;
+		// Sanctuary Reforged plays on Hellfire too.
+		if (modEntry.name == "poe2" || modEntry.name == "reforged")
+			poe2 = poe2 || *modEntry.enabled;
 		else if (modEntry.name == "hf")
 			hellfire = &modEntry;
 	}
 	if (!poe2 || hellfire == nullptr || *hellfire->enabled)
 		return false;
 	hellfire->enabled.SetValue(true);
+	return true;
+}
+
+bool ModOptions::SwitchOffReforgedForPoe2()
+{
+	bool poe2 = false;
+	ModEntry *reforged = nullptr;
+	for (auto &modEntry : GetModEntries()) {
+		if (modEntry.name == "poe2")
+			poe2 = *modEntry.enabled;
+		else if (modEntry.name == "reforged")
+			reforged = &modEntry;
+	}
+	if (!poe2 || reforged == nullptr || !*reforged->enabled)
+		return false;
+	reforged->enabled.SetValue(false);
 	return true;
 }
 

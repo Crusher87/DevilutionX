@@ -942,6 +942,12 @@ private:
 	bool committed = false;
 };
 
+/**
+ * @brief Sanctuary Reforged never loads beside POE2 Mashup, whichever order the two are listed in: POE2 Mashup has
+ * everything it adds, and its saves must not land in Sanctuary Reforged's (see ModOptions::SwitchOffReforgedForPoe2).
+ */
+void DropReforgedBesidePoe2(std::vector<std::string_view> &mods);
+
 struct ModOptions : OptionCategoryBase {
 	ModOptions();
 	std::vector<std::string_view> GetActiveModList();
@@ -955,6 +961,12 @@ struct ModOptions : OptionCategoryBase {
 	 * @return true if it switched Hellfire on, whose own change then reloads the mods.
 	 */
 	bool SwitchOnHellfireForPoe2();
+	/**
+	 * @brief POE2 Mashup and Sanctuary Reforged are two flavours of one game and never run together: POE2 Mashup already
+	 * has everything Sanctuary Reforged adds. Switches Sanctuary Reforged off when both are on.
+	 * @return true if it switched Sanctuary Reforged off, whose own change then reloads the mods.
+	 */
+	bool SwitchOffReforgedForPoe2();
 
 private:
 	struct ModEntry {

@@ -35,6 +35,7 @@
 #include "lua/modules/monsters.hpp"
 #include "lua/modules/player.hpp"
 #include "lua/modules/poe2.hpp"
+#include "lua/modules/reforged.hpp"
 #include "lua/modules/render.hpp"
 #include "lua/modules/system.hpp"
 #include "lua/modules/towners.hpp"
@@ -250,6 +251,7 @@ void LuaReloadActiveMods()
 
 	gbIsHellfire = false;
 	gbIsPoe2 = false;
+	gbIsReforged = false;
 	UnloadModArchives();
 
 	std::vector<std::string_view> modnames = GetOptions().Mods.GetActiveModList();
@@ -259,6 +261,10 @@ void LuaReloadActiveMods()
 		const std::string packageName = StrCat("mods.", modname, ".init");
 		RunScript(CreateLuaSandbox(), packageName, /*optional=*/true);
 	}
+
+	// POE2 Mashup has the look and comfort features already, so the two never count together (HasEnhancements).
+	if (gbIsPoe2)
+		gbIsReforged = false;
 
 	for (const tl::function_ref<void()> handler : IsModChangeHandlers) {
 		handler();
@@ -291,6 +297,9 @@ namespace {
 /** @brief A mod was switched on or off. POE2 mode always plays on Hellfire, so Hellfire is switched back on first, and that change reloads the mods. */
 void OnModToggled()
 {
+	// Sanctuary Reforged gives way to POE2 Mashup, which has all of it already; that change comes back here.
+	if (GetOptions().Mods.SwitchOffReforgedForPoe2())
+		return;
 	if (!GetOptions().Mods.SwitchOnHellfireForPoe2())
 		LuaReloadActiveMods();
 }
@@ -331,6 +340,7 @@ void LuaInitialize()
 	    "devilutionx.towners", LuaTownersModule(lua),
 	    "devilutionx.hellfire", LuaHellfireModule(lua),
 	    "devilutionx.poe2", LuaPoe2Module(lua),
+	    "devilutionx.reforged", LuaReforgedModule(lua),
 	    "devilutionx.system", LuaSystemModule(lua),
 	    "devilutionx.floatingnumbers", LuaFloatingNumbersModule(lua),
 	    "devilutionx.message", [](std::string_view text) { EventPlrMsg(text, UiFlags::ColorRed); },

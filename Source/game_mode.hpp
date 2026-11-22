@@ -46,11 +46,24 @@ extern DVL_API_FOR_TEST bool gbIsSpawn;
 extern DVL_API_FOR_TEST bool gbIsHellfire;
 /** Indicate if the POE2 Mashup mod is active */
 extern DVL_API_FOR_TEST bool gbIsPoe2;
+/** Indicate if the Sanctuary Reforged mod is active: the HD look and the comfort features on plain Diablo and Hellfire rules. Off whenever POE2 Mashup is on. */
+extern DVL_API_FOR_TEST bool gbIsReforged;
 /** The POE2 Mashup mod's version, set by the mod and shown in the game menu. */
 extern std::string Poe2ModVersion;
 /** Indicate if we want vanilla savefiles */
 extern DVL_API_FOR_TEST bool gbVanilla;
 /** Whether the Hellfire mode is required (forced). */
 extern bool forceHellfire;
+
+/**
+ * @brief Whether the look and comfort features are on (HD art and light, weather, atmosphere, effects, the corner map and
+ * the like): with POE2 Mashup, which has always had them, or with Sanctuary Reforged, which is those alone.
+ *
+ * Game rules never ask this: items, monsters, levels, experience, saves and net messages only ask gbIsPoe2.
+ */
+inline bool HasEnhancements()
+{
+	return gbIsPoe2 || gbIsReforged;
+}
 
 } // namespace devilution
