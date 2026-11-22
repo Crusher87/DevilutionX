@@ -49,6 +49,7 @@
 #include "poe2/monster_armour.hpp"
 #include "poe2/table_skills.hpp"
 #include "portal.h"
+#include "poe2/camera_shake.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/effect_primitives.hpp"
@@ -3182,6 +3183,10 @@ void AddNova(Missile &missile, AddMissileParameter &parameter)
 		missile._midam = (currlevel / 2) + GenerateRndSum(3, 3);
 	}
 
+	// Sanctuary Reforged: the hero's own Nova or Immolation jolts the view a little.
+	if (!missile.IsTrap() && missile.sourcePlayer() == MyPlayer)
+		ShakeCameraFor(missile._mitype == MissileID::Immolation ? ReforgedShake::Immolation : ReforgedShake::Nova);
+
 	missile.duration = 1;
 }
 
@@ -3271,6 +3276,9 @@ void AddApocalypse(Missile &missile, AddMissileParameter & /*parameter*/)
 		missile._midam = GenerateRndSum(6, playerLevel) + playerLevel;
 	}
 	missile.duration = 255;
+	// Sanctuary Reforged: the hero's own Apocalypse shakes the view.
+	if (missile.sourcePlayer() == MyPlayer)
+		ShakeCameraFor(ReforgedShake::Apocalypse);
 }
 
 void AddInferno(Missile &missile, AddMissileParameter &parameter)
@@ -3414,6 +3422,9 @@ void AddDiabloApocalypse(Missile &missile, AddMissileParameter & /*parameter*/)
 			continue;
 
 		AddMissile({ 0, 0 }, player.position.future, Direction::South, MissileID::DiabloApocalypseBoom, missile._micaster, missile._misource, missile._midam, 0);
+		// Sanctuary Reforged: Diablo's blast reaching the hero is the hardest shake there is.
+		if (&player == MyPlayer)
+			ShakeCameraFor(ReforgedShake::DiabloApocalypse);
 	}
 	missile._miDelFlag = true;
 }

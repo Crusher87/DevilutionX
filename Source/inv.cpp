@@ -1255,9 +1255,9 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 		return;
 
 	uint8_t colorShift;
-	if (gbIsPoe2 && !IsInspectingPlayer()) {
+	if (HasEnhancements() && !IsInspectingPlayer()) {
 		// POE2 Mashup: the slot shows the item's rarity: plain grey for normal items, blue magic, yellow rare
-		// and orange unique.
+		// and orange unique. Sanctuary Reforged has Diablo's rarities only: plain, blue magic and gold unique.
 		switch (itemQuality) {
 		case ITEM_QUALITY_MAGIC:
 			colorShift = PAL16_GRAY - PAL16_BLUE - 1;
@@ -1266,7 +1266,7 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 			colorShift = PAL16_GRAY - PAL16_YELLOW - 1;
 			break;
 		case ITEM_QUALITY_UNIQUE:
-			colorShift = PAL16_GRAY - PAL16_ORANGE - 1;
+			colorShift = PAL16_GRAY - (gbIsPoe2 ? PAL16_ORANGE : PAL16_YELLOW) - 1;
 			break;
 		default:
 			return;
