@@ -1255,9 +1255,9 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 		return;
 
 	uint8_t colorShift;
-	if (gbIsPoe2 && !IsInspectingPlayer()) {
+	if (HasEnhancements() && !IsInspectingPlayer()) {
 		// POE2 Mashup: the slot shows the item's rarity: plain grey for normal items, blue magic, yellow rare
-		// and orange unique.
+		// and orange unique. Sanctuary Reforged has Diablo's rarities only: plain, blue magic and gold unique.
 		switch (itemQuality) {
 		case ITEM_QUALITY_MAGIC:
 			colorShift = PAL16_GRAY - PAL16_BLUE - 1;
@@ -1266,7 +1266,7 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 			colorShift = PAL16_GRAY - PAL16_YELLOW - 1;
 			break;
 		case ITEM_QUALITY_UNIQUE:
-			colorShift = PAL16_GRAY - PAL16_ORANGE - 1;
+			colorShift = PAL16_GRAY - (gbIsPoe2 ? PAL16_ORANGE : PAL16_YELLOW) - 1;
 			break;
 		default:
 			return;
@@ -1330,7 +1330,7 @@ void InitInv()
 
 namespace {
 
-/** @brief POE2 Mashup: the weapon set I and II buttons above the left hand slot. */
+/** @brief POE2 Mashup and Sanctuary Reforged: the weapon set I and II buttons above the left hand slot; the lit one is out. */
 Rectangle WeaponSetButton(uint8_t set)
 {
 	return { GetPanelPosition(UiPanels::Inventory, { 17 + (set * 30), 60 }), { 28, 14 } };
@@ -1349,7 +1349,7 @@ void DrawWeaponSetButtons(const Surface &out, const Player &player)
 /** @brief A click on the other set's button swaps to it. */
 bool CheckWeaponSetButtons(Player &player)
 {
-	if (!gbIsPoe2 || !player.HoldItem.isEmpty())
+	if (!HasWeaponSwap() || !player.HoldItem.isEmpty())
 		return false;
 	for (uint8_t set = 0; set < NumWeaponSets; set++) {
 		if (!WeaponSetButton(set).contains(MousePosition))
@@ -1480,8 +1480,9 @@ void DrawInv(const Surface &out)
 		}
 	}
 
-	if (gbIsPoe2) {
+	if (HasWeaponSwap())
 		DrawWeaponSetButtons(out, myPlayer);
+	if (gbIsPoe2) {
 		// The league's gold, shared by every hero in it.
 		DrawString(out, FormatRuntime(_("Gold: {:s}"), FormatInteger(Stash.gold)), { GetPanelPosition(UiPanels::Inventory, { 80, 184 }), { 164, 16 } },
 		    { .flags = UiFlags::AlignCenter | UiFlags::ColorGold | UiFlags::FontSize12 });
@@ -2305,7 +2306,7 @@ int8_t CheckInvHLight()
 		if (rv >= INVITEM_INV_FIRST)
 			PrintItemComparison(*pi);
 		// POE2 Mashup: at a vendor, your own items show what they sell for.
-		if (gbIsPoe2 && rv >= INVITEM_INV_FIRST) {
+		if (UsesShopTabs() && rv >= INVITEM_INV_FIRST) {
 			if (const std::optional<int> price = VisualStoreSellPrice(*pi); price) {
 				CurrentInfoLineStyle = InfoLineStyle::Note;
 				// Only the price: how to sell is in the help, and the hint lines cluttered every hover (Curtis 2026-10-21).

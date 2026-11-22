@@ -19,6 +19,19 @@ enum class WeaponSkill : uint8_t;
  */
 constexpr size_t NumWeaponSets = 2;
 
+/**
+ * @brief Whether X swaps weapon sets: in POE2 Mashup, and in Sanctuary Reforged as plain Diablo weapon swap (two sets
+ * of hands, nothing else of POE2's: no skills, passives or POE2 hand rules).
+ */
+bool HasWeaponSwap();
+
+/**
+ * @brief Sanctuary Reforged: whether the hero could take these two items into the hands by Diablo's own rules: hand
+ * items only, usable with the hero's stats now, a two-handed weapon alone, and two items only where the class can
+ * hold them together (a weapon and a shield, or a Bard's two swords or maces).
+ */
+bool HandsSetIsLegal(const Player &player, const Item &left, const Item &right);
+
 /** @brief The other set's hand for an InvBody hand slot (INVLOC_HAND_LEFT or INVLOC_HAND_RIGHT). */
 Item &InactiveHand(Player &player, size_t handSlot);
 const Item &InactiveHand(const Player &player, size_t handSlot);

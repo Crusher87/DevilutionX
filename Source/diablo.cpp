@@ -308,8 +308,8 @@ void LeftMouseCmd(bool bShift)
 		ForgetChosenPortal();
 		ForgetChosenLevelExit();
 	}
-	// POE2 Mashup: Ctrl+click on stairs asks for a fresh floor on the other side.
-	Poe2ForceFreshFloor = trigflag && pcursitem == -1 && pcursmonst == -1 && (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
+	// POE2 Mashup: Ctrl+click on stairs asks for a fresh floor on the other side (Sanctuary Reforged keeps its floors).
+	Poe2ForceFreshFloor = !gbIsReforged && trigflag && pcursitem == -1 && pcursmonst == -1 && (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
 
 	// POE2 Mashup: clicking a portal or stairs walks into it, even with WASD movement.
 	if (wasdMovement && trigflag && pcursitem == -1 && pcursmonst == -1) {
@@ -491,8 +491,9 @@ void LeftMouseDown(uint16_t modState)
 	}
 
 	if (IsPlayerInStore()) {
-		// POE2 Mashup: a click outside a towner's talk menu closes it and goes on, so the hero walks off at once.
-		if (gbIsPoe2 && !StoreWindowContainsMouse()) {
+		// POE2 Mashup and Sanctuary Reforged: a click outside a towner's talk menu closes it and goes on, so the hero
+		// walks off at once.
+		if (HasEnhancements() && !StoreWindowContainsMouse()) {
 			CloseTalkMenu();
 		} else {
 			CheckStoreBtn();
@@ -621,8 +622,8 @@ void RightMouseDown(bool isShiftHeld)
 			PlaySFX(SfxID::ItemGold);
 		return;
 	}
-	// POE2 Mashup: right-clicking equipment in the inventory puts it on, swapping out what was worn.
-	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
+	// POE2 Mashup and Sanctuary Reforged: right-clicking equipment in the inventory puts it on, swapping out what was worn.
+	if (HasEnhancements() && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
 		return;
 	SetStickyItemUse(isShiftHeld);
 	if (pcursinvitem != -1 && UseInvItem(pcursinvitem))
@@ -736,8 +737,8 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	}
 
 	if (!ChatFlag && WasdMovementKeyPressed(vkey)) {
-		// POE2 Mashup: walking off closes a towner's talk menu, like the stash, and the walk goes on.
-		if (gbIsPoe2 && IsPlayerInStore())
+		// POE2 Mashup and Sanctuary Reforged: walking off closes a towner's talk menu, like the stash, and the walk goes on.
+		if (HasEnhancements() && IsPlayerInStore())
 			CloseTalkMenu();
 		return;
 	}
@@ -1037,7 +1038,7 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				ChatLogScrollUp();
 			} else if (IsStashOpen) {
 				Stash.PreviousPage();
-			} else if (gbIsPoe2 && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
+			} else if (UsesShopTabs() && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
 				VisualStorePreviousPage();
 			} else if (SDL_GetModState() & SDL_KMOD_CTRL) {
 				if (AutomapActive) {
@@ -1057,7 +1058,7 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				ChatLogScrollDown();
 			} else if (IsStashOpen) {
 				Stash.NextPage();
-			} else if (gbIsPoe2 && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
+			} else if (UsesShopTabs() && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
 				VisualStoreNextPage();
 			} else if (SDL_GetModState() & SDL_KMOD_CTRL) {
 				if (AutomapActive) {
@@ -2607,11 +2608,11 @@ void InitKeymapActions()
 	options.Keymapper.AddAction(
 	    "SwapWeapons",
 	    N_("Swap weapons"),
-	    N_("Swaps between weapon sets I and II (POE2 Mashup)."),
+	    N_("Swaps between weapon sets I and II (POE2 Mashup and Sanctuary Reforged)."),
 	    'X',
 	    [] { SwapWeapons(*MyPlayer); },
 	    nullptr,
-	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
+	    [] { return HasWeaponSwap() && CanPlayerTakeAction(); });
 	options.Keymapper.CommitActions();
 }
 

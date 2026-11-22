@@ -79,6 +79,7 @@
 #include "player.h"
 #include "poe2/area_levels.hpp"
 #include "poe2/bound_demons.hpp"
+#include "poe2/camera_shake.hpp"
 #include "poe2/charms.hpp"
 #include "poe2/defenses.hpp"
 #include "poe2/economy.hpp"
@@ -1458,6 +1459,9 @@ void MonsterAttackPlayer(Monster &monster, Player &player, int hit, int minDam, 
 		if (chaos > 0)
 			ApplyPlrDamage(DamageType::Chaos, player, left.chaos);
 		ReflectMeleeHit(player, monster, dam);
+		// Sanctuary Reforged: the Butcher's and Diablo's blows landing on the hero jolt the view.
+		if (BlowsShakeCamera(monster))
+			ShakeCameraFor(ReforgedShake::BossBlow);
 	}
 
 	// Reflect can also kill a monster, so make sure the monster is still alive

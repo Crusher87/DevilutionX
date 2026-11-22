@@ -50,6 +50,7 @@
 #include "qol/stash.h"
 #include "utils/display.h"
 #include "utils/format.hpp"
+#include "utils/format_int.hpp"
 #include "utils/language.h"
 #include "utils/sdl_compat.h"
 #include "utils/str_cat.hpp"
@@ -80,6 +81,9 @@ constexpr uint32_t DrawerSlideMs = 140;
 constexpr int DrawerWidth = 230;
 unsigned SettingsPage = 0;
 unsigned ListScroll = 0;
+/** The first tab shown in the strip, and the open tab when the strip last showed it. */
+unsigned TabScroll = 0;
+unsigned LastShownPage = static_cast<unsigned>(-1);
 bool EditingName = false;
 
 /** A tab being dragged to another place in the order, from the strip or the drawer (Curtis 2026-10-17). */
@@ -209,6 +213,12 @@ Rectangle AffinityBox(size_t index)
 	const int column = static_cast<int>(index % 2);
 	const int row = static_cast<int>(index / 2);
 	return { PopupRect().position + Displacement { 14 + (column * 140), 240 + (row * 22) }, { 130, 20 } };
+}
+
+/** Sanctuary Reforged: its tabs have no kind or affinities to set, so the popup has a button to remove an empty tab. */
+Rectangle RemoveTabButton()
+{
+	return { PopupRect().position + Displacement { 14, 146 }, { 120, ButtonSize.height } };
 }
 
 Rectangle ListButton()
@@ -385,8 +395,24 @@ void DrawSettings(const Surface &out)
 		}
 	}
 
-	DrawString(out, _("Kind"), { popup.position + Displacement { 14, 128 }, { 120, 16 } }, { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite });
 	const bool empty = IsStashTabEmpty(SettingsPage);
+	const auto popupButton = [&out](const Rectangle &rect, std::string_view text, bool enabled = true) {
+		FillRectangle(out, rect, enabled && rect.contains(MousePosition) ? RowHoverColor : RowColor);
+		DrawFrame(out, rect, BorderColor);
+		DrawString(out, text, rect, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | (enabled ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed) });
+	};
+	// Sanctuary Reforged: every tab is a blank tab that takes anything; an empty one can be removed.
+	if (gbIsReforged) {
+		const bool removable = empty && StashTabs.count() > 1;
+		popupButton(RemoveTabButton(), _("Remove tab"), removable);
+		DrawString(out, removable ? _("Every tab takes any item.") : _("Empty the tab to remove it."),
+		    { popup.position + Displacement { 14, 170 }, { popup.size.width - 28, 16 } }, { .flags = UiFlags::VerticalCenter | UiFlags::ColorButtonpushed });
+		popupButton(ListButton(), _("All tabs"));
+		popupButton(DoneButton(), _("Done"));
+		return;
+	}
+
+	DrawString(out, _("Kind"), { popup.position + Displacement { 14, 128 }, { 120, 16 } }, { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite });
 	for (size_t i = 0; i < std::size(KindChoices); i++) {
 		const Rectangle rect = KindRect(i);
 		const bool selected = tab.kind == KindChoices[i];
@@ -420,11 +446,6 @@ void DrawSettings(const Surface &out)
 		}
 	}
 
-	const auto popupButton = [&out](const Rectangle &rect, std::string_view text) {
-		FillRectangle(out, rect, rect.contains(MousePosition) ? RowHoverColor : RowColor);
-		DrawFrame(out, rect, BorderColor);
-		DrawString(out, text, rect, { .flags = UiFlags::AlignCenter | UiFlags::VerticalCenter | UiFlags::ColorWhite });
-	};
 	popupButton(ListButton(), _("All tabs"));
 	popupButton(DoneButton(), _("Done"));
 }
@@ -480,7 +501,19 @@ bool HandleSettingsClick()
 			return true;
 		}
 	}
-	for (size_t i = 0; i < std::size(KindChoices); i++) {
+	if (gbIsReforged && RemoveTabButton().contains(MousePosition)) {
+		if (!IsStashTabEmpty(SettingsPage)) {
+			EventPlrMsg(_("Empty the tab to remove it."), UiFlags::ColorWhite);
+			return true;
+		}
+		if (RemoveStashTab(SettingsPage)) {
+			OpenPopup = Popup::None;
+			LastShownPage = static_cast<unsigned>(-1);
+			TabScroll = std::min(TabScroll, StashTabs.count() - 1);
+		}
+		return true;
+	}
+	for (size_t i = 0; i < std::size(KindChoices) && !gbIsReforged; i++) {
 		if (!KindRect(i).contains(MousePosition) || StashTabs.kind(SettingsPage) == KindChoices[i])
 			continue;
 		if (!IsStashTabEmpty(SettingsPage)) {
@@ -496,7 +529,7 @@ bool HandleSettingsClick()
 		Stash.dirty = true;
 		return true;
 	}
-	if (!StashTabs.tabs[SettingsPage].isPremade()) {
+	if (!StashTabs.tabs[SettingsPage].isPremade() && !gbIsReforged) {
 		for (size_t i = 0; i < std::size(AllStashAffinities); i++) {
 			if (AffinityBox(i).contains(MousePosition)) {
 				const StashAffinity affinity = AllStashAffinities[i];
@@ -588,9 +621,6 @@ constexpr int TabsRight = 266;
 constexpr int HeaderY = 27;
 constexpr int CellPitch = INV_SLOT_SIZE_PX + 1;
 constexpr Size CellSize { INV_SLOT_SIZE_PX, INV_SLOT_SIZE_PX };
-
-unsigned TabScroll = 0;
-unsigned LastShownPage = static_cast<unsigned>(-1);
 
 Rectangle StripLeftArrow()
 {
@@ -1276,6 +1306,14 @@ void BuildUniquesView(TabView &view, unsigned page)
 
 void BuildBlankView(TabView &view, unsigned page)
 {
+	// Sanctuary Reforged: gold is kept in the stash, as in Diablo; its amount and the withdraw button head every tab.
+	if (gbIsReforged) {
+		view.labels.push_back({ At(10, HeaderY + 2, 126, 14), StrCat(_("Gold: "), FormatInteger(Stash.gold)), UiFlags::ColorWhite });
+		view.buttons.push_back({ .rect = At(140, HeaderY, 76, 18), .text = std::string(_("Withdraw")), .onClick = [] {
+			                        if (Stash.gold > 0 && MyPlayer->HoldItem.isEmpty())
+				                        StartGoldWithdraw();
+		                        } });
+	}
 	// A main tab (no affinities) takes anything; it says nothing about it.
 	if (const std::string affinities = StashTabs.affinityText(page); !affinities.empty())
 		view.labels.push_back({ At(10, HeaderY + 2, 190, 14), StrCat(_("Takes: "), affinities), UiFlags::ColorButtonpushed });
@@ -1611,7 +1649,7 @@ bool IsStashTabPopupOpen()
 
 bool StashDrawerContains(Point position)
 {
-	return gbIsPoe2 && IsStashOpen && DrawerOpen && DrawerRect().contains(position);
+	return HasStashTabs() && IsStashOpen && DrawerOpen && DrawerRect().contains(position);
 }
 
 void CloseStashTabPopups()
@@ -1712,12 +1750,15 @@ bool HandlePoe2StashClick(Point mousePosition, bool isShiftHeld, bool isCtrlHeld
 
 bool StashTabsHandleEvent(const SDL_Event &event)
 {
-	if (!gbIsPoe2 || !IsStashOpen) {
+	if (!HasStashTabs() || !IsStashOpen) {
 		if (OpenPopup != Popup::None || Drag)
 			CloseStashTabPopups();
 		StashSearch.unfocus();
 		return false;
 	}
+	// Sanctuary Reforged: the box asking how much gold to withdraw takes the keyboard and the clicks.
+	if (IsWithdrawGoldOpen)
+		return false;
 	if (OpenPopup != Popup::None)
 		return HandlePopupEvent(event);
 	if (const std::optional<bool> dropped = HandleTabDragEvent(event))

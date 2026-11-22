@@ -104,6 +104,7 @@ set(tests
   poe2_shrines_test
   poe2_summon_commands_test
   poe2_weapon_swap_test
+  reforged_swap_hardcore_test
   poe2_rare_items_test
   poe2_save_fixture_test
   poe2_skill_effects_test
@@ -146,7 +147,9 @@ set(tests
   poe2_swing_speed_test
   player_test
   quests_test
+  reforged_floors_test
   reforged_mode_test
+  reforged_ui_comforts_test
   reencode_dun_cels_test
   scrollrt_test
   stores_test
@@ -160,6 +163,7 @@ set(tests
   store_transaction_test
   visual_store_test
   stash_test
+  reforged_stash_shops_test
   inventory_ui_test
   spell_ui_test
   char_panel_test

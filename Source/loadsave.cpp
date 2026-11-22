@@ -2936,6 +2936,77 @@ void ReadPoe2Shrines(Player &player)
 	UnpackShrineBuffs(player.poe2.shrines, data);
 }
 
+namespace {
+
+/**
+ * @brief Sanctuary Reforged's own hero entry, "srvhero": the few things Reforged adds to a Diablo hero.
+ *
+ * Version 1: version (1 byte), flags (1 byte: bit 0 hardcore), the weapon set that is out (1 byte), then the weapon set
+ * that isn't, main hand and off hand: a byte saying whether the hand holds an item, and the item if it does.
+ * Later versions only add fields at the end, so a newer save is read as far as this build knows.
+ */
+constexpr const char *ReforgedHeroEntry = "srvhero";
+constexpr uint8_t ReforgedHeroDataVersion = 1;
+constexpr uint8_t ReforgedHardcoreFlag = 1 << 0;
+
+} // namespace
+
+bool ReadReforgedHardcoreFlag(SaveReader &archive)
+{
+	size_t length = 0;
+	const std::unique_ptr<std::byte[]> data = ReadArchive(archive, ReforgedHeroEntry, &length);
+	return data != nullptr && length >= 2 && data[0] != std::byte { 0 } && (static_cast<uint8_t>(data[1]) & ReforgedHardcoreFlag) != 0;
+}
+
+void LoadReforgedHeroData(Player &player)
+{
+	if (!gbIsReforged)
+		return;
+	// A Reforged hero saved before this entry existed has no second weapon set and is a normal hero.
+	player.poe2.weaponSet = 0;
+	player.poe2.hardcore = false;
+	for (Item &item : player.swapHands)
+		item.clear();
+	LoadHelper file(OpenSaveArchive(gSaveNumber), ReforgedHeroEntry);
+	if (!file.IsValid(3))
+		return;
+	const uint8_t version = file.NextLE<uint8_t>();
+	if (version == 0)
+		return;
+	if (version > ReforgedHeroDataVersion)
+		LogError("Sanctuary Reforged hero data version {} is newer than this build's {}; reading the parts this build knows", version, ReforgedHeroDataVersion);
+	const uint8_t flags = file.NextLE<uint8_t>();
+	player.poe2.hardcore = (flags & ReforgedHardcoreFlag) != 0;
+	player.poe2.weaponSet = static_cast<uint8_t>(file.NextLE<uint8_t>() % NumWeaponSets);
+	const size_t itemSize = gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize;
+	for (Item &item : player.swapHands) {
+		if (!file.IsValid(1))
+			return;
+		if (file.NextLE<uint8_t>() == 0 || !file.IsValid(itemSize))
+			continue;
+		LoadItem(file, item);
+	}
+}
+
+void SaveReforgedHeroData(SaveWriter &saveWriter, const Player &player)
+{
+	if (!gbIsReforged)
+		return;
+	const size_t itemSize = gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize;
+	size_t size = 3;
+	for (const Item &item : player.swapHands)
+		size += 1 + (item.isEmpty() ? 0 : itemSize);
+	SaveHelper file(saveWriter, ReforgedHeroEntry, size);
+	file.WriteLE<uint8_t>(ReforgedHeroDataVersion);
+	file.WriteLE<uint8_t>(player.poe2.hardcore ? ReforgedHardcoreFlag : 0);
+	file.WriteLE<uint8_t>(player.poe2.weaponSet);
+	for (const Item &item : player.swapHands) {
+		file.WriteLE<uint8_t>(item.isEmpty() ? 0 : 1);
+		if (!item.isEmpty())
+			SaveItem(file, item);
+	}
+}
+
 void LoadPoe2HeroData(Player &player)
 {
 	player.poe2.clear();
@@ -2990,6 +3061,8 @@ void LoadPoe2HeroData(Player &player)
 		if (&player == MyPlayer && gbIsPoe2 && (refunded || bookChange != 0))
 			QueueTreeNotice(redrawn, refunded, bookChange);
 	}
+	// Sanctuary Reforged keeps its weapon sets and hardcore flag in its own entry, which has the last word.
+	LoadReforgedHeroData(player);
 }
 
 void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
@@ -3301,8 +3374,14 @@ void LoadStash()
 	const uint32_t openPage = file.NextLE<uint32_t>();
 
 	// POE2 tab names, colours, affinities and kinds; every page with items gets a tab.
-	if (gbIsPoe2) {
+	if (HasStashTabs()) {
 		const uint8_t tabsVersion = LoadTabs(gbIsMultiplayer ? "mpstashtabs" : "spstashtabs");
+		// Sanctuary Reforged: blank tabs only; a stash from before its tabs keeps each page as a tab.
+		if (gbIsReforged) {
+			KeepReforgedStashTabsBlank();
+			Stash.SetPage(openPage);
+			return;
+		}
 		if (tabsVersion == 0) {
 			// A stash from before tabs: its pages are blank tabs.
 			StashTabs.tabs.assign(DefaultBlankStashTabs, StashTab {});
@@ -3392,6 +3471,9 @@ std::expected<void, std::string> LoadGame(bool firstflag)
 	Player &myPlayer = *MyPlayer;
 
 	LoadPlayer(file, myPlayer);
+	// Sanctuary Reforged: the hands just loaded and the weapon set that isn't out go back together, so a swap made
+	// after the save can't leave a weapon in both places (the hero entry is written with every single player save).
+	LoadReforgedHeroData(myPlayer);
 
 	if (sgGameInitInfo.nDifficulty < DIFF_NORMAL || sgGameInitInfo.nDifficulty > DIFF_HELL)
 		sgGameInitInfo.nDifficulty = DIFF_NORMAL;
@@ -3581,7 +3663,7 @@ void SaveHeroItems(SaveWriter &saveWriter, Player &player)
 
 void SaveStash(SaveWriter &stashWriter)
 {
-	if (gbIsPoe2) {
+	if (HasStashTabs()) {
 		const std::vector<uint8_t> tabs = SerializeStashTabs(StashTabs, StashTabsSaveVersion);
 		SaveHelper tabsFile(stashWriter, gbIsMultiplayer ? "mpstashtabs" : "spstashtabs", sizeof(uint32_t) + tabs.size());
 		tabsFile.WriteLE<uint32_t>(static_cast<uint32_t>(tabs.size()));

@@ -50,6 +50,9 @@ bool IsCurrency(const Item &item)
 
 std::vector<StashTab> StashTabSet::DefaultTabs()
 {
+	// Sanctuary Reforged: blank tabs only, none of POE2's premade ones.
+	if (gbIsReforged)
+		return std::vector<StashTab>(DefaultReforgedStashTabs);
 	std::vector<StashTab> result(DefaultBlankStashTabs);
 	for (const StashTabKind kind : PremadeStashTabKinds)
 		result.push_back({ .color = DefaultStashTabColorFor(kind), .kind = kind });
@@ -75,6 +78,9 @@ unsigned StashTabSet::countOf(StashTabKind kind) const
 
 bool StashTabSet::canHaveAnother(StashTabKind kind) const
 {
+	// Sanctuary Reforged: as many blank tabs as Diablo had stash pages, and no premade ones.
+	if (gbIsReforged)
+		return kind == StashTabKind::Blank && tabs.size() < MaxStashTabs;
 	return countOf(kind) < (kind == StashTabKind::Blank ? MaxBlankStashTabs : 1);
 }
 
@@ -96,6 +102,8 @@ bool StashTabSet::addOverflowTab()
 
 void StashTabSet::addMissingPremadeTabs(uint8_t savedVersion)
 {
+	if (gbIsReforged)
+		return;
 	for (const StashTabKind kind : PremadeStashTabKinds) {
 		if (StashTabKindVersion(kind) <= savedVersion)
 			continue;
@@ -137,6 +145,9 @@ bool StashTabSet::accepts(unsigned page, const Item &item) const
 	if (item.isEmpty() || page >= tabs.size())
 		return false;
 	const StashTab &tab = tabs[page];
+	// Sanctuary Reforged: every tab takes anything, like Diablo's stash pages.
+	if (gbIsReforged)
+		return true;
 	if (tab.isPremade())
 		return PremadeTabTakes(tab.kind, item);
 	if (tab.affinities == 0)
@@ -176,7 +187,7 @@ bool StashTabSet::hasAffinity(unsigned page, StashAffinity affinity) const
 
 void StashTabSet::setAffinity(unsigned page, StashAffinity affinity, bool enabled)
 {
-	if (page >= tabs.size() || (enabled && tabs[page].isPremade()))
+	if (page >= tabs.size() || (enabled && (tabs[page].isPremade() || gbIsReforged)))
 		return;
 	const auto bit = static_cast<uint8_t>(affinity);
 	if (enabled) {

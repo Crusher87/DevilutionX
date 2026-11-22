@@ -151,5 +151,12 @@ void MoveStashTab(unsigned from, unsigned to);
  * others move to the tabs that are kept, and the emptied tabs go; a tab whose items fit nowhere else stays.
  */
 void ConsolidateStashTabs();
+/**
+ * @brief Sanctuary Reforged, after loading: every tab is blank and takes anything, and each page with items has a tab,
+ * so a stash saved as plain pages keeps each page as a tab of its own.
+ */
+void KeepReforgedStashTabsBlank();
+/** @brief Sanctuary Reforged: removes an empty tab, the tabs after it moving up; false when it isn't empty or is the last one. */
+bool RemoveStashTab(unsigned page);
 
 } // namespace devilution

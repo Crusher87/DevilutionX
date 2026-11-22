@@ -7045,6 +7045,8 @@ std::string PrintItemPowerWithTier(item_effect_type power, const Item &item, uin
 /** @brief POE2 Mashup: crafting state shown under the modifiers: an unrevealed modifier, catalyst quality and augment sockets. */
 void PrintItemCraftState(const Item &item)
 {
+	if (!gbIsPoe2)
+		return;
 	// Waystones and tablets keep their tier and uses where jewellery keeps its catalyst.
 	if (IsWaystone(item) || IsEndgameItem(item))
 		return;
@@ -7083,6 +7085,8 @@ void PrintItemCraftState(const Item &item)
 
 void PrintItemCorruption(const Item &item)
 {
+	if (!gbIsPoe2)
+		return;
 	if ((item.dwBuff & CF_POE2_CORRUPTED) == 0)
 		return;
 	if (const std::string enchant = CorruptionEnchantText(item); !enchant.empty())
@@ -7113,6 +7117,9 @@ void PrintItemCorruption(const Item &item)
  */
 void PrintItemImplicits(const Item &item)
 {
+	// Diablo's own items have no implicits or quality; Sanctuary Reforged's tooltip shows only what Diablo shows.
+	if (!gbIsPoe2)
+		return;
 	// With its own increased Spirit, once identified (plan 6.15); a legacy sceptre's is always 100.
 	if (gbIsPoe2 && IsAnySceptre(item))
 		AddItemInfoBoxString(FormatRuntime(_("implicit: +{:d} to Spirit"), SceptreSpiritOf(item)));
@@ -7376,6 +7383,13 @@ void PrintItemDetails(const Item &item)
 				AddItemInfoBoxString(PrintItemPower(power.type, item));
 			}
 		}
+	} else if (item._iMagical == ITEM_QUALITY_UNIQUE && gbIsReforged && item._iUid >= 0 && static_cast<size_t>(item._iUid) < UniqueItems.size()) {
+		// Sanctuary Reforged: the newer tooltip lists a unique's powers, in Diablo's words, instead of the separate window.
+		for (const auto &power : UniqueItems[item._iUid].powers) {
+			if (power.type == IPL_INVALID)
+				break;
+			AddItemInfoBoxString(PrintItemPower(power.type, item));
+		}
 	} else if (item._iMagical == ITEM_QUALITY_UNIQUE) {
 		AddItemInfoBoxString(_("unique item"));
 		ShowUniqueItemInfoBox = true;
@@ -7431,7 +7445,8 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 
 void PrintItemComparison(const Item &item)
 {
-	if (!gbIsPoe2 || MyPlayer == nullptr)
+	// Sanctuary Reforged compares too, with Diablo's own numbers (PrintItemComparisonWith).
+	if (!HasEnhancements() || MyPlayer == nullptr)
 		return;
 	// The hover can be worked out more than once before a frame is drawn; a second ring box then got drawn over by a
 	// copy of the first pair and flickered (Curtis 2026-10-20). One hovered item has one set of comparisons.
@@ -7497,6 +7512,44 @@ void PrintItemComparisonWith(const Item &item, const Item &worn, std::string_vie
 		AddInfoBoxString(StrCat(difference > 0 ? "+" : "", difference, suffix, " ", label), true);
 		shown++;
 	};
+	// Normal items have no modifiers to hide.
+	const auto identifiedOrPlain = [](const Item &it) { return it.isEmpty() || it._iIdentified || it._iMagical == ITEM_QUALITY_NORMAL; };
+	if (!gbIsPoe2) {
+		// Sanctuary Reforged: Diablo's own numbers, as its tooltip shows them: the weapon's damage and the armour class,
+		// then, once both are identified, what their affixes give.
+		if (item._iClass == ICLASS_WEAPON || other._iClass == ICLASS_WEAPON) {
+			compare(item._iMinDam, other._iMinDam, _("to minimum Damage"));
+			compare(item._iMaxDam, other._iMaxDam, _("to maximum Damage"));
+		}
+		compare(item._iAC, other._iAC, _("Armor Class"));
+		if (identifiedOrPlain(item) && identifiedOrPlain(other)) {
+			compare(item._iPLDam, other._iPLDam, _("damage"), "%");
+			compare(item._iPLToHit, other._iPLToHit, _("chance to hit"), "%");
+			compare(item._iPLAC, other._iPLAC, _("armor"), "%");
+			compare((item._iFMinDam + item._iFMaxDam) / 2, (other._iFMinDam + other._iFMaxDam) / 2, _("average Fire Damage"));
+			compare((item._iLMinDam + item._iLMaxDam) / 2, (other._iLMinDam + other._iLMaxDam) / 2, _("average Lightning Damage"));
+			compare(item._iPLStr, other._iPLStr, _("Strength"));
+			compare(item._iPLMag, other._iPLMag, _("Magic"));
+			compare(item._iPLDex, other._iPLDex, _("Dexterity"));
+			compare(item._iPLVit, other._iPLVit, _("Vitality"));
+			compare(item._iPLHP.whole(), other._iPLHP.whole(), _("Hit Points"));
+			compare(item._iPLMana.whole(), other._iPLMana.whole(), _("Mana"));
+			compare(item._iPLFR, other._iPLFR, _("Resist Fire"), "%");
+			compare(item._iPLLR, other._iPLLR, _("Resist Lightning"), "%");
+			compare(item._iPLMR, other._iPLMR, _("Resist Magic"), "%");
+			compare(item._iSplLvlAdd, other._iSplLvlAdd, _("to spell levels"));
+			compare(-item._iPLGetHit, -other._iPLGetHit, _("less damage from enemies"));
+			if (shown == 0) {
+				CurrentInfoLineStyle = InfoLineStyle::Requirement;
+				AddInfoBoxString(_("No differences"), true);
+			}
+		} else {
+			CurrentInfoLineStyle = InfoLineStyle::Requirement;
+			AddInfoBoxString(_("Identify both to compare affixes"), true);
+		}
+		CurrentInfoLineStyle = InfoLineStyle::Default;
+		return;
+	}
 	// Unidentified weapons and armour only show their base and quality; identified ones compare their whole hit and
 	// defence, as the tooltip shows them.
 	const auto hitDamage = [](const Item &it, bool max) {
