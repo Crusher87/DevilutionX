@@ -366,7 +366,10 @@ void SelheroLeagueEsc()
 	memcpy(selhero_heroInfo.name, name, sizeof(name));
 }
 
-/** POE2 Mashup: single player heroes pick a league after their name. */
+/**
+ * POE2 Mashup: single player heroes pick a league after their name. Sanctuary Reforged asks the same, as Normal or
+ * Hardcore (it has no leagues).
+ */
 void SelheroLeagueInit()
 {
 	const Point uiPosition = GetUIRectangle().position;
@@ -375,14 +378,17 @@ void SelheroLeagueInit()
 	selhero_heroInfo.hardcore = false;
 
 	const SDL_Rect rect1 = { (Sint16)(uiPosition.x + 242), (Sint16)(uiPosition.y + 211), 365, 33 };
-	vecSelDlgItems.push_back(std::make_unique<UiArtText>(_("Choose League").data(), rect1, UiFlags::AlignCenter | UiFlags::FontSize30 | UiFlags::ColorUiSilver, 3));
+	vecSelDlgItems.push_back(std::make_unique<UiArtText>(gbIsReforged ? _("Choose Mode").data() : _("Choose League").data(), rect1, UiFlags::AlignCenter | UiFlags::FontSize30 | UiFlags::ColorUiSilver, 3));
 
-	vecLeagueItems.push_back(std::make_unique<UiListItem>(_("Softcore"), 0));
+	vecLeagueItems.push_back(std::make_unique<UiListItem>(gbIsReforged ? _("Normal") : _("Softcore"), 0));
 	vecLeagueItems.push_back(std::make_unique<UiListItem>(_("Hardcore"), 1));
 	vecSelDlgItems.push_back(std::make_unique<UiList>(vecLeagueItems, vecLeagueItems.size(), uiPosition.x + 265, (uiPosition.y + 256), 320, 26, UiFlags::AlignCenter | UiFlags::FontSize24 | UiFlags::ColorUiGold));
 
 	const SDL_Rect rect2 = { (Sint16)(uiPosition.x + 252), (Sint16)(uiPosition.y + 320), 345, 100 };
-	vecSelDlgItems.push_back(std::make_unique<UiArtText>(_("Hardcore heroes have one life and their own stash. If one dies, they carry on in Softcore with only what they wear and carry.").data(), rect2, UiFlags::AlignCenter | UiFlags::FontSize12 | UiFlags::ColorUiSilverDark));
+	const std::string_view rule = gbIsReforged
+	    ? _("Hardcore heroes have one life and their own stash. If one dies, they carry on as a Normal hero with only what they wear and carry.")
+	    : _("Hardcore heroes have one life and their own stash. If one dies, they carry on in Softcore with only what they wear and carry.");
+	vecSelDlgItems.push_back(std::make_unique<UiArtText>(rule.data(), rect2, UiFlags::AlignCenter | UiFlags::FontSize12 | UiFlags::ColorUiSilverDark));
 
 	const SDL_Rect rect3 = { (Sint16)(uiPosition.x + 279), (Sint16)(uiPosition.y + 429), 140, 35 };
 	vecSelDlgItems.push_back(std::make_unique<UiArtTextButton>(_("OK"), &UiFocusNavigationSelect, rect3, UiFlags::AlignCenter | UiFlags::FontSize30 | UiFlags::ColorUiGold));
@@ -401,7 +407,8 @@ void SelheroNameSelect(size_t /*value*/)
 		UiSelOkDialog(title, _("Invalid name. A name cannot contain spaces, reserved characters, or reserved words.\n").data(), false);
 		AddSelHeroBackground();
 	} else {
-		if (gbIsPoe2 && !selhero_isMultiPlayer) {
+		// POE2 Mashup and Sanctuary Reforged: a new single player hero can be Hardcore.
+		if ((gbIsPoe2 || gbIsReforged) && !selhero_isMultiPlayer) {
 			SelheroLeagueInit();
 			return;
 		}

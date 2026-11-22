@@ -98,7 +98,7 @@ std::string GetSavePath(uint32_t saveNum, std::string_view savePrefix = {})
 std::string GetStashSavePath()
 {
 	const std::string_view ext = GetSaveExtension();
-	// POE2 Mashup: Hardcore heroes share their own stash.
+	// POE2 Mashup and Sanctuary Reforged: Hardcore heroes share their own stash.
 	const bool hardcore = MyPlayer != nullptr && IsHardcoreHero(*MyPlayer);
 	return StrCat(paths::PrefPath(),
 	    gbIsSpawn ? "stash_spawn" : "stash", hardcore ? "_hardcore" : "",
@@ -788,7 +788,7 @@ bool pfile_ui_save_create(_uiheroinfo *heroinfo)
 	CreatePlayer(player, heroinfo->heroclass);
 	CopyUtf8(player._pName, heroinfo->name, PlayerNameLength);
 	player.poe2.clear();
-	player.poe2.hardcore = gbIsPoe2 && heroinfo->hardcore;
+	player.poe2.hardcore = HasHardcoreChoice() && heroinfo->hardcore;
 	if (gbIsPoe2)
 		GrantStarterSkill(player);
 	PackPlayer(pkplr, player);
