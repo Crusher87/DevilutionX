@@ -100,6 +100,7 @@ set(tests
   poe2_shrines_test
   poe2_summon_commands_test
   poe2_weapon_swap_test
+  reforged_swap_hardcore_test
   poe2_rare_items_test
   poe2_save_fixture_test
   poe2_skill_effects_test

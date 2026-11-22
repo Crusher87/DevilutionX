@@ -40,6 +40,16 @@ void SaveHotkeys(SaveWriter &saveWriter, const Player &player);
 /** @brief Loads the POE2 Mashup character state (support gems, ...) of the current hero. */
 void LoadPoe2HeroData(Player &player);
 void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player);
+/**
+ * @brief Sanctuary Reforged: loads the hero's own small save entry (the weapon set that isn't out, and whether the hero
+ * is hardcore). A hero saved before the entry existed gets an empty second set and is a normal hero. Does nothing
+ * outside Reforged; LoadPoe2HeroData calls it last.
+ */
+void LoadReforgedHeroData(Player &player);
+/** @brief Sanctuary Reforged: writes the hero's own small save entry; does nothing outside Reforged. */
+void SaveReforgedHeroData(SaveWriter &saveWriter, const Player &player);
+/** @brief Sanctuary Reforged: whether the hero in the archive is hardcore, read from the hero's own entry alone (for the hero list). */
+bool ReadReforgedHardcoreFlag(SaveReader &archive);
 void SaveHeroItems(SaveWriter &saveWriter, Player &player);
 void SaveGameData(SaveWriter &saveWriter);
 void SaveGame();

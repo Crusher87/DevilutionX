@@ -870,7 +870,10 @@ void DrawDeathText(const Surface &out)
 	}
 
 	if (HardcoreHeroFell()) {
-		text = FormatRuntime(_("Your hardcore hero has fallen. Press {} to continue in Softcore."), buttonText);
+		if (gbIsReforged)
+			text = FormatRuntime(_("Your hardcore hero has fallen. Press {} to continue as a Normal hero."), buttonText);
+		else
+			text = FormatRuntime(_("Your hardcore hero has fallen. Press {} to continue in Softcore."), buttonText);
 	} else if (!gbIsMultiplayer) {
 		if (gbValidSaveFile)
 			text = FormatRuntime(_("Press {} to load last save."), buttonText);

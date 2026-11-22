@@ -11,7 +11,13 @@ struct Player;
  * Softcore with what they wear and carry; the hardcore stash stays as it is for the other hardcore heroes.
  */
 
-/** @brief Whether the hero is in the Hardcore league (single player only). */
+/**
+ * @brief Whether new single player heroes can be made hardcore: in POE2 Mashup (its Hardcore league) and in Sanctuary
+ * Reforged (a Normal or Hardcore choice), with the same rule and a stash of their own in each mod's save files.
+ */
+bool HasHardcoreChoice();
+
+/** @brief Whether the hero is a hardcore hero (Hardcore league in POE2 Mashup, Hardcore in Sanctuary Reforged; single player only). */
 bool IsHardcoreHero(const Player &player);
 
 /** @brief Whether the hero has just fallen in Hardcore and is waiting to continue in Softcore. */

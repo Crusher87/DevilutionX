@@ -1330,7 +1330,7 @@ void InitInv()
 
 namespace {
 
-/** @brief POE2 Mashup: the weapon set I and II buttons above the left hand slot. */
+/** @brief POE2 Mashup and Sanctuary Reforged: the weapon set I and II buttons above the left hand slot; the lit one is out. */
 Rectangle WeaponSetButton(uint8_t set)
 {
 	return { GetPanelPosition(UiPanels::Inventory, { 17 + (set * 30), 60 }), { 28, 14 } };
@@ -1349,7 +1349,7 @@ void DrawWeaponSetButtons(const Surface &out, const Player &player)
 /** @brief A click on the other set's button swaps to it. */
 bool CheckWeaponSetButtons(Player &player)
 {
-	if (!gbIsPoe2 || !player.HoldItem.isEmpty())
+	if (!HasWeaponSwap() || !player.HoldItem.isEmpty())
 		return false;
 	for (uint8_t set = 0; set < NumWeaponSets; set++) {
 		if (!WeaponSetButton(set).contains(MousePosition))
@@ -1480,8 +1480,9 @@ void DrawInv(const Surface &out)
 		}
 	}
 
-	if (gbIsPoe2) {
+	if (HasWeaponSwap())
 		DrawWeaponSetButtons(out, myPlayer);
+	if (gbIsPoe2) {
 		// The league's gold, shared by every hero in it.
 		DrawString(out, FormatRuntime(_("Gold: {:s}"), FormatInteger(Stash.gold)), { GetPanelPosition(UiPanels::Inventory, { 80, 184 }), { 164, 16 } },
 		    { .flags = UiFlags::AlignCenter | UiFlags::ColorGold | UiFlags::FontSize12 });
