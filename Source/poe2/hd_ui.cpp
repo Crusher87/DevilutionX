@@ -27,6 +27,7 @@
 #include "engine/surface.hpp"
 #include "engine/trn.hpp"
 #include "poe2/hd_outline.hpp"
+#include "poe2/hd_spell_icons.hpp"
 #include "utils/file_util.h"
 #include "utils/log.hpp"
 #include "utils/png.h"
@@ -55,6 +56,8 @@ struct UiSpriteName {
 	uint16_t fullHeight = 0;
 	/** @brief A UI panel's picture (RegisterUiPicture): its HD art goes under the UI, which leaves out its pixels there. */
 	bool panel = false;
+	/** @brief A spell icon: its HD art is put together from a plate and a layer, and shrunk to its size on screen. */
+	bool spellIcon = false;
 };
 
 /** @brief Each item picture frame, by the address of its pixels. */
@@ -80,6 +83,12 @@ struct UiOutlineArt {
 	SDL_Texture *texture = nullptr;
 };
 
+/** @brief A spell icon's HD art shrunk to one size on screen, and its texture as last made. */
+struct UiFittedArt {
+	SDL_Surface *picture = nullptr;
+	SDL_Texture *texture = nullptr;
+};
+
 /** @brief An item picture's HD art: the picture, and its textures as last made. */
 struct UiArt {
 	bool tried = false;
@@ -89,6 +98,8 @@ struct UiArt {
 	SDL_Texture *red = nullptr;
 	/** @brief Its smooth outlines, made the first time each shows, by the size it is shown at and their cut. */
 	std::unordered_map<uint64_t, UiOutlineArt> outlines;
+	/** @brief A spell icon's picture at each size it has been shown at on screen (FittedArtOf), by width and height. */
+	std::unordered_map<uint32_t, UiFittedArt> fitted;
 };
 std::unordered_map<std::string, UiArt> UiArts;
 SDL_Renderer *UiArtRenderer = nullptr;
@@ -340,6 +351,8 @@ void ForgetTextures()
 		art.red = nullptr;
 		for (auto &[key, outline] : art.outlines)
 			outline.texture = nullptr;
+		for (auto &[size, fitted] : art.fitted)
+			fitted.texture = nullptr;
 	}
 	MaskedTextures.clear();
 }
@@ -957,6 +970,283 @@ void RecordUiPictureImpl(const Surface &out, const Rectangle &box, const std::st
 
 [[maybe_unused]] const bool RecordUiPictureHookSet = (RecordUiPictureHook = RecordUiPictureImpl, true);
 
+// Spell icons (the skill bar, the spell book, the spell list...) show painted pictures the same way, over the UI where
+// the icon's own pixels still show. An icon's picture is its stone plate, in the colours the icon is drawn in, with the
+// icon's symbol laid over it. The art is far bigger than an icon is on screen, so the picture is shrunk once to the
+// exact screen size (an area filter) and then drawn pixel for pixel, rather than scaled down by the graphics card every
+// frame, which would skip most of its pixels.
+
+/** @brief The number of colourings SetSpellTrans has (SpellType). */
+constexpr size_t NumSpellIconTints = 5;
+
+/** @brief Each icon's name, by its colours, its size and its frame: null until asked for, then its name or NoSpellIcon. */
+const UiSpriteName *SpellIconNames[NumSpellIconTints][2][SpellIconLastFrame + 1];
+const UiSpriteName NoSpellIcon;
+
+/** @brief The icons' names, by their HD art's name (the nodes stay where they are, so draws can point at them). */
+std::unordered_map<std::string, UiSpriteName> SpellIconNamesByArt;
+
+/** @brief The name a spell icon's draw goes by; null when it has no HD art name (a label frame, colours with no plate). */
+const UiSpriteName *SpellIconNameOf(uint8_t frame, bool large, uint8_t tint, int width, int height)
+{
+	if (!SpellIconHasHdArt(frame) || tint >= NumSpellIconTints)
+		return nullptr;
+	const UiSpriteName *&name = SpellIconNames[tint][large ? 1 : 0][frame];
+	if (name == nullptr) {
+		const std::string art = SpellIconArtName(frame, large, static_cast<SpellType>(tint));
+		if (art.empty()) {
+			name = &NoSpellIcon;
+		} else {
+			const auto [it, inserted] = SpellIconNamesByArt.try_emplace(art + (large ? "@big" : "@small"));
+			if (inserted) {
+				it->second = UiSpriteName { art, static_cast<uint16_t>(width), static_cast<uint16_t>(height) };
+				it->second.spellIcon = true;
+			}
+			name = &it->second;
+		}
+	}
+	return name != &NoSpellIcon && name->width == width && name->height == height ? name : nullptr;
+}
+
+/** @brief Loads one picture of the HD art (hd\<name>.png), 4 bytes a pixel; null when the art hasn't got it. */
+SDL_Surface *LoadUiPicture(const std::string &name)
+{
+	std::string path = "hd\\" + name + ".png";
+	std::replace(path.begin(), path.end(), '/', '\\');
+	if (!FindAsset(path).ok())
+		return nullptr;
+	SDL_Surface *loaded = LoadPNG(path.c_str());
+	if (loaded == nullptr)
+		return nullptr;
+	SDL_Surface *picture = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
+	SDL_FreeSurface(loaded);
+	return picture;
+}
+
+/**
+ * @brief A spell icon's HD art by its name (SpellIconArtName): the plate, with the symbol's layer laid over it. Null
+ * when either file is missing (or they differ in size): the icon then keeps the game's own drawing.
+ */
+UiArt *SpellIconArtFor(const std::string &name)
+{
+	UiArt &art = UiArts[name];
+	if (!art.tried) {
+		art.tried = true;
+		const size_t plus = name.find('+');
+		if (plus == std::string::npos) {
+			art.picture = LoadUiPicture(name);
+		} else if (const UiArt *plate = SpellIconArtFor(name.substr(0, plus)); plate != nullptr) {
+			// (UiArts' entries stay where they are when another is added, so `art` is still good.)
+			SDL_Surface *layer = LoadUiPicture(name.substr(plus + 1));
+			if (layer != nullptr && layer->w == plate->picture->w && layer->h == plate->picture->h) {
+				art.picture = SDL_DuplicateSurface(plate->picture);
+				if (art.picture != nullptr) {
+					LayPictureOver(static_cast<uint8_t *>(art.picture->pixels), art.picture->pitch,
+					    static_cast<const uint8_t *>(layer->pixels), layer->pitch, layer->w, layer->h);
+				}
+			}
+			if (layer != nullptr)
+				SDL_FreeSurface(layer);
+		}
+	}
+	return art.picture != nullptr ? &art : nullptr;
+}
+
+/** @brief A spell icon about to be drawn: where, and the UI's pixels there before it. */
+struct PendingSpellIcon {
+	const UiSpriteName *name = nullptr;
+	SDL_Rect rect {};
+	std::vector<uint8_t> under;
+};
+PendingSpellIcon PendingUiSpellIcon;
+
+void RecordUiSpellIconImpl(const Surface &out, Rectangle box, uint8_t frame, bool large, uint8_t tint, bool drawn)
+{
+	PendingSpellIcon &pending = PendingUiSpellIcon;
+	const UiSpriteName *before = pending.name;
+	pending.name = nullptr;
+	if (out.surface == nullptr || out.surface != PalSurface)
+		return;
+	const int w = box.size.width;
+	const int h = box.size.height;
+	if (w <= 0 || h <= 0 || w > UINT16_MAX || h > UINT16_MAX)
+		return;
+	const SDL_Rect rect { out.region.x + box.position.x, out.region.y + box.position.y, w, h };
+	const SDL_Surface *ui = PalSurface;
+	// The part of the box inside the surface it is drawn on: the rest is clipped, and lays nothing down.
+	const int left = std::max({ rect.x, static_cast<int>(out.region.x), 0 });
+	const int top = std::max({ rect.y, static_cast<int>(out.region.y), 0 });
+	const int right = std::min({ rect.x + w, static_cast<int>(out.region.x + out.region.w), ui->w });
+	const int bottom = std::min({ rect.y + h, static_cast<int>(out.region.y + out.region.h), ui->h });
+	if (right <= left || bottom <= top)
+		return;
+	const auto *pixels = static_cast<const uint8_t *>(ui->pixels);
+	if (!drawn) {
+		if (!Enabled())
+			return;
+		const UiSpriteName *name = SpellIconNameOf(frame, large, tint, w, h);
+		if (name == nullptr || SpellIconArtFor(name->name) == nullptr)
+			return;
+		pending.name = name;
+		pending.rect = rect;
+		pending.under.assign(static_cast<size_t>(w) * h, 0);
+		for (int uy = top; uy < bottom; uy++) {
+			const uint8_t *line = pixels + static_cast<ptrdiff_t>(uy) * ui->pitch;
+			std::copy(line + left, line + right, pending.under.begin() + static_cast<ptrdiff_t>(uy - rect.y) * w + (left - rect.x));
+		}
+		return;
+	}
+	if (before == nullptr || pending.rect.x != rect.x || pending.rect.y != rect.y || pending.rect.w != w || pending.rect.h != h)
+		return;
+	if (UiDraws.size() >= 512)
+		UiDraws.clear();
+	UiDraw &draw = UiDraws.emplace_back();
+	draw.order = UiOrder++;
+	draw.name = before;
+	draw.rect = rect;
+	draw.under = std::move(pending.under);
+	pending.under.clear();
+	// An icon fills its box: every pixel of it inside the surface is the icon's, as it is now.
+	auto pattern = std::make_shared<UiPattern>();
+	pattern->width = static_cast<uint16_t>(w);
+	pattern->height = static_cast<uint16_t>(h);
+	pattern->pixels.assign(static_cast<size_t>(w) * h, -1);
+	draw.shows.assign(static_cast<size_t>(w) * h, 0);
+	for (int uy = top; uy < bottom; uy++) {
+		const uint8_t *line = pixels + static_cast<ptrdiff_t>(uy) * ui->pitch;
+		for (int ux = left; ux < right; ux++) {
+			const size_t i = static_cast<size_t>(uy - rect.y) * w + (ux - rect.x);
+			pattern->pixels[i] = line[ux];
+			draw.shows[i] = 1; // inside the surface: may show
+		}
+	}
+	draw.pattern = pattern.get();
+	draw.ownPattern = std::move(pattern);
+}
+
+/**
+ * @brief The border the game drew just inside a box: the spell icons drawn there this frame don't show under it, even
+ * where it happens to have the colour the icon had.
+ */
+void CoverUiSpellIconImpl(const Surface &out, Rectangle box)
+{
+	if (out.surface == nullptr || out.surface != PalSurface)
+		return;
+	const SDL_Rect rect { out.region.x + box.position.x, out.region.y + box.position.y, box.size.width, box.size.height };
+	for (auto it = UiDraws.rbegin(); it != UiDraws.rend(); ++it) {
+		UiDraw &draw = *it;
+		if (!draw.name->spellIcon)
+			continue;
+		const int left = std::max(rect.x, draw.rect.x);
+		const int top = std::max(rect.y, draw.rect.y);
+		const int right = std::min(rect.x + rect.w, draw.rect.x + draw.rect.w);
+		const int bottom = std::min(rect.y + rect.h, draw.rect.y + draw.rect.h);
+		for (int uy = top; uy < bottom; uy++) {
+			const bool edgeRow = uy < rect.y + 2 || uy >= rect.y + rect.h - 2;
+			for (int ux = left; ux < right; ux++) {
+				if (edgeRow || ux < rect.x + 2 || ux >= rect.x + rect.w - 2)
+					draw.shows[static_cast<size_t>(uy - draw.rect.y) * draw.rect.w + (ux - draw.rect.x)] = 0;
+			}
+		}
+	}
+}
+
+[[maybe_unused]] const bool RecordUiSpellIconHookSet = (RecordUiSpellIconHook = RecordUiSpellIconImpl, true);
+[[maybe_unused]] const bool CoverUiSpellIconHookSet = (CoverUiSpellIconHook = CoverUiSpellIconImpl, true);
+
+/** @brief A spell icon's picture shrunk to a size on screen, made the first time it is shown at that size. */
+UiFittedArt *FittedArtOf(UiArt &art, int width, int height)
+{
+	if (width <= 0 || height <= 0 || width > UINT16_MAX || height > UINT16_MAX)
+		return nullptr;
+	const uint32_t size = static_cast<uint32_t>(width) | (static_cast<uint32_t>(height) << 16);
+	auto it = art.fitted.find(size);
+	if (it == art.fitted.end()) {
+		// A new size: the UI's scale or the window changed. The sizes before it are no longer shown (an icon takes one
+		// of two widths and heights at a scale, by where it is).
+		if (art.fitted.size() >= 8) {
+			for (auto &[key, old] : art.fitted) {
+				if (old.texture != nullptr)
+					SDL_DestroyTexture(old.texture);
+				if (old.picture != nullptr)
+					SDL_FreeSurface(old.picture);
+			}
+			art.fitted.clear();
+			// Copies of them with parts left out may be among these.
+			for (auto &[key, texture] : MaskedTextures)
+				SDL_DestroyTexture(texture);
+			MaskedTextures.clear();
+		}
+		it = art.fitted.try_emplace(size).first;
+		const SDL_Surface *picture = art.picture;
+		SDL_Surface *fitted = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+		if (fitted != nullptr) {
+			ShrinkPicture(static_cast<const uint8_t *>(picture->pixels), picture->w, picture->h, picture->pitch,
+			    static_cast<uint8_t *>(fitted->pixels), width, height, fitted->pitch);
+		}
+		it->second.picture = fitted;
+	}
+	return it->second.picture != nullptr ? &it->second : nullptr;
+}
+
+/**
+ * @brief Draws a spell icon's HD art over the UI: its picture at the very size the icon's box has on screen, on the
+ * screen pixels the game's own icon covers, where the icon's own pixels still show.
+ */
+void DrawFittedUiArt(SDL_Renderer *renderer, const UiDraw &draw)
+{
+	// How much bigger the UI is on screen (it is drawn in UI pixels).
+	float scaleX = 1.F;
+	float scaleY = 1.F;
+	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+	if (!(scaleX > 0.F) || !(scaleY > 0.F))
+		return;
+	const int x0 = FirstScreenPixelOf(draw.rect.x, scaleX);
+	const int y0 = FirstScreenPixelOf(draw.rect.y, scaleY);
+	const int width = FirstScreenPixelOf(draw.rect.x + draw.rect.w, scaleX) - x0;
+	const int height = FirstScreenPixelOf(draw.rect.y + draw.rect.h, scaleY) - y0;
+	UiFittedArt *fitted = FittedArtOf(*draw.art, width, height);
+	if (fitted == nullptr)
+		return;
+	SDL_Texture *texture = nullptr;
+	// (An icon partly outside the surface it was drawn on has all the pixels it laid down showing, but not all of itself.)
+	if (draw.whole && draw.shown == draw.rect.w * draw.rect.h) {
+		if (fitted->texture == nullptr)
+			fitted->texture = MakeTexture(renderer, fitted->picture);
+		texture = fitted->texture;
+	} else {
+		// Partly covered (a border, a key's letter, a tooltip): a copy with the screen pixels of covered UI pixels left out.
+		uint64_t key = std::hash<std::string> {}(draw.name->name) ^ 0xD6E8FEB86659FD93ULL;
+		for (const int part : { width, height, x0 - static_cast<int>(std::floor(static_cast<float>(draw.rect.x) * scaleX)), y0 - static_cast<int>(std::floor(static_cast<float>(draw.rect.y) * scaleY)), draw.rect.w, draw.rect.h })
+			key = key * 1099511628211ULL ^ static_cast<uint64_t>(static_cast<uint32_t>(part));
+		for (const uint8_t bit : draw.shows)
+			key = key * 1099511628211ULL ^ bit;
+		auto [it, inserted] = MaskedTextures.try_emplace(key, nullptr);
+		if (inserted) {
+			SDL_Surface *copy = SDL_DuplicateSurface(fitted->picture);
+			if (copy != nullptr) {
+				for (int y = 0; y < copy->h; y++) {
+					auto *row = static_cast<uint8_t *>(copy->pixels) + static_cast<ptrdiff_t>(y) * copy->pitch;
+					const int uy = static_cast<int>(std::floor((static_cast<float>(y0 + y) + 0.5F) / scaleY)) - draw.rect.y;
+					for (int x = 0; x < copy->w; x++) {
+						const int ux = static_cast<int>(std::floor((static_cast<float>(x0 + x) + 0.5F) / scaleX)) - draw.rect.x;
+						const bool shows = ux >= 0 && uy >= 0 && ux < draw.rect.w && uy < draw.rect.h && draw.shows[static_cast<size_t>(uy) * draw.rect.w + ux] != 0;
+						if (!shows)
+							row[static_cast<ptrdiff_t>(x) * 4 + 3] = 0;
+					}
+				}
+				it->second = MakeTexture(renderer, copy);
+				SDL_FreeSurface(copy);
+			}
+		}
+		texture = it->second;
+	}
+	if (texture == nullptr)
+		return;
+	const SDL_FRect dest { static_cast<float>(x0) / scaleX, static_cast<float>(y0) / scaleY, static_cast<float>(width) / scaleX, static_cast<float>(height) / scaleY };
+	SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+}
+
 } // namespace
 
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height)
@@ -995,7 +1285,7 @@ void PrepareUiSprites()
 		UiHidden.assign(static_cast<size_t>(ui->w) * ui->h, 0);
 	}
 	for (UiDraw &draw : UiDraws) {
-		draw.art = ArtFor(draw.name->name);
+		draw.art = draw.name->spellIcon ? SpellIconArtFor(draw.name->name) : ArtFor(draw.name->name);
 		draw.outline.smooth = false;
 	}
 	for (size_t i = 0; i < UiDraws.size(); i++) {
@@ -1174,6 +1464,10 @@ void RenderUiSprites(SDL_Renderer *renderer)
 		// Panels went under the UI (RenderUiPanels).
 		if (draw.shown == 0 || draw.art == nullptr || renderer == nullptr || draw.name->panel)
 			continue;
+		if (draw.name->spellIcon) {
+			DrawFittedUiArt(renderer, draw);
+			continue;
+		}
 		UiArt &art = *draw.art;
 		const SDL_FRect dest = DestOf(draw);
 		SDL_Texture *texture = nullptr;
