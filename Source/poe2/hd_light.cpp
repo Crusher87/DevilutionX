@@ -49,10 +49,21 @@ constexpr float SampleAt(int i)
 	return static_cast<float>(i) / Per - 0.25F;
 }
 
+/**
+ * @brief The whole number at or just below a value, as static_cast<int>(std::floor(value)) gives it for any value an
+ * int can hold. Without the call: std::floor is a call into the maths library on the processors this is built for, and
+ * a light that moves asks for it some hundred thousand times a frame (four times for every ray it casts).
+ */
+constexpr int FloorToInt(float value)
+{
+	const int whole = static_cast<int>(value);
+	return static_cast<float>(whole) > value ? whole - 1 : whole;
+}
+
 /** @brief The sample at or just before a world coordinate. */
 int SampleBefore(float world)
 {
-	return static_cast<int>(std::floor((world + 0.25F) * Per));
+	return FloorToInt((world + 0.25F) * Per);
 }
 
 /** @brief How far (dx, dy) reaches. Not std::hypot, which is slower and gives precision not needed here. */
@@ -434,10 +445,10 @@ bool BlocksSight(int x, int y)
 /** @brief Light goes from one world point to another without a wall in between (the tiles they're in don't count). */
 bool Clear(float x0, float y0, float x1, float y1)
 {
-	int tx = static_cast<int>(std::floor(x0 + 0.5F));
-	int ty = static_cast<int>(std::floor(y0 + 0.5F));
-	const int ex = static_cast<int>(std::floor(x1 + 0.5F));
-	const int ey = static_cast<int>(std::floor(y1 + 0.5F));
+	int tx = FloorToInt(x0 + 0.5F);
+	int ty = FloorToInt(y0 + 0.5F);
+	const int ex = FloorToInt(x1 + 0.5F);
+	const int ey = FloorToInt(y1 + 0.5F);
 	const float dx = x1 - x0;
 	const float dy = y1 - y0;
 	const int sx = dx > 0 ? 1 : -1;
@@ -480,7 +491,7 @@ bool Clear(float x0, float y0, float x1, float y1)
 
 int TileOf(float world)
 {
-	return static_cast<int>(std::floor(world + 0.5F));
+	return FloorToInt(world + 0.5F);
 }
 
 /**
@@ -610,8 +621,8 @@ void PlaceRays(Source &source)
 {
 	source.rayX = source.x;
 	source.rayY = source.y;
-	const int tx = static_cast<int>(std::floor(source.x + 0.5F));
-	const int ty = static_cast<int>(std::floor(source.y + 0.5F));
+	const int tx = FloorToInt(source.x + 0.5F);
+	const int ty = FloorToInt(source.y + 0.5F);
 	if (!BlocksTile(tx, ty))
 		return;
 	if ((source.faceX != 0 || source.faceY != 0) && !BlocksTile(tx + source.faceX, ty + source.faceY)) {
@@ -1473,11 +1484,11 @@ void AddFarGlow()
 	}
 	const Colour colour = Even(LavaColour);
 	for (int j = 0; j < LatticeH; j++) {
-		const int y = std::clamp(static_cast<int>(std::floor(SampleAt(j) + 0.5F)), 0, MAXDUNY - 1);
+		const int y = std::clamp(FloorToInt(SampleAt(j) + 0.5F), 0, MAXDUNY - 1);
 		const int y0 = std::max(y - reach, 0);
 		const int y1 = std::min(y + reach, MAXDUNY - 1) + 1;
 		for (int i = 0; i < LatticeW; i++) {
-			const int x = std::clamp(static_cast<int>(std::floor(SampleAt(i) + 0.5F)), 0, MAXDUNX - 1);
+			const int x = std::clamp(FloorToInt(SampleAt(i) + 0.5F), 0, MAXDUNX - 1);
 			const int x0 = std::max(x - reach, 0);
 			const int x1 = std::min(x + reach, MAXDUNX - 1) + 1;
 			const int lava = sums[static_cast<size_t>(x1) * Wide + y1] - sums[static_cast<size_t>(x0) * Wide + y1] - sums[static_cast<size_t>(x1) * Wide + y0] + sums[static_cast<size_t>(x0) * Wide + y0];
