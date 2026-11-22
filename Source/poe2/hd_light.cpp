@@ -1997,7 +1997,18 @@ void Finish()
 {
 	const Look &look = CurrentLook;
 	const auto byte = [](float value) { return static_cast<uint32_t>(std::clamp(value, 0.F, 1.F) * 255.F + 0.5F); };
+	// Most of the view is beyond every light's reach, in the same dark from one sample to the next. A sample with
+	// exactly the light of the one before it (the same bits, so the same answer) takes what was worked out for that one.
+	const auto sameLight = [](float brightA, const std::array<float, 4> &hueA, float brightB, const std::array<float, 4> &hueB) {
+		return std::memcmp(&brightA, &brightB, sizeof(float)) == 0 && std::memcmp(hueA.data(), hueB.data(), sizeof(float) * hueA.size()) == 0;
+	};
 	for (size_t k = 0; k < WinBright.size(); k++) {
+		if (k > 0 && sameLight(WinBright[k], WinHue[k], WinBright[k - 1], WinHue[k - 1])) {
+			WinColour[k] = WinColour[k - 1];
+			WinPixels[k] = WinPixels[k - 1];
+			WinMulPixels[k] = WinMulPixels[k - 1];
+			continue;
+		}
 		const std::array<float, 3> colour = Graded(WinBright[k], WinHue[k]);
 		Rgb &out = WinColour[k];
 		out = { colour[0], colour[1], colour[2] };
@@ -2010,13 +2021,19 @@ void Finish()
 		WinMulPixels[k] = (byte(alpha) << 24) | (byte(colour[0] - 1 + alpha) << 16) | (byte(colour[1] - 1 + alpha) << 8) | byte(colour[2] - 1 + alpha);
 	}
 	// The rock tops' light, at the rock's samples (the open ones keep the floor's).
+	size_t lastTop = SIZE_MAX;
 	for (size_t k = 0; k < WinTopBright.size(); k++) {
 		if (WinSet[k] == 1) {
 			WinTopColour[k] = WinColour[k];
 			continue;
 		}
+		if (lastTop != SIZE_MAX && sameLight(WinTopBright[k], WinTopHue[k], WinTopBright[lastTop], WinTopHue[lastTop])) {
+			WinTopColour[k] = WinTopColour[lastTop];
+			continue;
+		}
 		const std::array<float, 3> colour = Graded(WinTopBright[k], WinTopHue[k]);
 		WinTopColour[k] = { colour[0], colour[1], colour[2] };
+		lastTop = k;
 	}
 	// The sky's light alone, drawn as a point lit by nothing else is above.
 	SkyRgb = Full();
