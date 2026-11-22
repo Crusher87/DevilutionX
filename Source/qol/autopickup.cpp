@@ -45,7 +45,7 @@ int NumMiscItemsInInv(int iMiscId)
 bool DoPickup(Item item)
 {
 	// POE2 Mashup: gold is always picked up by walking near it.
-	if (item._itype == ItemType::Gold && (gbIsPoe2 || *GetOptions().Gameplay.autoGoldPickup) && HasRoomForGold())
+	if (item._itype == ItemType::Gold && (HasEnhancements() || *GetOptions().Gameplay.autoGoldPickup) && HasRoomForGold())
 		return true;
 
 	if (item._itype == ItemType::Misc

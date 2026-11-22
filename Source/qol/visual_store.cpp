@@ -61,7 +61,7 @@ Poe2ShopTab ActivePoe2ShopTab = Poe2ShopTab::Weapons;
 
 bool UseVisualStoreUi()
 {
-	return gbIsPoe2 || *GetOptions().Gameplay.storeUi == StoreUi::VisualGrid;
+	return HasEnhancements() || *GetOptions().Gameplay.storeUi == StoreUi::VisualGrid;
 }
 
 namespace {

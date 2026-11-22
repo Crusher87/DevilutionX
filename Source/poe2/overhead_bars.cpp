@@ -299,7 +299,7 @@ void DrawHeroBar(const Surface &out, Point topLeft, const OverheadBarValues &val
 
 void QueueHeroOverheadBar(const Player &player, Point spritePosition, ClxSprite sprite)
 {
-	if (!gbIsPoe2 || player.hasNoLife())
+	if (!HasEnhancements() || player.hasNoLife())
 		return;
 	const bool bar = *GetOptions().Gameplay.heroMiniBar;
 	const bool shrine = NewestShrineBuff(player.poe2.shrines) != nullptr;
@@ -323,7 +323,7 @@ void QueueHeroOverheadBar(const Player &player, Point spritePosition, ClxSprite 
 
 void QueueMonsterOverheadBar(const Monster &monster, Point spritePosition, ClxSprite sprite)
 {
-	if (!gbIsPoe2 || !*GetOptions().Gameplay.hurtMonsterBars || !IsHurtEnemyForBar(monster))
+	if (!HasEnhancements() || !*GetOptions().Gameplay.hurtMonsterBars || !IsHurtEnemyForBar(monster))
 		return;
 	// Measured on the standing picture, so the bar doesn't bob as the monster swings.
 	int standHeight = sprite.height();

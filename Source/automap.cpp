@@ -1883,7 +1883,7 @@ void DrawAutomap(const Surface &out)
 	// POE2 Mashup: Map Transparency, and the floor under the lines (Landscape Transparency).
 	const int savedLineOpacity = GetMapLineOpacity();
 	const bool savedTints = GetMapTintsUi();
-	if (gbIsPoe2) {
+	if (HasEnhancements()) {
 		SetMapLineOpacity(MapOpacityPercent());
 		// POE2 Mashup: the Tab map goes over the world with real alpha, so it holds steady while walking; the corner map
 		// keeps its solid backdrop (Curtis 2026-10-29).
@@ -1894,7 +1894,7 @@ void DrawAutomap(const Surface &out)
 		// Background fill
 		// POE2 Mashup: the corner map gets a solid backdrop. Seen through, the world scrolling under it kept changing its
 		// shade while walking (Curtis 2026-10-29).
-		if (gbIsPoe2 && CornerView != nullptr) {
+		if (HasEnhancements() && CornerView != nullptr) {
 			FillRect(out, MinimapRect.position.x, MinimapRect.position.y, MinimapRect.size.width, MinimapRect.size.height, 0);
 			// The whole corner map is a solid panel: no part of the world or the effects layer shows through where its black
 			// happens to match the world's (Curtis 2026-10-30: it still darkened while walking).
@@ -1922,7 +1922,7 @@ void DrawAutomap(const Surface &out)
 			});
 	}
 
-	if (gbIsPoe2)
+	if (HasEnhancements())
 		DrawMapLandscape(out, myPlayerOffset, cells, LandscapeOpacityPercent());
 
 	Point screen = {};
@@ -1991,7 +1991,7 @@ void DrawAutomap(const Surface &out)
 #endif
 
 	// POE2 Mashup: stairs, portals, shrines, strongboxes, rare monsters and bosses; monsters without names.
-	if (gbIsPoe2) {
+	if (HasEnhancements()) {
 		const Rectangle clip = GetAutomapType() == AutomapType::Minimap ? MinimapRect : Rectangle { { 0, 0 }, { out.w(), out.h() } };
 		DrawMapMarkers(out, clip, scale, [&](Point tile) { return TileToAutomapScreen(tile, myPlayerOffset); });
 	}

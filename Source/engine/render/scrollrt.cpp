@@ -517,7 +517,7 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 	// POE2 Mashup: the HD light gives a monster a shadow, and lights it in its colour unless it's drawn in a recolour.
 	const hd::CasterScope caster(hd::Caster::Monster);
 	// POE2 Mashup: a monster in front of a brazier or a portal goes over its effects.
-	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
+	if (HasEnhancements() && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, targetBufferPosition, sprite);
 
 	if (!IsTileLit(tilePosition)) {
@@ -709,13 +709,13 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
 	// POE2 Mashup: the mini life bar over the hero is drawn later, with the UI.
-	if (gbIsPoe2 && &player == MyPlayer)
+	if (HasEnhancements() && &player == MyPlayer)
 		QueueHeroOverheadBar(player, spriteBufferPosition, sprite);
 	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
-	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
+	if (HasEnhancements() && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, spriteBufferPosition, sprite);
 	// POE2 Mashup: Tristram's stream shows whoever stands by it (idea 66).
-	if (gbIsPoe2 && leveltype == DTYPE_TOWN)
+	if (HasEnhancements() && leveltype == DTYPE_TOWN)
 		vfx::NoteReflection(out, spriteBufferPosition, sprite);
 
 	// POE2 Mashup: in HD the outline under the cursor fades in.
@@ -892,7 +892,7 @@ void DrawCell(const Surface &out, const Lightmap lightmap, Point tilePosition, P
 #endif
 	// POE2 Mashup: walls and pillars in front of a portal hide it, as heroes and monsters do (Curtis, Rogue run 2: the
 	// town portal was drawn over them). One gone see-through lets it show.
-	const bool marksFront = gbIsPoe2 && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
+	const bool marksFront = HasEnhancements() && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
 	if (marksFront) {
 		const int columnHeight = MicroTileLen / 2 * TILE_HEIGHT;
 		vfx::BeginFrontPiece(out, targetBufferPosition + Displacement { 0, 1 - columnHeight }, Size { TILE_WIDTH, columnHeight });
@@ -1115,7 +1115,7 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 		const hd::CasterScope caster(hd::Caster::Monster);
 		ClxDraw(out, position, sprite);
 		// And the stream shows them, as it does a hero (idea 66).
-		if (gbIsPoe2)
+		if (HasEnhancements())
 			vfx::NoteReflection(out, position, sprite);
 		return;
 	}
@@ -1160,7 +1160,7 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 
 	const Point monsterRenderPosition = targetBufferPosition + offset;
 	// POE2 Mashup: a hurt monster's life bar is drawn later, with the UI.
-	if (gbIsPoe2 && !IsBoundDemon(monster))
+	if (HasEnhancements() && !IsBoundDemon(monster))
 		QueueMonsterOverheadBar(monster, monsterRenderPosition, sprite);
 	// POE2 Mashup: in HD the outline fades in under the cursor.
 	const hd::OutlineScope outlineLook(MonsterOutlineLook(mi));
@@ -1332,7 +1332,7 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 #endif
 			// POE2 Mashup: an arch in front of a portal hides it, as the walls do (see DrawCell).
 			const ClxSprite arch = (*pSpecialCels)[bArch];
-			const bool marksFront = gbIsPoe2 && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
+			const bool marksFront = HasEnhancements() && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
 			if (marksFront)
 				vfx::BeginFrontPiece(out, targetBufferPosition + Displacement { 0, 1 - arch.height() }, Size { arch.width(), arch.height() });
 			if (perPixelLighting) {
@@ -1851,7 +1851,7 @@ void DrawView(const Surface &out, Point startPosition)
 	}
 #endif
 	DrawItemNameLabels(out);
-	if (gbIsPoe2)
+	if (HasEnhancements())
 		DrawOverheadBars(out);
 	if (gbIsPoe2)
 		DrawMonsterBanner(out);
@@ -1859,9 +1859,9 @@ void DrawView(const Surface &out, Point startPosition)
 		DrawMonsterHealthBar(out);
 	DrawFloatingNumbers(out, startPosition, offset);
 	// POE2 Mashup: the corner map, under the open windows.
-	if (gbIsPoe2)
+	if (HasEnhancements())
 		DrawPoe2CornerMap(out.subregionY(0, gnViewportHeight));
-	if (gbIsPoe2)
+	if (HasEnhancements())
 		DrawPoe2QuestTracker(out.subregionY(0, gnViewportHeight));
 	// POE2 Mashup: the effects layer lines up with this frame's view.
 	TelemetryDrawStep("finding effects to draw");
@@ -2399,7 +2399,7 @@ void DrawAndBlit()
 			    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
 			    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
 	}
-	if (gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox)
+	if (HasEnhancements() || *GetOptions().Gameplay.floatingInfoBox)
 		DrawFloatingInfoBox(out);
 	DrawStashTabTooltip(out);
 	DrawMinionHud(out);

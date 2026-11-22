@@ -1774,7 +1774,7 @@ void TelemetryGameStarted(const Player &player, bool loaded)
 	LastExperience = player._pExperience;
 	LastGold = HeroGold(player);
 	StartOfGame = { player._pName, std::string(player.getClassName()), player.getCharacterLevel(), loaded };
-	const std::string_view mode = gbIsPoe2 ? "POE2" : (gbIsHellfire ? "Hellfire" : "Diablo");
+	const std::string_view mode = gbIsPoe2 ? "POE2" : (gbIsReforged ? "Sanctuary Reforged" : (gbIsHellfire ? "Hellfire" : "Diablo"));
 	WriteText("game", std::format("{:s} {:s}: level {:d} {:s}, life {:d}/{:d}, mana {:d}/{:d}, mode {:s}", loaded ? "loaded" : "new game", player._pName, player.getCharacterLevel(), player.getClassName(), player._pHitPoints.whole(), player._pMaxHP.whole(), player._pMana.whole(), player._pMaxMana.whole(), mode), true);
 	Event(LogChannel::Session, LogLevel::Always, "game_start")
 	    .add("p", player.getId())

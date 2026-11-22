@@ -316,6 +316,9 @@ void gmenu_draw(const Surface &out)
 		// POE2 Mashup: the mod's version, under the menu rather than always in the corner of the screen.
 		if (gbIsPoe2 && !Poe2ModVersion.empty())
 			DrawString(out, StrCat("POE2 Mashup ", Poe2ModVersion), { { 0, y + 8 }, { gnScreenWidth, 20 } }, { .flags = UiFlags::AlignCenter | UiFlags::ColorWhitegold });
+		// Sanctuary Reforged says so in the same place, so it's easy to tell which flavour is running.
+		else if (gbIsReforged)
+			DrawString(out, "Sanctuary Reforged", { { 0, y + 8 }, { gnScreenWidth, 20 } }, { .flags = UiFlags::AlignCenter | UiFlags::ColorWhitegold });
 	}
 }
 

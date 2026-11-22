@@ -2064,13 +2064,13 @@ void ItemDoppel()
 void AddItemInfoBoxString(const std::string_view str)
 {
 	// POE2 Mashup: item details always go in the tooltip by the item, never the box at the bottom.
-	const bool floatingInfoBoxEnabled = gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox;
+	const bool floatingInfoBoxEnabled = HasEnhancements() || *GetOptions().Gameplay.floatingInfoBox;
 	AddInfoBoxString(str, floatingInfoBoxEnabled);
 }
 
 void AddItemInfoBoxString(std::string &&str)
 {
-	const bool floatingInfoBoxEnabled = gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox;
+	const bool floatingInfoBoxEnabled = HasEnhancements() || *GetOptions().Gameplay.floatingInfoBox;
 	AddInfoBoxString(std::move(str), floatingInfoBoxEnabled);
 }
 

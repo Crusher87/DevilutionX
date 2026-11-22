@@ -74,7 +74,7 @@ void Save(const char *why)
 
 bool AutosaveEnabled()
 {
-	return gbIsPoe2 && !gbIsMultiplayer;
+	return HasEnhancements() && !gbIsMultiplayer;
 }
 
 void RequestAutosave(const char *why)

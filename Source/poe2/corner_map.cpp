@@ -252,14 +252,14 @@ size_t StepListIndex(size_t index, size_t listSize, int step)
 
 int MapOpacityPercent()
 {
-	if (!gbIsPoe2)
+	if (!HasEnhancements())
 		return 100;
 	return 100 - std::clamp(*GetOptions().Gameplay.mapTransparency, 0, 100);
 }
 
 int LandscapeOpacityPercent()
 {
-	if (!gbIsPoe2)
+	if (!HasEnhancements())
 		return 0;
 	const int landscape = 100 - std::clamp(*GetOptions().Gameplay.landscapeTransparency, 0, 100);
 	return landscape * MapOpacityPercent() / 100;
@@ -483,7 +483,7 @@ void DrawMapMarkers(const Surface &out, const Rectangle &clip, int scale, tl::fu
 
 bool CornerMapShown()
 {
-	return gbIsPoe2 && *GetOptions().Gameplay.showCornerMap && !AutomapActive;
+	return HasEnhancements() && *GetOptions().Gameplay.showCornerMap && !AutomapActive;
 }
 
 Rectangle CurrentCornerMapRect()

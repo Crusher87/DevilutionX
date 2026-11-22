@@ -112,7 +112,7 @@ void AddItemToLabelQueue(int id, Point position)
 	if (IsItemHiddenByLootFilter(item))
 		return;
 	// POE2 Mashup: no names through closed doors or in rooms not yet seen (Curtis 2026-11-07).
-	if (gbIsPoe2 && !HeroHasSeenGroundItem(item))
+	if (HasEnhancements() && !HeroHasSeenGroundItem(item))
 		return;
 	// POE2 Mashup: gold has no label; picking it up shows the amount over the hero.
 	if (gbIsPoe2 && item._itype == ItemType::Gold)
@@ -217,7 +217,7 @@ void DrawItemNameLabels(const Surface &out)
 			    && !MyPlayerIsDead
 			    && !IsPlayerInStore()
 			    && IsMouseOverGameArea()
-			    && (gbIsPoe2 ? sgbMouseDown == CLICK_NONE : LastPlayerAction == PlayerActionType::None)) {
+			    && (HasEnhancements() ? sgbMouseDown == CLICK_NONE : LastPlayerAction == PlayerActionType::None)) {
 				isLabelHighlighted = true;
 				cursPosition = item.position;
 				pcursitem = label.id;

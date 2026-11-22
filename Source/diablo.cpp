@@ -764,7 +764,7 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	case SDLK_KP_EQUALS:
 		if (AutomapActive) {
 			AutomapZoomIn();
-		} else if (gbIsPoe2) {
+		} else if (HasEnhancements()) {
 			CornerMapZoomKey(1);
 		}
 		return;
@@ -773,7 +773,7 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	case SDLK_UNDERSCORE:
 		if (AutomapActive) {
 			AutomapZoomOut();
-		} else if (gbIsPoe2) {
+		} else if (HasEnhancements()) {
 			CornerMapZoomKey(-1);
 		}
 		return;
@@ -2300,7 +2300,7 @@ void InitKeymapActions()
 	    // POE2 Mashup: Alt toggles the labels, which stay up until it's pressed again; the loot filter decides which show.
 	    // Over an item it only shows the item's modifier details, so checking an item doesn't flip the labels.
 	    [] {
-		    if (gbIsPoe2) {
+		    if (HasEnhancements()) {
 			    if (pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursitem == -1)
 				    ToggleItemLabelHighlight();
 		    } else {
@@ -2308,7 +2308,7 @@ void InitKeymapActions()
 		    }
 	    },
 	    [] {
-		    if (!gbIsPoe2)
+		    if (!HasEnhancements())
 			    HighlightKeyPressed(false);
 	    });
 	options.Keymapper.AddAction(
@@ -2447,7 +2447,7 @@ void InitKeymapActions()
 		    EventPlrMsg(*hd ? _("HD on") : _("HD off"));
 	    },
 	    nullptr,
-	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
+	    [] { return HasEnhancements() && CanPlayerTakeAction(); });
 	options.Keymapper.AddAction(
 	    "PauseGame",
 	    N_("Pause Game"),
