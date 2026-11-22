@@ -409,5 +409,60 @@ TEST_F(ReforgedUiComfortsTest, WalkingAwayClosesATalkMenu)
 	ActiveStore = TalkID::None;
 }
 
+// --- 6. Camera shake on Diablo's own big moments --------------------------------------------------------------------
+
+TEST(ReforgedCameraShakeTest, OnlyReforgedShakesForDiablosMomentsAndNeverTouchesTheRandomNumbers)
+{
+	gbIsPoe2 = false;
+	gbIsReforged = false;
+	StopCameraShake();
+	ShakeCameraFor(ReforgedShake::Apocalypse);
+	EXPECT_EQ(CameraShakeOffset(), Displacement {});
+
+	gbIsPoe2 = true;
+	ShakeCameraFor(ReforgedShake::Apocalypse);
+	EXPECT_EQ(CameraShakeOffset(), Displacement {});
+	gbIsPoe2 = false;
+
+	gbIsReforged = true;
+	SetRndSeed(1234);
+	const uint32_t rng = GetLCGEngineState();
+	ShakeCameraFor(ReforgedShake::Nova);
+	EXPECT_EQ(GetLCGEngineState(), rng);
+	const auto size = [](Displacement offset) { return std::max(std::abs(offset.deltaX), std::abs(offset.deltaY)); };
+	EXPECT_GT(size(CameraShakeOffset()), 0);
+	EXPECT_LE(size(CameraShakeOffset()), static_cast<int>(ShakeStrength::Light));
+
+	// A stronger moment takes over; Diablo's own Apocalypse is the strongest, and still gentle.
+	ShakeCameraFor(ReforgedShake::DiabloApocalypse);
+	EXPECT_LE(size(CameraShakeOffset()), static_cast<int>(ShakeStrength::Heavy));
+	EXPECT_GT(size(CameraShakeOffset()), static_cast<int>(ShakeStrength::Light));
+	// It fades away within a second.
+	for (int tick = 0; tick < 20; tick++)
+		TickCameraShake();
+	EXPECT_EQ(CameraShakeOffset(), Displacement {});
+	gbIsReforged = false;
+}
+
+TEST(ReforgedCameraShakeTest, TheButchersAndDiablosBlowsShakeAndOthersDont)
+{
+	LoadMonsterData();
+	LevelMonsterTypes[0].type = MT_CLEAVER;
+	LevelMonsterTypes[1].type = MT_DIABLO;
+	LevelMonsterTypes[2].type = MT_NZOMBIE;
+	Monster butcher {};
+	butcher.levelType = 0;
+	butcher.uniqueType = UniqueMonsterType::Butcher;
+	Monster diablo {};
+	diablo.levelType = 1;
+	diablo.uniqueType = UniqueMonsterType::None;
+	Monster zombie {};
+	zombie.levelType = 2;
+	zombie.uniqueType = UniqueMonsterType::None;
+	EXPECT_TRUE(BlowsShakeCamera(butcher));
+	EXPECT_TRUE(BlowsShakeCamera(diablo));
+	EXPECT_FALSE(BlowsShakeCamera(zombie));
+}
+
 } // namespace
 } // namespace devilution
