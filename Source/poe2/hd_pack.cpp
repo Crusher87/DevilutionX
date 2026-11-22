@@ -46,28 +46,41 @@ uint32_t Le32(const uint8_t *p)
 	return static_cast<uint32_t>(p[0]) | (static_cast<uint32_t>(p[1]) << 8) | (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
-const uint32_t *CrcTable()
+/** @brief Eight tables of 256: the CRC is worked out eight bytes at a step (a picture's worth in a few microseconds). */
+const uint32_t *CrcTables()
 {
-	static const uint32_t *table = [] {
-		auto *made = new uint32_t[256];
+	static const uint32_t *tables = [] {
+		auto *made = new uint32_t[8 * 256];
 		for (uint32_t i = 0; i < 256; i++) {
 			uint32_t c = i;
 			for (int bit = 0; bit < 8; bit++)
 				c = (c & 1) != 0 ? 0xEDB88320U ^ (c >> 1) : c >> 1;
 			made[i] = c;
 		}
+		for (uint32_t table = 1; table < 8; table++) {
+			for (uint32_t i = 0; i < 256; i++) {
+				const uint32_t before = made[(table - 1) * 256 + i];
+				made[table * 256 + i] = (before >> 8) ^ made[before & 0xFF];
+			}
+		}
 		return made;
 	}();
-	return table;
+	return tables;
 }
 
 /** @brief The CRC-32 zlib and PNG use. */
 uint32_t Crc32(const uint8_t *data, size_t size)
 {
-	const uint32_t *table = CrcTable();
+	const uint32_t *t = CrcTables();
 	uint32_t crc = 0xFFFFFFFFU;
+	for (; size >= 8; size -= 8, data += 8) {
+		const uint32_t one = Le32(data) ^ crc;
+		const uint32_t two = Le32(data + 4);
+		crc = t[7 * 256 + (one & 0xFF)] ^ t[6 * 256 + ((one >> 8) & 0xFF)] ^ t[5 * 256 + ((one >> 16) & 0xFF)] ^ t[4 * 256 + (one >> 24)]
+		    ^ t[3 * 256 + (two & 0xFF)] ^ t[2 * 256 + ((two >> 8) & 0xFF)] ^ t[1 * 256 + ((two >> 16) & 0xFF)] ^ t[two >> 24];
+	}
 	for (size_t i = 0; i < size; i++)
-		crc = table[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
+		crc = t[(crc ^ data[i]) & 0xFF] ^ (crc >> 8);
 	return crc ^ 0xFFFFFFFFU;
 }
 
