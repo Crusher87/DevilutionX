@@ -1037,7 +1037,7 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				ChatLogScrollUp();
 			} else if (IsStashOpen) {
 				Stash.PreviousPage();
-			} else if (gbIsPoe2 && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
+			} else if (UsesShopTabs() && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
 				VisualStorePreviousPage();
 			} else if (SDL_GetModState() & SDL_KMOD_CTRL) {
 				if (AutomapActive) {
@@ -1057,7 +1057,7 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				ChatLogScrollDown();
 			} else if (IsStashOpen) {
 				Stash.NextPage();
-			} else if (gbIsPoe2 && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
+			} else if (UsesShopTabs() && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
 				VisualStoreNextPage();
 			} else if (SDL_GetModState() & SDL_KMOD_CTRL) {
 				if (AutomapActive) {
