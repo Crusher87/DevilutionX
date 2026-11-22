@@ -9,6 +9,7 @@
 #include <array>
 #include <cstring>
 
+#include "game_mode.hpp"
 #include "interfac.h"
 #include "levels/gendung.h"
 #include "msg.h"
@@ -367,6 +368,15 @@ void Poe2BeginFloorVisit(bool firstflag, lvl_entry lvldir)
 	}
 	if (FloorIsFinalBossRest(level, setlevel))
 		return;
+	// Sanctuary Reforged keeps every floor as Diablo does. A floor is only built again when a game update changed the rooms it
+	// was built from, since its saved monsters and objects would no longer fit its layout (see RebuildFloorsFromOtherRooms).
+	if (gbIsReforged) {
+		if (!gbIsMultiplayer && (force || BuiltFromOtherRooms(level, setlevel))) {
+			Poe2RollFreshFloor(level, setlevel);
+			Poe2FloorFresh = true;
+		}
+		return;
+	}
 	if (gbIsMultiplayer) {
 		// Every player has a different clock, so only the Ctrl+click roll is used, and only when nobody else
 		// is already standing on that floor (they would keep a different copy of it).
@@ -467,6 +477,11 @@ bool Poe2UnpackFloors(std::span<const uint8_t> data)
 	return true;
 }
 
+bool UsesDesignedFloors()
+{
+	return (gbIsPoe2 || gbIsReforged) && !gbIsMultiplayer;
+}
+
 Poe2FloorBuild Poe2FloorBuildFor(int level)
 {
 	FloorRecord *record = RecordFor(level, false);
@@ -490,8 +505,10 @@ Poe2FloorBuild Poe2FloorBuildFor(int level)
 			wanted = *GetOptions().Gameplay.newCavesFloors;
 		else if (catacombs)
 			wanted = *GetOptions().Gameplay.newCatacombsFloors;
-		// A kept floor that was never settled was built before its dungeon had the new builder: it stays Diablo's.
-		record->cathedralFunnel = !record->kept && wanted;
+		// A kept floor that was never settled was built before its dungeon had the new builder: it stays Diablo's. Sanctuary
+		// Reforged keeps every floor it has saved, so there that is any floor visited before and not being built fresh.
+		const bool builtBefore = gbIsReforged ? EverVisited(level, false) && !Poe2FloorFresh : record->kept;
+		record->cathedralFunnel = !builtBefore && wanted;
 		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs, caves || hive, hell, hive, crypt) : 0;
 		record->roomsPending = record->cathedralFunnel;
 		record->roomsStamp = record->cathedralFunnel ? CathedralRoomsStamp(catacombs, caves, hell, hive, crypt) : 0;

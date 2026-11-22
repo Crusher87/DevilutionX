@@ -68,6 +68,13 @@ void Poe2FloorsAfterLoadGame();
 /** @brief The hero's town portal closed; the timer on its floor starts now. */
 void Poe2PortalClosed(int level, bool isSetLevel);
 
+/**
+ * @brief Whether floors are built from the designed rooms when their area's New ... Floors setting is on: in POE2 Mashup
+ * and in Sanctuary Reforged (which takes the layouts only, with Diablo's own monsters, objects and items on them), single
+ * player only.
+ */
+bool UsesDesignedFloors();
+
 /** @brief How a floor's current build is made. */
 struct Poe2FloorBuild {
 	/** The new Cathedral builder (poe2/cathedral_floors.hpp) rather than Diablo's. */

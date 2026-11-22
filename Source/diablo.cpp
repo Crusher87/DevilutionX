@@ -308,8 +308,8 @@ void LeftMouseCmd(bool bShift)
 		ForgetChosenPortal();
 		ForgetChosenLevelExit();
 	}
-	// POE2 Mashup: Ctrl+click on stairs asks for a fresh floor on the other side.
-	Poe2ForceFreshFloor = trigflag && pcursitem == -1 && pcursmonst == -1 && (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
+	// POE2 Mashup: Ctrl+click on stairs asks for a fresh floor on the other side (Sanctuary Reforged keeps its floors).
+	Poe2ForceFreshFloor = !gbIsReforged && trigflag && pcursitem == -1 && pcursmonst == -1 && (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
 
 	// POE2 Mashup: clicking a portal or stairs walks into it, even with WASD movement.
 	if (wasdMovement && trigflag && pcursitem == -1 && pcursmonst == -1) {
