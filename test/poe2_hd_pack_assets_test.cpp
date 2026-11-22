@@ -317,6 +317,33 @@ TEST_F(HdPackAssetsTest, TimeLooseAgainstPacked)
 	hdpack::Unmount();
 	RemoveFile((packHd + "index.hdx").c_str());
 	RemoveFile((packHd + PackFileName(0)).c_str());
+
+	// How long an index of as many names as the whole of the art has takes to read and check, and a lookup in it.
+	const int names = env != nullptr && std::getenv("HD_PACK_BENCH_NAMES") != nullptr ? std::atoi(std::getenv("HD_PACK_BENCH_NAMES")) : 2000;
+	std::map<std::string, std::string> many;
+	for (int i = 0; i < names; i++) {
+		char name[96];
+		std::snprintf(name, sizeof(name), "monsters\\monster%04d\\monster%04da\\d%d_f%02d_m%d.png", i / 512, i / 512, (i / 64) % 8, (i / 4) % 16, i % 4);
+		many[name] = SomeBytes(static_cast<uint32_t>(i - i % 3), 10);
+	}
+	ASSERT_GT(WritePack(packHd, many, 0x7FFFFFF0U), 0U);
+	uint64_t from = SDL_GetPerformanceCounter();
+	ASSERT_TRUE(hdpack::Mount(packHd));
+	const double mountMs = static_cast<double>(SDL_GetPerformanceCounter() - from) * 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
+	EXPECT_EQ(hdpack::NameCount(), static_cast<uint32_t>(names));
+	from = SDL_GetPerformanceCounter();
+	int there = 0;
+	for (const auto &[name, data] : many)
+		there += hdpack::Has("hd\\" + name) ? 1 : 0;
+	const double hasMs = static_cast<double>(SDL_GetPerformanceCounter() - from) * 1000.0 / static_cast<double>(SDL_GetPerformanceFrequency());
+	EXPECT_EQ(there, names);
+	std::uintmax_t indexSize = 0;
+	GetFileSize((packHd + "index.hdx").c_str(), &indexSize);
+	if (env != nullptr)
+		std::printf("HD_PACK_BENCH index of %d names: %.1f MB, read and checked in %.1f ms; %d lookups in %.1f ms\n", names, static_cast<double>(indexSize) / 1048576.0, mountMs, names, hasMs);
+	hdpack::Unmount();
+	RemoveFile((packHd + "index.hdx").c_str());
+	RemoveFile((packHd + PackFileName(0)).c_str());
 }
 
 #endif
