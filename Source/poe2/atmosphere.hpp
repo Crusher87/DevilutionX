@@ -124,8 +124,10 @@ enum class Knob : uint8_t {
 	TileShapes,
 	/** In a Tristram storm, raindrops land on the screen as on a window: they sit, dry off, and now and then run down. */
 	Lens,
+	/** An experiment, off unless asked for: the HD world's tiles drawn from a few big pictures in few draws (hd_batch.hpp). */
+	Batch,
 };
-inline constexpr size_t NumKnobs = 43;
+inline constexpr size_t NumKnobs = 44;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

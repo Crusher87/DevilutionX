@@ -90,6 +90,7 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "reflect", 1.F, "you show in Tristram's stream when you stand at its edge, and the water takes a little of the sky (idea 66)" },
 	{ "tileshapes", 1.F, "walls and floors that have a shape map are lit by their shape, so stone edges and pillars catch the light; 0 lights them flat (works with Atmosphere off)" },
 	{ "lens", 1.F, "in a Tristram storm rain gathers on the screen as on a window: droplets, pools where it lands close together, and now and then a run down the glass; 2 twice as much" },
+	{ "batch", 0.F, "an experiment for the frame rate: the HD world's tiles are drawn from a few big pictures in few draws; the picture should not change (works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
