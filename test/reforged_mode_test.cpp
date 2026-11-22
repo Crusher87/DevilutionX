@@ -31,6 +31,7 @@
 #include "poe2/autosave.hpp"
 #include "poe2/corner_map.hpp"
 #include "poe2/experience.hpp"
+#include "poe2/floors.hpp"
 #include "poe2/monster_mods.hpp"
 #include "qol/visual_store.h"
 #include "spells.h"
@@ -42,6 +43,27 @@
 
 namespace devilution {
 namespace {
+
+/** @brief Turns an area's New ... Floors setting off for one test, and on again (its default) after. */
+class ScopedFloorsSetting {
+public:
+	explicit ScopedFloorsSetting(OptionEntryBoolean &setting)
+	    : setting_(setting)
+	{
+		Poe2FloorsReset();
+		setting_.SetValue(false);
+	}
+	~ScopedFloorsSetting()
+	{
+		setting_.SetValue(true);
+		Poe2FloorsReset();
+	}
+	ScopedFloorsSetting(const ScopedFloorsSetting &) = delete;
+	ScopedFloorsSetting &operator=(const ScopedFloorsSetting &) = delete;
+
+private:
+	OptionEntryBoolean &setting_;
+};
 
 /** @brief Puts the mode switches back however a test ends. */
 class ReforgedModeTest : public ::testing::Test {
@@ -233,8 +255,10 @@ TEST_F(ReforgedModeTest, TheManifestKeepsItsSavesToItself)
 
 TEST_F(ReforgedModeTest, TheModsTablesAreTheSameAsPoe2s)
 {
-	// The look and comfort tables are copies: a change to one mod's is a change to the other's.
-	for (const std::string_view file : { "atmosphere.tsv", "map_icons.tsv", "quest_tracker.tsv", "skill_looks.tsv" }) {
+	// The look and comfort tables, and the designed rooms the floor layouts are built from, are copies: a change to one
+	// mod's is a change to the other's.
+	for (const std::string_view file : { "atmosphere.tsv", "map_icons.tsv", "quest_tracker.tsv", "skill_looks.tsv", "cathedral_rooms.tsv",
+	         "catacombs_rooms.tsv", "caves_rooms.tsv", "hell_rooms.tsv", "hive_rooms.tsv", "crypt_rooms.tsv" }) {
 		const std::string reforged = ReadWholeFile(StrCat(paths::BasePath(), "mods/reforged/txtdata/poe2/", file));
 		const std::string poe2 = ReadWholeFile(StrCat(paths::BasePath(), "mods/poe2/txtdata/poe2/", file));
 		ASSERT_FALSE(reforged.empty()) << file;
@@ -330,6 +354,8 @@ TEST_F(ReforgedModeTest, MonstersAndExperienceAreHellfires)
 
 TEST_F(ReforgedModeTest, ACathedralLevelIsBuiltTheSameAsDiablos)
 {
+	// With New Cathedral Floors off (on, the floor is built from the designed rooms: reforged_floors_test.cpp).
+	const ScopedFloorsSetting off(GetOptions().Gameplay.newCathedralFloors);
 	LoadExpectedLevelData("diablo/1-2588.dun");
 	TestInitGame();
 	gbIsReforged = true;
@@ -341,6 +367,7 @@ TEST_F(ReforgedModeTest, ACathedralLevelIsBuiltTheSameAsDiablos)
 
 TEST_F(ReforgedModeTest, AHellfireLevelIsBuiltTheSameAsHellfires)
 {
+	const ScopedFloorsSetting off(GetOptions().Gameplay.newCathedralFloors);
 	LoadExpectedLevelData("hellfire/1-401921334.dun");
 	TestInitGame(true, false);
 	gbIsReforged = true;
@@ -352,6 +379,7 @@ TEST_F(ReforgedModeTest, AHellfireLevelIsBuiltTheSameAsHellfires)
 
 TEST_F(ReforgedModeTest, ACryptLevelIsBuiltTheSameAsHellfires)
 {
+	const ScopedFloorsSetting off(GetOptions().Gameplay.newCryptFloors);
 	LoadExpectedLevelData("hellfire/21-2122696790.dun");
 	TestInitGame(true, true, true);
 	gbIsReforged = true;
