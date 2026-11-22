@@ -272,6 +272,22 @@ inline void RegisterUiPicture(std::string_view path, ClxSpriteList sprites)
 		RegisterUiPictureHook(path, sprites);
 }
 
+using RegisterUiLettersFn = void (*)(ClxSpriteList sprites, const uint8_t *trn, std::string_view name);
+
+/** @brief RegisterUiLetters when the HD renderer is linked in, otherwise null (hd_hooks.cpp). */
+extern RegisterUiLettersFn RegisterUiLettersHook;
+
+/**
+ * @brief Names a font's letters (one frame per character code) for when they are drawn with `trn` (null for none):
+ * each letter then shows its HD art hd\\<name>\\d0_fNN.png over the UI, NN being the character code, as item pictures
+ * do. A letter drawn in another colour, or with no art, keeps the game's own. ForgetUiPicture forgets them.
+ */
+inline void RegisterUiLetters(ClxSpriteList sprites, const uint8_t *trn, std::string_view name)
+{
+	if (RegisterUiLettersHook != nullptr)
+		RegisterUiLettersHook(sprites, trn, name);
+}
+
 /** @brief Forgets a UI panel's picture before its pixels are freed, so another picture loaded there doesn't take its art. */
 inline void ForgetUiPicture(ClxSpriteList sprites)
 {

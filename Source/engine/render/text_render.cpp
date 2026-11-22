@@ -251,6 +251,32 @@ uint32_t GetFontId(GameFontTables size, uint16_t row)
 	return (size << 16) | row;
 }
 
+/** @brief A colour's translation table, loaded the first time it is asked for; null for a colour drawn as it is. */
+const uint8_t *TranslationOf(text_color color)
+{
+	if (ColorTranslations[color] == nullptr)
+		return nullptr;
+	if (!ColorTranslationsData[color]) {
+		ColorTranslationsData[color].emplace();
+		LoadFileInMem(ColorTranslations[color], *ColorTranslationsData[color]);
+	}
+	return ColorTranslationsData[color]->data();
+}
+
+/**
+ * @brief POE2 Mashup: the main menu's letters (size 42 in its gold) and the Esc menu's (size 46 in gold, and black for
+ * what can't be picked) show the HD pack's art of them (hd\fonts\42-00, 46-00 and 46-00-black), drawn sharp.
+ */
+void RegisterHdLetters(GameFontTables size, ClxSpriteList letters)
+{
+	if (size == GameFont42) {
+		hd::RegisterUiLetters(letters, TranslationOf(ColorUiGold), "fonts/42-00");
+	} else if (size == GameFont46) {
+		hd::RegisterUiLetters(letters, nullptr, "fonts/46-00");
+		hd::RegisterUiLetters(letters, TranslationOf(ColorBlack), "fonts/46-00-black");
+	}
+}
+
 FontStack LoadFont(GameFontTables size, text_color color, uint16_t row)
 {
 	if (color == ColorGreen)
@@ -296,6 +322,8 @@ FontStack LoadFont(GameFontTables size, text_color color, uint16_t row)
 
 	if (!font.baseFont.has_value()) {
 		LogError("Error loading font: {}", path);
+	} else if (row == 0 && !font.overrideFont.has_value()) {
+		RegisterHdLetters(size, *font.baseFont);
 	}
 
 	return FontStack(font);
@@ -695,6 +723,9 @@ void LoadSmallSelectionSpinner()
 
 void UnloadFonts()
 {
+	// POE2 Mashup: the HD letters named for them are forgotten before their pixels go.
+	for (const auto &[id, font] : Fonts)
+		hd::ForgetUiPicture(font.baseFont);
 	Fonts.clear();
 }
 

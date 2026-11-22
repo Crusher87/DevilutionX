@@ -13,6 +13,7 @@ RecordUiOutlineFn RecordUiOutlineHook = nullptr;
 RegisterUiPictureFn RegisterUiPictureHook = nullptr;
 ForgetUiPictureFn ForgetUiPictureHook = nullptr;
 RecordUiBlitFn RecordUiBlitHook = nullptr;
+RegisterUiLettersFn RegisterUiLettersHook = nullptr;
 
 } // namespace hd
 
