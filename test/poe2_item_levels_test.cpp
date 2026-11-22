@@ -218,8 +218,8 @@ TEST_F(Poe2ItemLevelsTest, FistsReachTheTopStaff)
 
 TEST_F(Poe2ItemLevelsTest, EveryVendorLevelHasACandidatePerCategory)
 {
-	// Every class of POE2 equipment the vendors sell has, at every area level they stock for, a base Griswold can
-	// stock (drop level up to the area level) and one for his premium stock (from PremiumAreaLevelDivisor of it up).
+	// Every class of POE2 equipment the vendors sell has, at every level they stock for, a base they can stock (drop
+	// level up to it; VendorBaseFloors then keeps the newest of those).
 	std::set<ItemType> types;
 	for (size_t i = 0; i < AllItemsList.size(); i++) {
 		const ItemData &data = AllItemsList[i];
@@ -227,21 +227,17 @@ TEST_F(Poe2ItemLevelsTest, EveryVendorLevelHasACandidatePerCategory)
 			types.insert(data.itype);
 	}
 	EXPECT_GE(types.size(), 10U);
-	const int lowest = AreaLevelForFloor(1) + VendorAreaLevelBonus;
-	ASSERT_GT(lowest, VendorAreaLevelBonus);
+	const int lowest = 1 + VendorAreaLevelBonus;
 	for (int area = lowest; area <= MaxPoe2ItemLevel; area++) {
 		for (const ItemType type : types) {
 			bool stock = false;
-			bool premium = false;
 			for (size_t i = 0; i < AllItemsList.size(); i++) {
 				const ItemData &data = AllItemsList[i];
 				if (data.itype != type || data.dropRate <= 0 || !IsItemAvailable(static_cast<int>(i)) || BaseMetaFor(static_cast<int>(i)) == nullptr)
 					continue;
 				stock = stock || data.iMinMLvl <= area;
-				premium = premium || (data.iMinMLvl >= area / PremiumAreaLevelDivisor && data.iMinMLvl <= area);
 			}
 			EXPECT_TRUE(stock) << "area " << area << ", item type " << static_cast<int>(type);
-			EXPECT_TRUE(premium) << "area " << area << ", item type " << static_cast<int>(type);
 		}
 	}
 }

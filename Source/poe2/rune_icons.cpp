@@ -114,6 +114,35 @@ bool InStone(int dx, int dy, int rx, int ry)
 	return (dx * dx * ry * ry) + (dy * dy * width * width) <= width * width * ry * ry;
 }
 
+/** Where the stone sits in a box: its centre and how far it reaches across and down from it. */
+struct Stone {
+	Point center;
+	int rx;
+	int ry;
+};
+
+Stone StoneIn(const Rectangle &box)
+{
+	return {
+		box.position + Displacement { box.size.width / 2, box.size.height / 2 },
+		std::max(std::min(box.size.width, box.size.height) / 2 - 4, 4),
+		std::max(box.size.height / 2 - 3, 5),
+	};
+}
+
+/** Plots the ring `ring` pixels outside the stone: the glow's rings, and the outline just past them. */
+void PlotRing(const Surface &out, const Stone &stone, int ring, uint8_t color)
+{
+	const int rx = stone.rx;
+	const int ry = stone.ry;
+	for (int dy = -ry - ring; dy <= ry + ring; dy++) {
+		for (int dx = -rx - ring; dx <= rx + ring; dx++) {
+			if (InStone(dx, dy, rx + ring, ry + ring) && !InStone(dx, dy, rx + ring - 1, ry + ring - 1))
+				Plot(out, stone.center + Displacement { dx, dy }, color);
+		}
+	}
+}
+
 template <typename F>
 void ForLine(int x0, int y0, int x1, int y1, F &&plot)
 {
@@ -152,22 +181,17 @@ bool IsDrawnRuneItem(const Item &item)
 
 void DrawRuneIcon(const Surface &out, const Rectangle &box, AugmentId id, bool dim)
 {
-	const Point center = box.position + Displacement { box.size.width / 2, box.size.height / 2 };
-	const int rx = std::max(std::min(box.size.width, box.size.height) / 2 - 4, 4);
-	const int ry = std::max(box.size.height / 2 - 3, 5);
+	const Stone stone = StoneIn(box);
+	const Point center = stone.center;
+	const int rx = stone.rx;
+	const int ry = stone.ry;
 	const Glow glow = dim ? Glow { 0, 0, 0, 0 } : GlowFor(id);
 
 	// The glow: rings just outside the stone.
 	for (int ring = glow.rings; ring >= 1; ring--) {
 		const uint8_t color = ring == 1 ? glow.inner : glow.outer;
-		if (color == 0)
-			continue;
-		for (int dy = -ry - ring; dy <= ry + ring; dy++) {
-			for (int dx = -rx - ring; dx <= rx + ring; dx++) {
-				if (InStone(dx, dy, rx + ring, ry + ring) && !InStone(dx, dy, rx + ring - 1, ry + ring - 1))
-					Plot(out, center + Displacement { dx, dy }, color);
-			}
-		}
+		if (color != 0)
+			PlotRing(out, stone, ring, color);
 	}
 
 	// The stone: grey, lit from the top left, with a dark rim. Shade 15 of a ramp is the palette's white, so 14 is the darkest.
@@ -200,6 +224,12 @@ void DrawRuneIcon(const Surface &out, const Rectangle &box, AugmentId id, bool d
 			Plot(out, origin + Displacement { x, y }, groove);
 		});
 	}
+}
+
+void DrawRuneOutline(const Surface &out, const Rectangle &box, AugmentId id, uint8_t color)
+{
+	// Just past the glow's outer ring (or the stone's rim, for a rune with no glow), so it goes round all of the rune.
+	PlotRing(out, StoneIn(box), GlowFor(id).rings + 1, color);
 }
 
 } // namespace devilution

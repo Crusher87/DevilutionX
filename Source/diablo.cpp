@@ -119,6 +119,7 @@
 #include "poe2/level_census.hpp"
 #include "poe2/minion_travel.hpp"
 #include "poe2/modifiers.hpp"
+#include "poe2/moments.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/shrines.hpp"
@@ -1078,6 +1079,8 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 			nthread_ignore_mutex(true);
 			TelemetryLoadingStarted("level change");
 			// POE2 Mashup: quick fades between levels, and no loading screen when the level loads quickly.
+			// The Atmosphere option's idea 49: going down, the dark closes in on the hero as the level fades.
+			moments::LeavingLevel(IsAnyOf(GetCustomEvent(event), WM_DIABNEXTLVL, WM_DIABTOWNWARP, WM_DIABSETLVL));
 			PaletteFadeOut(LevelChangeFadeSpeed());
 			TelemetryLoadingFadedOut();
 			sound_stop();
@@ -1086,6 +1089,7 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 			PrepareForFadeIn();
 			LoadPWaterPalette();
 			TelemetryLoadingFadingIn();
+			moments::ArrivingOnLevel();
 			if (gbRunGame)
 				PaletteFadeIn(LevelChangeFadeSpeed());
 			TelemetryLoadingDone();

@@ -286,6 +286,9 @@ void PresentLayeredFrame(SDL_Surface *surface)
 	// POE2 Mashup: an HD world that covers the whole view hides the game's own under it, so that isn't turned into
 	// full colour and sent to the graphics card at all.
 	const bool hdCovers = hd::Active() && hd::CoversView({ gnRenderWidth, gnRenderHeight });
+	// POE2 Mashup: raindrops on the screen show the world through themselves, so while there are any the world is
+	// drawn into a picture of its own first.
+	vfx::BeginScene(renderer, { gnScreenWidth, gnScreenHeight });
 	{
 		const FramePartScope part(FramePart::WorldUpload);
 		if (!hdCovers)
@@ -306,6 +309,15 @@ void PresentLayeredFrame(SDL_Surface *surface)
 	{
 		const FramePartScope part(FramePart::Effects);
 		vfx::Render(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
+	}
+	// POE2 Mashup: the Atmosphere option's moments darken the HD world and the effects on it.
+	if (hd::Active())
+		hd::RenderOver(renderer);
+	// POE2 Mashup: raindrops on the screen in a storm, over the world and under the UI, as on a window.
+	{
+		const FramePartScope part(FramePart::Effects);
+		vfx::EndScene(renderer);
+		vfx::RenderLens(renderer, { gnRenderWidth, gnRenderHeight }, { gnScreenWidth, gnScreenHeight });
 	}
 	TelemetryDrawStep(nullptr);
 	{

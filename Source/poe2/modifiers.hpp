@@ -499,6 +499,11 @@ std::vector<std::string> ItemModText(const Poe2ItemMod &mod);
  */
 std::vector<std::string> CombinedItemModText(std::span<const Poe2ItemMod> mods);
 /**
+ * @brief As above; @p newLines gets, for each line, whether a modifier whose bit is set in @p newMods (bit i for
+ * mods[i]) gives it, so a line a new modifier adds to shows as new.
+ */
+std::vector<std::string> CombinedItemModText(std::span<const Poe2ItemMod> mods, uint32_t newMods, std::vector<bool> &newLines);
+/**
  * @brief The modifier's stats as POE2 shows them with Alt held: the tier's range after the rolled value, like
  * "+8(3-10) to Armour". The tooltip adds its side (Prefix or Suffix) and tier beside the lines.
  */
