@@ -37,13 +37,6 @@ MapEffects CurrentEffects;
 /** Where the local player came into the map, for revives (not saved; the level's entrance after a load). */
 std::optional<Point> MapEntrance;
 
-int SideCount(const Poe2Craft &craft, bool prefix)
-{
-	return static_cast<int>(std::count_if(craft.mods.begin(), craft.mods.end(), [prefix](const Poe2CraftMod &mod) {
-		return mod.family != 0 && GetWaystoneMod(mod.family).prefix == prefix;
-	}));
-}
-
 /** @brief Adds a modifier for the waystone's tier band; false if none fits. */
 bool AddWaystoneMod(Poe2Craft &craft, int tier, uint32_t seed, int forcedSide = 0)
 {
