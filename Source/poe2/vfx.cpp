@@ -5584,7 +5584,7 @@ bool Enabled()
 #ifdef USE_SDL1
 	return false;
 #else
-	return gbIsPoe2 && !HeadlessMode && *GetOptions().Graphics.modernEffects;
+	return HasEnhancements() && !HeadlessMode && *GetOptions().Graphics.modernEffects;
 #endif
 }
 

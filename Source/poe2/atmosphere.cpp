@@ -154,7 +154,7 @@ void Load()
 	LoadCount++;
 	for (auto &area : Areas)
 		area.clear();
-	if (!gbIsPoe2)
+	if (!HasEnhancements())
 		return;
 	auto dataFile = DataFile::load(Filename);
 	if (!dataFile.has_value()) {
@@ -206,7 +206,7 @@ const Row *Find(std::string_view name)
 
 float OptionScale()
 {
-	if (!gbIsPoe2)
+	if (!HasEnhancements())
 		return 0;
 	const GraphicsOptions &graphics = GetOptions().Graphics;
 	// Everything here works on the HD world's own light.

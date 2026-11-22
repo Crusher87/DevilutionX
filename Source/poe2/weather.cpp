@@ -476,7 +476,7 @@ bool Enabled()
 #ifdef USE_SDL1
 	return false;
 #else
-	return gbIsPoe2 && *GetOptions().Graphics.weather && vfx::Enabled();
+	return HasEnhancements() && *GetOptions().Graphics.weather && vfx::Enabled();
 #endif
 }
 

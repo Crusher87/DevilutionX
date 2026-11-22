@@ -360,7 +360,7 @@ void PaletteFadeOut(int fr, const std::array<SDL_Color, 256> &srcPalette)
 
 	// POE2 Mashup: with the effects layer, the frame the fade stopped on is still in the output, and the next plain
 	// present (the loading step's) shows it again: the game's own world, faintly, for as long as the next level loads.
-	if (gbIsPoe2 && fr > 0) {
+	if (HasEnhancements() && fr > 0) {
 		if (SDL_Surface *output = GetOutputSurface(); output != nullptr)
 			SDL_FillSurfaceRect(output, nullptr, 0);
 	}

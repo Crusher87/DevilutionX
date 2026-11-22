@@ -5806,7 +5806,7 @@ const char *PackPalette(uint8_t levelType)
 
 bool Enabled()
 {
-	return gbIsPoe2 && !HeadlessMode && *GetOptions().Graphics.hdGraphics && HavePack();
+	return HasEnhancements() && !HeadlessMode && *GetOptions().Graphics.hdGraphics && HavePack();
 }
 
 bool Active()

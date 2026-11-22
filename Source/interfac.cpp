@@ -292,7 +292,7 @@ void CheckShouldSkipRendering()
 	if (!ProgressEventHandlerState.skipRendering) return;
 	// POE2 Mashup: a level that loads within this long shows no loading screen, just a quick fade.
 	constexpr uint32_t Poe2SkipLoadingScreenMs = 2000;
-	const uint32_t threshold = gbIsPoe2 ? std::max<uint32_t>(*GetOptions().Gameplay.skipLoadingScreenThresholdMs, Poe2SkipLoadingScreenMs) : *GetOptions().Gameplay.skipLoadingScreenThresholdMs;
+	const uint32_t threshold = HasEnhancements() ? std::max<uint32_t>(*GetOptions().Gameplay.skipLoadingScreenThresholdMs, Poe2SkipLoadingScreenMs) : *GetOptions().Gameplay.skipLoadingScreenThresholdMs;
 	const bool shouldSkip = ProgressEventHandlerState.loadStartedAt + threshold > SDL_GetTicks();
 	if (shouldSkip) return;
 	ProgressEventHandlerState.skipRendering = false;
@@ -658,7 +658,7 @@ void CompleteProgress()
 
 int LevelChangeFadeSpeed()
 {
-	return gbIsPoe2 ? 32 : 8;
+	return HasEnhancements() ? 32 : 8;
 }
 
 void ShowProgress(interface_mode uMsg)
