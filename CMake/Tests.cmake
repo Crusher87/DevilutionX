@@ -142,6 +142,7 @@ set(tests
   poe2_swing_speed_test
   player_test
   quests_test
+  reforged_mode_test
   reencode_dun_cels_test
   scrollrt_test
   stores_test
