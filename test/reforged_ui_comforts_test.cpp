@@ -464,5 +464,93 @@ TEST(ReforgedCameraShakeTest, TheButchersAndDiablosBlowsShakeAndOthersDont)
 	EXPECT_FALSE(BlowsShakeCamera(zombie));
 }
 
+// --- 7. Held bow shots with WASD movement -------------------------------------------------------------------------
+
+/** @brief Drains the loopback and returns the last attack-at-a-tile command sent, if any. */
+std::optional<Point> LastRangedAttackTile()
+{
+	std::optional<Point> tile;
+	uint8_t sender;
+	void *data;
+	size_t size;
+	while (SNetReceiveMessage(&sender, &data, &size)) {
+		if (size < sizeof(TPktHdr) + sizeof(TCmdLoc))
+			continue;
+		const auto *cmd = reinterpret_cast<const TCmdLoc *>(static_cast<const std::byte *>(data) + sizeof(TPktHdr));
+		if (cmd->bCmd == CMD_RATTACKXY)
+			tile = Point { cmd->x, cmd->y };
+	}
+	return tile;
+}
+
+class ReforgedHeldShotTest : public ReforgedUiComfortsTest {
+protected:
+	void SetUp() override
+	{
+		ReforgedUiComfortsTest::SetUp();
+		if (IsSkipped())
+			return;
+		Player &player = *MyPlayer;
+		player.position.tile = player.position.future = player.position.old = { 50, 50 };
+		player._pmode = PM_STAND;
+		player.destAction = ACTION_NONE;
+		player._pInvincible = false;
+		player._pgfxnum = static_cast<uint8_t>(PlayerWeaponGraphic::Bow);
+		pcurs = CURSOR_HAND;
+		pcursmonst = -1;
+		ObjectUnderCursor = nullptr;
+		sgbMouseDown = CLICK_LEFT;
+		cursPosition = { 53, 51 };
+		SetCursorTileExact(52.6F, 50.2F);
+		wasdWasOn = IsWasdMovementEnabled();
+		LastRangedAttackTile();
+	}
+
+	void TearDown() override
+	{
+		sgbMouseDown = CLICK_NONE;
+		LastPlayerAction = PlayerActionType::None;
+		SetCursorTileExact(-1, -1);
+		SetWasdMovementEnabled(wasdWasOn);
+		LastRangedAttackTile();
+		ReforgedUiComfortsTest::TearDown();
+	}
+
+	bool wasdWasOn = false;
+};
+
+TEST_F(ReforgedHeldShotTest, AHeldBowShootsAlongTheCursor)
+{
+	ASSERT_TRUE(MyPlayer->UsesRangedWeapon());
+	const Point aimed = AimAlongCursor(*MyPlayer, AimTiles);
+	ASSERT_NE(aimed, cursPosition);
+	LastPlayerAction = PlayerActionType::Attack;
+	RepeatPlayerAction();
+	EXPECT_EQ(LastRangedAttackTile(), std::optional<Point>(aimed));
+
+	// Plain Diablo shoots at the tile under the cursor.
+	gbIsReforged = false;
+	MyPlayer->destAction = ACTION_NONE;
+	cursPosition = { 54, 51 };
+	RepeatPlayerAction();
+	EXPECT_EQ(LastRangedAttackTile(), std::optional<Point>(Point { 54, 51 }));
+}
+
+TEST_F(ReforgedHeldShotTest, WithWasdAHeldBowKeepsShootingAfterItsTargetIsGone)
+{
+	SetWasdMovementEnabled(true);
+	LastPlayerAction = PlayerActionType::AttackMonsterTarget;
+	RepeatPlayerAction();
+	EXPECT_EQ(LastRangedAttackTile(), std::optional<Point>(AimAlongCursor(*MyPlayer, AimTiles)));
+	EXPECT_EQ(LastPlayerAction, PlayerActionType::Attack);
+
+	// Plain Diablo stops.
+	gbIsReforged = false;
+	MyPlayer->destAction = ACTION_NONE;
+	LastPlayerAction = PlayerActionType::AttackMonsterTarget;
+	RepeatPlayerAction();
+	EXPECT_FALSE(LastRangedAttackTile().has_value());
+}
+
 } // namespace
 } // namespace devilution
