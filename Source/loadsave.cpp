@@ -3301,8 +3301,14 @@ void LoadStash()
 	const uint32_t openPage = file.NextLE<uint32_t>();
 
 	// POE2 tab names, colours, affinities and kinds; every page with items gets a tab.
-	if (gbIsPoe2) {
+	if (HasStashTabs()) {
 		const uint8_t tabsVersion = LoadTabs(gbIsMultiplayer ? "mpstashtabs" : "spstashtabs");
+		// Sanctuary Reforged: blank tabs only; a stash from before its tabs keeps each page as a tab.
+		if (gbIsReforged) {
+			KeepReforgedStashTabsBlank();
+			Stash.SetPage(openPage);
+			return;
+		}
 		if (tabsVersion == 0) {
 			// A stash from before tabs: its pages are blank tabs.
 			StashTabs.tabs.assign(DefaultBlankStashTabs, StashTab {});
@@ -3581,7 +3587,7 @@ void SaveHeroItems(SaveWriter &saveWriter, Player &player)
 
 void SaveStash(SaveWriter &stashWriter)
 {
-	if (gbIsPoe2) {
+	if (HasStashTabs()) {
 		const std::vector<uint8_t> tabs = SerializeStashTabs(StashTabs, StashTabsSaveVersion);
 		SaveHelper tabsFile(stashWriter, gbIsMultiplayer ? "mpstashtabs" : "spstashtabs", sizeof(uint32_t) + tabs.size());
 		tabsFile.WriteLE<uint32_t>(static_cast<uint32_t>(tabs.size()));
