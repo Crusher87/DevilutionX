@@ -176,12 +176,18 @@ else()
 endif()
 
 # Sanctuary Reforged mod (requires Hellfire): the HD look and the comfort features on plain Diablo and Hellfire rules.
-# It carries only the tables those features read; the game's own rules tables stay Hellfire's. The tables are copies of
-# POE2 Mashup's, kept the same by test/reforged_mode_test.cpp.
+# It carries only the tables those features read, and the designed rooms its floor layouts are built from; the game's own
+# rules tables stay Hellfire's. The tables are copies of POE2 Mashup's, kept the same by test/reforged_mode_test.cpp.
 set(reforged_mod
   manifest.ini
   lua/mods/reforged/init.lua
   txtdata/poe2/atmosphere.tsv
+  txtdata/poe2/catacombs_rooms.tsv
+  txtdata/poe2/cathedral_rooms.tsv
+  txtdata/poe2/caves_rooms.tsv
+  txtdata/poe2/crypt_rooms.tsv
+  txtdata/poe2/hell_rooms.tsv
+  txtdata/poe2/hive_rooms.tsv
   txtdata/poe2/map_icons.tsv
   txtdata/poe2/quest_tracker.tsv
   txtdata/poe2/skill_looks.tsv)

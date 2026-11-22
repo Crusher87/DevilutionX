@@ -1547,8 +1547,8 @@ void CreateL4Dungeon(uint32_t rseed, lvl_entry entry)
 	SetRndSeed(rseed);
 
 	SetCathedralFunnelFloor(false);
-	// POE2: the new Hell floors for levels 13 to 15, for a floor whose build was settled on them (single player for now).
-	const Poe2FloorBuild build = gbIsPoe2 && !gbIsMultiplayer && currlevel >= 13 && currlevel <= 15 ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
+	// POE2 and Sanctuary Reforged: the new Hell floors for levels 13 to 15, for a floor whose build was settled on them (single player for now).
+	const Poe2FloorBuild build = UsesDesignedFloors() && currlevel >= 13 && currlevel <= 15 ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
 	if (build.cathedralFunnel)
 		GenerateHellFunnelLevel(entry, build.avoidRooms);
 	else

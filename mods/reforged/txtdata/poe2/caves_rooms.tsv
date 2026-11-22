@@ -1,0 +1,42 @@
+id	family	roles	memorable	pillarsBehind	reward	options	grid
+lavalake	cavern	big,main	0	0			_...EEE..._/.........../....LLL..../...LLLLL.../E..LLLLL..E/E..LLLLL..E/E...LLL...E/.....l...../.........../.....LL..../_EEE.....__
+forest	cavern	big,main	0	0		1i.	__..EEE..__/_........../..TT....i../..TT......./E........../E.....TT..E/E.....TT..E/..TT......E/..TT....1../.........../_...EEE....
+warcamp	cavern	big,main	1	0			E...EEE...E/E.........E/E.........E/fffffgffff./.........../....u.G..../.........../fffffgffff./E.........E/E..r...r..E/E...EEE...E
+ringcave	cavern	big,main	0	0			__..EEE..__/_........._/.........../....___..../E.._____..E/E.._____..E/E.._____..E/....___..../.........../_........._/__..EEE..__
+twinlobe	cavern	big,main	0	0			_..EEE..___/........___/E..i....___/E.......___/E.......___/_........../___......../___....i..E/___.......E/___.......E/____.EEE.__
+cavein	cavern	big,main	0	0		1o.	_...EEE..._/.........../..__....o../..__......./E......__../E..o...__../E.........E/....__....E/..o.__..1.E/.........../_...EEE..._
+riverhall	cavern	big,main	0	0			_...EEE..._/.........../E..i......E/E.........E/E.........E/lllllHllll./.........../E.........E/E......i..E/E.........E/_...EEE..._
+islands	cavern	big,main	0	0		1i.	....EEE..../.LL.....LL./.LL.....LL./.........../E.........E/E....1....E/E.........E/.........../.LL.....LL./.LL.....LL./....EEE....
+arrival	stairs	main	0	0			_UUU__ZZZ__/.........../E.........E/E.........E/E...EEE...E
+waydown	stairs	main	0	0			__...EEE.._/__V.......E/__V...i...E/__V.......E/__..EEE..._
+pen	camp	side	0	0	chest		_EEE_/...../fgff./.*.r./.....
+cookfire	camp	side,quiet	0	0			_........._/E..u..P...E/E.........E/E..s...r..E/_........._
+palisade	camp	main	0	0			_.....f..._/E.....f...E/E.....g...E/E.....f...E/_........._
+goatshrine	camp	side	1	0			_........._/E.x..G..x.E/E.........E/E..s...s..E/_........._
+chieftain	camp	side	0	0	raremonster		_..f......_/..*f......E/...g......E/..rf......E/_........._
+lookout	camp	main	0	0			_...EEE..._/...r......./ffffgfffff./.........../_...EEE..._
+cages	camp	main	0	0			_.f..f..f._/E.f..f..f.E/E.g..g..g.E/E.f..f..f.E/_........._
+lavapocket	lava	side	0	0	chest		_........._/E..LLL...../E..LLL..*../E........../_........._
+gorge	lava	main	0	0			_....l...._/E....H....E/E....l....E/E....l....E/_........._
+forge	lava	side	0	0	chest		_........._/E.LL..k..../E.LL..*..r./E........../_........._
+emberfield	lava	main	0	0			_........._/E.LL......E/E.........E/E.....LL..E/_........._
+spring	grotto	quiet,side	0	0			_........._/E.i....i..E/E....F....E/E.........E/_...EEE..._
+shrinegrotto	grotto	quiet,side	0	0			_........._/E.i.A..i..E/E.........E/E.........E/_........._
+restcave	grotto	quiet	0	0			_........._/E...o...r.E/E.........E/E....D....E/_........._
+bonepit	grotto	side	1	0	chest		_..._/.P.s./..*../.s.P./_EEE.
+warmhollow	grotto	quiet	0	0			_..._/..L../..L../...../_EEE_
+ledge	grotto	quiet,side	0	0			_........._/E.LLLLLL..E/E.........E/E.........E/_........._
+den	den	side	0	0	raremonster		_..._/.P.../..*../...s./_EEE.
+hollow	den	side	0	0	strongbox		_....__..._/E...__...../E...__..*../E........../_........._
+nest	den	big,side	0	0	raremonster		_...EEE..._/.........../..s..*..s../.........../E...___...E/E...___...E/E...___...E/...P...P.../..s.....s../.........../_...EEE..._
+warren	den	side,main	0	0			_........._/E..o...o..E/E.........E/E....o....E/_........._
+pocket	pocket	side	0	0	chest		_..._/.*.../...../...../_EEE_
+slainhero	pocket	side	0	0	chest		_..._/..D../.*.../...../_EEE_
+stalagnook	pocket	side	0	0	chest		_........._/E....i...../E......i.*./E........../_........._
+barrelstore	pocket	side	0	0	chest		_..._/.r.r./..*../.r.../_EEE_
+winding	passage	main	0	0			E....._____/E......____/E.........E/____......E/_____.....E
+fork	passage	main,junction	0	0			_........._/E.........E/E...___...E/E.........E/_........._
+rift	passage	main	0	0			_........._/E....o....E/E.........E/E..o......E/_........._
+gallery	passage	main,junction	0	0			....EEE..../E.i.....i.E/E....i....E/E.........E/....EEE....
+neck	passage	main	0	0			_...___..._/E...._....E/E.........E/E.........E/_...___..._
+switchback	passage	main	0	0			_EEE.....__/.........../_______..../.........../_EEE.....__

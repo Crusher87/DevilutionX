@@ -1,0 +1,41 @@
+id	family	roles	memorable	pillarsBehind	reward	options	grid
+burialnave	hall	big,main	0	0		1S.	__Q.LcL.Q__/_........._/..O.S.S.O../E.........E/..O.S1S.O../.........../___..E..___
+statues	hall	big,main	1	0		1+.	Q.Q.Q.Q.Q.E/.........../Q..O...O.../.........../Q....1....E/.........../Q..O...O.../.........../E....E.....
+starchamber	hall	big,main	1	0			___..E..___/__Q.....Q__/_..L...L.._/...=====.../...=...=.../E..=.+.=..E/...=...=.../...==.==.../_..L...L.._/__.......__/___..E..___
+candlehall	hall	big,main	0	0		1L.	c.c.cAc.c.c/.........../.L..L.L..L./E.........E/.L..L1L..L./.........../c....E....c
+charnel	hall	big,main	0	0			P.#P.#.P#.P/..#..#..#../.........../E....s....E/.........../..#..#..#../P.#.P#P.#.P
+mourners	hall	big,main	0	0		1S.	B.S..Q..S.B/.........../aaaaa.aaaaa/.........../E....L....E/.........../aaaaa.aaaaa/.........../..S..1..S..
+graves	hall	big,main	0	0		1+L	_....E...._/..O.....O../...S...S.../.........../E.S..1..S.E/.........../...S...S.../..O.....O../_....E...._
+arrival	stairs	main	0	0			L...UUUU..L/.........../..O.....O../.........../E....E....E
+waydown	stairs	main	0	0			LQ.VVVV..QL/...VVVV..../..O.....O../.........../E....E....E
+familytomb	tomb	side	0	0			S.Q.S/...../E.*.E/...../..E..
+priesttomb	tomb	side	0	0		1*.	..L.cSc.L../....1....../=====d=====/E.........E/.....E.....
+sealedtomb	tomb	side	0	0			B..S.S.S..B/.........../#####d#####/.........../E....E....E
+niches	tomb	main,side	0	0		1Ps;2rc	P#r#1#c#2#s/.........../E.........E/.........../s#.#2#L#.#P
+twintombs	tomb	side	0	0			.S.c.a.c.S./.....a...../E....a....E/.....a...../..E.....E..
+knighttomb	tomb	side	0	0			..M.QSQ.M../.........../E.b.....b.E/.........../.....E.....
+bonepit	ossuary	side	1	0	raremonster		XP.......PX/...=====.../E..=sPs=..E/...==.==.../P....E....P
+skullwall	ossuary	side	0	0		1P.	sssss/...../E.1.E/...../..E..
+crucified	ossuary	main,side	0	0		1bx;2c.;3P.	X.1.X2X.1.X/3.........3/E.O.....O.E/.........../....E......
+bonechapel	ossuary	side,quiet	0	0			sPAPs/...../s...s/...../..E..
+mourning	chapel	main,quiet	0	0			__Q.cAc.Q__/_........._/..L.....L../E.........E/....E......
+weeping	chapel	quiet,main	0	0		1BQ;2QB	B..1...2..B/.........../E....F....E/.........../..c..E..c..
+lectern	chapel	side,quiet	0	0			cLkLc/...../E...E/...../..E..
+defiled	chapel	side	0	0			Q..x.A.x..Q/.........../E.c.....c.E/.........../.....E.....
+archive	reliquary	side,main	1	0		1*.	KKK.k.KKK../.........../E..KK.KK..E/.........../c....1....c
+relichall	reliquary	side	0	0			rr.c...c.rr/=====.=====/E.........E/..L.....L../.....E.....
+scribes	reliquary	side	0	0			k#k#k/d#d#d/...../E...E/..E..
+binding	seal	side	1	0			Q.x.....x.Q/....=.=..../E...=+=...E/....===..../L....E....L
+wardgate	seal	main	0	0		1d#	..x..#..x../.....#...../E.+..d..+.E/.....#...../.....1.....
+demonseal	seal	side	0	0		1*L	Q.1.Q/...../..+../...../..E..
+urnvault	vault	side	0	0		1r.	r.r.r/...../r.1.r/...../..E..
+offering	vault	side	0	0			L.*.L/...../..+../...../..E..
+boneniche	vault	side	0	0			P.*.P/#...#/#...#/...../..E..
+oubliette	vault	side	0	0	strongbox		B.*.B/=.=.=/=d=d=/...../..E..
+cavein	ruin	big,main	0	0			_...E....._/......__.../..R...__..E/...R......./E.....R..../....O....../..__....R../..___..R.../E........../...P...s.../_....E...._
+crackedhall	ruin	main	0	0		1R.	B.B..R..B.B/.........../E..O...O..E/.........../....1E.....
+brokentombs	ruin	side	0	0			S.R.P.R.S../.........../E.P..R..s.E/.........../.....E.....
+crossing	junction	junction,main	0	0		1+L	_.E._/...../E.1.E/...../_.E._
+fork	junction	junction,main	0	0		1L.	E....Q....E/.........../..O.....O../___..1..___/____.E.____
+bend	junction	junction,main	0	0			E..B./.O..E/...__/...__/.E.__
+procession	junction	main	0	0			Q.L.Q.L.Q../.........../E.........E/.........../..L...L..E.
