@@ -659,8 +659,11 @@ void PrintPoe2ItemTooltip(const Surface &out)
 	// The equipped items it would replace, side by side like POE2's: away from the cursor, or past it if there's no room.
 	std::vector<TooltipLayout> equipped;
 	std::vector<const CompareTooltip *> sources;
+	// The layouts point into these texts, so they live until the boxes are drawn (reserved: no reallocation moves them).
+	std::vector<std::string> compareTexts;
+	compareTexts.reserve(CompareTooltips.size());
 	for (const CompareTooltip &compare : CompareTooltips) {
-		const std::string compareText { compare.text.str() };
+		const std::string &compareText = compareTexts.emplace_back(compare.text.str());
 		if (compareText.empty())
 			continue;
 		TooltipLayout layout = MeasureTooltip(out, compareText, compare.styles);
