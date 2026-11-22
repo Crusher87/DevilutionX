@@ -58,8 +58,8 @@ public:
 		gbIsPoe2 = false;
 		gbIsReforged = true;
 		LoadMods({ "hf", "reforged" });
-		// Saves of this test go in a folder of their own, so they never meet another test's.
-		prefPath = paths::BasePath() + "reforged_swap_saves" + DIRECTORY_SEPARATOR_STR;
+		// Saves of each test go in a folder of their own, so they never meet another test's when tests run in parallel.
+		prefPath = StrCat(paths::BasePath(), "reforged_swap_saves_", ::testing::UnitTest::GetInstance()->current_test_info()->name(), DIRECTORY_SEPARATOR_STR);
 		RecursivelyCreateDir(prefPath.c_str());
 		paths::SetPrefPath(prefPath);
 	}
