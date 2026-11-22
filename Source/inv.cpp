@@ -2306,7 +2306,7 @@ int8_t CheckInvHLight()
 		if (rv >= INVITEM_INV_FIRST)
 			PrintItemComparison(*pi);
 		// POE2 Mashup: at a vendor, your own items show what they sell for.
-		if (gbIsPoe2 && rv >= INVITEM_INV_FIRST) {
+		if (UsesShopTabs() && rv >= INVITEM_INV_FIRST) {
 			if (const std::optional<int> price = VisualStoreSellPrice(*pi); price) {
 				CurrentInfoLineStyle = InfoLineStyle::Note;
 				// Only the price: how to sell is in the help, and the hint lines cluttered every hover (Curtis 2026-10-21).

@@ -21,9 +21,19 @@
 #include <string_view>
 #include <vector>
 
+#include "game_mode.hpp"
 #include "utils/attributes.h"
 
 namespace devilution {
+
+/**
+ * @brief Whether the stash is the tabbed one: named, coloured tabs, a tab list, search and sorting. POE2 Mashup has
+ * it with its premade tabs and affinities; Sanctuary Reforged has it with blank tabs only, each taking any item.
+ */
+inline bool HasStashTabs()
+{
+	return gbIsPoe2 || gbIsReforged;
+}
 
 struct Item;
 
@@ -79,6 +89,8 @@ constexpr unsigned MaxBlankStashTabs = 2;
 /** @brief A new stash starts with its blank tabs, then one of each premade tab. */
 constexpr unsigned DefaultBlankStashTabs = MaxBlankStashTabs;
 constexpr unsigned DefaultStashTabs = DefaultBlankStashTabs + std::size(PremadeStashTabKinds);
+/** @brief Sanctuary Reforged: a new stash's tabs, all blank. More can be added, up to MaxStashTabs, like Diablo's 100 pages. */
+constexpr unsigned DefaultReforgedStashTabs = 4;
 constexpr size_t MaxStashTabNameLength = 16;
 /** @brief Six hues in three shades: dark, mid and light. */
 constexpr uint8_t StashTabColorCount = 18;

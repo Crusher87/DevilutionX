@@ -159,6 +159,7 @@ set(tests
   store_transaction_test
   visual_store_test
   stash_test
+  reforged_stash_shops_test
   inventory_ui_test
   spell_ui_test
   char_panel_test

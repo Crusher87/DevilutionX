@@ -1316,10 +1316,7 @@ void SStartBoyBuy()
 	BoyItem._iStatFlag = MyPlayer->CanUseItem(BoyItem);
 	const UiFlags itemColor = BoyItem.getTextColorWithStatCheck();
 	AddSText(20, 10, BoyItem.getName(), itemColor, true, BoyItem._iCurs, true);
-	if (gbIsHellfire)
-		AddSTextVal(10, BoyItem._iIvalue - (BoyItem._iIvalue / 4));
-	else
-		AddSTextVal(10, BoyItem._iIvalue + (BoyItem._iIvalue / 2));
+	AddSTextVal(10, WirtPrice(BoyItem));
 	PrintStoreItem(BoyItem, 11, itemColor, true);
 
 	{
@@ -2153,11 +2150,7 @@ void BoyBuyEnter()
 	OldActiveStore = TalkID::BoyBuy;
 	OldScrollPos = ScrollPos;
 	OldTextLine = 10;
-	int price = BoyItem._iIvalue;
-	if (gbIsHellfire)
-		price -= BoyItem._iIvalue / 4;
-	else
-		price += BoyItem._iIvalue / 2;
+	const int price = WirtPrice(BoyItem);
 
 	if (!PlayerCanAfford(price)) {
 		StartStore(TalkID::NoMoney);
@@ -3389,6 +3382,13 @@ bool IsPlayerInStore()
 bool PlayerCanAfford(int price)
 {
 	return TotalPlayerGold() >= static_cast<uint32_t>(price);
+}
+
+int WirtPrice(const Item &item)
+{
+	if (gbIsHellfire)
+		return item._iIvalue - (item._iIvalue / 4);
+	return item._iIvalue + (item._iIvalue / 2);
 }
 
 namespace {

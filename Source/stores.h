@@ -224,6 +224,8 @@ bool IsPlayerInStore();
  */
 bool StoreAutoPlace(Item &item, bool persistItem);
 bool PlayerCanAfford(int price);
+/** @brief What Wirt asks for his item: a quarter off its value in Hellfire, half again in Diablo. */
+int WirtPrice(const Item &item);
 
 /**
  * @brief Check if Griswold will buy this item.
