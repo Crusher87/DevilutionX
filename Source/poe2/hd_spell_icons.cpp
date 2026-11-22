@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <initializer_list>
 #include <vector>
 
 namespace devilution {
@@ -51,19 +52,31 @@ uint8_t ToByte(float value)
 
 } // namespace
 
-std::string_view SpellIconPlateName(SpellType tint)
+std::string_view SpellIconPlateName(SpellType tint, bool large)
 {
 	switch (tint) {
 	case SpellType::Skill:
-		return "spellicons/plate_skill";
+		return large ? "spellicons/plate_skill" : "spellicons/small/plate_skill";
 	case SpellType::Spell:
-		return "spellicons/plate_spell";
+		return large ? "spellicons/plate_spell" : "spellicons/small/plate_spell";
 	case SpellType::Scroll:
-		return "spellicons/plate_scroll";
+		return large ? "spellicons/plate_scroll" : "spellicons/small/plate_scroll";
 	case SpellType::Charges:
-		return "spellicons/plate_charges";
+		return large ? "spellicons/plate_charges" : "spellicons/small/plate_charges";
 	case SpellType::Invalid:
-		return "spellicons/plate_invalid";
+		return large ? "spellicons/plate_invalid" : "spellicons/small/plate_invalid";
+	}
+	return {};
+}
+
+std::string_view SpellIconPlateFallback(std::string_view plate)
+{
+	constexpr std::string_view Small = "spellicons/small/plate_";
+	if (plate.substr(0, Small.size()) != Small)
+		return {};
+	for (const SpellType tint : { SpellType::Skill, SpellType::Spell, SpellType::Scroll, SpellType::Charges, SpellType::Invalid }) {
+		if (SpellIconPlateName(tint, false) == plate)
+			return SpellIconPlateName(tint, true);
 	}
 	return {};
 }
@@ -80,7 +93,7 @@ std::string SpellIconLayerName(uint8_t frame, bool large)
 
 std::string SpellIconArtName(uint8_t frame, bool large, SpellType tint)
 {
-	const std::string_view plate = SpellIconPlateName(tint);
+	const std::string_view plate = SpellIconPlateName(tint, large);
 	if (!SpellIconHasHdArt(frame) || plate.empty())
 		return {};
 	std::string name(plate);

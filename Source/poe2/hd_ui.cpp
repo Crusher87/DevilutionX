@@ -1035,6 +1035,9 @@ UiArt *SpellIconArtFor(const std::string &name)
 		const size_t plus = name.find('+');
 		if (plus == std::string::npos) {
 			art.picture = LoadUiPicture(name);
+			// A small icon's own plate may be missing from older art: the large plate then.
+			if (const std::string_view fallback = SpellIconPlateFallback(name); art.picture == nullptr && !fallback.empty())
+				art.picture = LoadUiPicture(std::string(fallback));
 		} else if (const UiArt *plate = SpellIconArtFor(name.substr(0, plus)); plate != nullptr) {
 			// (UiArts' entries stay where they are when another is added, so `art` is still good.)
 			SDL_Surface *layer = LoadUiPicture(name.substr(plus + 1));
