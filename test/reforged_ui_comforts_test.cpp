@@ -175,8 +175,8 @@ TEST_F(ReforgedBannerTest, AUniqueShowsItsNameKindTypeAndDiablosWordsForItsResis
 	EXPECT_EQ(text.name, butcher.name());
 	EXPECT_EQ(text.nameColor, UiFlags::ColorWhitegold);
 	ASSERT_EQ(text.lines.size(), 2U);
-	EXPECT_NE(text.lines[0].find("Type: Demon"), std::string::npos) << text.lines[0];
-	EXPECT_NE(text.lines[0].find(MonstersData[MT_CLEAVER].name), std::string::npos) << text.lines[0];
+	// The Butcher is a kind of his own, so his line is only his type.
+	EXPECT_EQ(text.lines[0], "Type: Demon");
 	// Diablo never names a unique's elements, only that it has some.
 	EXPECT_EQ(text.lines[1], "Some Magic Resistances   No Immunities");
 	for (const std::string &line : text.lines) {
@@ -184,6 +184,15 @@ TEST_F(ReforgedBannerTest, AUniqueShowsItsNameKindTypeAndDiablosWordsForItsResis
 		EXPECT_EQ(line.find("Armour"), std::string::npos) << line;
 		EXPECT_EQ(line.find("Level"), std::string::npos) << line;
 	}
+}
+
+TEST_F(ReforgedBannerTest, AUniqueOfAnotherKindNamesItsKind)
+{
+	const Monster unique = MakeMonster(MT_NZOMBIE, UniqueMonsterType::Garbud, 0);
+	const MonsterBannerText text = ReforgedMonsterBannerText(unique);
+	ASSERT_FALSE(text.lines.empty());
+	EXPECT_EQ(text.lines[0], StrCat(MonstersData[MT_NZOMBIE].name, " - Type: Undead"));
+	EXPECT_EQ(text.lines[1], "No resistances   No Immunities");
 }
 
 TEST_F(ReforgedBannerTest, AKindsResistancesShowAfterFifteenKillsAsDiabloWordsThem)

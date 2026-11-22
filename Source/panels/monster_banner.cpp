@@ -400,9 +400,12 @@ MonsterBannerText ReforgedMonsterBannerText(const Monster &monster)
 	else
 		text.nameColor = UiFlags::ColorWhite;
 	const std::string_view type = MonsterClassText(monster.data().monsterClass);
-	if (monster.isUnique())
-		text.lines.push_back(StrCat(pgettext("monster", monster.data().name), " - ", FormatRuntime(_("Type: {:s}"), type)));
-	else
+	if (monster.isUnique()) {
+		// The kind behind a unique's name, unless it is the same (the Butcher is a kind of his own).
+		const std::string_view kind = pgettext("monster", monster.data().name);
+		const std::string typeText = FormatRuntime(_("Type: {:s}"), type);
+		text.lines.push_back(kind == text.name ? typeText : StrCat(kind, " - ", typeText));
+	} else
 		text.lines.push_back(FormatRuntime(_("Type: {:s}  Kills: {:d}"), type, MonsterKillCounts[monster.type().type]));
 	if (std::string resistances = VanillaResistanceText(monster); !resistances.empty())
 		text.lines.push_back(std::move(resistances));
