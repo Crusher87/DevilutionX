@@ -11,6 +11,7 @@
 #include "data/file.hpp"
 #include "data/record_reader.hpp"
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
@@ -1573,6 +1574,23 @@ bool PlaceShrine(Point block)
 	return false;
 }
 
+/**
+ * Sanctuary Reforged takes the designed rooms' layouts only. What stands in a room for loot, a blessing or a fight (reward
+ * chests and strongboxes, sarcophagi, book, armour and weapon stands, shrines, fountains, cauldrons, barrels, bodies to
+ * search) comes from Diablo's own placement there, so only the props that are just furniture stay: candles, braziers,
+ * bookshelves, crosses, chained and staked bodies, skulls, banners and wall torches. A shrine spot holds its candles.
+ */
+bool PropIsPlaced(char kind)
+{
+	return gbIsPoe2 || IsAnyOf(kind, 'A', 'c', 'L', 'K', 'X', 'x', 'T', 'Y', 'P', 's', 'b', 't');
+}
+
+/** On one floor in three the shrine spots hold a shrine; on the others, candles. Only POE2 Mashup rolls it. */
+bool RollShrineFloor()
+{
+	return gbIsPoe2 && GenerateRnd(3) == 0;
+}
+
 template <size_t N>
 _object_id PickOne(const std::array<_object_id, N> &ids)
 {
@@ -1678,12 +1696,14 @@ void AddWallTorch(Point block)
 /** The props of a new Catacombs floor's designed rooms. */
 void AddCatacombsRoomObjects()
 {
-	const bool shrineFloor = GenerateRnd(3) == 0;
+	const bool shrineFloor = RollShrineFloor();
 	std::vector<int> standsInArea(CurrentPlan.areas.size(), 0);
 	// Racks and stands give an item each: one of each still holds gear in a room, the rest are bare.
 	std::vector<bool> rackInArea(CurrentPlan.areas.size(), false);
 	std::vector<bool> standInArea(CurrentPlan.areas.size(), false);
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		if (prop.kind == 'C' || prop.kind == '~')
 			continue; // Drawn onto the floor itself.
 		if (prop.kind == 't') {
@@ -1752,12 +1772,14 @@ void AddCatacombsRoomObjects()
 /** The props of a new Hell floor's designed rooms. */
 void AddHellRoomObjects()
 {
-	const bool shrineFloor = GenerateRnd(3) == 0;
+	const bool shrineFloor = RollShrineFloor();
 	std::vector<int> standsInArea(CurrentPlan.areas.size(), 0);
 	// Racks and stands give an item each: one of each still holds gear in a room, the rest are bare.
 	std::vector<bool> rackInArea(CurrentPlan.areas.size(), false);
 	std::vector<bool> standInArea(CurrentPlan.areas.size(), false);
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
 			continue;
 		const bool wall = IsAnyOf(prop.kind, 'A', 'x', 'X', 'W', 'M', 'K');
@@ -1817,9 +1839,11 @@ void AddHellRoomObjects()
 /** The props of a new Caves floor's designed rooms. */
 void AddCavesRoomObjects()
 {
-	const bool shrineFloor = GenerateRnd(3) == 0;
+	const bool shrineFloor = RollShrineFloor();
 	std::vector<int> standsInArea(CurrentPlan.areas.size(), 0);
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
 			continue;
 		const std::optional<Point> spot = PropSpot(prop.block, IsAnyOf(prop.kind, 'A', 'x'), false);
@@ -1848,8 +1872,10 @@ void AddCavesRoomObjects()
 /** The props of a new Hive floor's designed rooms. The bodies on spikes and hanging bodies are only decoration. */
 void AddHiveRoomObjects()
 {
-	const bool shrineFloor = GenerateRnd(3) == 0;
+	const bool shrineFloor = RollShrineFloor();
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
 			continue;
 		const std::optional<Point> spot = PropSpot(prop.block, prop.kind == 'A', false);
@@ -2224,7 +2250,7 @@ std::vector<std::pair<int, int>> CathedralBigFights()
 
 int CathedralDesignedSarcophagi()
 {
-	if (!FunnelFloor)
+	if (!FunnelFloor || !PropIsPlaced('S'))
 		return 0;
 	return static_cast<int>(std::count_if(CurrentPlan.props.begin(), CurrentPlan.props.end(), [](const CathedralProp &prop) { return prop.kind == 'S'; }));
 }
@@ -2234,6 +2260,8 @@ void MarkCathedralObjectGraphics(uint16_t filesWidths[65])
 	if (!FunnelFloor)
 		return;
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		for (const _object_id id : ObjectsFor(prop.kind, CurrentPlan)) {
 			const ObjectData &data = AllObjects[id];
 			filesWidths[data.ofindex] = data.animWidth;
@@ -2262,12 +2290,13 @@ void AddCathedralRoomObjects()
 		AddHellRoomObjects();
 		return;
 	}
-	// On one floor in three the shrine spots hold a shrine; on the others, candles.
-	const bool shrineFloor = GenerateRnd(3) == 0;
+	const bool shrineFloor = RollShrineFloor();
 	std::vector<int> standsInArea(CurrentPlan.areas.size(), 0);
 	std::vector<bool> standInArea(CurrentPlan.areas.size(), false);
 	const bool crypt = CurrentPlan.crypt;
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		// The Crypt's carvings, blood and floor stars are its own tiles (crypt.cpp).
 		if (crypt && IsAnyOf(prop.kind, 'Q', 'B', '+'))
 			continue;
@@ -2342,7 +2371,8 @@ void AddCathedralRoomObjects()
 
 std::optional<Point> CathedralStoryBookSpot()
 {
-	if (!FunnelFloor || !CurrentPlan.crypt)
+	// Sanctuary Reforged's designed rooms have no reading stands (PropIsPlaced): the book goes where Hellfire puts it.
+	if (!FunnelFloor || !CurrentPlan.crypt || !PropIsPlaced('k'))
 		return std::nullopt;
 	for (const std::string_view room : { "lectern", "archive" }) {
 		for (const CathedralProp &prop : CurrentPlan.props) {

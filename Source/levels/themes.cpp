@@ -582,8 +582,9 @@ void Theme_Library(int t)
 
 	for (int yp = 1; yp < MAXDUNY - 1; yp++) {
 		for (int xp = 1; xp < MAXDUNX - 1; xp++) {
-			// POE2 Mashup: never where it would close a way in (Curtis 2026-11-06: a book stand blocked a doorway).
-			if (CheckThemeObj3({ xp, yp }, themes[t].ttval) && dMonster[xp][yp] == 0 && (!gbIsPoe2 || !ObjectWouldBlockPassage({ xp, yp })) && FlipCoin(librnd[leveltype - 1])) {
+			// POE2 Mashup: never where it would close a way in (Curtis 2026-11-06: a book stand blocked a doorway); Sanctuary
+			// Reforged too on the designed floors, whose doorways are one block wide.
+			if (CheckThemeObj3({ xp, yp }, themes[t].ttval) && dMonster[xp][yp] == 0 && ((!gbIsPoe2 && !IsCathedralFunnelFloor()) || !ObjectWouldBlockPassage({ xp, yp })) && FlipCoin(librnd[leveltype - 1])) {
 				Object *bookstand = AddObject(OBJ_BOOKSTAND, { xp, yp });
 				if (!FlipCoin(2 * librnd[leveltype - 1])) {
 					if (bookstand != nullptr) {
