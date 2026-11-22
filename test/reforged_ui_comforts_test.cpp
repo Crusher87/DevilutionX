@@ -341,5 +341,48 @@ TEST_F(ReforgedUiComfortsTest, SlotsAreColouredByDiablosRarities)
 	EXPECT_EQ(SlotPixelAfterTint(ITEM_QUALITY_NORMAL), PAL16_BEIGE + 6);
 }
 
+// --- 4. Right-click to put an item on ----------------------------------------------------------------------------
+
+TEST_F(ReforgedUiComfortsTest, RightClickPutsOnASwordAndStillDrinksAPotion)
+{
+	Player &player = *MyPlayer;
+	const int sword = PlaceAndPointAt(MakeItem(IDI_WARRIOR));
+	ASSERT_TRUE(EquipInvItem(player, INVITEM_INV_FIRST + sword));
+	EXPECT_EQ(player.InvBody[INVLOC_HAND_LEFT].IDidx, IDI_WARRIOR);
+	EXPECT_EQ(player._pNumInv, 0);
+
+	// A second weapon swaps with the one in hand.
+	const int club = PlaceAndPointAt(MakeItem(IDI_WARRCLUB));
+	ASSERT_TRUE(EquipInvItem(player, INVITEM_INV_FIRST + club));
+	EXPECT_EQ(player.InvBody[INVLOC_HAND_LEFT].IDidx, IDI_WARRCLUB);
+	ASSERT_EQ(player._pNumInv, 1);
+	EXPECT_EQ(player.InvList[0].IDidx, IDI_WARRIOR);
+	player.InvList[0].clear();
+	for (int8_t &cell : player.InvGrid)
+		cell = 0;
+	player._pNumInv = 0;
+
+	// A potion isn't put on: right-click goes on to drink it, as in Diablo.
+	const int potion = PlaceAndPointAt(MakeItem(IDI_HEAL));
+	EXPECT_FALSE(EquipInvItem(player, INVITEM_INV_FIRST + potion));
+	player._pHitPoints = Fixed26_6::fromInt(1);
+	pcurs = CURSOR_HAND;
+	EXPECT_TRUE(UseInvItem(INVITEM_INV_FIRST + potion));
+	EXPECT_GT(player._pHitPoints, Fixed26_6::fromInt(1));
+}
+
+TEST_F(ReforgedUiComfortsTest, RightClickKeepsDiablosRulesForWhatCanBeWorn)
+{
+	Player &player = *MyPlayer;
+	// Too heavy for the hero: it stays in the bag.
+	Item heavy = MakeItem(IDI_WARRIOR);
+	heavy._iMinStr = 250;
+	heavy._iStatFlag = false;
+	const int iv = PlaceAndPointAt(heavy);
+	EquipInvItem(player, INVITEM_INV_FIRST + iv);
+	EXPECT_TRUE(player.InvBody[INVLOC_HAND_LEFT].isEmpty());
+	EXPECT_EQ(player._pNumInv, 1);
+}
+
 } // namespace
 } // namespace devilution

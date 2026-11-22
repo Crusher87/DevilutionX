@@ -621,8 +621,8 @@ void RightMouseDown(bool isShiftHeld)
 			PlaySFX(SfxID::ItemGold);
 		return;
 	}
-	// POE2 Mashup: right-clicking equipment in the inventory puts it on, swapping out what was worn.
-	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
+	// POE2 Mashup and Sanctuary Reforged: right-clicking equipment in the inventory puts it on, swapping out what was worn.
+	if (HasEnhancements() && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
 		return;
 	SetStickyItemUse(isShiftHeld);
 	if (pcursinvitem != -1 && UseInvItem(pcursinvitem))
