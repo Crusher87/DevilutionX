@@ -174,3 +174,53 @@ else()
     add_dependencies(libdevilutionx poe2_copied_assets)
   endif()
 endif()
+
+# Sanctuary Reforged mod (requires Hellfire): the HD look and the comfort features on plain Diablo and Hellfire rules.
+# It carries only the tables those features read; the game's own rules tables stay Hellfire's. The tables are copies of
+# POE2 Mashup's, kept the same by test/reforged_mode_test.cpp.
+set(reforged_mod
+  manifest.ini
+  lua/mods/reforged/init.lua
+  txtdata/poe2/atmosphere.tsv
+  txtdata/poe2/map_icons.tsv
+  txtdata/poe2/quest_tracker.tsv
+  txtdata/poe2/skill_looks.tsv)
+
+if(APPLE)
+  foreach(asset_file ${reforged_mod})
+    set(src "${CMAKE_CURRENT_SOURCE_DIR}/mods/reforged/${asset_file}")
+    get_filename_component(_asset_dir "${asset_file}" DIRECTORY)
+    set_source_files_properties("${src}" PROPERTIES
+      MACOSX_PACKAGE_LOCATION "Resources/mods/reforged/${_asset_dir}"
+      XCODE_EXPLICIT_FILE_TYPE compiled)
+    target_sources(${BIN_TARGET} PRIVATE "${src}")
+  endforeach()
+else()
+  copy_files(
+    FILES ${reforged_mod}
+    SRC_PREFIX "mods/reforged/"
+    OUTPUT_DIR "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/reforged"
+    OUTPUT_VARIABLE REFORGED_OUTPUT_FILES)
+  add_trim_target(reforged_trim_assets
+    ROOT_FOLDER "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/reforged"
+    CURRENT_FILES ${reforged_mod})
+
+  if(BUILD_ASSETS_MPQ)
+    set(REFORGED_MPQ "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/reforged.mpq")
+    add_custom_command(
+      COMMENT "Building reforged.mpq"
+      OUTPUT "${REFORGED_MPQ}"
+      COMMAND ${CMAKE_COMMAND} -E remove -f "${REFORGED_MPQ}"
+      COMMAND ${SMPQ} -A -M 1 -C BZIP2 -c "${REFORGED_MPQ}" ${reforged_mod}
+      WORKING_DIRECTORY "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/reforged"
+      DEPENDS ${TRIM_COMMAND_BYPRODUCT} ${REFORGED_OUTPUT_FILES}
+      VERBATIM)
+    add_custom_target(reforged_mpq DEPENDS "${REFORGED_MPQ}")
+    add_dependencies(reforged_mpq reforged_trim_assets)
+    add_dependencies(libdevilutionx reforged_mpq)
+  else()
+    add_custom_target(reforged_copied_assets DEPENDS ${REFORGED_OUTPUT_FILES})
+    add_dependencies(reforged_copied_assets reforged_trim_assets)
+    add_dependencies(libdevilutionx reforged_copied_assets)
+  endif()
+endif()
