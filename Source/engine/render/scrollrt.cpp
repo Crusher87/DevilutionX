@@ -1853,7 +1853,8 @@ void DrawView(const Surface &out, Point startPosition)
 	DrawItemNameLabels(out);
 	if (HasEnhancements())
 		DrawOverheadBars(out);
-	if (gbIsPoe2)
+	// Sanctuary Reforged has the banner too, with Diablo's own facts, in place of the small health bar.
+	if (HasEnhancements())
 		DrawMonsterBanner(out);
 	else
 		DrawMonsterHealthBar(out);

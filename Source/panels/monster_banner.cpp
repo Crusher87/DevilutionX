@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -299,7 +300,114 @@ std::string ResistanceText(const Monster &monster)
 	return text;
 }
 
+/** @brief Diablo's word for a monster's type, as its info box shows it. */
+std::string_view MonsterClassText(MonsterClass monsterClass)
+{
+	switch (monsterClass) {
+	case MonsterClass::Animal:
+		return _("Animal");
+	case MonsterClass::Demon:
+		return _("Demon");
+	case MonsterClass::Undead:
+		return _("Undead");
+	}
+	return {};
+}
+
+/** @brief Sanctuary Reforged: a monster's resistances and immunities, worded as Diablo's info box words them. */
+std::string VanillaResistanceText(const Monster &monster)
+{
+	const uint16_t res = monster.resistance & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING | IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING);
+	if (monster.isUnique()) {
+		// Diablo keeps a unique's elements to itself: it only says whether it has some.
+		const std::string_view resists = (res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING)) != 0 ? _("Some Magic Resistances") : _("No resistances");
+		const std::string_view immunes = (res & (IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) != 0 ? _("Some Magic Immunities") : _("No Immunities");
+		return StrCat(resists, "   ", immunes);
+	}
+	// A kind's elements are known after 15 kills, as in Diablo.
+	if (MonsterKillCounts[monster.type().type] < 15)
+		return {};
+	if (res == 0)
+		return std::string(_("No magic resistance"));
+	std::string text;
+	if ((res & (RESIST_MAGIC | RESIST_FIRE | RESIST_LIGHTNING)) != 0) {
+		text = std::string(_("Resists:"));
+		if ((res & RESIST_MAGIC) != 0)
+			text.append(_(" Magic"));
+		if ((res & RESIST_FIRE) != 0)
+			text.append(_(" Fire"));
+		if ((res & RESIST_LIGHTNING) != 0)
+			text.append(_(" Lightning"));
+	}
+	if ((res & (IMMUNE_MAGIC | IMMUNE_FIRE | IMMUNE_LIGHTNING)) != 0) {
+		StrAppend(text, text.empty() ? "" : "   ", _("Immune:"));
+		if ((res & IMMUNE_MAGIC) != 0)
+			text.append(_(" Magic"));
+		if ((res & IMMUNE_FIRE) != 0)
+			text.append(_(" Fire"));
+		if ((res & IMMUNE_LIGHTNING) != 0)
+			text.append(_(" Lightning"));
+	}
+	return text;
+}
+
+/** @brief The banner's left edge and width, shifted beside an open side panel. */
+int BannerLeft(const Surface &out, int width)
+{
+	int x = (out.w() - width) / 2;
+	if (CanPanelsCoverView()) {
+		if (IsRightPanelOpen())
+			x -= SidePanelSize.width / 2;
+		if (IsLeftPanelOpen())
+			x += SidePanelSize.width / 2;
+	}
+	return x;
+}
+
+/** @brief Sanctuary Reforged: the same banner with Diablo's facts only: the name, the life bar and the lines under it. */
+void DrawReforgedMonsterBanner(const Surface &out, const Monster &monster)
+{
+	const MonsterBannerText text = ReforgedMonsterBannerText(monster);
+	const int width = std::min(MaxWidth, out.w() - 60);
+	const int x = BannerLeft(out, width);
+	const int barHeight = monster.isUnique() ? UniqueBarHeight : BarHeight;
+	const int height = 6 + NameHeight + barHeight + 10 + (static_cast<int>(text.lines.size()) * LineHeight);
+	DrawHalfTransparentRectTo(out, x - 24, Top - 4, width + 48, height);
+	int y = Top;
+	DrawShadowedText(out, text.name, { { x, y }, { width, NameHeight } }, text.nameColor | UiFlags::AlignCenter | UiFlags::VerticalCenter);
+	y += NameHeight + 4;
+	DrawLifeBar(out, { { x + 16, y }, { width - 32, barHeight } }, monster);
+	y += barHeight + 6;
+	for (size_t i = 0; i < text.lines.size(); i++) {
+		// The first line is what it is; the resistances under it are greyed, as on the POE2 banner.
+		const UiFlags color = i == 0 ? UiFlags::ColorWhite : UiFlags::ColorButtonpushed;
+		DrawShadowedText(out, text.lines[i], { { x, y }, { width, LineHeight } }, color | UiFlags::FontSize12 | UiFlags::AlignCenter);
+		y += LineHeight;
+	}
+}
+
 } // namespace
+
+MonsterBannerText ReforgedMonsterBannerText(const Monster &monster)
+{
+	MonsterBannerText text;
+	text.name = std::string(monster.name());
+	// Diablo's own colours for the name, as its health bar has them.
+	if (monster.isUnique())
+		text.nameColor = UiFlags::ColorWhitegold;
+	else if (monster.leader != Monster::NoLeader)
+		text.nameColor = UiFlags::ColorBlue;
+	else
+		text.nameColor = UiFlags::ColorWhite;
+	const std::string_view type = MonsterClassText(monster.data().monsterClass);
+	if (monster.isUnique())
+		text.lines.push_back(StrCat(pgettext("monster", monster.data().name), " - ", FormatRuntime(_("Type: {:s}"), type)));
+	else
+		text.lines.push_back(FormatRuntime(_("Type: {:s}  Kills: {:d}"), type, MonsterKillCounts[monster.type().type]));
+	if (std::string resistances = VanillaResistanceText(monster); !resistances.empty())
+		text.lines.push_back(std::move(resistances));
+	return text;
+}
 
 void DrawMonsterBanner(const Surface &out)
 {
@@ -322,6 +430,11 @@ void DrawMonsterBanner(const Surface &out)
 	const Monster &monster = Monsters[ShownMonster];
 	if (monster.hasNoLife() || monster.isInvalid || monster.mode == MonsterMode::Death) {
 		ShownMonster = -1;
+		return;
+	}
+
+	if (!gbIsPoe2) {
+		DrawReforgedMonsterBanner(out, monster);
 		return;
 	}
 
