@@ -181,6 +181,7 @@ set(standalone_tests
   static_vector_test
   str_cat_test
   utf8_test
+  zoom_rows_test
 )
 if(NOT USE_SDL1)
   list(APPEND standalone_tests text_render_integration_test)
@@ -193,6 +194,7 @@ set(benchmarks
   palette_blending_benchmark
   path_benchmark
   poe2_hd_light_benchmark
+  zoom_rows_benchmark
 )
 
 include(test/Fixtures.cmake)

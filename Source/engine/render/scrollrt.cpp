@@ -41,6 +41,7 @@
 #include "engine/render/light_render.hpp"
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
+#include "engine/render/zoom_rows.hpp"
 #include "engine/trn.hpp"
 #include "engine/ui_scale.hpp"
 #include "engine/world_tile.hpp"
@@ -1553,43 +1554,8 @@ void Zoom(const Surface &out)
 		}
 	}
 
-	// We round to even for the source width and height.
-	// If the width / height was odd, we copy just one extra pixel / row later on.
-	const int srcWidth = (viewportWidth + 1) / 2;
-	const int doubleableWidth = viewportWidth / 2;
-	const int srcHeight = (out.h() + 1) / 2;
-	const int doubleableHeight = out.h() / 2;
-
-	uint8_t *src = out.at(srcWidth - 1, srcHeight - 1);
-	uint8_t *dst = out.at(viewportOffsetX + viewportWidth - 1, out.h() - 1);
-	const bool oddViewportWidth = (viewportWidth % 2) == 1;
-
-	for (int hgt = 0; hgt < doubleableHeight; hgt++) {
-		// Double the pixels in the line.
-		for (int i = 0; i < doubleableWidth; i++) {
-			*dst-- = *src;
-			*dst-- = *src;
-			--src;
-		}
-
-		// Copy a single extra pixel if the output width is odd.
-		if (oddViewportWidth) {
-			*dst-- = *src;
-			--src;
-		}
-
-		// Skip the rest of the source line.
-		src -= (out.pitch() - srcWidth);
-
-		// Double the line.
-		memcpy(dst - out.pitch() + 1, dst + 1, viewportWidth);
-
-		// Skip the rest of the destination line.
-		dst -= 2 * out.pitch() - viewportWidth;
-	}
-	if ((out.h() % 2) == 1) {
-		memcpy(dst - out.pitch() + 1, dst + 1, viewportWidth);
-	}
+	// EXPERIMENT: the doubling itself is in zoom_rows.hpp, where it is tested against the loop that was here.
+	ZoomTopLeft(out.at(0, 0), out.pitch(), out.h(), viewportOffsetX, viewportWidth);
 }
 
 Displacement tileOffset;
