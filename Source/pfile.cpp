@@ -553,6 +553,7 @@ void pfile_write_hero(SaveWriter &saveWriter, bool writeGameData)
 		SaveHotkeys(saveWriter, myPlayer);
 		SaveHeroItems(saveWriter, myPlayer);
 		SavePoe2HeroData(saveWriter, myPlayer);
+		SaveReforgedHeroData(saveWriter, myPlayer);
 	}
 }
 
@@ -731,9 +732,14 @@ bool pfile_ui_set_hero_infos(bool (*uiAddHeroInfo)(_uiheroinfo *))
 				LoadHeroItems(player);
 				RemoveAllInvalidItems(player);
 				CalcPlrInv(player, false);
-				size_t modeLength = 0;
-				const std::unique_ptr<std::byte[]> mode = ReadArchive(*archive, "poe2mode", &modeLength);
-				player.poe2.hardcore = mode != nullptr && modeLength >= 1 && mode[0] != std::byte { 0 };
+				if (gbIsReforged) {
+					// Sanctuary Reforged keeps the flag in its own hero entry.
+					player.poe2.hardcore = ReadReforgedHardcoreFlag(*archive);
+				} else {
+					size_t modeLength = 0;
+					const std::unique_ptr<std::byte[]> mode = ReadArchive(*archive, "poe2mode", &modeLength);
+					player.poe2.hardcore = mode != nullptr && modeLength >= 1 && mode[0] != std::byte { 0 };
+				}
 
 				Game2UiPlayer(player, &uihero, hasSaveGame);
 				uiAddHeroInfo(&uihero);
@@ -792,6 +798,7 @@ bool pfile_ui_save_create(_uiheroinfo *heroinfo)
 		SaveHotkeys(saveWriter, player);
 		SaveHeroItems(saveWriter, player);
 		SavePoe2HeroData(saveWriter, player);
+		SaveReforgedHeroData(saveWriter, player);
 	}
 
 	return true;
@@ -815,6 +822,7 @@ bool pfile_create_lab_hero(uint32_t saveNum, HeroClass heroClass, std::string_vi
 		SaveHotkeys(saveWriter, player);
 		SaveHeroItems(saveWriter, player);
 		SavePoe2HeroData(saveWriter, player);
+		SaveReforgedHeroData(saveWriter, player);
 	}
 	return true;
 }
