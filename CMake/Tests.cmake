@@ -32,6 +32,7 @@ set(tests
   pack_test
   poe2_admin_tools_test
   poe2_area_levels_test
+  poe2_atmosphere_test
   poe2_attributes_test
   poe2_bare_fists_test
   poe2_breakables_test

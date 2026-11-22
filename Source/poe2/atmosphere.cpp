@@ -8,7 +8,6 @@
 #include <format>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include "data/file.hpp"
@@ -20,6 +19,7 @@
 #include "quests.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
+#include "utils/string_view_hash.hpp"
 
 namespace devilution::atmosphere {
 
@@ -35,7 +35,7 @@ struct Row {
 };
 
 /** @brief The table, by area (the level type) and then by the number's name. */
-std::array<std::unordered_map<std::string, Row>, 8> Areas;
+std::array<ankerl::unordered_dense::map<std::string, Row, StringViewHash, StringViewEquals>, 8> Areas;
 bool Loaded = false;
 uint32_t LoadCount = 0;
 
@@ -195,7 +195,9 @@ const Row *FindIn(int area, std::string_view name)
 	if (area < 0)
 		return nullptr;
 	const auto &rows = Areas[static_cast<size_t>(area)];
-	const auto it = rows.find(std::string(name));
+	// Looked up by the name as given: the drawing asks for dozens of numbers a frame, and a std::string made for each
+	// is a trip to the heap for every name longer than fifteen letters.
+	const auto it = rows.find(name);
 	return it != rows.end() ? &it->second : nullptr;
 }
 
