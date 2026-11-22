@@ -54,6 +54,7 @@ set(tests
   poe2_cathedral_floors_test
   poe2_cathedral_objects_test
   poe2_floors_test
+  poe2_hd_pack_assets_test
   poe2_gemcutting_test
   poe2_item_bases_test
   poe2_item_spawner_test
@@ -175,6 +176,7 @@ set(standalone_tests
   palette_blending_test
   parse_int_test
   path_test
+  poe2_hd_pack_test
   vision_test
   random_test
   rectangle_test
@@ -277,6 +279,18 @@ target_link_dependencies(dun_render_benchmark
   unordered_dense::unordered_dense
 )
 target_link_dependencies(file_util_test PRIVATE libdevilutionx_file_util app_fatal_for_testing)
+
+# POE2 Mashup: the HD pack files. The reader is tested against packs a writer in the tests makes and, where there is
+# a Python to run it, against one made by the packer itself (tools/hd_pack.py), which has tests of its own as well.
+target_link_dependencies(poe2_hd_pack_test PRIVATE DevilutionX::SDL libdevilutionx_hd_pack libdevilutionx_file_util libdevilutionx_log app_fatal_for_testing)
+target_include_directories(poe2_hd_pack_test PRIVATE "${PROJECT_SOURCE_DIR}/test")
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  target_compile_definitions(poe2_hd_pack_test PRIVATE
+    "HD_PACK_PYTHON=\"${Python3_EXECUTABLE}\""
+    "HD_PACK_TOOL=\"${PROJECT_SOURCE_DIR}/tools/hd_pack.py\"")
+  add_test(NAME hd_pack_tool_test COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/hd_pack_test.py")
+endif()
 target_link_dependencies(format_int_test PRIVATE libdevilutionx_format_int language_for_testing)
 target_link_dependencies(ini_test PRIVATE libdevilutionx_ini app_fatal_for_testing)
 target_link_dependencies(mod_identity_test PRIVATE libdevilutionx_mod_identity app_fatal_for_testing)

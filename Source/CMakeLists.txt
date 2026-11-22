@@ -252,12 +252,22 @@ target_link_dependencies(libdevilutionx_mod_identity PUBLIC
   libdevilutionx_sdl2_to_1_2_backports
 )
 
+add_devilutionx_object_library(libdevilutionx_hd_pack
+  poe2/hd_pack.cpp
+)
+target_link_dependencies(libdevilutionx_hd_pack PUBLIC
+  DevilutionX::SDL
+  libdevilutionx_file_util
+  libdevilutionx_log
+)
+
 add_devilutionx_object_library(libdevilutionx_assets
   engine/assets.cpp
 )
 target_link_dependencies(libdevilutionx_assets PUBLIC
   DevilutionX::SDL
   tl
+  libdevilutionx_hd_pack
   libdevilutionx_headless_mode
   libdevilutionx_game_mode
   libdevilutionx_mod_identity

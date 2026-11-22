@@ -42,6 +42,7 @@
 #include "poe2/atmosphere.hpp"
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_outline.hpp"
+#include "poe2/hd_pack.hpp"
 #include "poe2/moments.hpp"
 #include "poe2/props.hpp"
 #include "poe2/telemetry.hpp"
@@ -462,7 +463,7 @@ uint32_t PaletteVersion = 1;
 std::array<SDL_Color, 256> LastPalette;
 
 int PackState = -1;
-/** @brief The HD pack is loose files on disk, not packed in an archive: its pictures can be read ahead by the reader. */
+/** @brief The HD pack is loose files on disk or HD pack files (hd\index.hdx), not packed in an archive: its pictures can be read ahead by the reader. */
 bool PackLoose = false;
 
 /** @brief The palette this level type's HD tiles were made in, and a count of its loads. */
@@ -899,30 +900,35 @@ bool IsTilePicture(std::string_view path)
 	return path.starts_with("hd\\tiles\\");
 }
 
-/** @brief Reads a loose picture from the first folder that has it. Safe on any thread. */
+/** @brief Reads a picture from the first folder that has it as a loose file, or else from the HD pack files. Safe on any thread. */
 SDL_Surface *ReadLoosePicture(const std::vector<std::string> &dirs, const std::string &path)
 {
 	std::string relative = path;
 #ifndef _WIN32
 	std::replace(relative.begin(), relative.end(), '\\', '/');
 #endif
+	SDL_RWops *file = nullptr;
 	for (const std::string &dir : dirs) {
-		SDL_RWops *file = SDL_RWFromFile((dir + relative).c_str(), "rb");
-		if (file == nullptr)
-			continue;
-		SDL_Surface *surface = IMG_LoadPNG_RW(file);
-		SDL_RWclose(file);
-		// A tile's picture is cut to the tile's shape in this format (MaskedArt): turned into it here, off the frame.
-		if (surface != nullptr && surface->format->format != SDL_PIXELFORMAT_RGBA32 && IsTilePicture(path)) {
-			SDL_Surface *rgba = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
-			if (rgba != nullptr) {
-				SDL_FreeSurface(surface);
-				surface = rgba;
-			}
-		}
-		return surface;
+		file = SDL_RWFromFile((dir + relative).c_str(), "rb");
+		if (file != nullptr)
+			break;
 	}
-	return nullptr;
+	// No loose file of that name: the HD pack files (hd\index.hdx) may have it.
+	if (file == nullptr)
+		file = hdpack::Open(path);
+	if (file == nullptr)
+		return nullptr;
+	SDL_Surface *surface = IMG_LoadPNG_RW(file);
+	SDL_RWclose(file);
+	// A tile's picture is cut to the tile's shape in this format (MaskedArt): turned into it here, off the frame.
+	if (surface != nullptr && surface->format->format != SDL_PIXELFORMAT_RGBA32 && IsTilePicture(path)) {
+		SDL_Surface *rgba = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
+		if (rgba != nullptr) {
+			SDL_FreeSurface(surface);
+			surface = rgba;
+		}
+	}
+	return surface;
 }
 
 #ifdef POE2_HD_READER
@@ -1001,6 +1007,8 @@ bool ReaderOn()
 void UpdateReadDirs()
 {
 	const std::string &assets = paths::AssetsPath();
+	// The pack files are looked for in the same folders (the reader's threads read from them without asking FindAsset).
+	hdpack::MountFromGameFolders(OverridePaths, assets);
 	if (ReadDirs.size() == OverridePaths.size() + 1 && ReadDirs.back() == assets && std::equal(OverridePaths.begin(), OverridePaths.end(), ReadDirs.begin()))
 		return;
 	ReadDirs = OverridePaths;
