@@ -2607,11 +2607,11 @@ void InitKeymapActions()
 	options.Keymapper.AddAction(
 	    "SwapWeapons",
 	    N_("Swap weapons"),
-	    N_("Swaps between weapon sets I and II (POE2 Mashup)."),
+	    N_("Swaps between weapon sets I and II (POE2 Mashup and Sanctuary Reforged)."),
 	    'X',
 	    [] { SwapWeapons(*MyPlayer); },
 	    nullptr,
-	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
+	    [] { return HasWeaponSwap() && CanPlayerTakeAction(); });
 	options.Keymapper.CommitActions();
 }
 

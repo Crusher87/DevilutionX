@@ -43,9 +43,27 @@ const Item &InactiveHand(const Player &player, size_t handSlot)
 	return player.swapHands[SwapIndex(handSlot)];
 }
 
+bool HasWeaponSwap()
+{
+	return gbIsPoe2 || gbIsReforged;
+}
+
+bool HandsSetIsLegal(const Player &player, const Item &left, const Item &right)
+{
+	for (const Item *item : { &left, &right }) {
+		if (item->isEmpty())
+			continue;
+		if (!item->isEquipment() || IsNoneOf(player.GetItemLocation(*item), ILOC_ONEHAND, ILOC_TWOHAND) || !player.CanUseItem(*item))
+			return false;
+	}
+	if (left.isEmpty() || right.isEmpty())
+		return true;
+	return HandsCanHold(player, left, right);
+}
+
 bool CanSwapWeapons(const Player &player)
 {
-	if (!gbIsPoe2 || player.hasNoLife() || player.poe2.isDodging())
+	if (!HasWeaponSwap() || player.hasNoLife() || player.poe2.isDodging())
 		return false;
 	// Not in the middle of a swing or a cast, like POE2.
 	return player._pmode == PM_STAND || player.isWalking();
@@ -55,6 +73,12 @@ bool SwapWeapons(Player &player)
 {
 	if (!CanSwapWeapons(player))
 		return false;
+	// Sanctuary Reforged: the other set comes into the hands by Diablo's rules, as if equipped by hand.
+	if (!gbIsPoe2 && !HandsSetIsLegal(player, InactiveHand(player, INVLOC_HAND_LEFT), InactiveHand(player, INVLOC_HAND_RIGHT))) {
+		if (&player == MyPlayer)
+			player.Say(HeroSpeech::ICantUseThisYet);
+		return false;
+	}
 	// The weapon type held before, for Knife in the Dark (a shield or empty hands hold none).
 	ItemType before = ItemType::None;
 	for (const Item *item : { &player.InvBody[INVLOC_HAND_RIGHT], &player.InvBody[INVLOC_HAND_LEFT] }) {
@@ -77,7 +101,8 @@ bool SwapWeapons(Player &player)
 			PlaySFX(ItemInvSnds[ItemCAnimTbl[weapon._iCurs]]);
 	}
 	CalcPlrInv(player, true);
-	OnWeaponsSwapped(player, before);
+	if (gbIsPoe2)
+		OnWeaponsSwapped(player, before);
 	return true;
 }
 
