@@ -90,6 +90,11 @@ bool HaveScaledWorld = false;
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 /** POE2 Mashup: a frame waiting to be presented in layers: the world, the effects, then the UI over them. */
 bool LayeredFramePending = false;
+/**
+ * POE2 Mashup: a frame put together the usual way (not in layers) with the item pictures and menu letters that have HD
+ * art left out of it, which RenderPresent draws over it (the main menu's letters, before the game starts).
+ */
+bool UiSpritesLeftOut = false;
 /** The UI with the world left out (transparent), at the UI's size. */
 SDL_Texture *UiOverlay = nullptr;
 SDL_Renderer *UiOverlayRenderer = nullptr;
@@ -598,7 +603,14 @@ void BltFast(SDL_Rect *srcRect, SDL_Rect *dstRect)
 #endif
 		// The UI is scaled up over the full-size world, always the whole frame.
 		const FramePartScope part(FramePart::WorldUpload);
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+		hd::PrepareUiSprites();
 		ComposeScaledFrame();
+		hd::RestoreUiSprites();
+		UiSpritesLeftOut = true;
+#else
+		ComposeScaledFrame();
+#endif
 		Blit(WorldSurface.get(), nullptr, nullptr);
 		return;
 	}
@@ -745,7 +757,11 @@ void RenderPresent()
 			if (SDL_RenderClear(renderer) <= -1) ErrSdl();
 			if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
 			if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+			// POE2 Mashup: the HD art of what was left out of the frame (BltFast) goes over it.
+			if (UiSpritesLeftOut)
+				hd::RenderUiSprites(renderer);
 		}
+		UiSpritesLeftOut = false;
 #endif
 
 		if (ControlMode == ControlTypes::VirtualGamepad) {

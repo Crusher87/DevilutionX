@@ -60,6 +60,20 @@ struct UiSpriteName {
 /** @brief Each item picture frame, by the address of its pixels. */
 std::unordered_map<const uint8_t *, UiSpriteName> UiSpriteNames;
 
+// A font's letters (RegisterUiLetters) show their HD art the same way, over the UI, but only in the colours they were
+// named for: the same letter drawn with another colour table keeps the game's own.
+
+/** @brief A letter frame drawn in one colour: the address of its pixels and of its colour table (0 for none). */
+using UiLetterKey = std::pair<uintptr_t, uintptr_t>;
+
+UiLetterKey LetterKey(const uint8_t *pixels, const uint8_t *trn)
+{
+	return { reinterpret_cast<uintptr_t>(pixels), reinterpret_cast<uintptr_t>(trn) };
+}
+
+/** @brief Each letter's HD art name, by its frame and colour (std::map, so a draw's pointer to one stays good). */
+std::map<UiLetterKey, UiSpriteName> UiLetterNames;
+
 /** @brief A smooth outline round an item picture's HD art, as shown at one size: its shape, and its texture as last made. */
 struct UiOutlineArt {
 	OutlineShape shape;
@@ -225,6 +239,18 @@ const UiPattern &PatternOf(ClxSprite clx, const uint8_t *trn)
 	return pattern;
 }
 
+/** @brief The pixels a letter lays down in its colour, by its frame and colour. */
+std::map<UiLetterKey, UiPattern> UiLetterPatterns;
+
+const UiPattern &LetterPatternOf(ClxSprite clx, const uint8_t *trn)
+{
+	UiPattern &pattern = UiLetterPatterns[LetterKey(clx.pixelData(), trn)];
+	if (pattern.width == clx.width() && pattern.height == clx.height() && !pattern.pixels.empty())
+		return pattern;
+	MakePattern(pattern, clx, trn);
+	return pattern;
+}
+
 const std::vector<Point> &RingOf(ClxSprite clx)
 {
 	const auto [it, inserted] = UiRings.try_emplace(clx.pixelData());
@@ -360,11 +386,20 @@ void RecordUiSpriteImpl(const Surface &out, Point position, ClxSprite clx, const
 	// The outline the game drew round it just before, if it did; only the next picture can be the one it goes round.
 	UiOutline outline = std::move(PendingUiOutline);
 	PendingUiOutline = {};
-	const auto it = UiSpriteNames.find(clx.pixelData());
-	if (it == UiSpriteNames.end() || it->second.width != clx.width() || it->second.height != clx.height())
-		return;
-	// Other colourings (a Book of Specialisation's gold binding) keep the game's own picture.
-	if (trn != nullptr && trn != GetInfravisionTRN())
+	const UiSpriteName *name = nullptr;
+	bool letter = false;
+	if (const auto it = UiSpriteNames.find(clx.pixelData()); it != UiSpriteNames.end()) {
+		// Other colourings (a Book of Specialisation's gold binding) keep the game's own picture.
+		if (trn != nullptr && trn != GetInfravisionTRN())
+			return;
+		name = &it->second;
+	} else if (const auto found = UiLetterNames.find(LetterKey(clx.pixelData(), trn)); found != UiLetterNames.end()) {
+		// A letter in a colour it has art for; it has no outline of its own to smooth.
+		name = &found->second;
+		letter = true;
+		outline = {};
+	}
+	if (name == nullptr || name->width != clx.width() || name->height != clx.height())
 		return;
 	if (!Enabled())
 		return;
@@ -372,9 +407,9 @@ void RecordUiSpriteImpl(const Surface &out, Point position, ClxSprite clx, const
 		UiDraws.clear();
 	UiDraw &draw = UiDraws.emplace_back();
 	draw.order = UiOrder++;
-	draw.name = &it->second;
-	draw.pattern = &PatternOf(clx, trn);
-	draw.red = trn != nullptr;
+	draw.name = name;
+	draw.pattern = letter ? &LetterPatternOf(clx, trn) : &PatternOf(clx, trn);
+	draw.red = !letter && trn != nullptr;
 	const int w = clx.width();
 	const int h = clx.height();
 	draw.rect = SDL_Rect { out.region.x + position.x, out.region.y + position.y - h, w, h };
@@ -491,10 +526,45 @@ void RegisterUiPictureImpl(std::string_view path, ClxSpriteList sprites)
 	}
 }
 
+void RegisterUiLettersImpl(ClxSpriteList sprites, const uint8_t *trn, std::string_view name)
+{
+	for (size_t frame = 0; frame < sprites.numSprites(); frame++) {
+		const ClxSprite sprite = sprites[frame];
+		if (sprite.width() == 0 || sprite.height() == 0)
+			continue;
+		char suffix[32];
+		std::snprintf(suffix, sizeof(suffix), "/d0_f%02zu", frame);
+		const UiLetterKey key = LetterKey(sprite.pixelData(), trn);
+		UiLetterNames[key] = UiSpriteName { std::string(name) + suffix, sprite.width(), sprite.height() };
+		UiLetterPatterns.erase(key);
+	}
+}
+
+/** @brief Forgets the letters of a font whose pixels are about to be freed, in every colour. */
+void ForgetUiLetters(ClxSpriteList sprites)
+{
+	bool any = false;
+	for (size_t frame = 0; frame < sprites.numSprites(); frame++) {
+		const uintptr_t pixels = reinterpret_cast<uintptr_t>(sprites[frame].pixelData());
+		const auto from = UiLetterKey { pixels, 0 };
+		for (auto it = UiLetterNames.lower_bound(from); it != UiLetterNames.end() && it->first.first == pixels;) {
+			// This frame's draws may point at its name.
+			if (!any) {
+				UiDraws.clear();
+				any = true;
+			}
+			it = UiLetterNames.erase(it);
+		}
+		for (auto it = UiLetterPatterns.lower_bound(from); it != UiLetterPatterns.end() && it->first.first == pixels;)
+			it = UiLetterPatterns.erase(it);
+	}
+}
+
 void ForgetUiPictureImpl(ClxSpriteList sprites)
 {
 	if (sprites.numSprites() == 0)
 		return;
+	ForgetUiLetters(sprites);
 	const uint8_t *first = sprites[0].pixelData();
 	for (auto it = UiPictures.begin(); it != UiPictures.end(); ++it) {
 		if (!it->second.empty() && it->second.front() == first) {
@@ -536,6 +606,7 @@ void RecordUiBlitImpl(const Surface &out, const Surface &src, Rectangle srcRect,
 [[maybe_unused]] const bool RegisterUiPictureHookSet = (RegisterUiPictureHook = RegisterUiPictureImpl, true);
 [[maybe_unused]] const bool ForgetUiPictureHookSet = (ForgetUiPictureHook = ForgetUiPictureImpl, true);
 [[maybe_unused]] const bool RecordUiBlitHookSet = (RecordUiBlitHook = RecordUiBlitImpl, true);
+[[maybe_unused]] const bool RegisterUiLettersHookSet = (RegisterUiLettersHook = RegisterUiLettersImpl, true);
 
 /** @brief Leaves a UI pixel out of the overlay this frame. */
 void HideUiPixel(int ux, int uy)
