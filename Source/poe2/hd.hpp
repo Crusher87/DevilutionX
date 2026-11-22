@@ -298,6 +298,26 @@ inline void RegisterUiLetters(ClxSpriteList sprites, const uint8_t *trn, std::st
 		RegisterUiLettersHook(sprites, trn, name);
 }
 
+using RecordUiSpellIconFn = void (*)(const Surface &out, Rectangle box, uint8_t frame, bool large, uint8_t tint, bool drawn);
+
+/**
+ * @brief Notes a spell icon drawn in the UI (set by the HD renderer; null without it): called with `drawn` false just
+ * before the game draws the icon in `box`, and with it true just after. `frame` is the icon's frame (SpellIcon),
+ * `large` tells the 56x56 icons from the 37x38 ones, `tint` is the SpellType whose colours it is drawn in
+ * (SetSpellTrans). Where the HD art has the icon (hd_spell_icons.hpp), its painted picture shows over the UI in the box
+ * as an item picture's does, made for the size the box has on screen; without the art, with HD off, or for a label
+ * frame, the game's own icon stays.
+ */
+extern RecordUiSpellIconFn RecordUiSpellIconHook;
+
+using CoverUiSpellIconFn = void (*)(const Surface &out, Rectangle box);
+
+/**
+ * @brief Notes the 2 pixel border the game drew just inside `box`, over a spell icon (set by the HD renderer; null
+ * without it): the icon's HD art leaves it out, whatever its colour.
+ */
+extern CoverUiSpellIconFn CoverUiSpellIconHook;
+
 /** @brief Forgets a UI panel's picture before its pixels are freed, so another picture loaded there doesn't take its art. */
 inline void ForgetUiPicture(ClxSpriteList sprites)
 {

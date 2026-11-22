@@ -15,6 +15,8 @@ RegisterUiPictureFn RegisterUiPictureHook = nullptr;
 ForgetUiPictureFn ForgetUiPictureHook = nullptr;
 RecordUiBlitFn RecordUiBlitHook = nullptr;
 RegisterUiLettersFn RegisterUiLettersHook = nullptr;
+RecordUiSpellIconFn RecordUiSpellIconHook = nullptr;
+CoverUiSpellIconFn CoverUiSpellIconHook = nullptr;
 
 } // namespace hd
 
