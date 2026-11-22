@@ -221,6 +221,11 @@ void TelemetrySlowWorkDone(SlowWork work, uint64_t start);
 void TelemetryGameSaved(std::string_view why, uint64_t start);
 /** @brief The HD world's cache of the game's own pictures filled up and was emptied. */
 void TelemetryHdCacheDropped(size_t pictures);
+/**
+ * @brief The calls a frame of the HD world made to SDL (hd_batch.hpp): its draws, how many of them had another texture
+ * than the draw before, and how many more were merged into those by feel("batch"). Averaged in the stats line.
+ */
+void TelemetryHdDraws(int draws, int textureSwitches, int merged);
 /** @brief Notes that the HD reader's threads read that many pictures from disk, for the line on the seconds after a loading screen. */
 void TelemetryHdPicturesRead(size_t pictures);
 

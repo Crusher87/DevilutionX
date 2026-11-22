@@ -40,6 +40,7 @@
 #include "levels/tileset_mix.hpp"
 #include "options.h"
 #include "poe2/atmosphere.hpp"
+#include "poe2/hd_batch.hpp"
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_outline.hpp"
 #include "poe2/hd_pack.hpp"
@@ -70,6 +71,22 @@ Point CurrentTileOrigin;
 bool HaveTile = false;
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
+
+#ifdef POE2_HD_BATCH
+// The batching experiment (hd_batch.hpp, feel("batch", 1)): everything this file draws goes to SDL through it, so that
+// it can gather the tiles' draws into batches, send them on before anything else is drawn, and count the calls for the
+// play log. With the switch off each of these passes its call straight on to the SDL function of its name.
+#define SDL_RenderGeometry(...) batch::Geometry(__VA_ARGS__)
+#define SDL_RenderCopyF(...) batch::CopyF(__VA_ARGS__)
+#define SDL_RenderCopy(...) batch::Copy(__VA_ARGS__)
+#define SDL_RenderFillRect(...) batch::FillRect(__VA_ARGS__)
+#define SDL_RenderFillRectF(...) batch::FillRectF(__VA_ARGS__)
+#define SDL_RenderClear(...) batch::ClearTarget(__VA_ARGS__)
+#define SDL_SetRenderTarget(...) batch::SetTarget(__VA_ARGS__)
+#define SDL_RenderSetClipRect(...) batch::SetClipRect(__VA_ARGS__)
+#define SDL_DestroyTexture(...) batch::DestroyTexture(__VA_ARGS__)
+#define SDL_UpdateTexture(...) batch::UpdateTexture(__VA_ARGS__)
+#endif
 
 namespace {
 
@@ -536,6 +553,9 @@ void KeepTilePictures();
 
 void DestroyTextures()
 {
+#ifdef POE2_HD_BATCH
+	batch::Release(CacheRenderer != nullptr);
+#endif
 	if (CacheRenderer != nullptr) {
 		for (auto &[name, art] : Art) {
 			if (art.texture != nullptr)
@@ -1487,6 +1507,9 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 		// Nearest, like the tile's own art (see MaskedArt).
 		SDL_SetTextureScaleMode(art.sheet, SDL_ScaleModeNearest);
 #endif
+#ifdef POE2_HD_BATCH
+		batch::Add(renderer, art.sheet, sheet.data(), cell * static_cast<int>(NumShapeAxes), height, cell * static_cast<int>(NumShapeAxes) * 4);
+#endif
 		art.sheetCell = width;
 		art.shaped = true;
 		return;
@@ -2036,6 +2059,11 @@ HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &dr
 			// Nearest, like the game's own tiles: smoothing the cut edges of two tiles that meet lets the black
 			// under them show through as thin lines wherever the screen isn't drawn at exactly twice the world.
 			SDL_SetTextureScaleMode(art.texture, SDL_ScaleModeNearest);
+#endif
+#ifdef POE2_HD_BATCH
+			// (Not lava or water that flows: its picture is painted again as it does.)
+			if (art.flow == nullptr)
+				batch::Add(renderer, art.texture, surface->pixels, surface->w, surface->h, surface->pitch);
 #endif
 			// Made from the picture as cut here, so a wall cut away near the hero has its shape cut the same way.
 			if (TileMapsHere && art.flow == nullptr)
@@ -5744,6 +5772,9 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 	{
 		// A bright doorway's shaft of light lies on the floor, under the shadows and whoever stands in it (idea 66).
 		const FramePartScope part(FramePart::Atmosphere);
+#ifdef POE2_HD_BATCH
+		batch::Flush(renderer);
+#endif
 		vfx::DrawFloorShafts(renderer, toLogical);
 	}
 	const bool joined = DrawJoinedShadows(renderer, worldSize, toLogical);
@@ -6367,6 +6398,45 @@ void ReadAhead(Size worldSize)
 #endif
 }
 
+#ifdef POE2_HD_BATCH
+namespace {
+
+/** @brief Whether the tiles' draws are batched: feel("batch", 1), or POE2_HD_BATCH=1 for a whole run. An experiment, off unless asked for. */
+bool BatchWanted()
+{
+	static const bool always = [] {
+		const char *env = std::getenv("POE2_HD_BATCH");
+		return env != nullptr && env[0] != '\0' && env[0] != '0';
+	}();
+	return always || atmosphere::Setting(atmosphere::Knob::Batch) > 0;
+}
+
+/** @brief A frame of the HD world for the batching experiment: what it gathered is drawn when the frame is over, and its calls go to the play log. */
+struct BatchFrame {
+	SDL_Renderer *renderer;
+
+	explicit BatchFrame(SDL_Renderer *renderer)
+	    : renderer(renderer)
+	{
+		if (batch::BeginFrame(renderer, BatchWanted())) {
+			// Just turned on: the tiles' art made so far is in no atlas, so all of it is made again.
+			DestroyTextures();
+			batch::BeginFrame(renderer, true);
+		}
+	}
+	~BatchFrame()
+	{
+		batch::EndFrame(renderer);
+		const batch::FrameStats &stats = batch::LastFrame();
+		TelemetryHdDraws(stats.draws, stats.textureSwitches, stats.merged);
+	}
+	BatchFrame(const BatchFrame &) = delete;
+	BatchFrame &operator=(const BatchFrame &) = delete;
+};
+
+} // namespace
+#endif
+
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
@@ -6390,6 +6460,9 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		ShadeFailed = false;
 		CacheRenderer = renderer;
 	}
+#ifdef POE2_HD_BATCH
+	const BatchFrame batchFrame(renderer);
+#endif
 	CheckPalette();
 	ReadAhead(worldSize);
 	if (Rasters.size() > 20000) {

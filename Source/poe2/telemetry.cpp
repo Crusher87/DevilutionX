@@ -137,6 +137,8 @@ struct TelemetryCounts {
 	uint32_t frameMs = 0;
 	/** Time spent on each part of drawing those frames (FramePart), in milliseconds. */
 	std::array<double, NumFrameParts> framePartMs {};
+	/** The HD world's calls to SDL in those frames (TelemetryHdDraws): draws, texture switches, draws merged by feel("batch"). */
+	std::array<int64_t, 3> hdDraws {};
 	int levelsEntered = 0;
 	int64_t experience = 0;
 	int gold = 0;
@@ -201,6 +203,8 @@ uint32_t FrameGapSinceTick = 0;
 uint32_t LastFrameMs = 0;
 /** Time each part of drawing took since the last counted frame, in nanoseconds. */
 std::array<uint64_t, NumFrameParts> PendingFrameParts {};
+/** The HD world's calls to SDL since the last counted frame (TelemetryHdDraws). */
+std::array<int64_t, 3> PendingHdDraws {};
 /** Time each part of drawing took in the frames since the last game tick, in nanoseconds, for the stall line. */
 std::array<uint64_t, NumFrameParts> FramePartsSinceTick {};
 /** Slow work since the last game tick (TelemetrySlowWorkDone): how often and how long, in nanoseconds, for the stall line. */
@@ -1020,9 +1024,15 @@ std::string FramePartsText(const TelemetryCounts &counts)
 	if (counts.frames <= 0)
 		return {};
 	const auto part = [&](FramePart which) { return counts.framePartMs[static_cast<size_t>(which)] / counts.frames; };
-	return std::format(", frame ms: drawing {:.1f} (world {:.1f}), world upload {:.1f}, hd {:.1f} (atmosphere {:.2f}), effects {:.1f}, ui layer {:.1f}, present {:.1f}",
+	std::string text = std::format(", frame ms: drawing {:.1f} (world {:.1f}), world upload {:.1f}, hd {:.1f} (atmosphere {:.2f}), effects {:.1f}, ui layer {:.1f}, present {:.1f}",
 	    part(FramePart::Drawing), part(FramePart::World), part(FramePart::WorldUpload), part(FramePart::Hd), part(FramePart::Atmosphere), part(FramePart::Effects),
 	    part(FramePart::UiLayer), part(FramePart::Present));
+	// What the HD world asks of the graphics card each frame, to see what feel("batch") changes.
+	if (counts.hdDraws[0] > 0) {
+		const auto each = [&](size_t which) { return static_cast<double>(counts.hdDraws[which]) / counts.frames; };
+		text += std::format(", hd draws a frame {:.0f} ({:.0f} texture switches, {:.0f} more merged by batch)", each(0), each(1), each(2));
+	}
+	return text;
 }
 
 std::string RatesText(const TelemetryCounts &counts, double minutes)
@@ -1059,6 +1069,9 @@ void WriteStatsLine(uint32_t now)
 	    .add("effectsMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Effects)] / Window.frames : 0.0)
 	    .add("uiLayerMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::UiLayer)] / Window.frames : 0.0)
 	    .add("presentMs", Window.frames > 0 ? Window.framePartMs[static_cast<size_t>(FramePart::Present)] / Window.frames : 0.0)
+	    .add("hdDraws", Window.frames > 0 ? static_cast<double>(Window.hdDraws[0]) / Window.frames : 0.0)
+	    .add("hdTextureSwitches", Window.frames > 0 ? static_cast<double>(Window.hdDraws[1]) / Window.frames : 0.0)
+	    .add("hdMerged", Window.frames > 0 ? static_cast<double>(Window.hdDraws[2]) / Window.frames : 0.0)
 	    .add("stalls", Window.stalls)
 	    .add("kills", Window.kills)
 	    .add("hitsTaken", Window.hitsTaken)
@@ -2664,6 +2677,13 @@ void TelemetryHdCacheDropped(size_t pictures)
 	Event(LogChannel::Perf, LogLevel::Normal, "hd_cache_dropped").add("pictures", static_cast<int>(pictures));
 }
 
+void TelemetryHdDraws(int draws, int textureSwitches, int merged)
+{
+	PendingHdDraws[0] += draws;
+	PendingHdDraws[1] += textureSwitches;
+	PendingHdDraws[2] += merged;
+}
+
 void TelemetryHdPicturesRead(size_t pictures)
 {
 	if (AfterLoading.startMs != 0)
@@ -2676,6 +2696,8 @@ void TelemetryFrameDrawn()
 	// The parts timed since the last frame belong to this one (showing the last frame comes after it's counted).
 	const std::array<uint64_t, NumFrameParts> parts = PendingFrameParts;
 	PendingFrameParts = {};
+	const std::array<int64_t, 3> hdDraws = PendingHdDraws;
+	PendingHdDraws = {};
 	for (size_t i = 0; i < NumFrameParts; i++)
 		FramePartsSinceTick[i] += parts[i];
 	if (LogFile == nullptr || GameStartMs == 0)
@@ -2701,10 +2723,14 @@ void TelemetryFrameDrawn()
 				counts.frames++;
 				for (size_t i = 0; i < NumFrameParts; i++)
 					counts.framePartMs[i] += static_cast<double>(parts[i]) / 1e6;
+				for (size_t i = 0; i < hdDraws.size(); i++)
+					counts.hdDraws[i] += hdDraws[i];
 			}
 		}
 	}
-	Count([gap, &parts](TelemetryCounts &counts) {
+	Count([gap, &parts, &hdDraws](TelemetryCounts &counts) {
+		for (size_t i = 0; i < hdDraws.size(); i++)
+			counts.hdDraws[i] += hdDraws[i];
 		counts.frames++;
 		counts.frameMs += gap;
 		if (gap > 33)
