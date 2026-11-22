@@ -2426,10 +2426,10 @@ std::optional<Point> InteractionSpot;
 /** Where the hero stood when a towner's talk menu opened: any step from it closes the menu (POE2). */
 std::optional<Point> TalkSpot;
 
-/** @brief POE2: closes a towner's talk menu once the hero moves, by walking, clicking away or dodge rolling. */
+/** @brief POE2 and Sanctuary Reforged: closes a towner's talk menu once the hero moves, by walking, clicking away or dodge rolling. */
 void CloseTalkMenuWhenMoved()
 {
-	if (!gbIsPoe2 || !IsPlayerInStore() || MyPlayer == nullptr) {
+	if (!HasEnhancements() || !IsPlayerInStore() || MyPlayer == nullptr) {
 		TalkSpot = std::nullopt;
 		return;
 	}

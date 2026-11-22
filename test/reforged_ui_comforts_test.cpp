@@ -384,5 +384,30 @@ TEST_F(ReforgedUiComfortsTest, RightClickKeepsDiablosRulesForWhatCanBeWorn)
 	EXPECT_EQ(player._pNumInv, 1);
 }
 
+// --- 5. Walking away closes a shopkeeper's talk menu -------------------------------------------------------------
+
+TEST_F(ReforgedUiComfortsTest, WalkingAwayClosesATalkMenu)
+{
+	Player &player = *MyPlayer;
+	player.position.tile = player.position.future = { 60, 60 };
+	ActiveStore = TalkID::Smith;
+	CloseInteractionPanelsWhenAway();
+	EXPECT_TRUE(IsPlayerInStore());
+	// The hero steps off: the menu closes.
+	player.position.future = { 61, 60 };
+	CloseInteractionPanelsWhenAway();
+	EXPECT_FALSE(IsPlayerInStore());
+
+	// Plain Diablo keeps it open.
+	gbIsReforged = false;
+	player.position.future = { 60, 60 };
+	ActiveStore = TalkID::Smith;
+	CloseInteractionPanelsWhenAway();
+	player.position.future = { 61, 60 };
+	CloseInteractionPanelsWhenAway();
+	EXPECT_TRUE(IsPlayerInStore());
+	ActiveStore = TalkID::None;
+}
+
 } // namespace
 } // namespace devilution

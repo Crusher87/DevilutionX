@@ -491,8 +491,9 @@ void LeftMouseDown(uint16_t modState)
 	}
 
 	if (IsPlayerInStore()) {
-		// POE2 Mashup: a click outside a towner's talk menu closes it and goes on, so the hero walks off at once.
-		if (gbIsPoe2 && !StoreWindowContainsMouse()) {
+		// POE2 Mashup and Sanctuary Reforged: a click outside a towner's talk menu closes it and goes on, so the hero
+		// walks off at once.
+		if (HasEnhancements() && !StoreWindowContainsMouse()) {
 			CloseTalkMenu();
 		} else {
 			CheckStoreBtn();
@@ -736,8 +737,8 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	}
 
 	if (!ChatFlag && WasdMovementKeyPressed(vkey)) {
-		// POE2 Mashup: walking off closes a towner's talk menu, like the stash, and the walk goes on.
-		if (gbIsPoe2 && IsPlayerInStore())
+		// POE2 Mashup and Sanctuary Reforged: walking off closes a towner's talk menu, like the stash, and the walk goes on.
+		if (HasEnhancements() && IsPlayerInStore())
 			CloseTalkMenu();
 		return;
 	}
