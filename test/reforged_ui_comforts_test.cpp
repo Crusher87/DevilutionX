@@ -316,5 +316,30 @@ TEST_F(ReforgedUiComfortsTest, ShiftComparesWithTheWornItemOfTheSameSlotInDiablo
 	EXPECT_TRUE(CompareTooltips.empty());
 }
 
+// --- 3. Rarity-coloured inventory slots ---------------------------------------------------------------------------
+
+uint8_t SlotPixelAfterTint(item_quality quality)
+{
+	OwnedSurface surface { 40, 40 };
+	constexpr uint8_t Grey = PAL16_GRAY + 5;
+	FillRect(surface, 0, 0, 40, 40, Grey);
+	InvDrawSlotBack(surface, { 4, 31 }, { 28, 28 }, quality);
+	return surface[{ 10, 20 }];
+}
+
+TEST_F(ReforgedUiComfortsTest, SlotsAreColouredByDiablosRarities)
+{
+	EXPECT_EQ(SlotPixelAfterTint(ITEM_QUALITY_NORMAL), PAL16_GRAY + 5);
+	EXPECT_EQ(SlotPixelAfterTint(ITEM_QUALITY_MAGIC), PAL16_BLUE + 6);
+	EXPECT_EQ(SlotPixelAfterTint(ITEM_QUALITY_UNIQUE), PAL16_YELLOW + 6);
+
+	// POE2 Mashup keeps its orange uniques; plain Diablo keeps its beige normal items.
+	gbIsReforged = false;
+	gbIsPoe2 = true;
+	EXPECT_EQ(SlotPixelAfterTint(ITEM_QUALITY_UNIQUE), PAL16_ORANGE + 6);
+	gbIsPoe2 = false;
+	EXPECT_EQ(SlotPixelAfterTint(ITEM_QUALITY_NORMAL), PAL16_BEIGE + 6);
+}
+
 } // namespace
 } // namespace devilution
