@@ -265,7 +265,8 @@ const uint8_t *TranslationOf(text_color color)
 
 /**
  * @brief POE2 Mashup: the main menu's letters (size 42 in its gold) and the Esc menu's (size 46 in gold, and black for
- * what can't be picked) show the HD pack's art of them (hd\fonts\42-00, 46-00 and 46-00-black), drawn sharp.
+ * what can't be picked) and the other menu screens' (sizes 30 and 24 in gold and silver: character select, the hero
+ * and game screens, Settings) show the HD pack's art of them (hd\fonts\<size>-00 and its -black/-silver sets).
  */
 void RegisterHdLetters(GameFontTables size, ClxSpriteList letters)
 {
@@ -274,6 +275,12 @@ void RegisterHdLetters(GameFontTables size, ClxSpriteList letters)
 	} else if (size == GameFont46) {
 		hd::RegisterUiLetters(letters, nullptr, "fonts/46-00");
 		hd::RegisterUiLetters(letters, TranslationOf(ColorBlack), "fonts/46-00-black");
+	} else if (size == GameFont30) {
+		hd::RegisterUiLetters(letters, TranslationOf(ColorUiGold), "fonts/30-00");
+		hd::RegisterUiLetters(letters, TranslationOf(ColorUiSilver), "fonts/30-00-silver");
+	} else if (size == GameFont24) {
+		hd::RegisterUiLetters(letters, TranslationOf(ColorUiGold), "fonts/24-00");
+		hd::RegisterUiLetters(letters, TranslationOf(ColorUiSilver), "fonts/24-00-silver");
 	}
 }
 
