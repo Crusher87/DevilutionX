@@ -194,6 +194,9 @@ void StartWalkAnimation(Player &player, Direction dir, bool pmWillBeCalled)
 	int8_t skippedFrames = -2;
 	if (leveltype == DTYPE_TOWN && sgGameInitInfo.bRunInTown != 0)
 		skippedFrames = 2;
+	// Sanctuary Reforged: the town jog in the dungeon too, as a setting (single player only, so it can't differ between players).
+	if (gbIsReforged && !gbIsMultiplayer && leveltype != DTYPE_TOWN && *GetOptions().Gameplay.runInDungeon)
+		skippedFrames = 2;
 	// POE2 Mashup: always run, in the dungeon as well as in town, and dash while dodge rolling. Defiance Banner runs faster.
 	if (gbIsPoe2)
 		skippedFrames = player.poe2.isDodging() ? DodgeRollSkippedWalkFrames : static_cast<int8_t>(2 + BannerWalkSkippedFrames(player, player._pWFrames));

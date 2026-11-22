@@ -627,6 +627,8 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryInt<int> tickRate;
 	/** @brief Enable double walk speed when in town. */
 	OptionEntryBoolean runInTown;
+	/** @brief Sanctuary Reforged: jog in the dungeon as well (single player). */
+	OptionEntryBoolean runInDungeon;
 	/** @brief Do not let the mouse leave the application window. */
 	OptionEntryBoolean grabInput;
 	/** @brief Pause the game when focus is lost. */
