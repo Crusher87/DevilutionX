@@ -686,5 +686,72 @@ TEST_F(ReforgedGoldPickupTest, Poe2ShowsItOnceAndPlainDiabloNotAtAll)
 	EXPECT_TRUE(FloatingNumberTexts().empty());
 }
 
+// --- 10. A hovered item's name stays out of the box at the bottom --------------------------------------------------
+
+/** @brief The screen, with the main panel and its info box at 1920x1080, for drawing the info box in a test. */
+class ReforgedInfoBoxTest : public ReforgedUiComfortsTest {
+protected:
+	void SetUp() override
+	{
+		ReforgedUiComfortsTest::SetUp();
+		if (IsSkipped())
+			return;
+		oldWidth_ = gnScreenWidth;
+		oldHeight_ = gnScreenHeight;
+		gnScreenWidth = 1920;
+		gnScreenHeight = 1080;
+		CalculatePanelAreas();
+		if (!BottomBuffer)
+			BottomBuffer.emplace(GetMainPanel().size.width, (GetMainPanel().size.height + 64) * 2);
+	}
+
+	void TearDown() override
+	{
+		pcursinvitem = -1;
+		invflag = false;
+		BottomBuffer = std::nullopt;
+		gnScreenWidth = oldWidth_;
+		gnScreenHeight = oldHeight_;
+		CalculatePanelAreas();
+		ReforgedUiComfortsTest::TearDown();
+	}
+
+	/** @brief The screen after a frame's info boxes: the item under the mouse hovered, or nothing. */
+	static std::vector<uint8_t> DrawFrame(bool hovering)
+	{
+		OwnedSurface out { gnScreenWidth, gnScreenHeight };
+		InfoString = StringOrView {};
+		FloatingInfoString = StringOrView {};
+		FloatingInfoStyles.clear();
+		pcursitem = -1;
+		pcursinvitem = hovering ? CheckInvHLight() : -1;
+		DrawInfoBox(out);
+		std::vector<uint8_t> pixels;
+		for (int y = 0; y < out.h(); y++)
+			pixels.insert(pixels.end(), out.at(0, y), out.at(0, y) + out.w());
+		return pixels;
+	}
+
+private:
+	uint16_t oldWidth_ = 0;
+	uint16_t oldHeight_ = 0;
+};
+
+TEST_F(ReforgedInfoBoxTest, AHoveredItemsNameIsOnlyInItsTooltip)
+{
+	// Its name and details are in the tooltip by it, as in POE2 Mashup. Writing the name in the box at the bottom too
+	// had the screen reader hooks told the name and the tooltip in turn, twice a frame, which lagged on Windows.
+	invflag = true;
+	PlaceAndPointAt(MakeItem(IDI_WARRIOR));
+	const std::vector<uint8_t> hovered = DrawFrame(true);
+	ASSERT_NE(pcursinvitem, -1);
+	EXPECT_FALSE(FloatingInfoString.empty());
+	EXPECT_TRUE(hovered == DrawFrame(false)) << "the item's name was written in the box at the bottom";
+
+	// Plain Diablo still writes it there.
+	gbIsReforged = false;
+	EXPECT_FALSE(DrawFrame(true) == DrawFrame(false));
+}
+
 } // namespace
 } // namespace devilution

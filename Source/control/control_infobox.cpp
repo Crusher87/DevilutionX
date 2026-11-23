@@ -45,8 +45,11 @@ void PrintInfo(const Surface &out)
 {
 	if (ChatFlag)
 		return;
-	// POE2 Mashup: a hovered item's name and details are in its tooltip instead.
-	if (gbIsPoe2 && !FloatingInfoString.empty())
+	// POE2 Mashup and Sanctuary Reforged: a hovered item's name and details are in its tooltip instead. Drawing the name
+	// here as well also had the screen reader told the name, then the tooltip, then the name again, every frame: each
+	// change is a Tolk_Output on Windows, which looks for a running screen reader every time, and that made hovering an
+	// item lag in Reforged (Curtis 2026-11-23).
+	if (HasEnhancements() && !FloatingInfoString.empty())
 		return;
 
 	const int space[] = { 18, 12, 6, 3, 0 };
