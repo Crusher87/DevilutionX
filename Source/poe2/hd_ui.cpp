@@ -33,6 +33,7 @@
 #include "poe2/hd_spell_icons.hpp"
 #include "poe2/live_fire.hpp"
 #include "poe2/live_fire_sdl.hpp"
+#include "poe2/menu_intro_sdl.hpp"
 #include "utils/file_util.h"
 #include "utils/log.hpp"
 #include "utils/png.h"
@@ -492,6 +493,7 @@ void ForgetTextures()
 	MaskedTexturePixels = 0;
 	if (MenuFire != nullptr)
 		MenuFire->ForgetTextures();
+	intro_sdl::ForgetTextures();
 }
 
 void RecordUiOutlineImpl(const Surface &out, Point position, ClxSprite clx, uint8_t colour)
@@ -1517,9 +1519,18 @@ bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &d
 	if (layer == nullptr)
 		return false;
 	const SDL_FRect &spot = draw.name->fire->rect;
+	const SDL_FRect picture { dest.x + spot.x * dest.w, dest.y + spot.y * dest.h, spot.w * dest.w, spot.h * dest.h };
+	// The main menu's logo: while the intro plays it draws it itself, as it flies in and lands here.
+	const bool mainMenu = draw.name->fire == &FireSpots[1];
+	if (mainMenu && intro_sdl::HoldsMenuLogo(picture)) {
+		// (It is still shown: not let go as idle.)
+		MenuFireTicks = SDL_GetTicks();
+		MenuFireCounter = 0;
+		return true;
+	}
 	// The maps' picture goes over the logo at `spot`; the grid's padding reaches past it on each side (past the logo's
 	// own rect too: what is under that is the menu's background, the fire only added over it).
-	const SDL_FRect rect = layer->GridRect(SDL_FRect { dest.x + spot.x * dest.w, dest.y + spot.y * dest.h, spot.w * dest.w, spot.h * dest.h });
+	const SDL_FRect rect = layer->GridRect(picture);
 	// Real time, so it burns at the same pace whatever the frame rate; after a while unseen it goes on from where it was.
 	const uint64_t now = SDL_GetPerformanceCounter();
 	float seconds = 1.F / 60.F;
@@ -1537,12 +1548,36 @@ bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &d
 	const uint8_t *cover = MenuFireCoverOf(draw, rect, layer->Fire().Width(), layer->Fire().Height(), 0.F, screenRight);
 	if (!layer->Draw(renderer, rect, seconds, cover))
 		return false;
+	// After the intro: its burning lines round the subtitle, behind the letters, and the subtitle over them.
+	if (mainMenu)
+		intro_sdl::DrawLines(renderer, picture, seconds);
 	if (!layer->DrawLit(renderer, texture, dest, spot))
 		SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+	if (mainMenu)
+		intro_sdl::DrawSubtitle(renderer, picture);
 	return true;
 }
 
 } // namespace
+
+fire::FireLayer *MenuLogoFire()
+{
+	return MenuFireLayer();
+}
+
+SDL_Texture *MenuLogoArt(SDL_Renderer *renderer)
+{
+	if (renderer == nullptr)
+		return nullptr;
+	UseRenderer(renderer);
+	UiArt *art = ArtFor("ui_art/logo/d0_f00");
+	if (art == nullptr)
+		return nullptr;
+	SDL_Texture *texture = TextureOf(renderer, *art);
+	if (texture != nullptr)
+		SDL_SetTextureColorMod(texture, 255, 255, 255);
+	return texture;
+}
 
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height)
 {
@@ -1859,6 +1894,7 @@ void DropUiDraws()
 
 void ForgetMenuFire()
 {
+	intro_sdl::ReleaseLines();
 	if (MenuFire != nullptr)
 		MenuFire->ReleaseTextures();
 	MenuFire = nullptr;

@@ -397,6 +397,30 @@ void DropUiDraws();
  */
 void ForgetMenuFire();
 
+/**
+ * @brief Whether the main menu's intro (poe2/menu_intro.hpp) should play now: once a launch, the Menu Intro option on,
+ * the HD pack's main menu logo shown (ShowsHdLogo) and its art there (hd\ui_art\intro\steel.png and textmaps.png, and
+ * the logo's fire maps). The game then leaves out the title screen and plays it as the main menu opens.
+ */
+bool MenuIntroWanted();
+/** @brief Starts the intro (MenuIntroWanted): the main menu's logo flies in, and the menu fades in under it. */
+void StartMenuIntro();
+/** @brief Whether the intro is still playing (until it ends on the menu as it always is). */
+bool MenuIntroPlaying();
+/** @brief Whether the menu isn't showing yet: a click or a key skips the intro, and does nothing else. */
+bool MenuIntroTakesInput();
+/** @brief Jumps to the intro's end: the logo in place and burning, the words cooled, the menu shown; its sounds stop. */
+void SkipMenuIntro();
+/** @brief The main menu closes: whatever is left of the intro ends (its sounds play out). */
+void FinishMenuIntro();
+/**
+ * @brief Around the drawing of a frame of the menus (RenderPresent): while the intro plays, the frame is drawn into a
+ * picture of its own, and the intro puts it on the screen with everything else (EndMenuIntroFrame). False when it
+ * isn't playing: nothing changes.
+ */
+bool BeginMenuIntroFrame(SDL_Renderer *renderer);
+void EndMenuIntroFrame(SDL_Renderer *renderer);
+
 /** @brief A UI picture frame's HD art name (RegisterUiPicture) and where its art goes, by its pixels; false for none. */
 bool UiPictureFrameOf(const uint8_t *pixels, std::string &name, UiPictureLayer &layer);
 

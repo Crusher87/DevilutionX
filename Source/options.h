@@ -501,6 +501,8 @@ struct StartUpOptions : OptionCategoryBase {
 	/** @brief Play game intro video on hellfire startup. */
 	OptionEntryEnum<StartUpIntro> hellfireIntro;
 	OptionEntryEnum<StartUpSplash> splash;
+	/** @brief POE2 Mashup: play the burning-logo intro before the main menu (needs its HD art). */
+	OptionEntryBoolean menuIntro;
 };
 
 struct DiabloOptions : OptionCategoryBase {

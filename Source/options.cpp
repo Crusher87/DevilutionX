@@ -472,6 +472,7 @@ StartUpOptions::StartUpOptions()
               { StartUpSplash::TitleDialog, N_("Title Screen") },
               { StartUpSplash::None, N_("None") },
           })
+    , menuIntro("Menu Intro", OptionEntryFlags::None, N_("Menu Intro"), N_("The burning logo's intro before the main menu."), true)
 {
 }
 std::vector<OptionEntryBase *> StartUpOptions::GetEntries()
@@ -480,6 +481,7 @@ std::vector<OptionEntryBase *> StartUpOptions::GetEntries()
 		&diabloIntro,
 		&hellfireIntro,
 		&splash,
+		&menuIntro,
 	};
 }
 

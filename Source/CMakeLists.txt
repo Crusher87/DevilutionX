@@ -66,6 +66,7 @@ set(libdevilutionx_SRCS
   poe2/live_fire.cpp
   poe2/live_fire_sdl.cpp
   poe2/menu_intro.cpp
+  poe2/menu_intro_sdl.cpp
   poe2/loot_filter.cpp
   poe2/rune_icons.cpp
   poe2/stash_layouts.cpp
