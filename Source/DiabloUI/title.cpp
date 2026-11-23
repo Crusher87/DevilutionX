@@ -20,6 +20,7 @@
 #include "engine/load_clx.hpp"
 #include "engine/load_pcx.hpp"
 #include "engine/point.hpp"
+#include "poe2/hd.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/language.h"
 #include "utils/sdl_compat.h"
@@ -41,6 +42,10 @@ void TitleLoad()
 	} else {
 		LoadBackgroundArt("ui_art\\title");
 		DiabloTitleLogo = LoadPcxSpriteList("ui_art\\logo", /*numFrames=*/15, /*transparentColor=*/250);
+		// POE2 Mashup: the HD pack's sharp logo (hd\\ui_art\\logo\\d0_fNN.png) goes over the UI in its place, and none of
+		// the old one (its fire too) shows round it. Without the art, the old one shows as it was.
+		if (DiabloTitleLogo.has_value())
+			hd::RegisterUiPicture("ui_art\\logo", *DiabloTitleLogo, hd::UiPictureLayer::Over);
 	}
 }
 
@@ -48,6 +53,7 @@ void TitleFree()
 {
 	ArtBackground = std::nullopt;
 	ArtBackgroundWidescreen = std::nullopt;
+	hd::ForgetUiPicture(DiabloTitleLogo);
 	DiabloTitleLogo = std::nullopt;
 
 	vecTitleScreen.clear();

@@ -634,6 +634,11 @@ void BltFast(SDL_Rect *srcRect, SDL_Rect *dstRect)
 		Blit(WorldSurface.get(), nullptr, nullptr);
 		return;
 	}
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+	// POE2 Mashup: an unscaled UI goes up as it is, without HD art: the UI pictures noted for it (a menu logo's are big)
+	// would only pile up.
+	hd::DropUiDraws();
+#endif
 	if (RenderDirectlyToOutputSurface) {
 #ifndef USE_SDL1
 		// A null rect means the caller changed the entire surface.
