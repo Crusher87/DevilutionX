@@ -50,6 +50,7 @@
 #include "init.hpp"
 #include "options.h"
 #include "player.h"
+#include "poe2/hd.hpp"
 #include "sound_effect_enums.h"
 #include "tables/playerdat.hpp"
 #include "utils/algorithm/container.hpp"
@@ -652,10 +653,16 @@ void LoadHeros()
 
 void LoadUiGFX()
 {
-	ArtLogo = LoadPcxSpriteList("ui_art\\hf_logo2", /*numFrames=*/16, /*transparentColor=*/0, nullptr, false);
+	const char *logo = "ui_art\\hf_logo2";
+	ArtLogo = LoadPcxSpriteList(logo, /*numFrames=*/16, /*transparentColor=*/0, nullptr, false);
 	if (!ArtLogo.has_value()) {
-		ArtLogo = LoadPcxSpriteList("ui_art\\smlogo", /*numFrames=*/15, /*transparentColor=*/250);
+		logo = "ui_art\\smlogo";
+		ArtLogo = LoadPcxSpriteList(logo, /*numFrames=*/15, /*transparentColor=*/250);
 	}
+	// POE2 Mashup: the HD pack's sharp logo (hd\\ui_art\\smlogo\\d0_fNN.png) goes over the UI in its place, and none of the
+	// old one (its fire too) shows round it. Without the art, the old one shows as it was.
+	if (ArtLogo.has_value())
+		hd::RegisterUiPicture(logo, *ArtLogo, hd::UiPictureLayer::Over);
 	DifficultyIndicator = LoadPcx("ui_art\\r1_gry", /*transparentColor=*/0);
 	ArtFocus[FOCUS_SMALL] = LoadPcxSpriteList("ui_art\\focus16", /*numFrames=*/8, /*transparentColor=*/250);
 	ArtFocus[FOCUS_MED] = LoadPcxSpriteList("ui_art\\focus", /*numFrames=*/8, /*transparentColor=*/250);
@@ -683,6 +690,7 @@ void UnloadUiGFX()
 	ArtCursor = std::nullopt;
 	for (auto &art : ArtFocus)
 		art = std::nullopt;
+	hd::ForgetUiPicture(ArtLogo);
 	ArtLogo = std::nullopt;
 	DifficultyIndicator = std::nullopt;
 }

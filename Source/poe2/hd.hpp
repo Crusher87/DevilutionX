@@ -251,7 +251,20 @@ void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t w
 /** @brief A one-cell shrunken copy of an item picture: it shows the full picture's HD art, shrunk the same way. */
 void RegisterFittedUiSprite(ClxSprite small, ClxSprite full);
 
-using RegisterUiPictureFn = void (*)(std::string_view path, ClxSpriteList sprites);
+/** @brief Where a UI picture's HD art goes (RegisterUiPicture). */
+enum class UiPictureLayer : uint8_t {
+	/** Under the UI, which leaves out the picture's pixels there (a panel: text and items drawn on it stay over it). Only
+	 * frames presented in layers (in the game) show it. */
+	Under,
+	/**
+	 * Over the UI, as item pictures: where the picture's own pixels still show, the UI shows what was under them, so
+	 * nothing of the game's picture shows round its art. Any frame shows it, the menus' too (the logos, whose fire the
+	 * HD art leaves out).
+	 */
+	Over,
+};
+
+using RegisterUiPictureFn = void (*)(std::string_view path, ClxSpriteList sprites, UiPictureLayer layer);
 using ForgetUiPictureFn = void (*)(ClxSpriteList sprites);
 using RecordUiBlitFn = void (*)(const Surface &out, const Surface &src, Rectangle srcRect, Point targetPosition, std::string_view name);
 
@@ -264,12 +277,13 @@ extern RecordUiBlitFn RecordUiBlitHook;
  * @brief Names a UI panel's picture (the inventory, the spell book, a button strip...) so its HD art shows over the UI
  * where its own pixels still show, as item pictures do. Each frame's art is hd\\<name>\\d0_fNN.png, the name being the
  * asset's path in lower case with / and no extension (data/inv/inv), or a fixed one for a picture the game puts
- * together itself (ui/char_panel). A picture named again forgets the frames it had before.
+ * together itself (ui/char_panel). A picture named again forgets the frames it had before. A frame with no art keeps
+ * the game's own. `layer` says whether its art goes under the UI (panels) or over it (the menus' logos).
  */
-inline void RegisterUiPicture(std::string_view path, ClxSpriteList sprites)
+inline void RegisterUiPicture(std::string_view path, ClxSpriteList sprites, UiPictureLayer layer = UiPictureLayer::Under)
 {
 	if (RegisterUiPictureHook != nullptr)
-		RegisterUiPictureHook(path, sprites);
+		RegisterUiPictureHook(path, sprites, layer);
 }
 
 using RegisterUiLettersFn = void (*)(ClxSpriteList sprites, const uint8_t *trn, std::string_view name);
@@ -343,6 +357,12 @@ void RestoreUiSprites();
 
 /** @brief Draws the HD art of this frame's item pictures over the UI, where their own pixels still show. */
 void RenderUiSprites(SDL_Renderer *renderer);
+
+/** @brief Forgets this frame's UI draws without showing them: the frame went up without its HD art (UI not scaled). */
+void DropUiDraws();
+
+/** @brief A UI picture frame's HD art name (RegisterUiPicture) and where its art goes, by its pixels; false for none. */
+bool UiPictureFrameOf(const uint8_t *pixels, std::string &name, UiPictureLayer &layer);
 
 /** @brief Names every frame of a loaded sprite file, so its HD art can be found. */
 void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);

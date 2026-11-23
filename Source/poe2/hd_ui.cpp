@@ -54,6 +54,19 @@ struct UiSpriteName {
 	uint16_t fullHeight = 0;
 	/** @brief A UI panel's picture (RegisterUiPicture): its HD art goes under the UI, which leaves out its pixels there. */
 	bool panel = false;
+	/** @brief A frame of a picture named by RegisterUiPicture (under or over the UI), forgotten with it. */
+	bool picture = false;
+	/**
+	 * @brief For a picture over the UI (a menu logo): the art its frames show when they have none of their own, its first
+	 * frame's. The HD logo is still while the game's cycles through its fire, so one picture serves every frame.
+	 */
+	std::string stillArt;
+	/**
+	 * @brief Its draws and pattern sit exactly where the game draws it. The others sit a row higher and leave out the
+	 * picture's bottom row, as the frames --hd-export wrote (and the pack's art made from them) do; a picture over the UI
+	 * has art made from the game's own file, and none of the old picture may be left under it.
+	 */
+	bool exact = false;
 };
 
 /** @brief Each item picture frame, by the address of its pixels. */
@@ -96,6 +109,7 @@ SDL_Renderer *UiArtRenderer = nullptr;
 struct UiPattern {
 	uint16_t width = 0;
 	uint16_t height = 0;
+	bool exact = false;
 	std::vector<int16_t> pixels;
 };
 /** @brief Each picture's pattern, plain and red, by the address of its pixels (and 1 for red). */
@@ -163,6 +177,18 @@ std::vector<std::pair<size_t, uint8_t>> Swapped;
 
 /** @brief Textures of pictures partly covered, by their art, colour and what of them shows. */
 std::unordered_map<uint64_t, SDL_Texture *> MaskedTextures;
+/** @brief The pixels of all those textures: a big picture (a menu logo under the cursor) makes a big one each time. */
+size_t MaskedTexturePixels = 0;
+/** @brief How many pixels of them are kept before all are let go (about 128 MB). */
+constexpr size_t MaskedTexturePixelBudget = 32 * 1024 * 1024;
+
+/** @brief Keeps a new partly covered texture, counting its pixels. */
+void KeepMaskedTexture(SDL_Texture *&slot, SDL_Texture *texture, int width, int height)
+{
+	slot = texture;
+	if (texture != nullptr)
+		MaskedTexturePixels += static_cast<size_t>(width) * static_cast<size_t>(height);
+}
 
 // UI panels (the inventory, the spell book, the bottom panel...) show their HD art the same way, but under the UI: the UI
 // leaves out their pixels that still show (UiHiddenPixels), so whatever was drawn over them (text, items, the cursor)
@@ -198,11 +224,16 @@ bool UiHiddenAny = false;
 std::string UiExportDir;
 std::map<std::string, std::vector<std::pair<int, int>>> UiExported;
 
-/** @brief Draws a picture on two colours to find the pixels it lays down: those that come out the same. */
-void MakePattern(UiPattern &pattern, ClxSprite clx, const uint8_t *trn)
+/**
+ * @brief Draws a picture on two colours to find the pixels it lays down: those that come out the same. ClxDraw takes the
+ * bottom row's place: `exact` puts the picture's rows where they are, otherwise they sit a row low, the last left out
+ * (UiSpriteName::exact).
+ */
+void MakePattern(UiPattern &pattern, ClxSprite clx, const uint8_t *trn, bool exact = false)
 {
 	pattern.width = clx.width();
 	pattern.height = clx.height();
+	pattern.exact = exact;
 	const int w = clx.width();
 	const int h = clx.height();
 	// Drawn once on 0 and once on 255: the pixels that come out the same are the ones it lays down.
@@ -211,10 +242,11 @@ void MakePattern(UiPattern &pattern, ClxSprite clx, const uint8_t *trn)
 	SDL_FillSurfaceRect(low.surface, nullptr, 0);
 	SDL_FillSurfaceRect(high.surface, nullptr, 255);
 	for (OwnedSurface *target : { &low, &high }) {
+		const Point bottom { 0, exact ? h - 1 : h };
 		if (trn != nullptr)
-			ClxDrawTRN(*target, { 0, h }, clx, trn);
+			ClxDrawTRN(*target, bottom, clx, trn);
 		else
-			ClxDraw(*target, { 0, h }, clx);
+			ClxDraw(*target, bottom, clx);
 	}
 	pattern.pixels.assign(static_cast<size_t>(w) * h, -1);
 	for (int y = 0; y < h; y++) {
@@ -227,12 +259,12 @@ void MakePattern(UiPattern &pattern, ClxSprite clx, const uint8_t *trn)
 	}
 }
 
-const UiPattern &PatternOf(ClxSprite clx, const uint8_t *trn)
+const UiPattern &PatternOf(ClxSprite clx, const uint8_t *trn, bool exact)
 {
 	UiPattern &pattern = UiPatterns[trn != nullptr ? 1 : 0][clx.pixelData()];
-	if (pattern.width == clx.width() && pattern.height == clx.height() && !pattern.pixels.empty())
+	if (pattern.width == clx.width() && pattern.height == clx.height() && pattern.exact == exact && !pattern.pixels.empty())
 		return pattern;
-	MakePattern(pattern, clx, trn);
+	MakePattern(pattern, clx, trn, exact);
 	return pattern;
 }
 
@@ -339,6 +371,7 @@ void ForgetTextures()
 			outline.texture = nullptr;
 	}
 	MaskedTextures.clear();
+	MaskedTexturePixels = 0;
 }
 
 void RecordUiOutlineImpl(const Surface &out, Point position, ClxSprite clx, uint8_t colour)
@@ -405,11 +438,11 @@ void RecordUiSpriteImpl(const Surface &out, Point position, ClxSprite clx, const
 	UiDraw &draw = UiDraws.emplace_back();
 	draw.order = UiOrder++;
 	draw.name = name;
-	draw.pattern = letter ? &LetterPatternOf(clx, trn) : &PatternOf(clx, trn);
+	draw.pattern = letter ? &LetterPatternOf(clx, trn) : &PatternOf(clx, trn, name->exact);
 	draw.red = !letter && trn != nullptr;
 	const int w = clx.width();
 	const int h = clx.height();
-	draw.rect = SDL_Rect { out.region.x + position.x, out.region.y + position.y - h, w, h };
+	draw.rect = SDL_Rect { out.region.x + position.x, out.region.y + position.y - h + (name->exact ? 1 : 0), w, h };
 	if (outline.pixels == clx.pixelData() && outline.at == Point { out.region.x + position.x, out.region.y + position.y })
 		draw.outline = std::move(outline);
 	// What it is drawn over; pixels outside the surface it is drawn on (clipped) lay nothing down.
@@ -490,7 +523,7 @@ void ForgetUiFrames(const std::vector<const uint8_t *> &frames)
 	PendingUiOutline = {};
 	for (const uint8_t *pixels : frames) {
 		const auto it = UiSpriteNames.find(pixels);
-		if (it != UiSpriteNames.end() && it->second.panel)
+		if (it != UiSpriteNames.end() && it->second.picture)
 			UiSpriteNames.erase(it);
 		for (auto &patterns : UiPatterns)
 			patterns.erase(pixels);
@@ -498,7 +531,7 @@ void ForgetUiFrames(const std::vector<const uint8_t *> &frames)
 	}
 }
 
-void RegisterUiPictureImpl(std::string_view path, ClxSpriteList sprites)
+void RegisterUiPictureImpl(std::string_view path, ClxSpriteList sprites, UiPictureLayer layer)
 {
 	const std::string name = UiPictureName(path);
 	std::vector<const uint8_t *> &frames = UiPictures[name];
@@ -511,11 +544,17 @@ void RegisterUiPictureImpl(std::string_view path, ClxSpriteList sprites)
 		char suffix[32];
 		std::snprintf(suffix, sizeof(suffix), "/d0_f%02zu", frame);
 		RegisterUiSprite(sprite.pixelData(), name + suffix, sprite.width(), sprite.height());
-		UiSpriteNames[sprite.pixelData()].panel = true;
+		UiSpriteName &named = UiSpriteNames[sprite.pixelData()];
+		named.panel = layer == UiPictureLayer::Under;
+		named.picture = true;
+		if (layer == UiPictureLayer::Over) {
+			named.stillArt = name + "/d0_f00";
+			named.exact = true;
+		}
 		frames.push_back(sprite.pixelData());
 		if (!UiExportDir.empty()) {
 			UiPattern pattern;
-			MakePattern(pattern, sprite, nullptr);
+			MakePattern(pattern, sprite, nullptr, layer == UiPictureLayer::Over);
 			WriteUiFrame(name, frame, pattern.width, pattern.height, [&](int x, int y) {
 				return static_cast<int>(pattern.pixels[static_cast<size_t>(y) * pattern.width + x]);
 			});
@@ -854,7 +893,7 @@ SDL_Texture *MaskedOutline(SDL_Renderer *renderer, const UiDraw &draw, const SDL
 				alpha[static_cast<size_t>(y) * shape.width + x] = 0;
 		}
 	}
-	it->second = OutlineTexture(renderer, shape, alpha, cut);
+	KeepMaskedTexture(it->second, OutlineTexture(renderer, shape, alpha, cut), shape.width, shape.height);
 	return it->second;
 }
 
@@ -941,6 +980,8 @@ void PrepareUiSprites()
 	}
 	for (UiDraw &draw : UiDraws) {
 		draw.art = ArtFor(draw.name->name);
+		if (draw.art == nullptr && !draw.name->stillArt.empty())
+			draw.art = ArtFor(draw.name->stillArt);
 		draw.outline.smooth = false;
 	}
 	for (size_t i = 0; i < UiDraws.size(); i++) {
@@ -1110,10 +1151,11 @@ void RestoreUiSprites()
 void RenderUiSprites(SDL_Renderer *renderer)
 {
 	UseRenderer(renderer);
-	if (MaskedTextures.size() > 256) {
+	if (MaskedTextures.size() > 256 || MaskedTexturePixels > MaskedTexturePixelBudget) {
 		for (auto &[key, texture] : MaskedTextures)
 			SDL_DestroyTexture(texture);
 		MaskedTextures.clear();
+		MaskedTexturePixels = 0;
 	}
 	for (UiDraw &draw : UiDraws) {
 		// Panels went under the UI (RenderUiPanels).
@@ -1157,11 +1199,13 @@ void RenderUiSprites(SDL_Renderer *renderer)
 							row[static_cast<ptrdiff_t>(x) * 4 + 3] = 0;
 					}
 				}
-				it->second = MakeTexture(renderer, copy);
+				KeepMaskedTexture(it->second, MakeTexture(renderer, copy), copy->w, copy->h);
 				SDL_FreeSurface(copy);
 			}
 			texture = it->second;
 		}
+		// A layer behind a picture over the UI (a menu logo's looping HD fire, timed by SDL_GetTicks rather than by the
+		// game's frame) would be drawn here, at `dest`, before the picture: the UI under it already shows no old fire.
 		if (texture != nullptr)
 			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
 		// Over the picture, as the world's outlines go over their sprites: it leaves out what the picture covers.
@@ -1175,6 +1219,24 @@ void RenderUiSprites(SDL_Renderer *renderer)
 	UiOutlines.Prune(SDL_GetTicks());
 }
 
+void DropUiDraws()
+{
+	UiDraws.clear();
+	UiBlits.clear();
+	UiOrder = 0;
+	PendingUiOutline = {};
+}
+
+bool UiPictureFrameOf(const uint8_t *pixels, std::string &name, UiPictureLayer &layer)
+{
+	const auto it = UiSpriteNames.find(pixels);
+	if (it == UiSpriteNames.end() || !it->second.picture)
+		return false;
+	name = it->second.name;
+	layer = it->second.panel ? UiPictureLayer::Under : UiPictureLayer::Over;
+	return true;
+}
+
 #else
 
 void RegisterUiSprite(const uint8_t *, const std::string &, uint16_t, uint16_t) { }
@@ -1184,6 +1246,8 @@ void RestoreUiSprites() { }
 void RenderUiSprites(SDL_Renderer *) { }
 const uint8_t *UiHiddenPixels(int, int) { return nullptr; }
 void RenderUiPanels(SDL_Renderer *) { }
+void DropUiDraws() { }
+bool UiPictureFrameOf(const uint8_t *, std::string &, UiPictureLayer &) { return false; }
 void BeginUiExport(const std::string &) { }
 void ExportUiSurface(std::string_view, const Surface &) { }
 void EndUiExport() { }
