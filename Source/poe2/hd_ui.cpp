@@ -1,6 +1,7 @@
 #include "poe2/hd.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <cstdint>
@@ -201,6 +202,58 @@ struct UiBlit {
 	uint32_t order = 0;
 };
 std::vector<UiBlit> UiBlits;
+
+/**
+ * @brief The draws and copies of the frame last shown. A frame shown again with nothing drawn since (a palette fade, or
+ * the frames shown while quitting) shows their HD art again, where the frame still has their pixels; without them it
+ * would fall back to the game's own letters and panels.
+ */
+std::vector<UiDraw> ShownUiDraws;
+std::vector<UiBlit> ShownUiBlits;
+
+/** @brief The draws now are the frame last shown's, taken up again (PrepareUiSprites) and not shown yet. */
+bool ShowingShownUiDraws = false;
+
+/** @brief A new frame is being drawn: the draws of the one shown before give way to its own. */
+void LeaveShownUiDraws()
+{
+	if (!ShowingShownUiDraws)
+		return;
+	ShowingShownUiDraws = false;
+	UiDraws.clear();
+	UiBlits.clear();
+	UiOrder = 0;
+}
+
+/** @brief Forgets the frame last shown, before what its draws point at (names, patterns, rings) can go. */
+void ForgetShownUiDraws()
+{
+	LeaveShownUiDraws();
+	ShownUiDraws.clear();
+	ShownUiBlits.clear();
+}
+
+/** @brief How much of each channel the screen palette keeps of the game's, at most all of it: a fade dims the HD art too. */
+std::array<float, 3> UiFade()
+{
+	std::array<float, 3> logical {};
+	std::array<float, 3> screen {};
+	for (int color = 0; color < 256; color++) {
+		logical[0] += logical_palette[color].r;
+		logical[1] += logical_palette[color].g;
+		logical[2] += logical_palette[color].b;
+		screen[0] += system_palette[color].r;
+		screen[1] += system_palette[color].g;
+		screen[2] += system_palette[color].b;
+	}
+	std::array<float, 3> fade;
+	for (int c = 0; c < 3; c++)
+		fade[c] = logical[c] > 0 ? std::clamp(screen[c] / logical[c], 0.F, 1.F) : 1.F;
+	return fade;
+}
+
+/** @brief This present's fade (UiFade). */
+std::array<float, 3> UiFadeNow { 1.F, 1.F, 1.F };
 
 /** @brief The UI pixels the overlay leaves out this frame (1), since a panel's HD art goes under them; and its size. */
 std::vector<uint8_t> UiHidden;
@@ -416,6 +469,7 @@ void RecordUiSpriteImpl(const Surface &out, Point position, ClxSprite clx, const
 		return;
 	if (!Enabled())
 		return;
+	LeaveShownUiDraws();
 	if (UiDraws.size() >= 512)
 		UiDraws.clear();
 	UiDraw &draw = UiDraws.emplace_back();
@@ -503,6 +557,7 @@ void WriteUiFrame(const std::string &name, size_t frame, int width, int height, 
 void ForgetUiFrames(const std::vector<const uint8_t *> &frames)
 {
 	UiDraws.clear();
+	ForgetShownUiDraws();
 	PendingUiOutline = {};
 	for (const uint8_t *pixels : frames) {
 		const auto it = UiSpriteNames.find(pixels);
@@ -541,6 +596,7 @@ void RegisterUiPictureImpl(std::string_view path, ClxSpriteList sprites)
 
 void RegisterUiLettersImpl(ClxSpriteList sprites, const uint8_t *trn, std::string_view name)
 {
+	ForgetShownUiDraws();
 	for (size_t frame = 0; frame < sprites.numSprites(); frame++) {
 		const ClxSprite sprite = sprites[frame];
 		if (sprite.width() == 0 || sprite.height() == 0)
@@ -556,6 +612,7 @@ void RegisterUiLettersImpl(ClxSpriteList sprites, const uint8_t *trn, std::strin
 /** @brief Forgets the letters of a font whose pixels are about to be freed, in every colour. */
 void ForgetUiLetters(ClxSpriteList sprites)
 {
+	ForgetShownUiDraws();
 	bool any = false;
 	for (size_t frame = 0; frame < sprites.numSprites(); frame++) {
 		const uintptr_t pixels = reinterpret_cast<uintptr_t>(sprites[frame].pixelData());
@@ -600,6 +657,7 @@ void RecordUiBlitImpl(const Surface &out, const Surface &src, Rectangle srcRect,
 	out.Clip(&rect, &at);
 	if (rect.w <= 0 || rect.h <= 0 || rect.x < 0 || rect.y < 0 || rect.x + rect.w > src.w() || rect.y + rect.h > src.h())
 		return;
+	LeaveShownUiDraws();
 	if (UiBlits.size() >= 256)
 		UiBlits.clear();
 	UiBlit &blit = UiBlits.emplace_back();
@@ -797,6 +855,12 @@ Uint8 UiColourByte(float value)
 	return static_cast<Uint8>(std::clamp(value, 0.F, 1.F) * 255.F + 0.5F);
 }
 
+/** @brief Dims a picture's texture as the screen palette is dimmed (UiFade), so the HD art fades with the game's. */
+void FadeUiTexture(SDL_Texture *texture)
+{
+	SDL_SetTextureColorMod(texture, UiColourByte(UiFadeNow[0]), UiColourByte(UiFadeNow[1]), UiColourByte(UiFadeNow[2]));
+}
+
 /** @brief A texture of an outline's shape (white, its shape in the alpha); a glow adds light to what is under it. */
 SDL_Texture *OutlineTexture(SDL_Renderer *renderer, const OutlineShape &shape, const std::vector<uint8_t> &alpha, OutlineCut cut)
 {
@@ -899,6 +963,8 @@ void DrawUiOutline(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &
 	float alpha = 1.F;
 	const uint32_t now = SDL_GetTicks();
 	UiOutlines.Fade(look, now, colour, alpha);
+	for (int c = 0; c < 3; c++)
+		colour[c] *= UiFadeNow[c];
 	const auto drawCut = [&](OutlineCut cut, float strength) {
 		if (strength <= 0)
 			return;
@@ -934,6 +1000,7 @@ void RecordUiPictureImpl(const Surface &out, const Rectangle &box, const std::st
 	const auto [named, inserted] = UiPictureNames.try_emplace(name + '@' + std::to_string(w) + 'x' + std::to_string(h));
 	if (inserted)
 		named->second = UiSpriteName { name, static_cast<uint16_t>(w), static_cast<uint16_t>(h) };
+	LeaveShownUiDraws();
 	if (UiDraws.size() >= 512)
 		UiDraws.clear();
 	UiDraw &draw = UiDraws.emplace_back();
@@ -1254,6 +1321,7 @@ void DrawFittedUiArt(SDL_Renderer *renderer, const UiDraw &draw)
 
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height)
 {
+	ForgetShownUiDraws();
 	UiSpriteNames[pixels] = UiSpriteName { name, width, height };
 	// A picture loaded where another was has its own pattern.
 	for (auto &patterns : UiPatterns)
@@ -1266,6 +1334,7 @@ void RegisterFittedUiSprite(ClxSprite small, ClxSprite full)
 	const auto it = UiSpriteNames.find(full.pixelData());
 	if (it == UiSpriteNames.end() || it->second.fullWidth != 0)
 		return;
+	ForgetShownUiDraws();
 	const UiSpriteName fitted { it->second.name, small.width(), small.height(), full.width(), full.height() };
 	UiSpriteNames[small.pixelData()] = fitted;
 	for (auto &patterns : UiPatterns)
@@ -1277,6 +1346,15 @@ void PrepareUiSprites()
 {
 	Swapped.clear();
 	SDL_Surface *ui = PalSurface;
+	UiFadeNow = UiFade();
+	// Nothing drawn since the last present: the same frame is shown again.
+	if (UiDraws.empty() && UiBlits.empty()) {
+		UiDraws = std::move(ShownUiDraws);
+		UiBlits = std::move(ShownUiBlits);
+		ShownUiDraws.clear();
+		ShownUiBlits.clear();
+		ShowingShownUiDraws = !UiDraws.empty() || !UiBlits.empty();
+	}
 	if (UiHiddenAny)
 		std::fill(UiHidden.begin(), UiHidden.end(), 0);
 	UiHiddenAny = false;
@@ -1368,8 +1446,10 @@ void RenderUiPanels(SDL_Renderer *renderer)
 		if (draw.shown == 0 || draw.art == nullptr || !draw.name->panel)
 			return;
 		const SDL_FRect dest = DestOf(draw);
-		if (SDL_Texture *texture = TextureOf(renderer, *draw.art); texture != nullptr)
+		if (SDL_Texture *texture = TextureOf(renderer, *draw.art); texture != nullptr) {
+			FadeUiTexture(texture);
 			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+		}
 	};
 	// In the order the game drew them: a button drawn over the bottom panel goes over its art.
 	size_t nextDraw = 0;
@@ -1392,11 +1472,12 @@ void RenderUiPanels(SDL_Renderer *renderer)
 		if (src.x + src.w > blit.art->picture->w || src.y + src.h > blit.art->picture->h)
 			continue;
 		const SDL_FRect dest { static_cast<float>(blit.dest.x), static_cast<float>(blit.dest.y), static_cast<float>(blit.dest.w), static_cast<float>(blit.dest.h) };
+		FadeUiTexture(texture);
 		SDL_RenderCopyF(renderer, texture, &src, &dest);
 	}
 	while (nextDraw < UiDraws.size())
 		drawPanel(UiDraws[nextDraw++]);
-	UiBlits.clear();
+	// The copies stay with the draws until RenderUiSprites keeps both for a frame shown again.
 }
 
 void BeginUiExport(const std::string &dir)
@@ -1514,15 +1595,21 @@ void RenderUiSprites(SDL_Renderer *renderer)
 			}
 			texture = it->second;
 		}
-		if (texture != nullptr)
+		if (texture != nullptr) {
+			FadeUiTexture(texture);
 			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+		}
 		// Over the picture, as the world's outlines go over their sprites: it leaves out what the picture covers.
 		if (draw.outline.smooth)
 			DrawUiOutline(renderer, draw, dest);
 	}
+	// Kept, should the same frame be shown again with nothing drawn since (PrepareUiSprites).
+	ShownUiDraws = std::move(UiDraws);
+	ShownUiBlits = std::move(UiBlits);
 	UiDraws.clear();
 	UiBlits.clear();
 	UiOrder = 0;
+	ShowingShownUiDraws = false;
 	PendingUiOutline = {};
 	UiOutlines.Prune(SDL_GetTicks());
 }
