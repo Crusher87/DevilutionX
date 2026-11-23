@@ -654,7 +654,10 @@ void LoadHeros()
 void LoadUiGFX()
 {
 	const char *logo = "ui_art\\hf_logo2";
-	ArtLogo = LoadPcxSpriteList(logo, /*numFrames=*/16, /*transparentColor=*/0, nullptr, false);
+	// POE2 Mashup: with the HD pack's Diablo logo, Hellfire's main menu shows it too (Diablo's smlogo, where Diablo has
+	// it) in place of hf_logo2.
+	if (!hd::ShowsHdLogo("ui_art/smlogo"))
+		ArtLogo = LoadPcxSpriteList(logo, /*numFrames=*/16, /*transparentColor=*/0, nullptr, false);
 	if (!ArtLogo.has_value()) {
 		logo = "ui_art\\smlogo";
 		ArtLogo = LoadPcxSpriteList(logo, /*numFrames=*/15, /*transparentColor=*/250);

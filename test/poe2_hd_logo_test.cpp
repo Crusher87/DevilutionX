@@ -16,6 +16,7 @@
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "poe2/hd.hpp"
+#include "utils/display.h"
 #include "utils/png.h"
 #include "utils/sdl_wrap.h"
 #include "utils/surface_to_clx.hpp"
@@ -25,6 +26,9 @@
 // the old picture may be left under it; without the art the old one shows as it was.
 
 namespace devilution {
+
+extern SDLSurfaceUniquePtr RendererTextureSurface; // dx.cpp
+
 namespace {
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
@@ -327,6 +331,74 @@ TEST_F(HdLogoTest, WithFireMapsTheLogoBurnsBehindItsArt)
 	hd::ForgetMenuFire();
 	std::error_code error;
 	std::filesystem::remove(maps, error);
+}
+
+TEST_F(HdLogoTest, MenusShowTheHdLogoWhereItHasArt)
+{
+	// Hellfire's menus load the Diablo logo in place of their own where the pack has its art.
+	EXPECT_TRUE(hd::ShowsHdLogo("ui_art/logo"));
+	EXPECT_TRUE(hd::ShowsHdLogo("ui_art/smlogo"));
+	EXPECT_FALSE(hd::ShowsHdLogo("data/diabsmal"));
+	EXPECT_FALSE(hd::ShowsHdLogo("ui_art/hf_logo2"));
+	// HD Graphics off: Hellfire keeps its own logos.
+	gbIsPoe2 = false;
+	EXPECT_FALSE(hd::ShowsHdLogo("ui_art/smlogo"));
+	gbIsPoe2 = true;
+}
+
+/** @brief How many pixels of the frame sent to the graphics card (RendererTextureSurface) show the old logo. */
+int OldLogoSent(const SDL_Surface *sent)
+{
+	int count = 0;
+	for (int y = 0; y < sent->h; y++) {
+		const auto *line = static_cast<const uint8_t *>(sent->pixels) + static_cast<ptrdiff_t>(y) * sent->pitch;
+		for (int x = 0; x < sent->w; x++) {
+			const uint8_t red = line[static_cast<ptrdiff_t>(x) * 4];
+			count += red == Letters || red == Fire ? 1 : 0;
+		}
+	}
+	return count;
+}
+
+TEST_F(HdLogoTest, UnscaledMenusShowTheHdLogoToo)
+{
+	// UI Scale 100 (no world surface): in the menus the frame goes up without the old logo, and its HD art is kept for
+	// RenderPresent to draw over it; in a game the frame goes up as it is, without HD art.
+	ASSERT_NE(Renderer, nullptr);
+	SDL_Color colours[256];
+	for (int i = 0; i < 256; i++)
+		colours[i] = SDL_Color { static_cast<Uint8>(i), static_cast<Uint8>(i), static_cast<Uint8>(i), 255 };
+	SDL_SetPaletteColors(PalSurface->format->palette, colours, 0, 256);
+	RendererTextureSurface = SDLWrap::CreateRGBSurfaceWithFormat(0, 40, 30, 32, SDL_PIXELFORMAT_RGBA32);
+	SDL_Renderer *const oldRenderer = renderer;
+	const bool oldDirect = RenderDirectlyToOutputSurface;
+	const bool oldRunGame = gbRunGame;
+	renderer = Renderer;
+	RenderDirectlyToOutputSurface = false;
+	hd::RegisterUiPicture("ui_art\\logo", *logo, hd::UiPictureLayer::Over);
+
+	gbRunGame = false;
+	Draw(0);
+	BltFast(nullptr, nullptr);
+	EXPECT_EQ(Drawn(), Laid); // the UI itself is as it was drawn
+	EXPECT_EQ(OldLogoSent(RendererTextureSurface.get()), 0);
+	hd::PrepareUiSprites(); // the draw is still there for the frame's HD art
+	EXPECT_EQ(Drawn(), 0);
+	hd::RestoreUiSprites();
+	hd::DropUiDraws();
+
+	gbRunGame = true;
+	Draw(0);
+	BltFast(nullptr, nullptr);
+	EXPECT_EQ(OldLogoSent(RendererTextureSurface.get()), Laid);
+	hd::PrepareUiSprites(); // dropped
+	EXPECT_EQ(Drawn(), Laid);
+	hd::RestoreUiSprites();
+
+	gbRunGame = oldRunGame;
+	renderer = oldRenderer;
+	RenderDirectlyToOutputSurface = oldDirect;
+	RendererTextureSurface = nullptr;
 }
 
 #endif

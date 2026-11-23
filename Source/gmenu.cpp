@@ -241,7 +241,9 @@ void gmenu_init_menu()
 
 	ForgetGMenuArt();
 	const char *logo = "data\\hf_logo3";
-	sgpLogo = LoadOptionalCel(logo, 430);
+	// POE2 Mashup: with the HD pack's Diablo logo, Hellfire's Esc menu shows Diablo's (diabsmal) in place of hf_logo3.
+	if (!hd::ShowsHdLogo("data/diabsmal"))
+		sgpLogo = LoadOptionalCel(logo, 430);
 	if (!sgpLogo.has_value()) {
 		logo = "data\\diabsmal";
 		sgpLogo = LoadCel(logo, 296);

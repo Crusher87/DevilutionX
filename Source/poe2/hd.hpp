@@ -387,6 +387,16 @@ void ForgetSprites(ClxSpriteListOrSheet sprites);
 bool HasArt(std::string_view name);
 
 /**
+ * @brief Whether a menu shows the HD pack's Diablo logo `picture` (ui_art/logo on the title screen, ui_art/smlogo in the
+ * main menu, data/diabsmal in the Esc menu): HD Graphics is on and the pack has its art. Hellfire's menus then load the
+ * Diablo logo in place of their own (hf_logo1, hf_logo2, hf_logo3), so it shows there too, with its fire.
+ */
+inline bool ShowsHdLogo(std::string_view picture)
+{
+	return Enabled() && HasArt(std::string(picture) + "/d0_f00");
+}
+
+/**
  * @brief Shows a sprite's HD art over the UI this frame, filling @p dest (UI pixels), for a preview in a panel.
  * Only one such sprite is shown at a time.
  * @param subFrame How far the sprite is towards its next frame, for the in-between drawings.
