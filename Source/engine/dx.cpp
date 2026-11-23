@@ -31,6 +31,7 @@
 #include "engine/palette.h"
 #include "engine/render/primitive_render.hpp"
 #include "engine/ui_scale.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "init.hpp"
 #include "options.h"
@@ -635,8 +636,17 @@ void BltFast(SDL_Rect *srcRect, SDL_Rect *dstRect)
 		return;
 	}
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
-	// POE2 Mashup: an unscaled UI goes up as it is, without HD art: the UI pictures noted for it (a menu logo's are big)
-	// would only pile up.
+	// POE2 Mashup: in the menus (not in a game) an unscaled UI shows its HD art too, as a scaled one does: the logo with
+	// its live fire and the menu letters are left out of the frame here and drawn over it when it is presented. In a
+	// game an unscaled UI goes up as it is, without HD art (the pictures noted for it would only pile up), so its frames
+	// cost what they did.
+	if (renderer != nullptr && !gbRunGame && !RenderDirectlyToOutputSurface) {
+		hd::PrepareUiSprites();
+		Blit(PalSurface, srcRect, dstRect);
+		hd::RestoreUiSprites();
+		UiSpritesLeftOut = true;
+		return;
+	}
 	hd::DropUiDraws();
 #endif
 	if (RenderDirectlyToOutputSurface) {

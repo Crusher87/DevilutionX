@@ -36,7 +36,10 @@ std::vector<std::unique_ptr<UiItemBase>> vecTitleScreen;
 
 void TitleLoad()
 {
-	ArtBackgroundWidescreen = LoadOptionalClx("ui_art\\hf_titlew.clx");
+	// POE2 Mashup: with the HD pack's Diablo logo, Hellfire's title screen is Diablo's (its background, with the HD logo
+	// and its fire) in place of hf_logo1, which is a whole picture with Hellfire's logo in it.
+	if (!hd::ShowsHdLogo("ui_art/logo"))
+		ArtBackgroundWidescreen = LoadOptionalClx("ui_art\\hf_titlew.clx");
 	if (ArtBackgroundWidescreen.has_value()) {
 		LoadBackgroundArt("ui_art\\hf_logo1", 16);
 	} else {
