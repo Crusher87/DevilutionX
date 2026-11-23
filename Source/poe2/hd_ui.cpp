@@ -1401,6 +1401,8 @@ void DrawFittedUiArt(SDL_Renderer *renderer, const UiDraw &draw)
 		return;
 	const SDL_FRect dest { static_cast<float>(x0) / scaleX, static_cast<float>(y0) / scaleY, static_cast<float>(width) / scaleX, static_cast<float>(height) / scaleY };
 	SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+}
+
 
 /** @brief The menu logos' fire, made from its maps the first time; null without them (or with POE2_LOGO_FIRE=0). */
 fire::FireLayer *MenuFireLayer()
