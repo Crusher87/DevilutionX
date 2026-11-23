@@ -3,8 +3,8 @@
  *
  * Sanctuary Reforged's share of POE2 Mashup's comfort features, filled with Diablo's own facts: the monster banner,
  * the newer item tooltip with Shift to compare, rarity-coloured inventory slots, right-click to put an item on,
- * held bow shots along the cursor with WASD, camera shake on Diablo's own big moments,
- * and Run in Town following the setting at once.
+ * held bow shots along the cursor with WASD, camera shake on Diablo's own big moments, "+N gold" over the hero for gold
+ * picked up, and Run in Town following the setting at once.
  */
 #include <algorithm>
 #include <cstdlib>
@@ -35,6 +35,8 @@
 #include "player.h"
 #include "poe2/aim.hpp"
 #include "poe2/camera_shake.hpp"
+#include "qol/floatingnumbers.h"
+#include "qol/stash.h"
 #include "storm/storm_net.hpp"
 #include "tables/monstdat.h"
 #include "track.h"
@@ -605,6 +607,83 @@ TEST(ReforgedRunInTownTest, SinglePlayerFollowsTheSettingAtOnceAndMultiplayerThe
 	sgGameInitInfo.bRunInTown = atStart;
 	gbIsReforged = wasReforged;
 	gbIsMultiplayer = wasMultiplayer;
+}
+
+// --- 9. Gold picked up by walking near it -------------------------------------------------------------------------
+
+class ReforgedGoldPickupTest : public ReforgedUiComfortsTest {
+protected:
+	static constexpr Point GoldTile { 50, 50 };
+
+	void SetUp() override
+	{
+		ReforgedUiComfortsTest::SetUp();
+		if (IsSkipped())
+			return;
+		MyPlayer->position.tile = MyPlayer->position.future = { 51, 50 };
+		ClearFloatingNumbers();
+	}
+
+	void TearDown() override
+	{
+		dItem[GoldTile.x][GoldTile.y] = 0;
+		Items[0] = {};
+		ActiveItemCount = 0;
+		ClearFloatingNumbers();
+		ReforgedUiComfortsTest::TearDown();
+	}
+
+	/** @brief A pile of gold on the ground by the hero, picked up as walking near it does. */
+	static void PickUpGold(int amount)
+	{
+		Items[0] = {};
+		MakeGoldStack(Items[0], amount);
+		Items[0].position = GoldTile;
+		ActiveItems[0] = 0;
+		ActiveItemCount = 1;
+		dItem[GoldTile.x][GoldTile.y] = 1;
+		AutoGetItem(*MyPlayer, &Items[0], 0);
+	}
+};
+
+TEST_F(ReforgedGoldPickupTest, ShowsWhatWasPickedUpOverTheHero)
+{
+	PickUpGold(250);
+	EXPECT_EQ(MyPlayer->_pGold, 250) << "the gold goes into the bag, as in Diablo";
+	EXPECT_EQ(dItem[GoldTile.x][GoldTile.y], 0);
+	EXPECT_EQ(FloatingNumberTexts(), std::vector<std::string> { "+250 gold" });
+}
+
+TEST_F(ReforgedGoldPickupTest, ABagTooFullForAllOfItShowsWhatWentIn)
+{
+	// Every cell but one holds a full pile; one pile has room for 100 more.
+	for (int cell = 0; cell < InventoryGridCells; cell++) {
+		MyPlayer->InvList[cell] = {};
+		MakeGoldStack(MyPlayer->InvList[cell], cell == 0 ? GOLD_MAX_LIMIT - 100 : GOLD_MAX_LIMIT);
+		MyPlayer->InvGrid[cell] = static_cast<int8_t>(cell + 1);
+	}
+	MyPlayer->_pNumInv = InventoryGridCells;
+	PickUpGold(300);
+	EXPECT_EQ(FloatingNumberTexts(), std::vector<std::string> { "+100 gold" });
+	EXPECT_EQ(Items[0]._ivalue, 200) << "the rest stays on the ground";
+}
+
+TEST_F(ReforgedGoldPickupTest, Poe2ShowsItOnceAndPlainDiabloNotAtAll)
+{
+	// POE2 Mashup's purse shows it once, not again for Reforged.
+	gbIsPoe2 = true;
+	gbIsReforged = false;
+	const int purse = Stash.gold;
+	PickUpGold(250);
+	EXPECT_EQ(Stash.gold, purse + 250);
+	EXPECT_EQ(FloatingNumberTexts(), std::vector<std::string> { "+250 gold" });
+	Stash.gold = purse;
+
+	ClearFloatingNumbers();
+	gbIsPoe2 = false;
+	PickUpGold(250);
+	EXPECT_EQ(MyPlayer->_pGold, 250);
+	EXPECT_TRUE(FloatingNumberTexts().empty());
 }
 
 } // namespace

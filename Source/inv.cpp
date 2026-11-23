@@ -1232,6 +1232,17 @@ int CreateGoldItemInInventorySlot(Player &player, int slotIndex, int value)
 	return value;
 }
 
+/**
+ * @brief Sanctuary Reforged: shows "+N gold" over the hero for gold picked up from the ground, as POE2 Mashup's purse
+ * does (AddGoldToInventory shows it there). Gold still goes into piles in the bag.
+ */
+void ShowReforgedGoldPickedUp(const Player &player, int pickedUp)
+{
+	if (!gbIsReforged || gbIsPoe2 || &player != MyPlayer || pickedUp <= 0)
+		return;
+	AddFloatingNumber(player.position.tile, { 0, -80 }, StrCat("+", FormatInteger(pickedUp), " ", _("gold")), UiFlags::ColorGold | UiFlags::FontSize12, 0x601D);
+}
+
 } // namespace
 
 item_quality SlotBackQuality(const Item &item)
@@ -1964,7 +1975,9 @@ void InvGetItem(Player &player, int ii)
 	item.updateRequiredStatsCacheForPlayer(player);
 	TelemetryItemPickedUp(player, item);
 
+	const int goldOffered = item._itype == ItemType::Gold ? item._ivalue : 0;
 	if (item._itype == ItemType::Gold && GoldAutoPlace(player, item)) {
+		ShowReforgedGoldPickedUp(player, goldOffered);
 		if (MyPlayer == &player) {
 			// Non-gold items (or gold when you have a full inventory) go to the hand then provide audible feedback on
 			//  paste. To give the same feedback for auto-placed gold we play the sound effect now.
@@ -2039,7 +2052,10 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii)
 	bool autoEquipped = false;
 
 	if (item._itype == ItemType::Gold) {
+		// Taken before GoldAutoPlace leaves only what didn't fit in the item.
+		const int goldOffered = item._ivalue;
 		done = GoldAutoPlace(player, item);
+		ShowReforgedGoldPickedUp(player, goldOffered - item._ivalue);
 		if (!done) {
 			SetPlrHandGoldCurs(item);
 		}
@@ -2058,8 +2074,8 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii)
 	}
 
 	if (done) {
-		if (gbIsPoe2 && item._itype == ItemType::Gold && &player == MyPlayer) {
-			// POE2 Mashup: gold picked up by walking near it just clinks.
+		if (HasEnhancements() && item._itype == ItemType::Gold && &player == MyPlayer) {
+			// POE2 Mashup and Sanctuary Reforged: gold picked up by walking near it just clinks.
 			PlaySFX(SfxID::ItemGold);
 		} else if (!autoEquipped && *GetOptions().Audio.itemPickupSound && &player == MyPlayer) {
 			PlaySFX(SfxID::GrabItem);

@@ -4,6 +4,7 @@
 #include <ctime>
 #include <deque>
 #include <string>
+#include <vector>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_timer.h>
@@ -113,6 +114,14 @@ void ClearFloatingNumbers()
 	srand(static_cast<unsigned int>(time(nullptr)));
 
 	FloatingQueue.clear();
+}
+
+std::vector<std::string> FloatingNumberTexts()
+{
+	std::vector<std::string> texts;
+	for (const FloatingNumber &num : FloatingQueue)
+		texts.push_back(num.text);
+	return texts;
 }
 
 } // namespace devilution
