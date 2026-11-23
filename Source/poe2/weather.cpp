@@ -19,9 +19,9 @@
 #endif
 
 #include "engine/assets.hpp"
+#include "engine/dx.h"
 #include "engine/sound.h"
 #include "engine/sound_defs.hpp"
-#include "engine/ui_scale.hpp"
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "levels/dun_tile_data.hpp"
@@ -651,8 +651,8 @@ std::string Text()
 	std::string text;
 	if (!Enabled())
 		text = "Weather is off (Settings > Graphics: Weather and Modern Effects, needs Upscale).\n";
-	else if (!IsUiScaled())
-		text = "Nothing is drawn at UI Scale 100: the weather needs UI Scale above 100 (Settings > Graphics).\n";
+	else if (!HasWorldLayer())
+		text = "Nothing is drawn yet: the weather needs the effects layer (Modern Effects with Upscale), made with the next frame.\n";
 	if (!Outdoors())
 		text += "No sky here: dungeons stay dry.\n";
 	const int percent = static_cast<int>(Now.strength * 100 + 0.5F);
