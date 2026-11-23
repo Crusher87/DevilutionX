@@ -35,6 +35,58 @@ struct FireSettings {
 	float flares = 1.F;
 };
 
+/**
+ * @brief How a fire is worked out: the sizes and speeds of its noise, how it moves and cools, and how it is coloured.
+ * The defaults are the title logo's (live/GAME_SPEC.md); LineRecipe is the menu intro's thin burning lines'.
+ */
+struct FireRecipe {
+	/** @brief The swirling air is worked out on a grid this many times smaller each way. */
+	int airDivisor = 4;
+	/** @brief The swirl's two stream functions (fbm2): size (grid pixels), rise speed (pixels a second), rate in time, strength. */
+	float swirlSize[2] = { 70.F, 26.F };
+	float swirlSpeed[2] = { 108.F, 216.F };
+	float swirlRate[2] = { 1.5F, 2.5F };
+	float swirlStrength[2] = { 36.F, 30.F };
+	/** @brief The step of its central difference, in grid pixels. */
+	float swirlStep = 2.F;
+	/** @brief The erosion (fbm3) that tears flames apart and the tongues (fbm2) at their base, and the tongues' range. */
+	float erosionSize = 30.F;
+	float erosionSpeed = 324.F;
+	float erosionRate = 2.F;
+	float tongueSize = 22.F;
+	float tongueRate = 2.F;
+	float tongueMin = 0.F;
+	float tongueMax = 1.5F;
+	/** @brief Its movement and cooling, before FireSettings' height and amount. */
+	float rise = 112.F;
+	float buoy = 176.F;
+	float cool = 0.22F;
+	float erode = 1.25F;
+	float emit = 9.F;
+	float swirlX = 1.3F;
+	float swirlY = 1.2F;
+	/** @brief The swirl and the erosion grow with the height above the source (FireSource::rise); off: the same everywhere. */
+	bool byHeight = true;
+	/** @brief How far below its top the heat fades out, in grid pixels. */
+	float topFade = 34.F;
+	/** @brief The flicker on its colour (fbm2), and how hot what is shown is of the heat. */
+	float detailSize = 9.F;
+	float detailSpeed = 432.F;
+	float detailRate = 3.F;
+	float shown = 0.86F;
+	/** @brief The glow behind: the heat's mip level it reads (3..5) and how much it shows. */
+	float glowLevel = 4.6F;
+	float glowAlpha = 0.55F;
+	/** @brief How far from its top and its sides it fades out, in grid pixels. */
+	float edgeTop = 26.F;
+	float edgeSide = 16.F;
+	/** @brief Sparks a second from its spark spots, before FireSettings::sparks. */
+	float sparkRate = 38.F;
+};
+
+/** @brief The menu intro's burning lines round its subtitle: the logo's fire made finer and shorter (FS_SIM2, FS_FIRE2). */
+FireRecipe LineRecipe();
+
 /** @brief A part of a fire that breathes and flares up on its own (a letter of the logo), in grid pixels. */
 struct FireZone {
 	/** @brief Its middle and half its width: its feed fades out as sqrt(1 - distance / halfWidth) round the middle. */
@@ -66,6 +118,8 @@ struct FireSource {
 	std::vector<float> sparkY;
 	/** @brief Its zones; none: one gain of 1 everywhere (no breathing or flare-ups). */
 	std::vector<FireZone> zones;
+	/** @brief Extra cooling a second at each point (width * height, row 0 the bottom one); empty for none. */
+	std::vector<float> cool;
 };
 
 /**
@@ -102,7 +156,7 @@ public:
 	 * @param threads Worker threads besides the caller's: -1 picks from the computer's cores; 0 does it all on the
 	 * caller's thread. The result is the same whatever the number.
 	 */
-	LiveFire(FireSource source, FireSettings settings, uint32_t seed = 77, int threads = -1);
+	LiveFire(FireSource source, FireSettings settings, uint32_t seed = 77, int threads = -1, const FireRecipe &recipe = {});
 	~LiveFire();
 	LiveFire(const LiveFire &) = delete;
 	LiveFire &operator=(const LiveFire &) = delete;
@@ -135,6 +189,27 @@ public:
 	void Push(float x0, float y0, float x1, float y1, float seconds);
 	/** @brief Makes a zone flare up now, with a burst of sparks from it. */
 	void Flare(size_t zone);
+	/** @brief Makes a zone flare up as if it had `ago` seconds ago (past its dip), its sparks starting `sparkDelay` on. */
+	void FlareAgo(size_t zone, float ago, float sparkDelay);
+
+	/** @brief Puts out the fire: no heat, no wind, no sparks (its time goes on). */
+	void Clear();
+	/** @brief Where its heat goes in (FireSource::feed), to change it as it burns. */
+	std::vector<float> &Feed() { return source_.feed; }
+	/** @brief A gust of wind at (x, y), grid pixels: as the pointer's, without its limits. */
+	void Blow(float x, float y, float vx, float vy);
+	/**
+	 * @brief Blows outward from (x, y) over the whole wind grid, `strength` of the way, the grid going that way at
+	 * 1 - 0.02^dt a step: as when the logo flies at the viewer (x 1.2, y 1.3, plus a quarter of x upward).
+	 */
+	void BlowOutward(float x, float y, float strength, float dt);
+	/** @brief A spark at (x, y), grid pixels, starting `delay` on, thrown `push` times as hard as the fire's own. */
+	void AddSparkAt(float x, float y, float delay, float push) { AddSpark(x, y, delay, push); }
+	/**
+	 * @brief What Paint adds while the menu intro's logo flies: its heat trailing toward the viewer from (trail) and
+	 * the light leaking through from behind the letters before they catch (back); 0 for none.
+	 */
+	void SetPaintExtras(float trail, float back);
 
 	/**
 	 * @brief Paints the fire's colours, sparks included, as RGBA bytes (alpha 255) top row first, to be added over
@@ -173,8 +248,21 @@ private:
 	void UpdateSparks(float dt);
 	void DrawSparks(uint8_t *rgba, int pitch, const uint8_t *cover) const;
 	float FlareGain(size_t zone, double t) const;
+	void FlareWith(size_t zone, double at, float sparkDelay);
 	float Random();
 	void BuildRamp();
+	void BuildTrail();
+	void BuildBack();
+
+	FireRecipe recipe_;
+	float trail_ = 0;
+	float back_ = 0;
+	/** @brief The heat trailing toward the viewer, at the heat's first mip level's size. */
+	std::vector<float> trailMap_;
+	/** @brief The light from behind the letters: their feed map blurred, a quarter of the picture each way. */
+	std::vector<float> backMap_;
+	int backWidth_ = 0;
+	int backHeight_ = 0;
 
 	int width_;
 	int height_;

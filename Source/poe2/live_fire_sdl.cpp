@@ -22,11 +22,12 @@ void SetLinear(SDL_Texture *texture)
 
 } // namespace
 
-FireLayer::FireLayer(FireSource source, FireSettings settings, uint32_t seed, int threads)
-    : fire_(std::make_unique<LiveFire>(std::move(source), settings, seed, threads))
+FireLayer::FireLayer(FireSource source, FireSettings settings, uint32_t seed, int threads, const FireRecipe &recipe, bool warm)
+    : fire_(std::make_unique<LiveFire>(std::move(source), settings, seed, threads, recipe))
 {
 	// It opens already burning.
-	fire_->WarmUp();
+	if (warm)
+		fire_->WarmUp();
 }
 
 // Its textures go with their renderer: at the game's end that may already be gone (ReleaseTextures lets them go before).
@@ -138,6 +139,8 @@ bool FireLayer::Draw(SDL_Renderer *renderer, const SDL_FRect &rect, float second
 	if (SDL_LockTexture(colour_, nullptr, &pixels, &pitch) != 0)
 		return false;
 	fire_->Paint(static_cast<uint8_t *>(pixels), pitch, cover);
+	if (afterPaint_)
+		afterPaint_(static_cast<uint8_t *>(pixels), pitch);
 	SDL_UnlockTexture(colour_);
 	SDL_RenderCopyF(renderer, colour_, nullptr, &rect);
 	if (multiply_ != nullptr && add_ != nullptr) {
@@ -179,6 +182,10 @@ bool FireLayer::DrawLit(SDL_Renderer *renderer, SDL_Texture *picture, const SDL_
 		SetLinear(lit_);
 	}
 	SDL_Texture *before = SDL_GetRenderTarget(renderer);
+	// Drawn into a picture of its own (the menu intro's), it goes back to that picture's scale after.
+	float scaleX = 1;
+	float scaleY = 1;
+	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
 	if (SDL_SetRenderTarget(renderer, lit_) != 0)
 		return false;
 	// The picture as it is, then times the light, then the warm light added where it is dark.
@@ -194,6 +201,8 @@ bool FireLayer::DrawLit(SDL_Renderer *renderer, SDL_Texture *picture, const SDL_
 	if (addDark_)
 		SDL_RenderCopyF(renderer, add_, nullptr, &lightRect);
 	SDL_SetRenderTarget(renderer, before);
+	if (before != nullptr)
+		SDL_RenderSetScale(renderer, scaleX, scaleY);
 	SDL_RenderCopyF(renderer, lit_, nullptr, &dest);
 	return true;
 }

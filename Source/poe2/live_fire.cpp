@@ -368,6 +368,47 @@ std::vector<FireZone> LogoZones()
 	return zones;
 }
 
+FireRecipe LineRecipe()
+{
+	// FS_AIR2 / FS_SIM2 / FS_FIRE2 of the intro (v18): noise about half the size, slower to rise and quicker to cool.
+	FireRecipe r;
+	r.airDivisor = 2;
+	r.swirlSize[0] = 34.F;
+	r.swirlSize[1] = 13.F;
+	r.swirlSpeed[0] = 70.F;
+	r.swirlSpeed[1] = 140.F;
+	r.swirlRate[0] = 1.7F;
+	r.swirlRate[1] = 2.8F;
+	r.swirlStrength[0] = 20.F;
+	r.swirlStrength[1] = 16.F;
+	r.swirlStep = 1.F;
+	r.erosionSize = 15.F;
+	r.erosionSpeed = 200.F;
+	r.erosionRate = 2.2F;
+	r.tongueSize = 11.F;
+	r.tongueRate = 2.6F;
+	r.tongueMin = 0.12F;
+	r.tongueMax = 1.6F;
+	r.rise = 78.F;
+	r.buoy = 135.F;
+	r.cool = 0.28F;
+	r.erode = 1.5F;
+	r.emit = 12.F;
+	r.swirlX = 1.2F;
+	r.swirlY = 1.F;
+	r.byHeight = false;
+	r.topFade = 30.F;
+	r.detailSize = 5.F;
+	r.detailSpeed = 300.F;
+	r.shown = 0.9F;
+	r.glowLevel = 3.6F;
+	r.glowAlpha = 0.6F;
+	r.edgeTop = 22.F;
+	r.edgeSide = 12.F;
+	r.sparkRate = 0.F;
+	return r;
+}
+
 RampColour RampAt(float heat, float red)
 {
 	heat = std::clamp(heat, 0.F, MaxHeat);
@@ -387,8 +428,9 @@ RampColour RampAt(float heat, float red)
 
 // ---- the fire ----
 
-LiveFire::LiveFire(FireSource source, FireSettings settings, uint32_t seed, int threads)
-    : width_(std::max(source.width, 4))
+LiveFire::LiveFire(FireSource source, FireSettings settings, uint32_t seed, int threads, const FireRecipe &recipe)
+    : recipe_(recipe)
+    , width_(std::max(source.width, 4))
     , height_(std::max(source.height, 4))
     , pad_(std::clamp(source.pad, 0, (std::max(source.width, 4) - 1) / 2))
     , source_(std::move(source))
@@ -401,8 +443,12 @@ LiveFire::LiveFire(FireSource source, FireSettings settings, uint32_t seed, int 
 	source_.pad = pad_;
 	source_.feed.resize(cells, 0.F);
 	source_.rise.resize(cells, 0.F);
-	airWidth_ = std::max(1, width_ / 4);
-	airHeight_ = std::max(1, height_ / 4);
+	recipe_.airDivisor = std::max(recipe_.airDivisor, 1);
+	recipe_.glowLevel = std::clamp(recipe_.glowLevel, 1.F, 4.99F);
+	airWidth_ = std::max(1, width_ / recipe_.airDivisor);
+	airHeight_ = std::max(1, height_ / recipe_.airDivisor);
+	if (!source_.cool.empty())
+		source_.cool.resize(cells, 0.F);
 	lightWidth_ = std::max(1, PictureWidth() / LightDivisor);
 	lightHeight_ = std::max(1, height_ / LightDivisor);
 	heat_.assign(cells, 0.F);
@@ -558,9 +604,14 @@ void LiveFire::AddSpark(float x, float y, float delay, float push)
 
 void LiveFire::Flare(size_t zone)
 {
+	FlareWith(zone, time_, 0.25F);
+}
+
+void LiveFire::FlareWith(size_t zone, double at, float sparkDelay)
+{
 	if (zone >= source_.zones.size())
 		return;
-	flareAt_[zone] = time_;
+	flareAt_[zone] = at;
 	if (warming_)
 		return;
 	const FireZone &z = source_.zones[zone];
@@ -573,7 +624,7 @@ void LiveFire::Flare(size_t zone)
 	const int n = static_cast<int>(std::lround(50.F * settings_.sparks));
 	for (int k = 0; k < n && !mine.empty(); k++) {
 		const size_t p = mine[std::min(mine.size() - 1, static_cast<size_t>(Random() * static_cast<float>(mine.size())))];
-		AddSpark(source_.sparkX[p], source_.sparkY[p], 0.25F + Random() * 0.25F, 1.6F);
+		AddSpark(source_.sparkX[p], source_.sparkY[p], sparkDelay + Random() * 0.25F, 1.6F);
 	}
 }
 
@@ -582,7 +633,7 @@ void LiveFire::BuildAir()
 	const double t = time_;
 	const float cx = static_cast<float>(width_) / static_cast<float>(airWidth_);
 	const float cy = static_cast<float>(height_) / static_cast<float>(airHeight_);
-	constexpr float E = 2.F;
+	const float E = recipe_.swirlStep;
 	std::vector<float> xc(airWidth_), yc(airHeight_), xs(static_cast<size_t>(airWidth_) * 2), ys(static_cast<size_t>(airHeight_) * 2);
 	for (int i = 0; i < airWidth_; i++) {
 		xc[i] = cx * (static_cast<float>(i) + 0.5F);
@@ -600,12 +651,13 @@ void LiveFire::BuildAir()
 	const float yMax = static_cast<float>(height_) + E + 1.F;
 	// The stream function: two fbm2, the big slow one and the small quick one.
 	NoiseLayer psi[4];
-	PrepareFbm(psi, 2, t, 70.F, 108.F, t * 1.5, 36.F * 70.F, xMin, xMax, yMin, yMax);
-	PrepareFbm(psi + 2, 2, t, 26.F, 216.F, t * 2.5, 30.F * 26.F, xMin, xMax, yMin, yMax);
+	const FireRecipe &r = recipe_;
+	for (int l = 0; l < 2; l++)
+		PrepareFbm(psi + l * 2, 2, t, r.swirlSize[l], r.swirlSpeed[l], t * r.swirlRate[l], r.swirlStrength[l] * r.swirlSize[l], xMin, xMax, yMin, yMax);
 	NoiseLayer erosion[3];
-	PrepareFbm(erosion, 3, t, 30.F, 324.F, t * 2.0, 1.F, xMin, xMax, yMin, yMax);
+	PrepareFbm(erosion, 3, t, r.erosionSize, r.erosionSpeed, t * r.erosionRate, 1.F, xMin, xMax, yMin, yMax);
 	NoiseLayer tongue[2];
-	PrepareFbm(tongue, 2, t, 22.F, 0.F, t * 2.0, 1.F, xMin, xMax, yMin, yMax);
+	PrepareFbm(tongue, 2, t, r.tongueSize, 0.F, t * r.tongueRate, 1.F, xMin, xMax, yMin, yMax);
 	// Each layer's axes: psi at x +-E (for d/dx) and at y +-E (for d/dy); erosion and tongue at the cell centres.
 	struct Axes {
 		Axis xs, xc, ys, yc;
@@ -661,12 +713,20 @@ void LiveFire::Simulate(float dt)
 {
 	const FireSettings &k = settings_;
 	const float height = std::max(k.height, 0.05F);
-	const float rise = 112.F * height;
-	const float buoy = 176.F * height;
-	const float cool = 0.22F / height;
-	const float erode = 1.25F / height;
-	const float emit = 9.F * k.amount;
+	const FireRecipe &recipe = recipe_;
+	const float rise = recipe.rise * height;
+	const float buoy = recipe.buoy * height;
+	const float cool = recipe.cool / height;
+	const float erode = recipe.erode / height;
+	const float emit = recipe.emit * k.amount;
 	const float wild = k.wild;
+	const bool byHeight = recipe.byHeight;
+	const float swirlX = recipe.swirlX;
+	const float swirlY = recipe.swirlY;
+	const float tongueMin = recipe.tongueMin;
+	const float tongueMax = recipe.tongueMax;
+	const float topFade = recipe.topFade;
+	const float *extraCool = source_.cool.empty() ? nullptr : source_.cool.data();
 	const int w = width_;
 	const int h = height_;
 	const float fw = static_cast<float>(w);
@@ -714,7 +774,7 @@ void LiveFire::Simulate(float dt)
 					windRow[k] = w0[k] + (w1[k] - w0[k]) * wy.w;
 			}
 			// Near the top of the picture the heat fades out, so nothing reaches its edge.
-			const float f = std::clamp(1.F - (fh - y) / 34.F, 0.F, 1.F);
+			const float f = std::clamp(1.F - (fh - y) / topFade, 0.F, 1.F);
 			const float fade = dt * 6.F * f * f;
 			const size_t row = static_cast<size_t>(j) * w;
 			const float *ar = airRow.data();
@@ -726,11 +786,11 @@ void LiveFire::Simulate(float dt)
 				const float c1 = l[1] + (r[1] - l[1]) * ax.w;
 				const float c2 = l[2] + (r[2] - l[2]) * ax.w;
 				const float c3 = l[3] + (r[3] - l[3]) * ax.w;
-				const float hgt = riseMap[row + i];
+				const float hgt = byHeight ? riseMap[row + i] : 1.F;
 				const float t = heat[row + i];
-				const float turb = (0.35F + 0.65F * hgt) * wild;
-				float vx = c0 * turb * 1.3F;
-				float vy = c1 * turb * 1.2F + rise + buoy * std::min(t, 1.2F);
+				const float turb = (byHeight ? 0.35F + 0.65F * hgt : 1.F) * wild;
+				float vx = c0 * turb * swirlX;
+				float vy = c1 * turb * swirlY + rise + buoy * std::min(t, 1.2F);
 				if (windy) {
 					const Tap &wx = windTaps[i];
 					const float *wl = windRow.data() + wx.i0 * 2;
@@ -759,7 +819,9 @@ void LiveFire::Simulate(float dt)
 				}
 				const float e = std::clamp(0.5F + c2 * 1.3F, 0.F, 1.6F);
 				n -= dt * (cool + erode * e * (0.25F + 0.75F * hgt));
-				n += dt * emit * feed[row + i] * gain[i] * std::clamp(0.55F + c3 * 1.5F, 0.F, 1.5F);
+				n += dt * emit * feed[row + i] * gain[i] * std::clamp(0.55F + c3 * 1.5F, tongueMin, tongueMax);
+				if (extraCool != nullptr)
+					n -= dt * extraCool[row + i];
 				n -= fade;
 				next[row + i] = std::clamp(n, 0.F, MaxHeat);
 			}
@@ -838,7 +900,7 @@ void LiveFire::Step(float dt)
 	Simulate(dt);
 	// Sparks ride the air.
 	if (!warming_ && !source_.sparkX.empty()) {
-		const float want = 38.F * settings_.sparks * dt;
+		const float want = recipe_.sparkRate * settings_.sparks * dt;
 		int n = static_cast<int>(want) + (Random() < want - std::floor(want) ? 1 : 0);
 		while (n-- > 0) {
 			const size_t p = std::min(source_.sparkX.size() - 1, static_cast<size_t>(Random() * static_cast<float>(source_.sparkX.size())));
@@ -917,6 +979,143 @@ float LiveFire::SampleMip(int level, float u, float v) const
 	return Bilinear(mips_[l].data(), w, h, u * static_cast<float>(w) - 0.5F, v * static_cast<float>(h) - 0.5F);
 }
 
+void LiveFire::SetPaintExtras(float trail, float back)
+{
+	trail_ = std::max(trail, 0.F);
+	back_ = std::max(back, 0.F);
+}
+
+void LiveFire::Clear()
+{
+	std::fill(heat_.begin(), heat_.end(), 0.F);
+	std::fill(next_.begin(), next_.end(), 0.F);
+	std::fill(wind_.begin(), wind_.end(), 0.F);
+	windAny_ = false;
+	sparks_.clear();
+	std::fill(flareAt_.begin(), flareAt_.end(), -10.0);
+	for (std::vector<float> &mip : mips_)
+		std::fill(mip.begin(), mip.end(), 0.F);
+}
+
+void LiveFire::FlareAgo(size_t zone, float ago, float sparkDelay)
+{
+	FlareWith(zone, time_ - static_cast<double>(ago), sparkDelay);
+}
+
+void LiveFire::Blow(float x, float y, float vx, float vy)
+{
+	Splat(x, y, vx, vy);
+}
+
+void LiveFire::BlowOutward(float x, float y, float strength, float dt)
+{
+	const int windWidth = std::max(1, static_cast<int>(std::lround(width_ / WindCell)));
+	const int windHeight = static_cast<int>(wind_.size() / 2) / windWidth;
+	const float cell = static_cast<float>(width_) / static_cast<float>(windWidth);
+	const float k = 1.F - std::pow(0.02F, dt);
+	for (int j = 0; j < windHeight; j++) {
+		for (int i = 0; i < windWidth; i++) {
+			const float dx = (static_cast<float>(i) + 0.5F) * cell - x;
+			const float dy = (static_cast<float>(j) + 0.5F) * cell - y;
+			float *q = &wind_[(static_cast<size_t>(j) * windWidth + i) * 2];
+			q[0] += (dx * 1.2F * strength - q[0]) * k;
+			q[1] += (dy * 1.3F * strength + std::abs(dx) * 0.25F * strength - q[1]) * k;
+		}
+	}
+	windAny_ = true;
+}
+
+void LiveFire::BuildTrail()
+{
+	// The heat's first mip level drawn out toward the viewer from the logo's middle (FS_FIRE's trail): the most of 14
+	// samples along the line to it, each less the further out.
+	const int w = mipWidth_[0];
+	const int h = mipHeight_[0];
+	trailMap_.resize(static_cast<size_t>(w) * h);
+	const float cx = (static_cast<float>(source_.width - 2 * pad_) * 0.5F + static_cast<float>(pad_)) / static_cast<float>(width_);
+	const float cy = 120.F / 432.F;
+	const float trail = trail_;
+	const float *mip = mips_[0].data();
+	workers_->Run(TasksFor(h), [&](int task) {
+		const int jEnd = std::min(h, (task + 1) * RowsPerTask);
+		for (int j = task * RowsPerTask; j < jEnd; j++) {
+			const float v = (static_cast<float>(j) + 0.5F) / static_cast<float>(h);
+			for (int i = 0; i < w; i++) {
+				const float u = (static_cast<float>(i) + 0.5F) / static_cast<float>(w);
+				float acc = 0.F;
+				for (int k = 0; k < 14; k++) {
+					const float f = (static_cast<float>(k) + 0.5F) / 14.F;
+					const float m = 1.F - f * trail * 0.45F;
+					const float qu = cx + (u - cx) * m;
+					const float qv = cy + (v - cy) * m;
+					acc = std::max(acc, Bilinear(mip, w, h, qu * static_cast<float>(w) - 0.5F, qv * static_cast<float>(h) - 0.5F) * (1.F - f) * 1.05F);
+				}
+				trailMap_[static_cast<size_t>(j) * w + i] = acc;
+			}
+		}
+	});
+}
+
+void LiveFire::BuildBack()
+{
+	// The letters' feed (maps R) blurred as the graphics card's mip levels 4, 5.5 and 6.5 would, the softer ones
+	// shifted up a little (FS_FIRE's burn-through): worked out once, at a quarter of the picture each way.
+	const int pw = std::max(1, PictureWidth());
+	const int ph = height_;
+	std::vector<std::vector<float>> levels;
+	std::vector<int> lw, lh;
+	{
+		std::vector<float> base(static_cast<size_t>(pw) * ph);
+		for (int y = 0; y < ph; y++)
+			for (int x = 0; x < pw; x++)
+				base[static_cast<size_t>(y) * pw + x] = source_.feed[static_cast<size_t>(y) * width_ + x + pad_] / 1.6F;
+		levels.push_back(std::move(base));
+		lw.push_back(pw);
+		lh.push_back(ph);
+	}
+	for (int level = 1; level <= 7; level++) {
+		const int sw = lw.back();
+		const int sh = lh.back();
+		const int w = std::max(1, sw / 2);
+		const int h = std::max(1, sh / 2);
+		std::vector<float> next(static_cast<size_t>(w) * h);
+		const std::vector<float> &src = levels.back();
+		for (int j = 0; j < h; j++) {
+			for (int i = 0; i < w; i++) {
+				const int x0 = std::min(i * 2, sw - 1);
+				const int x1 = std::min(i * 2 + 1, sw - 1);
+				const int y0 = std::min(j * 2, sh - 1);
+				const int y1 = std::min(j * 2 + 1, sh - 1);
+				next[static_cast<size_t>(j) * w + i] = (src[static_cast<size_t>(y0) * sw + x0] + src[static_cast<size_t>(y0) * sw + x1] + src[static_cast<size_t>(y1) * sw + x0] + src[static_cast<size_t>(y1) * sw + x1]) * 0.25F;
+			}
+		}
+		levels.push_back(std::move(next));
+		lw.push_back(w);
+		lh.push_back(h);
+	}
+	const auto sample = [&](float level, float u, float v) {
+		const int l0 = std::clamp(static_cast<int>(level), 0, 7);
+		const int l1 = std::min(l0 + 1, 7);
+		const float f = std::clamp(level - static_cast<float>(l0), 0.F, 1.F);
+		const auto at = [&](int l) {
+			const float cu = std::clamp(u, 0.F, 1.F);
+			const float cv = std::clamp(v, 0.F, 1.F);
+			return Bilinear(levels[l].data(), lw[l], lh[l], cu * static_cast<float>(lw[l]) - 0.5F, cv * static_cast<float>(lh[l]) - 0.5F);
+		};
+		return at(l0) * (1.F - f) + at(l1) * f;
+	};
+	backWidth_ = std::max(1, pw / 4);
+	backHeight_ = std::max(1, ph / 4);
+	backMap_.resize(static_cast<size_t>(backWidth_) * backHeight_);
+	for (int j = 0; j < backHeight_; j++) {
+		const float v = (static_cast<float>(j) + 0.5F) / static_cast<float>(backHeight_);
+		for (int i = 0; i < backWidth_; i++) {
+			const float u = (static_cast<float>(i) + 0.5F) / static_cast<float>(backWidth_);
+			backMap_[static_cast<size_t>(j) * backWidth_ + i] = sample(4.F, u, v) * 0.9F + sample(5.5F, u, v - 0.03F) * 0.8F + sample(6.5F, u, v - 0.07F) * 0.6F;
+		}
+	}
+}
+
 void LiveFire::Paint(uint8_t *rgba, int pitch, const uint8_t *cover)
 {
 	BuildMips();
@@ -925,9 +1124,10 @@ void LiveFire::Paint(uint8_t *rgba, int pitch, const uint8_t *cover)
 	const float fw = static_cast<float>(w);
 	const float fh = static_cast<float>(h);
 	const double t = time_;
+	const FireRecipe &recipe = recipe_;
 	// The flicker on the colour: fine noise that races up.
 	NoiseLayer detail[2];
-	PrepareFbm(detail, 2, t, 9.F, 432.F, t * 3.0, 1.F, -1.F, fw + 1.F, -1.F, fh + 1.F);
+	PrepareFbm(detail, 2, t, recipe.detailSize, recipe.detailSpeed, t * recipe.detailRate, 1.F, -1.F, fw + 1.F, -1.F, fh + 1.F);
 	std::vector<float> xs(w), ys(h);
 	for (int i = 0; i < w; i++)
 		xs[i] = static_cast<float>(i) + 0.5F;
@@ -938,29 +1138,81 @@ void LiveFire::Paint(uint8_t *rgba, int pitch, const uint8_t *cover)
 		detailX[l].Make(detail[l], true, xs.data(), xs.size());
 		detailY[l].Make(detail[l], false, ys.data(), ys.size());
 	}
-	// The glow behind: the heat's mip level 4.6, as the reference reads it (0.4 of level 4, 0.6 of level 5).
-	const int w4 = mipWidth_[3];
-	const int h4 = mipHeight_[3];
-	const int w5 = mipWidth_[4];
-	const int h5 = mipHeight_[4];
+	// The glow behind: the heat's mip level `glowLevel`, as the reference reads it (e.g. 4.6: 0.4 of level 4, 0.6 of 5).
+	const int glowLow = std::clamp(static_cast<int>(recipe.glowLevel), 1, 4);
+	const float glowHigh = std::clamp(recipe.glowLevel - static_cast<float>(glowLow), 0.F, 1.F);
+	const std::vector<float> &mipA = mips_[glowLow - 1];
+	const std::vector<float> &mipB = mips_[glowLow];
+	const int w4 = mipWidth_[glowLow - 1];
+	const int h4 = mipHeight_[glowLow - 1];
+	const int w5 = mipWidth_[glowLow];
+	const int h5 = mipHeight_[glowLow];
 	std::vector<Tap> tap4(w), tap5(w);
 	std::vector<float> edgeX(w);
 	for (int i = 0; i < w; i++) {
 		const float u = xs[i] / fw;
 		tap4[i] = TapAt(u * static_cast<float>(w4) - 0.5F, w4);
 		tap5[i] = TapAt(u * static_cast<float>(w5) - 0.5F, w5);
-		edgeX[i] = std::clamp(xs[i] / 16.F, 0.F, 1.F) * std::clamp((fw - xs[i]) / 16.F, 0.F, 1.F);
+		edgeX[i] = std::clamp(xs[i] / recipe.edgeSide, 0.F, 1.F) * std::clamp((fw - xs[i]) / recipe.edgeSide, 0.F, 1.F);
+	}
+	// While the intro's logo flies: its heat trailing toward the viewer, and the light through the letters.
+	const bool trailing = trail_ > 0.001F;
+	if (trailing)
+		BuildTrail();
+	const bool backLit = back_ > 0.001F;
+	std::vector<float> backColumn;
+	std::vector<Tap> backTapX;
+	float backRgb[3] = {};
+	if (backLit) {
+		if (backMap_.empty())
+			BuildBack();
+		const float hot = std::clamp(back_ - 0.9F, 0.F, 1.F);
+		backRgb[0] = 255.F;
+		backRgb[1] = (0.42F + (0.86F - 0.42F) * hot) * 255.F;
+		backRgb[2] = (0.10F + (0.62F - 0.10F) * hot) * 255.F;
+		backColumn.resize(w);
+		backTapX.resize(w);
+		// It flickers along the letters: noise across x that changes fast in time (vn(P.x / 90, 7t, 3)).
+		NoiseLayer flicker;
+		flicker.Prepare(1.0 / 90.0, 0.0, t * 7.0, 3.0, 1.F, -1.F, fw + 1.F, 0.F, 0.F);
+		Axis flickerX;
+		flickerX.Make(flicker, true, xs.data(), xs.size());
+		const int y0 = static_cast<int>(std::floor(flicker.fracY)) - flicker.y0;
+		const float fy = Smooth(std::clamp(flicker.fracY - std::floor(flicker.fracY), 0.F, 1.F));
+		std::vector<float> f0(w, 0.F);
+		AddRow(flicker, flickerX, std::clamp(y0, 0, flicker.ny - 2), fy, f0.data(), f0.size());
+		const float pw = static_cast<float>(std::max(1, PictureWidth()));
+		for (int i = 0; i < w; i++) {
+			const float x = xs[i];
+			const float fl = 0.85F + 0.15F * f0[i];
+			const float sx = std::clamp(x / 90.F, 0.F, 1.F);
+			const float ex = std::clamp((fw - x) / 90.F, 0.F, 1.F);
+			backColumn[i] = fl * Smooth(sx) * Smooth(ex) * back_;
+			const float mu = (x - static_cast<float>(pad_)) / pw;
+			backTapX[i] = TapAt(std::clamp(mu, 0.F, 1.F) * static_cast<float>(backWidth_) - 0.5F, backWidth_);
+		}
 	}
 	const float *heat = heat_.data();
 	const float *ramp = ramp_.data();
-	const float *m4 = mips_[3].data();
-	const float *m5 = mips_[4].data();
+	const float *m4 = mipA.data();
+	const float *m5 = mipB.data();
 	const float gr = glowR_;
 	const float gg = glowG_;
 	const float gb = glowB_;
+	const float shown = recipe.shown;
+	const float glowAlpha = recipe.glowAlpha;
+	const float edgeTop = recipe.edgeTop;
+	const int tw = mipWidth_[0];
+	const int th = mipHeight_[0];
 	constexpr float RampScale = static_cast<float>(RampSteps - 1) / MaxHeat;
 	workers_->Run(TasksFor(h), [&](int task) {
-		std::vector<float> noise(w), g4(w4), g5(w5);
+		std::vector<float> noise(w), g4(w4), g5(w5), trailRow(trailing ? tw : 0), backRow(backLit ? backWidth_ : 0);
+		std::vector<Tap> trailTapX;
+		if (trailing) {
+			trailTapX.resize(w);
+			for (int i = 0; i < w; i++)
+				trailTapX[i] = TapAt(xs[i] / fw * static_cast<float>(tw) - 0.5F, tw);
+		}
 		const int jEnd = std::min(h, (task + 1) * RowsPerTask);
 		for (int j = task * RowsPerTask; j < jEnd; j++) {
 			const float y = ys[j];
@@ -979,28 +1231,48 @@ void LiveFire::Paint(uint8_t *rgba, int pitch, const uint8_t *cover)
 				const float a = m5[static_cast<size_t>(t5.i0) * w5 + i];
 				g5[i] = a + (m5[static_cast<size_t>(t5.i1) * w5 + i] - a) * t5.w;
 			}
-			const bool anyHeat = std::any_of(heat + row, heat + row + w, [](float x) { return x > 0.F; });
+			if (trailing) {
+				const Tap ty = TapAt(v * static_cast<float>(th) - 0.5F, th);
+				for (int i = 0; i < tw; i++) {
+					const float a = trailMap_[static_cast<size_t>(ty.i0) * tw + i];
+					trailRow[i] = a + (trailMap_[static_cast<size_t>(ty.i1) * tw + i] - a) * ty.w;
+				}
+			}
+			float backY = 0.F;
+			if (backLit) {
+				const Tap by = TapAt(v * static_cast<float>(backHeight_) - 0.5F, backHeight_);
+				for (int i = 0; i < backWidth_; i++) {
+					const float a = backMap_[static_cast<size_t>(by.i0) * backWidth_ + i];
+					backRow[i] = a + (backMap_[static_cast<size_t>(by.i1) * backWidth_ + i] - a) * by.w;
+				}
+				backY = Smooth(std::clamp(y / 70.F, 0.F, 1.F));
+			}
+			const bool anyHeat = trailing || std::any_of(heat + row, heat + row + w, [](float x) { return x > 0.F; });
 			if (anyHeat) {
 				std::fill(noise.begin(), noise.end(), 0.F);
 				for (int l = 0; l < 2; l++)
 					AddRow(detail[l], detailX[l], detailY[l].cell[j], detailY[l].weight[j], noise.data(), noise.size());
 			}
-			const float edgeY = std::clamp((fh - y) / 26.F, 0.F, 1.F);
+			const float edgeY = std::clamp((fh - y) / edgeTop, 0.F, 1.F);
 			for (int i = 0; i < w; i++) {
-				const float hot = heat[row + i];
+				float hot = heat[row + i];
+				if (trailing) {
+					const Tap &tx = trailTapX[i];
+					hot = std::max(hot, trailRow[tx.i0] + (trailRow[tx.i1] - trailRow[tx.i0]) * tx.w);
+				}
 				const Tap &a4 = tap4[i];
 				const Tap &a5 = tap5[i];
 				const float glow4 = g4[a4.i0] + (g4[a4.i1] - g4[a4.i0]) * a4.w;
 				const float glow5 = g5[a5.i0] + (g5[a5.i1] - g5[a5.i0]) * a5.w;
-				const float gw = std::clamp(glow4 * 0.4F + glow5 * 0.6F, 0.F, 1.2F);
-				const float ga = std::clamp(gw * 0.55F, 0.F, 0.5F);
+				const float gw = std::clamp(glow4 * (1.F - glowHigh) + glow5 * glowHigh, 0.F, 1.2F);
+				const float ga = std::clamp(gw * glowAlpha, 0.F, 0.5F);
 				uint8_t *px = out + static_cast<ptrdiff_t>(i) * 4;
 				px[3] = 255;
 				float ed = edgeY * edgeX[i];
 				ed = ed * ed * (3.F - 2.F * ed);
 				if (coverRow != nullptr)
 					ed *= static_cast<float>(coverRow[i]) * (1.F / 255.F);
-				if ((hot <= 0.F && ga <= 0.F) || ed <= 0.F) {
+				if ((hot <= 0.F && ga <= 0.F && !backLit) || ed <= 0.F) {
 					px[0] = px[1] = px[2] = 0;
 					continue;
 				}
@@ -1010,7 +1282,7 @@ void LiveFire::Paint(uint8_t *rgba, int pitch, const uint8_t *cover)
 				float alpha = 0.F;
 				if (hot > 0.F) {
 					const float d = noise[i];
-					const float heatShown = std::clamp(hot * (1.F + 0.22F * d * std::min(hot * 2.F, 1.F)) * 0.86F, 0.F, MaxHeat);
+					const float heatShown = std::clamp(hot * (1.F + 0.22F * d * std::min(hot * 2.F, 1.F)) * shown, 0.F, MaxHeat);
 					const float *c = ramp + static_cast<size_t>(heatShown * RampScale + 0.5F) * 4;
 					r = c[0];
 					g = c[1];
@@ -1018,9 +1290,19 @@ void LiveFire::Paint(uint8_t *rgba, int pitch, const uint8_t *cover)
 					alpha = c[3];
 				}
 				const float under = ga * (1.F - alpha);
-				px[0] = ToByte((r + gr * under) * ed);
-				px[1] = ToByte((g + gg * under) * ed);
-				px[2] = ToByte((b + gb * under) * ed);
+				r += gr * under;
+				g += gg * under;
+				b += gb * under;
+				if (backLit) {
+					const Tap &bx = backTapX[i];
+					const float bl = (backRow[bx.i0] + (backRow[bx.i1] - backRow[bx.i0]) * bx.w) * backColumn[i] * backY * (1.F - alpha * 0.7F);
+					r += backRgb[0] * bl;
+					g += backRgb[1] * bl;
+					b += backRgb[2] * bl;
+				}
+				px[0] = ToByte(r * ed);
+				px[1] = ToByte(g * ed);
+				px[2] = ToByte(b * ed);
 			}
 		}
 	});

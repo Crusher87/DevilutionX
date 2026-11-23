@@ -11,6 +11,7 @@
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <vector>
 
@@ -24,13 +25,19 @@ namespace fire {
 
 class FireLayer {
 public:
-	/** @param threads As LiveFire's: -1 picks from the computer's cores. */
-	FireLayer(FireSource source, FireSettings settings, uint32_t seed = 77, int threads = -1);
+	/**
+	 * @param threads As LiveFire's: -1 picks from the computer's cores.
+	 * @param warm Whether it opens already burning (LiveFire::WarmUp).
+	 */
+	FireLayer(FireSource source, FireSettings settings, uint32_t seed = 77, int threads = -1, const FireRecipe &recipe = {}, bool warm = true);
 	~FireLayer();
 	FireLayer(const FireLayer &) = delete;
 	FireLayer &operator=(const FireLayer &) = delete;
 
 	LiveFire &Fire() { return *fire_; }
+
+	/** @brief Something painted over the fire's picture (LiveFire::Paint's, top row first) before it is sent up. */
+	void SetAfterPaint(std::function<void(uint8_t *, int)> afterPaint) { afterPaint_ = std::move(afterPaint); }
 
 	/**
 	 * @brief Where the whole grid goes when its maps' picture goes at `picture`: wider by its padding (FireSource::pad)
@@ -66,6 +73,7 @@ private:
 	bool MakeTextures(SDL_Renderer *renderer);
 
 	std::unique_ptr<LiveFire> fire_;
+	std::function<void(uint8_t *, int)> afterPaint_;
 	SDL_Renderer *renderer_ = nullptr;
 	SDL_Texture *colour_ = nullptr;
 	SDL_Texture *multiply_ = nullptr;
