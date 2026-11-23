@@ -107,6 +107,15 @@ std::vector<Player> Players;
 Player *InspectPlayer;
 bool MyPlayerIsDead;
 
+bool IsRunInTownOn()
+{
+	// Sanctuary Reforged, single player: the in-game setting counts as soon as it is changed. In multiplayer (and in
+	// plain Diablo and Hellfire) the value the game was started with counts, so it can't differ between players.
+	if (gbIsReforged && !gbIsMultiplayer)
+		return *GetOptions().Gameplay.runInTown;
+	return sgGameInitInfo.bRunInTown != 0;
+}
+
 namespace {
 
 /** @brief POE2 Mashup: attack animation frames skipped for the passive tree's attack speed, the uniques' changing attack speed, War Banner and Charge Regulation. */
@@ -192,7 +201,7 @@ void HandleWalkMode(Player &player, Direction dir)
 void StartWalkAnimation(Player &player, Direction dir, bool pmWillBeCalled)
 {
 	int8_t skippedFrames = -2;
-	if (leveltype == DTYPE_TOWN && sgGameInitInfo.bRunInTown != 0)
+	if (leveltype == DTYPE_TOWN && IsRunInTownOn())
 		skippedFrames = 2;
 	// Sanctuary Reforged: the town jog in the dungeon too, as a setting (single player only, so it can't differ between players).
 	if (gbIsReforged && !gbIsMultiplayer && leveltype != DTYPE_TOWN && *GetOptions().Gameplay.runInDungeon)
@@ -498,7 +507,7 @@ void InitLevelChange(Player &player)
 bool DoWalk(Player &player)
 {
 	// Play walking sound effect on certain animation frames
-	if (*GetOptions().Audio.walkingSound && (leveltype != DTYPE_TOWN || sgGameInitInfo.bRunInTown == 0)) {
+	if (*GetOptions().Audio.walkingSound && (leveltype != DTYPE_TOWN || !IsRunInTownOn())) {
 		if (player.AnimInfo.currentFrame == 0
 		    || player.AnimInfo.currentFrame == 4) {
 			PlaySfxLoc(SfxID::Walk, player.position.tile);
