@@ -72,7 +72,7 @@ SDL_Surface *PalSurface;
 
 namespace {
 
-/** POE2 Mashup: with the UI scaled, the full-size frame: the world, then the UI scaled up over it. */
+/** POE2 Mashup: with the UI scaled (or at 100 with HD or effects: WorldLayerUnscaled), the full-size frame: the world, then the UI scaled up over it. */
 SDLSurfaceUniquePtr WorldSurface;
 /** The UI frame as it was before the UI was drawn on it: what's left unchanged shows the full-size world. */
 std::vector<uint8_t> UiBase;
@@ -94,6 +94,11 @@ std::vector<uint16_t> WorldColumnOfUi;
 std::vector<uint16_t> WorldRowOfUi;
 Size WorldSampledFrom;
 bool HaveScaledWorld = false;
+/**
+ * POE2 Mashup: at UI Scale 100 the world has a frame of its own (the UI's size), for HD Graphics and Modern Effects
+ * (SyncWorldLayer). Kept across a new back buffer, which only SyncWorldLayer decides.
+ */
+bool WorldLayerUnscaled = false;
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 /** POE2 Mashup: a frame waiting to be presented in layers: the world, the effects, then the UI over them. */
 bool LayeredFramePending = false;
@@ -370,7 +375,7 @@ void CreateWorldSurface()
 	UiTinted.clear();
 	UiTintedRows.clear();
 	HaveScaledWorld = false;
-	if (!IsUiScaled())
+	if (!IsUiScaled() && !WorldLayerUnscaled)
 		return;
 	WorldSurface = SDLWrap::CreateRGBSurfaceWithFormat(0, gnRenderWidth, gnRenderHeight, 8, SDL_PIXELFORMAT_INDEX8);
 #ifdef USE_SDL3
@@ -403,6 +408,10 @@ void ComposeScaledFrame()
 		const uint8_t *uiLine = ui + static_cast<ptrdiff_t>(uiRow) * uiPitch;
 		uint8_t *frameLine = frame + static_cast<ptrdiff_t>(y) * framePitch;
 		if (!HaveScaledWorld) {
+			if (gnRenderWidth == gnScreenWidth) {
+				std::memcpy(frameLine, uiLine, gnRenderWidth);
+				continue;
+			}
 			for (int x = 0; x < gnRenderWidth; x++)
 				frameLine[x] = uiLine[UiColumnOf[x]];
 			continue;
@@ -528,11 +537,17 @@ void PrepareScaledUi()
 	auto *ui = static_cast<uint8_t *>(PalSurface->pixels);
 	const int uiPitch = PalSurface->pitch;
 	const uint16_t *columns = WorldColumnOfUi.data();
+	// At UI Scale 100 the world's frame is the UI's size: a straight copy.
+	const bool sameSize = gnScreenWidth == gnRenderWidth;
 	for (int y = 0; y < gnScreenHeight; y++) {
 		const uint8_t *worldLine = world + static_cast<ptrdiff_t>(WorldRowOfUi[y]) * worldPitch;
 		uint8_t *uiLine = ui + static_cast<ptrdiff_t>(y) * uiPitch;
-		for (int x = 0; x < gnScreenWidth; x++)
-			uiLine[x] = worldLine[columns[x]];
+		if (sameSize) {
+			std::memcpy(uiLine, worldLine, gnScreenWidth);
+		} else {
+			for (int x = 0; x < gnScreenWidth; x++)
+				uiLine[x] = worldLine[columns[x]];
+		}
 		std::memcpy(UiBase.data() + static_cast<size_t>(y) * gnScreenWidth, uiLine, gnScreenWidth);
 	}
 	HaveScaledWorld = true;
@@ -553,6 +568,28 @@ void PrepareScaledUi()
 		std::fill(UiTintedRows.begin(), UiTintedRows.end(), uint8_t { 0 });
 	}
 	SetUiCoverTarget(PalSurface, fits ? UiCovered.data() : nullptr, tintFits ? UiTinted.data() : nullptr, tintFits ? UiTintedRows.data() : nullptr);
+}
+
+bool HasWorldLayer()
+{
+	return WorldSurface != nullptr;
+}
+
+void SyncWorldLayer()
+{
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+	// Frames go up in layers (PresentLayeredFrame) only through an SDL2 renderer.
+	const bool layeredFrames = renderer != nullptr && !HeadlessMode && !RenderDirectlyToOutputSurface
+	    && gnRenderWidth == gnScreenWidth && gnRenderHeight == gnScreenHeight;
+#else
+	const bool layeredFrames = false;
+#endif
+	const bool scaled = IsUiScaled();
+	const bool wanted = WantsWorldLayer(scaled, layeredFrames, layeredFrames && !scaled && (hd::Enabled() || vfx::Enabled()));
+	WorldLayerUnscaled = wanted && !scaled;
+	const bool sizeKept = WorldSurface == nullptr || (WorldSurface->w == gnRenderWidth && WorldSurface->h == gnRenderHeight);
+	if (wanted != (WorldSurface != nullptr) || !sizeKept)
+		CreateWorldSurface();
 }
 
 void ClearScaledWorld()
@@ -638,8 +675,8 @@ void BltFast(SDL_Rect *srcRect, SDL_Rect *dstRect)
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 	// POE2 Mashup: in the menus (not in a game) an unscaled UI shows its HD art too, as a scaled one does: the logo with
 	// its live fire and the menu letters are left out of the frame here and drawn over it when it is presented. In a
-	// game an unscaled UI goes up as it is, without HD art (the pictures noted for it would only pile up), so its frames
-	// cost what they did.
+	// game an unscaled UI without a world layer (HD Graphics and Modern Effects off: SyncWorldLayer) goes up as it is,
+	// without HD art (the pictures noted for it would only pile up), so its frames cost what they did.
 	if (renderer != nullptr && !gbRunGame && !RenderDirectlyToOutputSurface) {
 		hd::PrepareUiSprites();
 		Blit(PalSurface, srcRect, dstRect);

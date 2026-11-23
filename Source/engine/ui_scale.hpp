@@ -22,7 +22,14 @@ extern DVL_API_FOR_TEST uint16_t gnRenderHeight;
 
 /** @brief The UI scale in effect, in percent; 100 when the UI isn't scaled. */
 int ActiveUiScale();
+/** @brief The UI is drawn smaller than the frame and scaled up over it. Means "the UI is bigger", not "the world has a surface of its own": for that see HasWorldLayer (dx.h). */
 bool IsUiScaled();
+/**
+ * @brief POE2 Mashup: whether the world gets a frame of its own, under the UI, which the HD world, its light, the
+ * effects and the HD UI art need. Always with the UI scaled; at UI Scale 100 only where frames can go up in layers (an
+ * SDL2 renderer) and HD Graphics or Modern Effects are on, so plain Diablo at 100 draws exactly as it did.
+ */
+bool WantsWorldLayer(bool uiScaled, bool layeredFrames, bool hdOrEffects);
 /**
  * @brief Works out the UI size for the frame size and the UI scale option, keeping the UI at least 640x480.
  * @return the UI size, which becomes the screen size.

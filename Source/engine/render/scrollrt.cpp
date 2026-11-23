@@ -1720,11 +1720,11 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 	DrawFloor(out, lightmap, position, Point {} + offset, rows, columns);
 	hd::EndFloor();
 	// POE2 Mashup: the effects lying on the floor hide behind whatever is drawn over it from here on.
-	const bool floorCopy = IsUiScaled() && vfx::WantsFloorCopy();
+	const bool floorCopy = HasWorldLayer() && vfx::WantsFloorCopy();
 	if (floorCopy)
 		vfx::CopyFloor(fullOut);
 	// POE2 Mashup: and a hero in front of a portal goes over it (not with the HD replay, which draws the world itself).
-	if (IsUiScaled() && !hd::Active())
+	if (HasWorldLayer() && !hd::Active())
 		vfx::BeginFront(fullOut);
 	DrawTileContent(out, lightmap, position, Point {} + offset, rows, columns);
 	DrawOOB(out, lightmap, position, Point {} + offset, rows, columns);
@@ -1775,7 +1775,7 @@ void DrawView(const Surface &out, Point startPosition)
 		// POE2 Mashup: heavy hits jolt the view.
 		offset += CameraShakeOffset();
 		const FramePartScope part(FramePart::World);
-		DrawGame(IsUiScaled() ? WorldBackBuffer() : out, startPosition, offset);
+		DrawGame(HasWorldLayer() ? WorldBackBuffer() : out, startPosition, offset);
 	}
 	TelemetryDrawStep("drawing the map, names and banners");
 	PrepareScaledUi();
@@ -1868,7 +1868,7 @@ void DrawView(const Surface &out, Point startPosition)
 	TelemetryDrawStep("finding effects to draw");
 	vfx::SetCamera(startPosition, offset, *GetOptions().Graphics.zoom);
 	vfx::ScanMissiles();
-	if (IsUiScaled())
+	if (HasWorldLayer())
 		vfx::ScanWorld(WorldBackBuffer());
 
 	TelemetryDrawStep("drawing the open windows");
@@ -2331,6 +2331,8 @@ void DrawAndBlit()
 	if (!gbRunGame || HeadlessMode) {
 		return;
 	}
+	// POE2 Mashup: at UI Scale 100 the world gets a frame of its own while HD Graphics or Modern Effects are on.
+	SyncWorldLayer();
 
 	int hgt = 0;
 	bool drawHealth = IsRedrawComponent(PanelDrawComponent::Health);

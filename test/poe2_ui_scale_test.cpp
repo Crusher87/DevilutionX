@@ -83,6 +83,42 @@ TEST_F(Poe2UiScaleTest, WorldSpaceSwapsSizesAndTheMouse)
 	EXPECT_EQ(UiToWorldHeight(60), 120);
 }
 
+TEST_F(Poe2UiScaleTest, WorldLayerAtUiScale100OnlyForHdOrEffects)
+{
+	// A scaled UI always has the world's frame; at 100 only with layered frames and HD Graphics or Modern Effects on.
+	EXPECT_TRUE(WantsWorldLayer(true, false, false));
+	EXPECT_TRUE(WantsWorldLayer(true, true, true));
+	EXPECT_TRUE(WantsWorldLayer(false, true, true));
+	EXPECT_FALSE(WantsWorldLayer(false, true, false)); // plain Diablo at 100
+	EXPECT_FALSE(WantsWorldLayer(false, false, true)); // no SDL2 renderer to put the layers together
+	EXPECT_FALSE(WantsWorldLayer(false, false, false));
+}
+
+TEST_F(Poe2UiScaleTest, AtUiScale100WorldAndUiShareCoordinates)
+{
+	// With the world layer at 100 the world's frame is the UI's size: the mouse and every mapping are 1:1.
+	Apply({ 3440, 1440 }, 100);
+	EXPECT_FALSE(IsUiScaled());
+	EXPECT_EQ(gnRenderWidth, gnScreenWidth);
+	EXPECT_EQ(gnRenderHeight, gnScreenHeight);
+	MousePosition = { 1234, 567 };
+	for (const Point p : { Point { 0, 0 }, Point { 1234, 567 }, Point { 3439, 1439 } }) {
+		EXPECT_EQ(UiToWorld(p), p);
+		EXPECT_EQ(WorldToUi(p), p);
+	}
+	EXPECT_EQ(UiToWorldHeight(352), 352);
+	{
+		const WorldSpaceScope world;
+		EXPECT_EQ(gnScreenWidth, 3440);
+		EXPECT_EQ(gnScreenHeight, 1440);
+		EXPECT_EQ(gnViewportHeight, 1440);
+		EXPECT_EQ(MousePosition, Point(1234, 567));
+		EXPECT_EQ(WorldToUi({ 100, 200 }), Point(100, 200));
+	}
+	EXPECT_EQ(MousePosition, Point(1234, 567));
+	EXPECT_EQ(gnScreenWidth, 3440);
+}
+
 TEST_F(Poe2UiScaleTest, SkillTraySitsBesideTheManaGlobe)
 {
 	const auto overlaps = [](const Rectangle &a, const Rectangle &b) {

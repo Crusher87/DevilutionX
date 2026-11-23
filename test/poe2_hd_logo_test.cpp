@@ -13,8 +13,10 @@
 #include "engine/dx.h"
 #include "engine/render/clx_render.hpp"
 #include "engine/surface.hpp"
+#include "engine/ui_scale.hpp"
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
+#include "options.h"
 #include "poe2/hd.hpp"
 #include "utils/display.h"
 #include "utils/png.h"
@@ -399,6 +401,81 @@ TEST_F(HdLogoTest, UnscaledMenusShowTheHdLogoToo)
 	renderer = oldRenderer;
 	RenderDirectlyToOutputSurface = oldDirect;
 	RendererTextureSurface = nullptr;
+}
+
+TEST_F(HdLogoTest, UnscaledGameWithHdOrEffectsKeepsItsHdArt)
+{
+	// Curtis 2026-11-23: "Regardless of UI scale it should all work". At UI Scale 100 with HD Graphics or Modern Effects
+	// on the world gets a frame of its own (the UI's size), so in a game the frame goes up without the old pictures and
+	// their HD art is kept for the layered frame, as at 125-200. With both off the frame goes up as it always did.
+	ASSERT_NE(Renderer, nullptr);
+	SDL_Color colours[256];
+	for (int i = 0; i < 256; i++)
+		colours[i] = SDL_Color { static_cast<Uint8>(i), static_cast<Uint8>(i), static_cast<Uint8>(i), 255 };
+	SDL_SetPaletteColors(PalSurface->format->palette, colours, 0, 256);
+	SDLPaletteUniquePtr oldPalette = std::move(Palette);
+	Palette = SDLWrap::AllocPalette();
+	SDL_SetPaletteColors(Palette.get(), colours, 0, 256);
+	RendererTextureSurface = SDLWrap::CreateRGBSurfaceWithFormat(0, 40, 30, 32, SDL_PIXELFORMAT_RGBA32);
+	SDL_Renderer *const oldRenderer = renderer;
+	const bool oldDirect = RenderDirectlyToOutputSurface;
+	const bool oldRunGame = gbRunGame;
+	const uint16_t oldWidth = gnScreenWidth;
+	const uint16_t oldHeight = gnScreenHeight;
+	const bool oldHd = *GetOptions().Graphics.hdGraphics;
+	const bool oldEffects = *GetOptions().Graphics.modernEffects;
+	renderer = Renderer;
+	RenderDirectlyToOutputSurface = false;
+	const Size ui = SetRenderSize({ 40, 30 }, 100, true);
+	gnScreenWidth = static_cast<uint16_t>(ui.width);
+	gnScreenHeight = static_cast<uint16_t>(ui.height);
+	ASSERT_FALSE(IsUiScaled());
+	hd::RegisterUiPicture("ui_art\\logo", *logo, hd::UiPictureLayer::Over);
+	gbRunGame = true;
+
+	GetOptions().Graphics.hdGraphics.SetValue(true);
+	GetOptions().Graphics.modernEffects.SetValue(false);
+	ASSERT_TRUE(hd::Enabled());
+	SyncWorldLayer();
+	ASSERT_TRUE(HasWorldLayer());
+	EXPECT_EQ(WorldBackBuffer().w(), 40);
+	EXPECT_EQ(WorldBackBuffer().h(), 30);
+	Draw(0);
+	BltFast(nullptr, nullptr);
+	EXPECT_EQ(Drawn(), Laid);
+	EXPECT_EQ(OldLogoSent(RendererTextureSurface.get()), 0);
+	hd::PrepareUiSprites(); // kept for the frame's HD art
+	EXPECT_EQ(Drawn(), 0);
+	hd::RestoreUiSprites();
+	hd::DropUiDraws();
+
+	// Modern Effects alone want the layer too.
+	GetOptions().Graphics.hdGraphics.SetValue(false);
+	GetOptions().Graphics.modernEffects.SetValue(true);
+	SyncWorldLayer();
+	EXPECT_TRUE(HasWorldLayer());
+
+	// Both off: plain Diablo at 100, no world layer, the frame as drawn and its HD draws dropped.
+	GetOptions().Graphics.modernEffects.SetValue(false);
+	SyncWorldLayer();
+	ASSERT_FALSE(HasWorldLayer());
+	SDL_FillRect(PalSurface, nullptr, Background);
+	Draw(0);
+	BltFast(nullptr, nullptr);
+	EXPECT_EQ(OldLogoSent(RendererTextureSurface.get()), Laid);
+
+	GetOptions().Graphics.hdGraphics.SetValue(oldHd);
+	GetOptions().Graphics.modernEffects.SetValue(oldEffects);
+	renderer = nullptr;
+	SyncWorldLayer();
+	EXPECT_FALSE(HasWorldLayer());
+	gnScreenWidth = oldWidth;
+	gnScreenHeight = oldHeight;
+	gbRunGame = oldRunGame;
+	renderer = oldRenderer;
+	RenderDirectlyToOutputSurface = oldDirect;
+	RendererTextureSurface = nullptr;
+	Palette = std::move(oldPalette);
 }
 
 #endif
