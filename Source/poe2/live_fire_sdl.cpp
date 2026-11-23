@@ -55,6 +55,13 @@ void FireLayer::ForgetTextures()
 	lightPainted_ = false;
 }
 
+SDL_FRect FireLayer::GridRect(const SDL_FRect &picture) const
+{
+	const float across = static_cast<float>(fire_->PictureWidth());
+	const float pad = across > 0 ? static_cast<float>(fire_->Pad()) / across * picture.w : 0.F;
+	return SDL_FRect { picture.x - pad, picture.y, picture.w + 2.F * pad, picture.h };
+}
+
 void FireLayer::Pointer(float x, float y, const SDL_FRect &rect, float seconds)
 {
 	if (rect.w <= 0 || rect.h <= 0) {

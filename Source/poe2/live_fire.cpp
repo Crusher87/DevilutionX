@@ -312,13 +312,16 @@ private:
 
 // ---- maps and presets ----
 
-bool SourceFromMaps(const uint8_t *rgba, int width, int height, int pitch, FireSource &source)
+bool SourceFromMaps(const uint8_t *rgba, int width, int height, int pitch, FireSource &source, int pad)
 {
 	if (rgba == nullptr || width <= 0 || height <= 0)
 		return false;
-	source.width = width;
+	pad = std::max(pad, 0);
+	const int gridWidth = width + 2 * pad;
+	source.width = gridWidth;
 	source.height = height;
-	const size_t cells = static_cast<size_t>(width) * height;
+	source.pad = pad;
+	const size_t cells = static_cast<size_t>(gridWidth) * height;
 	source.feed.assign(cells, 0.F);
 	source.rise.assign(cells, 0.F);
 	source.sparkX.clear();
@@ -328,14 +331,19 @@ bool SourceFromMaps(const uint8_t *rgba, int width, int height, int pitch, FireS
 		const int y = height - 1 - row;
 		for (int x = 0; x < width; x++) {
 			const uint8_t *p = line + static_cast<ptrdiff_t>(x) * 4;
-			const size_t i = static_cast<size_t>(y) * width + x;
+			const size_t i = static_cast<size_t>(y) * gridWidth + x + pad;
 			source.feed[i] = p[0] / 255.F * 1.6F;
 			source.rise[i] = p[1] / 255.F;
 			if ((row & 1) == 0 && (x & 1) == 0 && p[2] > 64) {
-				source.sparkX.push_back(static_cast<float>(x));
+				source.sparkX.push_back(static_cast<float>(x + pad));
 				source.sparkY.push_back(static_cast<float>(y));
 			}
 		}
+		// The padding has no feed and no sparks, and the height above the source of the picture's edge (as a graphics
+		// card clamps a texture read past it).
+		float *rise = &source.rise[static_cast<size_t>(y) * gridWidth];
+		std::fill(rise, rise + pad, rise[pad]);
+		std::fill(rise + pad + width, rise + gridWidth, rise[pad + width - 1]);
 	}
 	return true;
 }
@@ -382,6 +390,7 @@ RampColour RampAt(float heat, float red)
 LiveFire::LiveFire(FireSource source, FireSettings settings, uint32_t seed, int threads)
     : width_(std::max(source.width, 4))
     , height_(std::max(source.height, 4))
+    , pad_(std::clamp(source.pad, 0, (std::max(source.width, 4) - 1) / 2))
     , source_(std::move(source))
     , settings_(settings)
     , rng_(seed)
@@ -389,11 +398,12 @@ LiveFire::LiveFire(FireSource source, FireSettings settings, uint32_t seed, int 
 	const size_t cells = static_cast<size_t>(width_) * height_;
 	source_.width = width_;
 	source_.height = height_;
+	source_.pad = pad_;
 	source_.feed.resize(cells, 0.F);
 	source_.rise.resize(cells, 0.F);
 	airWidth_ = std::max(1, width_ / 4);
 	airHeight_ = std::max(1, height_ / 4);
-	lightWidth_ = std::max(1, width_ / LightDivisor);
+	lightWidth_ = std::max(1, PictureWidth() / LightDivisor);
 	lightHeight_ = std::max(1, height_ / LightDivisor);
 	heat_.assign(cells, 0.F);
 	next_.assign(cells, 0.F);
@@ -1096,7 +1106,8 @@ void LiveFire::PaintLight(uint8_t *multiply, int multiplyPitch, uint8_t *add, in
 		uint8_t *m = multiply + static_cast<ptrdiff_t>(lightHeight_ - 1 - j) * multiplyPitch;
 		uint8_t *a = add + static_cast<ptrdiff_t>(lightHeight_ - 1 - j) * addPitch;
 		for (int i = 0; i < lightWidth_; i++) {
-			const float x = (static_cast<float>(i) + 0.5F) / static_cast<float>(lightWidth_) * static_cast<float>(width_);
+			// Over the maps' picture only: what the fire lights (the letters) is there, not in the padding.
+			const float x = static_cast<float>(pad_) + (static_cast<float>(i) + 0.5F) / static_cast<float>(lightWidth_) * static_cast<float>(PictureWidth());
 			const float li = LightAt(x, y);
 			for (int c = 0; c < 3; c++) {
 				// rgb = L * (1 - 0.75 li) + L * tint * 1.12 * 0.75 li + (1 - lum) * dark * li

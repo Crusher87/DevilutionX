@@ -64,6 +64,11 @@ const FireSpot FireSpots[] = {
 };
 /** @brief The fire's maps, as an HD art name (hd\\ui_art\\logo\\fire_maps.png). */
 constexpr const char *FireMapsArt = "ui_art/logo/fire_maps";
+/**
+ * @brief How far the fire's grid reaches past its maps on each side, on maps of the title logo's grid (1100 wide;
+ * other sizes in proportion): flames leaning out past the D and the O aren't cut off. It is drawn past the logo's rect.
+ */
+constexpr int FireMapsPad = fire::LogoGridPad;
 
 const FireSpot *FireSpotOf(const std::string &picture)
 {
@@ -1423,7 +1428,9 @@ fire::FireLayer *MenuFireLayer()
 		return nullptr;
 	fire::FireSource source;
 	const SDL_Surface *picture = maps->picture;
-	const bool read = fire::SourceFromMaps(static_cast<const uint8_t *>(picture->pixels), picture->w, picture->h, picture->pitch, source);
+	const float across = static_cast<float>(picture->w) / static_cast<float>(fire::LogoGridWidth);
+	const int pad = static_cast<int>(std::lround(static_cast<float>(FireMapsPad) * across));
+	const bool read = fire::SourceFromMaps(static_cast<const uint8_t *>(picture->pixels), picture->w, picture->h, picture->pitch, source, pad);
 	// The maps' picture isn't wanted again (it is read anew if the fire is made again).
 	if (UiArts.count(FireMapsArt) != 0) {
 		SDL_FreeSurface(UiArts[FireMapsArt].picture);
@@ -1431,11 +1438,11 @@ fire::FireLayer *MenuFireLayer()
 	}
 	if (!read)
 		return nullptr;
-	// The logo's letters breathe and flare up each on its own; maps of another size have them where they would be.
-	const float across = static_cast<float>(source.width) / static_cast<float>(fire::LogoGridWidth);
+	// The logo's letters breathe and flare up each on its own; maps of another size have them where they would be (and
+	// the grid's x is the maps' plus the padding).
 	source.zones = fire::LogoZones();
 	for (fire::FireZone &zone : source.zones) {
-		zone.centre *= across;
+		zone.centre = zone.centre * across + static_cast<float>(source.pad);
 		zone.halfWidth *= across;
 		zone.sparkHalfWidth *= across;
 	}
@@ -1453,10 +1460,33 @@ void ReleaseIdleMenuFire()
 	MenuFireCover.shrink_to_fit();
 }
 
-/** @brief Where a partly covered logo's fire shows: not over what covers the logo's own pixels. */
-const uint8_t *MenuFireCoverOf(const UiDraw &draw, const SDL_FRect &rect, int width, int height)
+/**
+ * @brief Where a logo's fire (its grid at `rect`) shows: not over what covers the logo's own pixels when it is partly
+ * covered, and fading out over 16 grid columns before the screen's left and right edges, which its padding may reach
+ * past. Null when it all shows.
+ */
+const uint8_t *MenuFireCoverOf(const UiDraw &draw, const SDL_FRect &rect, int width, int height, float screenLeft, float screenRight)
 {
-	MenuFireCover.assign(static_cast<size_t>(width) * height, 255);
+	if (!(rect.w > 0))
+		return nullptr;
+	const float gridPerUi = static_cast<float>(width) / rect.w;
+	std::vector<uint8_t> edge(width, 255);
+	bool edged = false;
+	for (int x = 0; x < width; x++) {
+		const float ux = rect.x + (static_cast<float>(x) + 0.5F) / gridPerUi;
+		const float f = std::clamp(std::min(ux - screenLeft, screenRight - ux) * gridPerUi / 16.F, 0.F, 1.F);
+		if (f < 1.F) {
+			edge[x] = static_cast<uint8_t>(std::lround(f * f * (3.F - 2.F * f) * 255.F));
+			edged = true;
+		}
+	}
+	if (draw.whole && !edged)
+		return nullptr;
+	MenuFireCover.resize(static_cast<size_t>(width) * height);
+	for (int y = 0; y < height; y++)
+		std::copy(edge.begin(), edge.end(), MenuFireCover.begin() + static_cast<ptrdiff_t>(y) * width);
+	if (draw.whole)
+		return MenuFireCover.data();
 	std::vector<int> columns(width);
 	for (int x = 0; x < width; x++)
 		columns[x] = static_cast<int>(std::floor(rect.x + (static_cast<float>(x) + 0.5F) / static_cast<float>(width) * rect.w)) - draw.rect.x;
@@ -1487,7 +1517,9 @@ bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &d
 	if (layer == nullptr)
 		return false;
 	const SDL_FRect &spot = draw.name->fire->rect;
-	const SDL_FRect rect { dest.x + spot.x * dest.w, dest.y + spot.y * dest.h, spot.w * dest.w, spot.h * dest.h };
+	// The maps' picture goes over the logo at `spot`; the grid's padding reaches past it on each side (past the logo's
+	// own rect too: what is under that is the menu's background, the fire only added over it).
+	const SDL_FRect rect = layer->GridRect(SDL_FRect { dest.x + spot.x * dest.w, dest.y + spot.y * dest.h, spot.w * dest.w, spot.h * dest.h });
 	// Real time, so it burns at the same pace whatever the frame rate; after a while unseen it goes on from where it was.
 	const uint64_t now = SDL_GetPerformanceCounter();
 	float seconds = 1.F / 60.F;
@@ -1499,7 +1531,10 @@ bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &d
 	MenuFireCounter = now;
 	MenuFireTicks = SDL_GetTicks();
 	layer->Pointer(static_cast<float>(MousePosition.x) + 0.5F, static_cast<float>(MousePosition.y) + 0.5F, rect, seconds);
-	const uint8_t *cover = draw.whole ? nullptr : MenuFireCoverOf(draw, rect, layer->Fire().Width(), layer->Fire().Height());
+	SDL_Rect screen {};
+	SDL_RenderGetViewport(renderer, &screen);
+	const float screenRight = screen.w > 0 ? static_cast<float>(screen.w) : rect.x + rect.w;
+	const uint8_t *cover = MenuFireCoverOf(draw, rect, layer->Fire().Width(), layer->Fire().Height(), 0.F, screenRight);
 	if (!layer->Draw(renderer, rect, seconds, cover))
 		return false;
 	if (!layer->DrawLit(renderer, texture, dest, spot))

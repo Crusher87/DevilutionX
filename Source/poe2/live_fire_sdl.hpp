@@ -33,6 +33,12 @@ public:
 	LiveFire &Fire() { return *fire_; }
 
 	/**
+	 * @brief Where the whole grid goes when its maps' picture goes at `picture`: wider by its padding (FireSource::pad)
+	 * on each side. Pointer, Draw and their cover take this rect; DrawLit's `fire` is the picture's.
+	 */
+	SDL_FRect GridRect(const SDL_FRect &picture) const;
+
+	/**
 	 * @brief The pointer is at (x, y), in the same units as `rect` (where the fire is drawn): moving over it blows it.
 	 * `inside` false (or a pointer off the fire) forgets where it was, so coming back doesn't blow it from afar.
 	 */
@@ -45,8 +51,9 @@ public:
 	bool Draw(SDL_Renderer *renderer, const SDL_FRect &rect, float seconds, const uint8_t *cover = nullptr);
 
 	/**
-	 * @brief Draws `picture` at `dest`, lit by the fire as it was last drawn, the fire being at `fire` (fractions of
-	 * the picture: x, y, w, h). False when the renderer can't (no render targets): the caller draws it unlit.
+	 * @brief Draws `picture` at `dest`, lit by the fire as it was last drawn, the fire's maps' picture (the grid without
+	 * its padding) being at `fire` (fractions of the picture: x, y, w, h). False when the renderer can't (no render
+	 * targets): the caller draws it unlit.
 	 */
 	bool DrawLit(SDL_Renderer *renderer, SDL_Texture *picture, const SDL_FRect &dest, const SDL_FRect &fire);
 

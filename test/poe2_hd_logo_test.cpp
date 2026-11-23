@@ -18,6 +18,7 @@
 #include "headless_mode.hpp"
 #include "options.h"
 #include "poe2/hd.hpp"
+#include "poe2/live_fire.hpp"
 #include "utils/display.h"
 #include "utils/png.h"
 #include "utils/sdl_wrap.h"
@@ -158,6 +159,8 @@ public:
 	}
 
 	static constexpr int Laid = FrameWidth * FrameHeight - 4;
+	/** @brief How far past the logo's sides its fire may reach, in screen pixels (fire::LogoGridPad of 1100, rounded up). */
+	static constexpr int FirePad = (fire::LogoGridPad * FrameWidth + fire::LogoGridWidth - 1) / fire::LogoGridWidth;
 
 	/** @brief Shows the frame's HD art (and fire) as the game does, on black; how many pixels of it are lit, in and out of the logo. */
 	static void Present(int &inside, int &outside)
@@ -176,7 +179,9 @@ public:
 				const auto *p = reinterpret_cast<const uint8_t *>(&pixels[static_cast<size_t>(y) * 40 + x]);
 				if (p[0] + p[1] + p[2] == 0)
 					continue;
-				const bool inLogo = x >= 10 && x < 10 + FrameWidth && y >= 12 && y < 12 + FrameHeight;
+				// The logo's rect, and the fire's padding either side of it (fire::LogoGridPad on the 1100 wide logo grid:
+				// just over one pixel of this 8 pixel logo).
+				const bool inLogo = x >= 10 - FirePad && x < 10 + FrameWidth + FirePad && y >= 12 && y < 12 + FrameHeight;
 				(inLogo ? inside : outside)++;
 			}
 		}

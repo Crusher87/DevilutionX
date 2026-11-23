@@ -51,6 +51,12 @@ struct FireZone {
 struct FireSource {
 	int width = 0;
 	int height = 0;
+	/**
+	 * @brief Columns of the grid either side of its maps' picture, where nothing feeds: room for flames that lean out
+	 * past the picture's edges. `width` counts them (the picture is width - 2 * pad wide); every x (sparks, zones) is
+	 * in grid pixels, so the picture's own x is grid x - pad. The light on what goes over the fire covers the picture.
+	 */
+	int pad = 0;
 	/** @brief How much heat goes in each second, before the zone's gain (feed map R * 1.6). */
 	std::vector<float> feed;
 	/** @brief 0..1, how far above its source a point is (feed map G): the air swirls and tears more up there. */
@@ -63,10 +69,12 @@ struct FireSource {
 };
 
 /**
- * @brief Reads a fire's maps from an RGBA picture (R: feed, G: height above the source, B: spark spots), top row first.
+ * @brief Reads a fire's maps from an RGBA picture (R: feed, G: height above the source, B: spark spots), top row first,
+ * into a grid `pad` columns wider than it on each side (FireSource::pad): no feed or sparks out there, and the rise of
+ * the picture's edge column.
  * @return false for a picture with no pixels.
  */
-bool SourceFromMaps(const uint8_t *rgba, int width, int height, int pitch, FireSource &source);
+bool SourceFromMaps(const uint8_t *rgba, int width, int height, int pitch, FireSource &source, int pad = 0);
 
 /** @brief The zones of the title logo's letters (D I A B L O) on its 1100 x 432 grid (twice the 550 x 216 logo). */
 std::vector<FireZone> LogoZones();
@@ -74,6 +82,8 @@ std::vector<FireZone> LogoZones();
 /** @brief The title logo's grid: twice its 550 x 216 picture. */
 constexpr int LogoGridWidth = 1100;
 constexpr int LogoGridHeight = 432;
+/** @brief How far the title logo's fire reaches past its picture on each side, on its grid (80 logo pixels). */
+constexpr int LogoGridPad = 160;
 
 /** @brief A colour of the fire's ramp: 0..255 r, g, b and 0..1 alpha. */
 struct RampColour {
@@ -99,6 +109,10 @@ public:
 
 	int Width() const { return width_; }
 	int Height() const { return height_; }
+	/** @brief Columns either side of the maps' picture (FireSource::pad), and the picture's own width. */
+	int Pad() const { return pad_; }
+	int PictureWidth() const { return width_ - 2 * pad_; }
+	/** @brief The light map's size: a quarter of the maps' picture (not the padding) each way. */
 	int LightWidth() const { return lightWidth_; }
 	int LightHeight() const { return lightHeight_; }
 	float Time() const { return static_cast<float>(time_); }
@@ -132,7 +146,8 @@ public:
 	/**
 	 * @brief Paints the firelight on what goes over the fire (the logo's letters), LightWidth * LightHeight, RGBA
 	 * bytes, top row first: `multiply` is what their colour is multiplied by (halved when `doubled`, for a blend that
-	 * multiplies by twice it), `add` what is added where they are dark, both stretched over the grid's rect.
+	 * multiplies by twice it), `add` what is added where they are dark, both stretched over the maps' picture (the
+	 * grid without its padding).
 	 */
 	void PaintLight(uint8_t *multiply, int multiplyPitch, uint8_t *add, int addPitch, bool doubled);
 
@@ -163,6 +178,7 @@ private:
 
 	int width_;
 	int height_;
+	int pad_;
 	int airWidth_;
 	int airHeight_;
 	int lightWidth_;

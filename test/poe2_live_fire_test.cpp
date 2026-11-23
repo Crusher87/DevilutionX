@@ -61,6 +61,74 @@ TEST(LiveFireTest, MapsAreReadBottomRowFirst)
 	EXPECT_FALSE(SourceFromMaps(nullptr, 2, 2, 8, source));
 }
 
+TEST(LiveFireTest, PaddedMapsSitInTheMiddleOfAWiderGrid)
+{
+	// 2 x 2 maps: top row feed and a spark spot on the left, bottom row rises 0.2 / 0.6 from left to right.
+	const uint8_t rgba[2 * 2 * 4] = {
+		255, 0, 200, 255, 0, 0, 0, 255,
+		0, 51, 0, 255, 0, 153, 0, 255
+	};
+	FireSource source;
+	ASSERT_TRUE(SourceFromMaps(rgba, 2, 2, 8, source, 3));
+	EXPECT_EQ(source.width, 8);
+	EXPECT_EQ(source.height, 2);
+	EXPECT_EQ(source.pad, 3);
+	ASSERT_EQ(source.feed.size(), 16U);
+	// Feed only where the maps are (grid x 3 of the top row, y 1); none in the padding.
+	for (int i = 0; i < 16; i++)
+		EXPECT_FLOAT_EQ(source.feed[i], i == 8 + 3 ? 1.6F : 0.F) << i;
+	// The padding rises as the picture's edge column does.
+	for (int x = 0; x < 8; x++)
+		EXPECT_FLOAT_EQ(source.rise[x], x < 4 ? 0.2F : 0.6F) << x;
+	ASSERT_EQ(source.sparkX.size(), 1U);
+	EXPECT_FLOAT_EQ(source.sparkX[0], 3.F);
+	EXPECT_FLOAT_EQ(source.sparkY[0], 1.F);
+}
+
+TEST(LiveFireTest, APaddedFireLeansPastItsMapsAndLightsOnlyThem)
+{
+	// Feed right up to the maps' left edge: without padding the grid's own edge fades it out; with it, it burns on
+	// into the padding, and the light on the letters still covers only the maps.
+	const int pad = 16;
+	LiveFire fire(SmallSource(96, 96, 0, 20), FireSettings {}, 5, 0);
+	FireSource padded = SmallSource(96, 96, 0, 20);
+	std::vector<uint8_t> maps(96 * 96 * 4, 0);
+	for (int row = 0; row < 96; row++) {
+		const int y = 95 - row;
+		for (int x = 0; x < 96; x++) {
+			uint8_t *p = &maps[(static_cast<size_t>(row) * 96 + x) * 4];
+			p[0] = x < 20 && y >= 4 && y < 14 ? 255 : 0;
+			p[1] = static_cast<uint8_t>(std::clamp((y - 14) * 255 / 120, 0, 255));
+			p[3] = 255;
+		}
+	}
+	ASSERT_TRUE(SourceFromMaps(maps.data(), 96, 96, 96 * 4, padded, pad));
+	LiveFire wide(std::move(padded), FireSettings {}, 5, 0);
+	ASSERT_EQ(wide.Width(), 96 + 2 * pad);
+	EXPECT_EQ(wide.Pad(), pad);
+	EXPECT_EQ(wide.PictureWidth(), 96);
+	EXPECT_EQ(wide.LightWidth(), fire.LightWidth());
+	wide.WarmUp(1.5F);
+	float inPadding = 0.F;
+	for (int y = 0; y < wide.Height(); y++)
+		for (int x = 0; x < pad; x++)
+			inPadding += wide.Heat()[static_cast<size_t>(y) * wide.Width() + x];
+	EXPECT_GT(inPadding, 0.F);
+	std::vector<uint8_t> rgba(static_cast<size_t>(wide.Width()) * wide.Height() * 4);
+	wide.Paint(rgba.data(), wide.Width() * 4);
+	std::vector<uint8_t> multiply(static_cast<size_t>(wide.LightWidth()) * wide.LightHeight() * 4), add(multiply.size());
+	wide.PaintLight(multiply.data(), wide.LightWidth() * 4, add.data(), wide.LightWidth() * 4, false);
+	// Each light texel is the light at its place over the maps, the padding left out.
+	for (int j = 0; j < wide.LightHeight(); j += 5) {
+		for (int i = 0; i < wide.LightWidth(); i++) {
+			const float x = static_cast<float>(pad) + (static_cast<float>(i) + 0.5F) * 96.F / static_cast<float>(wide.LightWidth());
+			const float y = (static_cast<float>(j) + 0.5F) * 96.F / static_cast<float>(wide.LightHeight());
+			const float li = wide.LightAt(x, y);
+			EXPECT_NEAR(add[(static_cast<size_t>(wide.LightHeight() - 1 - j) * wide.LightWidth() + i) * 4], 0.10F * li * 255.F, 1.01F) << i << "," << j;
+		}
+	}
+}
+
 TEST(LiveFireTest, LogoZonesFollowTheLetters)
 {
 	const std::vector<FireZone> zones = LogoZones();
@@ -309,9 +377,8 @@ TEST(LiveFireTest, LightOnTheLettersFollowsTheHeat)
 	EXPECT_TRUE(warm);
 }
 
-TEST(LiveFireTest, LogoGridFrameTime)
+void LogoGridFrameTime(int pad)
 {
-	// The full title-logo grid with letter-like maps (the real ones are in the HD pack): how long a frame takes.
 	const int w = LogoGridWidth;
 	const int h = LogoGridHeight;
 	std::vector<uint8_t> rgba(static_cast<size_t>(w) * h * 4, 0);
@@ -328,28 +395,43 @@ TEST(LiveFireTest, LogoGridFrameTime)
 		for (int x = 0; x < w; x++)
 			rgba[(static_cast<size_t>(row) * w + x) * 4 + 1] = static_cast<uint8_t>(std::clamp((h - 60 - row) * 255 / 160, 0, 255));
 	FireSource source;
-	ASSERT_TRUE(SourceFromMaps(rgba.data(), w, h, w * 4, source));
+	ASSERT_TRUE(SourceFromMaps(rgba.data(), w, h, w * 4, source, pad));
 	source.zones = LogoZones();
+	for (FireZone &zone : source.zones)
+		zone.centre += static_cast<float>(pad);
 	LiveFire fire(std::move(source), FireSettings {});
 	const auto warmStart = std::chrono::steady_clock::now();
 	fire.WarmUp();
 	const auto warmEnd = std::chrono::steady_clock::now();
-	std::vector<uint8_t> out(static_cast<size_t>(w) * h * 4);
+	const int gw = fire.Width();
+	std::vector<uint8_t> out(static_cast<size_t>(gw) * h * 4);
 	std::vector<uint8_t> multiply(static_cast<size_t>(fire.LightWidth()) * fire.LightHeight() * 4), add(multiply.size());
 	constexpr int Frames = 120;
 	const auto start = std::chrono::steady_clock::now();
 	for (int i = 0; i < Frames; i++) {
 		if (i == 30)
-			fire.Push(200, 200, 260, 205, 1.F / 100.F);
+			fire.Push(200.F + static_cast<float>(pad), 200, 260.F + static_cast<float>(pad), 205, 1.F / 100.F);
 		fire.Advance(1.F / 100.F);
-		fire.Paint(out.data(), w * 4);
+		fire.Paint(out.data(), gw * 4);
 		fire.PaintLight(multiply.data(), fire.LightWidth() * 4, add.data(), fire.LightWidth() * 4, true);
 	}
 	const auto end = std::chrono::steady_clock::now();
 	const double ms = std::chrono::duration<double, std::milli>(end - start).count() / Frames;
 	const double warm = std::chrono::duration<double, std::milli>(warmEnd - warmStart).count();
-	std::printf("Live fire, %dx%d grid: %.2f ms a frame (step, paint and light), warm-up %.0f ms\n", w, h, ms, warm);
+	std::printf("Live fire, %dx%d grid (maps %dx%d, pad %d): %.2f ms a frame (step, paint and light), warm-up %.0f ms\n", gw, h, w, h, pad, ms, warm);
 	EXPECT_GT(Sum(fire.Heat()), 0.F);
+}
+
+TEST(LiveFireTest, LogoGridFrameTime)
+{
+	// The full title-logo grid with letter-like maps (the real ones are in the HD pack): how long a frame takes.
+	LogoGridFrameTime(0);
+}
+
+TEST(LiveFireTest, PaddedLogoGridFrameTime)
+{
+	// As the menus burn it: padded so flames lean out past the D and the O.
+	LogoGridFrameTime(LogoGridPad);
 }
 
 } // namespace
