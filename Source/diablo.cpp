@@ -1585,7 +1585,8 @@ void DiabloSplash()
 		}
 	}
 
-	if (IsAnyOf(*GetOptions().StartUp.splash, StartUpSplash::TitleDialog, StartUpSplash::LogoAndTitleDialog))
+	// POE2 Mashup: the main menu's intro takes the title screen's place.
+	if (IsAnyOf(*GetOptions().StartUp.splash, StartUpSplash::TitleDialog, StartUpSplash::LogoAndTitleDialog) && (demo::IsRunning() || !hd::MenuIntroWanted()))
 		UiTitleDialog();
 }
 

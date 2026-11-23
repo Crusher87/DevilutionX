@@ -17,7 +17,9 @@
 #include "engine/assets.hpp"
 #include "engine/load_clx.hpp"
 #include "engine/point.hpp"
+#include "engine/sound.h"
 #include "game_mode.hpp"
+#include "poe2/hd.hpp"
 #include "utils/language.h"
 #include "utils/ui_fwd.h"
 
@@ -30,6 +32,64 @@ std::vector<std::unique_ptr<UiItemBase>> vecMainMenuDialog;
 std::vector<std::unique_ptr<UiListItem>> vecMenuItems;
 
 _mainmenu_selections MainMenuResult;
+
+/** @brief POE2 Mashup: the main menu's intro was playing at the last frame. */
+bool IntroWasPlaying = false;
+
+/** @brief POE2 Mashup: the intro has ended (or been skipped): the menu's music starts, and its wait for the attract mode. */
+void IntroEnded()
+{
+	IntroWasPlaying = false;
+	music_start(TMUSIC_INTRO);
+	mainmenu_restart_repintro();
+}
+
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+/**
+ * @brief POE2 Mashup: until the menu shows, the intro takes the input: a click, Esc, Enter or Space (or a pad's
+ * button) skips it to its end, and nothing else reaches the menu.
+ */
+bool IntroEvent(SDL_Event &event)
+{
+	if (!hd::MenuIntroTakesInput())
+		return false;
+	switch (event.type) {
+	case SDL_KEYDOWN:
+		switch (event.key.keysym.sym) {
+		case SDLK_ESCAPE:
+		case SDLK_RETURN:
+		case SDLK_KP_ENTER:
+		case SDLK_SPACE:
+			hd::SkipMenuIntro();
+			break;
+		default:
+			break;
+		}
+		return true;
+	case SDL_MOUSEBUTTONDOWN:
+	case SDL_CONTROLLERBUTTONDOWN:
+	case SDL_FINGERDOWN:
+		hd::SkipMenuIntro();
+		return true;
+	case SDL_KEYUP:
+	case SDL_TEXTINPUT:
+	case SDL_MOUSEBUTTONUP:
+	case SDL_MOUSEMOTION:
+	case SDL_MOUSEWHEEL:
+	case SDL_CONTROLLERBUTTONUP:
+	case SDL_CONTROLLERAXISMOTION:
+	case SDL_JOYAXISMOTION:
+	case SDL_JOYBUTTONDOWN:
+	case SDL_JOYBUTTONUP:
+	case SDL_JOYHATMOTION:
+	case SDL_FINGERUP:
+	case SDL_FINGERMOTION:
+		return true;
+	default:
+		return false;
+	}
+}
+#endif
 
 void UiMainMenuSelect(size_t value)
 {
@@ -94,6 +154,11 @@ void MainmenuLoad(const char *name)
 
 void MainmenuFree()
 {
+	// POE2 Mashup: leaving the main menu ends its intro.
+	if (hd::MenuIntroPlaying()) {
+		hd::FinishMenuIntro();
+		IntroEnded();
+	}
 	ArtBackgroundWidescreen = std::nullopt;
 	ArtBackground = std::nullopt;
 
@@ -118,9 +183,21 @@ bool UiMainMenuDialog(const char *name, _mainmenu_selections *pdwResult, int att
 
 		mainmenu_restart_repintro(); // for automatic starts
 
+		// POE2 Mashup: the first time the main menu shows, its intro plays first.
+		if (hd::MenuIntroWanted()) {
+			hd::StartMenuIntro();
+			IntroWasPlaying = hd::MenuIntroPlaying();
+		}
+
 		while (MainMenuResult == MAINMENU_NONE) {
 			UiClearScreen();
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+			UiPollAndRender(IntroEvent);
+#else
 			UiPollAndRender();
+#endif
+			if (IntroWasPlaying && !hd::MenuIntroPlaying())
+				IntroEnded();
 			if (SDL_GetTicks() >= dwAttractTicks && (HaveIntro() || gbIsHellfire)) {
 				MainMenuResult = MAINMENU_ATTRACT_MODE;
 			}

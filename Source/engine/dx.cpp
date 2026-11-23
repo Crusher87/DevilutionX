@@ -815,6 +815,9 @@ void RenderPresent()
 		if (!SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch)) ErrSdl();
 		if (!SDL_RenderTexture(renderer, texture.get(), nullptr, nullptr)) ErrSdl();
 #else
+		// POE2 Mashup: while the main menu's intro plays, the frame is drawn into a picture of its own, which the intro
+		// then shows with its effects.
+		const bool intro = hd::BeginMenuIntroFrame(renderer);
 		if (LayeredFramePending && WantsLayeredFrame()) {
 			PresentLayeredFrame(surface);
 		} else {
@@ -834,6 +837,8 @@ void RenderPresent()
 				hd::RenderUiSprites(renderer);
 		}
 		UiSpritesLeftOut = false;
+		if (intro)
+			hd::EndMenuIntroFrame(renderer);
 #endif
 
 		if (ControlMode == ControlTypes::VirtualGamepad) {
