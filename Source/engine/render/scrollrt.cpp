@@ -1923,7 +1923,11 @@ void DrawView(const Surface &out, Point startPosition)
 		DrawChatLog(out);
 	}
 	if (MyPlayerIsDead) {
-		RedBack(out);
+		// POE2 Mashup and Sanctuary Reforged: the HD world shows the death itself (moments: the dark closing in and its
+		// red). The game's red, drawn over the UI's copy of the 8-bit world, would show over all of it once the UI is
+		// scaled, as the whole world in Diablo's red at the UI's size.
+		if (!hd::Active())
+			RedBack(out);
 		DrawDeathText(out);
 	} else if (PauseMode != 0) {
 		gmenu_draw_pause(out);
