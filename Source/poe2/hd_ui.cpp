@@ -5,8 +5,10 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <functional>
 #include <map>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -19,6 +21,7 @@
 #include <SDL.h>
 #endif
 
+#include "diablo.h"
 #include "engine/assets.hpp"
 #include "engine/dx.h"
 #include "engine/palette.h"
@@ -26,6 +29,8 @@
 #include "engine/surface.hpp"
 #include "engine/trn.hpp"
 #include "poe2/hd_outline.hpp"
+#include "poe2/live_fire.hpp"
+#include "poe2/live_fire_sdl.hpp"
 #include "utils/file_util.h"
 #include "utils/log.hpp"
 #include "utils/png.h"
@@ -38,6 +43,34 @@ namespace hd {
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 
 namespace {
+
+/**
+ * @brief A picture over the UI with a live fire behind it (poe2/live_fire.hpp): the title screen's and the main menu's
+ * logos. Its fire burns from the maps hd\\ui_art\\logo\\fire_maps.png (R: feed, G: height above the letters, B: spark
+ * spots), its grid set over the picture at `rect` (fractions of it). Both logos share the one fire, which goes on
+ * burning from the title screen into the main menu.
+ */
+struct FireSpot {
+	const char *picture;
+	SDL_FRect rect;
+};
+const FireSpot FireSpots[] = {
+	{ "ui_art/logo", { 0.F, 0.F, 1.F, 1.F } },
+	// The title logo shrunk to 0.708 and moved as the HD art's is (its fit.json: x -5.24, y -5.586 from the master,
+	// whose origin is 8 logo pixels up and left), in the main menu's 390 x 154.
+	{ "ui_art/smlogo", { (0.708F * 8.F - 5.24F) / 390.F, (0.708F * 8.F - 5.586F) / 154.F, 0.708F * 550.F / 390.F, 0.708F * 216.F / 154.F } },
+};
+/** @brief The fire's maps, as an HD art name (hd\\ui_art\\logo\\fire_maps.png). */
+constexpr const char *FireMapsArt = "ui_art/logo/fire_maps";
+
+const FireSpot *FireSpotOf(const std::string &picture)
+{
+	for (const FireSpot &spot : FireSpots) {
+		if (picture == spot.picture)
+			return &spot;
+	}
+	return nullptr;
+}
 
 // The pictures of items in the inventory, the stash, the belt, the shops and on the cursor are drawn with the UI,
 // which the HD world doesn't redraw. Each draw of one is noted here, with the pixels it lays down and the UI pixels it
@@ -67,6 +100,8 @@ struct UiSpriteName {
 	 * has art made from the game's own file, and none of the old picture may be left under it.
 	 */
 	bool exact = false;
+	/** @brief For a picture over the UI with a live fire behind it (a menu logo): where its fire goes. */
+	const FireSpot *fire = nullptr;
 };
 
 /** @brief Each item picture frame, by the address of its pixels. */
@@ -181,6 +216,16 @@ std::unordered_map<uint64_t, SDL_Texture *> MaskedTextures;
 size_t MaskedTexturePixels = 0;
 /** @brief How many pixels of them are kept before all are let go (about 128 MB). */
 constexpr size_t MaskedTexturePixelBudget = 32 * 1024 * 1024;
+
+/** @brief The menu logos' live fire (FireSpot), made the first time one shows and let go a while after none does. */
+std::unique_ptr<fire::FireLayer> MenuFire;
+/** @brief Whether its maps were looked for since it was last let go (none: the logos show without it). */
+bool MenuFireTried = false;
+/** @brief When it was last drawn: the performance counter (for its frame time) and the ticks (for letting it go). */
+uint64_t MenuFireCounter = 0;
+uint32_t MenuFireTicks = 0;
+/** @brief Where it shows when a logo is partly covered (grid size, top row first). */
+std::vector<uint8_t> MenuFireCover;
 
 /** @brief Keeps a new partly covered texture, counting its pixels. */
 void KeepMaskedTexture(SDL_Texture *&slot, SDL_Texture *texture, int width, int height)
@@ -372,6 +417,8 @@ void ForgetTextures()
 	}
 	MaskedTextures.clear();
 	MaskedTexturePixels = 0;
+	if (MenuFire != nullptr)
+		MenuFire->ForgetTextures();
 }
 
 void RecordUiOutlineImpl(const Surface &out, Point position, ClxSprite clx, uint8_t colour)
@@ -550,6 +597,7 @@ void RegisterUiPictureImpl(std::string_view path, ClxSpriteList sprites, UiPictu
 		if (layer == UiPictureLayer::Over) {
 			named.stillArt = name + "/d0_f00";
 			named.exact = true;
+			named.fire = FireSpotOf(name);
 		}
 		frames.push_back(sprite.pixelData());
 		if (!UiExportDir.empty()) {
@@ -941,6 +989,109 @@ void DrawUiOutline(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &
 	drawCut(OutlineCutFor(look), alpha);
 }
 
+/** @brief The menu logos' fire, made from its maps the first time; null without them (or with POE2_LOGO_FIRE=0). */
+fire::FireLayer *MenuFireLayer()
+{
+	if (MenuFire != nullptr)
+		return MenuFire.get();
+	if (MenuFireTried)
+		return nullptr;
+	MenuFireTried = true;
+	static const bool allowed = [] {
+		const char *env = std::getenv("POE2_LOGO_FIRE");
+		return env == nullptr || env[0] != '0';
+	}();
+	if (!allowed)
+		return nullptr;
+	const UiArt *maps = ArtFor(FireMapsArt);
+	if (maps == nullptr)
+		return nullptr;
+	fire::FireSource source;
+	const SDL_Surface *picture = maps->picture;
+	const bool read = fire::SourceFromMaps(static_cast<const uint8_t *>(picture->pixels), picture->w, picture->h, picture->pitch, source);
+	// The maps' picture isn't wanted again (it is read anew if the fire is made again).
+	if (UiArts.count(FireMapsArt) != 0) {
+		SDL_FreeSurface(UiArts[FireMapsArt].picture);
+		UiArts.erase(FireMapsArt);
+	}
+	if (!read)
+		return nullptr;
+	// The logo's letters breathe and flare up each on its own; maps of another size have them where they would be.
+	const float across = static_cast<float>(source.width) / static_cast<float>(fire::LogoGridWidth);
+	source.zones = fire::LogoZones();
+	for (fire::FireZone &zone : source.zones) {
+		zone.centre *= across;
+		zone.halfWidth *= across;
+		zone.sparkHalfWidth *= across;
+	}
+	// The approved settings (11-23): all as they are, colour half way to hell-red, the mouse's wind at a quarter.
+	MenuFire = std::make_unique<fire::FireLayer>(std::move(source), fire::FireSettings {});
+	return MenuFire.get();
+}
+
+/** @brief Lets the menu logos' fire go (its memory and threads) once none has shown for a few seconds. */
+void ReleaseIdleMenuFire()
+{
+	if (MenuFire == nullptr || SDL_GetTicks() - MenuFireTicks < 3000)
+		return;
+	ForgetMenuFire();
+	MenuFireCover.shrink_to_fit();
+}
+
+/** @brief Where a partly covered logo's fire shows: not over what covers the logo's own pixels. */
+const uint8_t *MenuFireCoverOf(const UiDraw &draw, const SDL_FRect &rect, int width, int height)
+{
+	MenuFireCover.assign(static_cast<size_t>(width) * height, 255);
+	std::vector<int> columns(width);
+	for (int x = 0; x < width; x++)
+		columns[x] = static_cast<int>(std::floor(rect.x + (static_cast<float>(x) + 0.5F) / static_cast<float>(width) * rect.w)) - draw.rect.x;
+	for (int y = 0; y < height; y++) {
+		const int uy = static_cast<int>(std::floor(rect.y + (static_cast<float>(y) + 0.5F) / static_cast<float>(height) * rect.h)) - draw.rect.y;
+		if (uy < 0 || uy >= draw.rect.h)
+			continue;
+		uint8_t *line = MenuFireCover.data() + static_cast<size_t>(y) * width;
+		for (int x = 0; x < width; x++) {
+			const int ux = columns[x];
+			if (ux < 0 || ux >= draw.rect.w)
+				continue;
+			const size_t i = static_cast<size_t>(uy) * draw.rect.w + ux;
+			if (draw.pattern->pixels[i] >= 0 && draw.shows[i] == 0)
+				line[x] = 0;
+		}
+	}
+	return MenuFireCover.data();
+}
+
+/**
+ * @brief Draws a menu logo's live fire at its place behind `dest`, then the logo's art (`texture`) over it lit by
+ * it. False when there is no fire (no maps, or the renderer can't): the caller draws the art as it is.
+ */
+bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &dest, SDL_Texture *texture)
+{
+	fire::FireLayer *layer = MenuFireLayer();
+	if (layer == nullptr)
+		return false;
+	const SDL_FRect &spot = draw.name->fire->rect;
+	const SDL_FRect rect { dest.x + spot.x * dest.w, dest.y + spot.y * dest.h, spot.w * dest.w, spot.h * dest.h };
+	// Real time, so it burns at the same pace whatever the frame rate; after a while unseen it goes on from where it was.
+	const uint64_t now = SDL_GetPerformanceCounter();
+	float seconds = 1.F / 60.F;
+	if (MenuFireCounter != 0) {
+		const float since = static_cast<float>(static_cast<double>(now - MenuFireCounter) / static_cast<double>(SDL_GetPerformanceFrequency()));
+		if (since > 0 && since < 0.25F)
+			seconds = since;
+	}
+	MenuFireCounter = now;
+	MenuFireTicks = SDL_GetTicks();
+	layer->Pointer(static_cast<float>(MousePosition.x) + 0.5F, static_cast<float>(MousePosition.y) + 0.5F, rect, seconds);
+	const uint8_t *cover = draw.whole ? nullptr : MenuFireCoverOf(draw, rect, layer->Fire().Width(), layer->Fire().Height());
+	if (!layer->Draw(renderer, rect, seconds, cover))
+		return false;
+	if (!layer->DrawLit(renderer, texture, dest, spot))
+		SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+	return true;
+}
+
 } // namespace
 
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height)
@@ -1204,9 +1355,9 @@ void RenderUiSprites(SDL_Renderer *renderer)
 			}
 			texture = it->second;
 		}
-		// A layer behind a picture over the UI (a menu logo's looping HD fire, timed by SDL_GetTicks rather than by the
-		// game's frame) would be drawn here, at `dest`, before the picture: the UI under it already shows no old fire.
-		if (texture != nullptr)
+		// A menu logo's live fire goes behind it, and lights it: the UI under it already shows no old fire.
+		const bool drawn = texture != nullptr && draw.name->fire != nullptr && DrawMenuFire(renderer, draw, dest, texture);
+		if (texture != nullptr && !drawn)
 			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
 		// Over the picture, as the world's outlines go over their sprites: it leaves out what the picture covers.
 		if (draw.outline.smooth)
@@ -1217,6 +1368,7 @@ void RenderUiSprites(SDL_Renderer *renderer)
 	UiOrder = 0;
 	PendingUiOutline = {};
 	UiOutlines.Prune(SDL_GetTicks());
+	ReleaseIdleMenuFire();
 }
 
 void DropUiDraws()
@@ -1225,6 +1377,22 @@ void DropUiDraws()
 	UiBlits.clear();
 	UiOrder = 0;
 	PendingUiOutline = {};
+	ReleaseIdleMenuFire();
+}
+
+void ForgetMenuFire()
+{
+	if (MenuFire != nullptr)
+		MenuFire->ReleaseTextures();
+	MenuFire = nullptr;
+	MenuFireTried = false;
+	MenuFireCounter = 0;
+	MenuFireCover.clear();
+	if (const auto it = UiArts.find(FireMapsArt); it != UiArts.end()) {
+		if (it->second.picture != nullptr)
+			SDL_FreeSurface(it->second.picture);
+		UiArts.erase(it);
+	}
 }
 
 bool UiPictureFrameOf(const uint8_t *pixels, std::string &name, UiPictureLayer &layer)
@@ -1247,6 +1415,7 @@ void RenderUiSprites(SDL_Renderer *) { }
 const uint8_t *UiHiddenPixels(int, int) { return nullptr; }
 void RenderUiPanels(SDL_Renderer *) { }
 void DropUiDraws() { }
+void ForgetMenuFire() { }
 bool UiPictureFrameOf(const uint8_t *, std::string &, UiPictureLayer &) { return false; }
 void BeginUiExport(const std::string &) { }
 void ExportUiSurface(std::string_view, const Surface &) { }

@@ -61,6 +61,8 @@ set(libdevilutionx_SRCS
   poe2/hd_light.cpp
   poe2/hd_outline.cpp
   poe2/hd_ui.cpp
+  poe2/live_fire.cpp
+  poe2/live_fire_sdl.cpp
   poe2/loot_filter.cpp
   poe2/rune_icons.cpp
   poe2/stash_layouts.cpp

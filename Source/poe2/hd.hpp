@@ -361,6 +361,12 @@ void RenderUiSprites(SDL_Renderer *renderer);
 /** @brief Forgets this frame's UI draws without showing them: the frame went up without its HD art (UI not scaled). */
 void DropUiDraws();
 
+/**
+ * @brief Lets the menu logos' live fire go now (its maps are looked for again the next time a logo shows). Without its
+ * maps (hd\\ui_art\\logo\\fire_maps.png) the logos show without a fire.
+ */
+void ForgetMenuFire();
+
 /** @brief A UI picture frame's HD art name (RegisterUiPicture) and where its art goes, by its pixels; false for none. */
 bool UiPictureFrameOf(const uint8_t *pixels, std::string &name, UiPictureLayer &layer);
 
