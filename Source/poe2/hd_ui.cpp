@@ -1537,6 +1537,9 @@ void PrepareUiSprites()
 	Swapped.clear();
 	SDL_Surface *ui = PalSurface;
 	UiFadeNow = UiFade();
+	// With HD art switched off nothing is drawn over the UI, not even what the last frame showed.
+	if (!Enabled())
+		ForgetShownUiDraws();
 	// Nothing drawn since the last present: the same frame is shown again.
 	if (UiDraws.empty() && UiBlits.empty()) {
 		UiDraws = std::move(ShownUiDraws);

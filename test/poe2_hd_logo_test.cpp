@@ -321,8 +321,8 @@ TEST_F(HdLogoTest, WithFireMapsTheLogoBurnsBehindItsArt)
 	// With the HD Graphics option off there is no HD logo, so no fire either.
 	gbIsPoe2 = false;
 	Draw(0);
-	gbIsPoe2 = true;
 	Present(inside, outside);
+	gbIsPoe2 = true;
 	EXPECT_EQ(inside, 0);
 	hd::ForgetMenuFire();
 	std::error_code error;
