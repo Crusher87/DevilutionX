@@ -1,8 +1,10 @@
+#include <algorithm>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <string>
 #include <system_error>
+#include <vector>
 
 #include <gtest/gtest.h>
 
@@ -45,6 +47,28 @@ void WritePng(const std::filesystem::path &path)
 	SDL_FreeSurface(surface);
 }
 
+/** @brief Writes a live fire's maps (hd\\ui_art\\logo\\fire_maps.png): heat fed along the bottom, under the letters. */
+void WriteFireMaps(const std::filesystem::path &path)
+{
+	constexpr int Width = 128;
+	constexpr int Height = 64;
+	SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, Width, Height, 32, SDL_PIXELFORMAT_RGBA32);
+	ASSERT_NE(surface, nullptr);
+	for (int row = 0; row < Height; row++) {
+		auto *line = static_cast<uint8_t *>(surface->pixels) + static_cast<ptrdiff_t>(row) * surface->pitch;
+		const int y = Height - 1 - row;
+		for (int x = 0; x < Width; x++) {
+			uint8_t *p = line + static_cast<ptrdiff_t>(x) * 4;
+			p[0] = y >= 2 && y < 14 && x >= 16 && x < 112 ? 255 : 0;
+			p[1] = static_cast<uint8_t>(std::max(0, (y - 14) * 5));
+			p[2] = 0;
+			p[3] = 255;
+		}
+	}
+	ASSERT_EQ(IMG_SavePNG(surface, path.string().c_str()), 0);
+	SDL_FreeSurface(surface);
+}
+
 class HdLogoTest : public ::testing::Test {
 public:
 	static void SetUpTestSuite()
@@ -60,10 +84,20 @@ public:
 		OverridePaths.insert(OverridePaths.begin(), (Root / "").string());
 		gbIsPoe2 = true;
 		HeadlessMode = false;
+		// One renderer for them all: the HD art's textures are kept by renderer.
+		Screen = SDL_CreateRGBSurfaceWithFormat(0, 40, 30, 32, SDL_PIXELFORMAT_RGBA32);
+		Renderer = Screen != nullptr ? SDL_CreateSoftwareRenderer(Screen) : nullptr;
 	}
 
 	static void TearDownTestSuite()
 	{
+		hd::ForgetMenuFire();
+		if (Renderer != nullptr)
+			SDL_DestroyRenderer(Renderer);
+		if (Screen != nullptr)
+			SDL_FreeSurface(Screen);
+		Renderer = nullptr;
+		Screen = nullptr;
 		HeadlessMode = true;
 		gbIsPoe2 = false;
 		std::erase(OverridePaths, (Root / "").string());
@@ -119,12 +153,39 @@ public:
 
 	static constexpr int Laid = FrameWidth * FrameHeight - 4;
 
+	/** @brief Shows the frame's HD art (and fire) as the game does, on black; how many pixels of it are lit, in and out of the logo. */
+	static void Present(int &inside, int &outside)
+	{
+		hd::PrepareUiSprites();
+		hd::RestoreUiSprites();
+		SDL_SetRenderDrawColor(Renderer, 0, 0, 0, 255);
+		SDL_RenderClear(Renderer);
+		hd::RenderUiSprites(Renderer);
+		std::vector<uint32_t> pixels(40 * 30);
+		ASSERT_EQ(SDL_RenderReadPixels(Renderer, nullptr, SDL_PIXELFORMAT_RGBA32, pixels.data(), 40 * 4), 0);
+		inside = 0;
+		outside = 0;
+		for (int y = 0; y < 30; y++) {
+			for (int x = 0; x < 40; x++) {
+				const auto *p = reinterpret_cast<const uint8_t *>(&pixels[static_cast<size_t>(y) * 40 + x]);
+				if (p[0] + p[1] + p[2] == 0)
+					continue;
+				const bool inLogo = x >= 10 && x < 10 + FrameWidth && y >= 12 && y < 12 + FrameHeight;
+				(inLogo ? inside : outside)++;
+			}
+		}
+	}
+
 	static std::filesystem::path Root;
+	static SDL_Surface *Screen;
+	static SDL_Renderer *Renderer;
 	SDLSurfaceUniquePtr ui;
 	OptionalOwnedClxSpriteList logo;
 };
 
 std::filesystem::path HdLogoTest::Root;
+SDL_Surface *HdLogoTest::Screen = nullptr;
+SDL_Renderer *HdLogoTest::Renderer = nullptr;
 
 TEST_F(HdLogoTest, NamesEachFrameAfterItsPictureAndLayer)
 {
@@ -228,6 +289,44 @@ TEST_F(HdLogoTest, DroppedDrawsAreNotShownLater)
 	hd::PrepareUiSprites();
 	EXPECT_EQ(Drawn(), Laid);
 	hd::RestoreUiSprites();
+}
+
+TEST_F(HdLogoTest, WithoutFireMapsTheHdLogoShowsAlone)
+{
+	ASSERT_NE(Renderer, nullptr);
+	hd::ForgetMenuFire();
+	hd::RegisterUiPicture("ui_art\\logo", *logo, hd::UiPictureLayer::Over);
+	Draw(0);
+	int inside = -1;
+	int outside = -1;
+	Present(inside, outside);
+	// The (see-through) HD art and nothing behind it.
+	EXPECT_EQ(inside, 0);
+	EXPECT_EQ(outside, 0);
+}
+
+TEST_F(HdLogoTest, WithFireMapsTheLogoBurnsBehindItsArt)
+{
+	ASSERT_NE(Renderer, nullptr);
+	const std::filesystem::path maps = Root / "hd" / "ui_art" / "logo" / "fire_maps.png";
+	WriteFireMaps(maps);
+	hd::ForgetMenuFire();
+	hd::RegisterUiPicture("ui_art\\logo", *logo, hd::UiPictureLayer::Over);
+	Draw(0);
+	int inside = 0;
+	int outside = 0;
+	Present(inside, outside);
+	EXPECT_GT(inside, 0);
+	EXPECT_EQ(outside, 0);
+	// With the HD Graphics option off there is no HD logo, so no fire either.
+	gbIsPoe2 = false;
+	Draw(0);
+	gbIsPoe2 = true;
+	Present(inside, outside);
+	EXPECT_EQ(inside, 0);
+	hd::ForgetMenuFire();
+	std::error_code error;
+	std::filesystem::remove(maps, error);
 }
 
 #endif

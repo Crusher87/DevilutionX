@@ -78,6 +78,7 @@ set(tests
   poe2_hd_batch_test
   poe2_hd_spell_icons_test
   poe2_hd_logo_test
+  poe2_live_fire_test
   poe2_rune_outline_test
   poe2_effect_primitives_test
   poe2_runes_test
