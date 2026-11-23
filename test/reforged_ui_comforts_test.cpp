@@ -3,7 +3,8 @@
  *
  * Sanctuary Reforged's share of POE2 Mashup's comfort features, filled with Diablo's own facts: the monster banner,
  * the newer item tooltip with Shift to compare, rarity-coloured inventory slots, right-click to put an item on,
- * held bow shots along the cursor with WASD, and camera shake on Diablo's own big moments.
+ * held bow shots along the cursor with WASD, camera shake on Diablo's own big moments,
+ * and Run in Town following the setting at once.
  */
 #include <algorithm>
 #include <cstdlib>
@@ -29,6 +30,7 @@
 #include "monster.h"
 #include "msg.h"
 #include "multi.h"
+#include "options.h"
 #include "panels/monster_banner.hpp"
 #include "player.h"
 #include "poe2/aim.hpp"
@@ -559,6 +561,50 @@ TEST_F(ReforgedHeldShotTest, WithWasdAHeldBowKeepsShootingAfterItsTargetIsGone)
 	LastPlayerAction = PlayerActionType::AttackMonsterTarget;
 	RepeatPlayerAction();
 	EXPECT_FALSE(LastRangedAttackTile().has_value());
+}
+
+
+// --- 8. Run in Town follows the setting at once in single player -----------------------------------------------
+
+TEST(ReforgedRunInTownTest, SinglePlayerFollowsTheSettingAtOnceAndMultiplayerTheGamesStart)
+{
+	OptionEntryBoolean &runInTown = GetOptions().Gameplay.runInTown;
+	const bool wasOn = *runInTown;
+	const uint8_t atStart = sgGameInitInfo.bRunInTown;
+	const bool wasReforged = gbIsReforged;
+	const bool wasMultiplayer = gbIsMultiplayer;
+
+	gbIsReforged = true;
+	gbIsMultiplayer = false;
+	// The game started with it off, and it was turned on in the menu (Curtis's first game).
+	sgGameInitInfo.bRunInTown = 0;
+	runInTown.SetValue(false);
+	EXPECT_FALSE(IsRunInTownOn());
+	runInTown.SetValue(true);
+	EXPECT_TRUE(IsRunInTownOn());
+	sgGameInitInfo.bRunInTown = 1;
+	runInTown.SetValue(false);
+	EXPECT_FALSE(IsRunInTownOn());
+
+	// Multiplayer keeps the game's start value, so every player has the same.
+	gbIsMultiplayer = true;
+	EXPECT_TRUE(IsRunInTownOn());
+	sgGameInitInfo.bRunInTown = 0;
+	runInTown.SetValue(true);
+	EXPECT_FALSE(IsRunInTownOn());
+
+	// Plain Diablo and Hellfire are unchanged: the game's start value.
+	gbIsReforged = false;
+	gbIsMultiplayer = false;
+	EXPECT_FALSE(IsRunInTownOn());
+	sgGameInitInfo.bRunInTown = 1;
+	runInTown.SetValue(false);
+	EXPECT_TRUE(IsRunInTownOn());
+
+	runInTown.SetValue(wasOn);
+	sgGameInitInfo.bRunInTown = atStart;
+	gbIsReforged = wasReforged;
+	gbIsMultiplayer = wasMultiplayer;
 }
 
 } // namespace

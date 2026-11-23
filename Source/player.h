@@ -976,6 +976,11 @@ void InitPlayerGFX(Player &player);
 void ResetPlayerGFX(Player &player);
 
 /**
+ * @brief Whether heroes jog in town: the game's start value, except in Sanctuary Reforged single player where the
+ * Run in Town setting counts as soon as it is changed in the menu.
+ */
+bool IsRunInTownOn();
+/**
  * @brief Sets the new Player Animation with all relevant information for rendering
  * @param player The player to set the animation for
  * @param graphic What player animation should be displayed
