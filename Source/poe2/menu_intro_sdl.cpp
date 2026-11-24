@@ -1077,6 +1077,11 @@ bool MenuIntroPlaying()
 	return Playing();
 }
 
+bool MenuSubtitleShown()
+{
+	return Current != nullptr && !Current->Running() && Enabled();
+}
+
 bool MenuIntroTakesInput()
 {
 	return Playing() && Current->Time() < intro::MenuAt;
@@ -1247,6 +1252,7 @@ void SkipMenuIntro() { }
 void FinishMenuIntro() { }
 bool BeginMenuIntroFrame(SDL_Renderer *) { return false; }
 void EndMenuIntroFrame(SDL_Renderer *) { }
+bool MenuSubtitleShown() { return false; }
 } // namespace hd
 } // namespace devilution
 

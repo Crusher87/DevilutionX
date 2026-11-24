@@ -145,6 +145,9 @@ void MainmenuLoad(const char *name)
 	const SDL_Rect rect2 = { 17, (Sint16)(gnScreenHeight - 36), 605, 21 };
 	vecMainMenuDialog.push_back(std::make_unique<UiArtText>(name, rect2, UiFlags::FontSize12 | UiFlags::ColorUiSilverDark));
 
+	// POE2 Mashup: the intro's subtitle was made to fit the main menu as it is.
+	UiKeepPlaces(vecMainMenuDialog);
+
 #ifndef NOEXIT
 	UiInitList(nullptr, UiMainMenuSelect, MainmenuEsc, vecMainMenuDialog, true);
 #else

@@ -119,6 +119,8 @@ bool Init(std::string_view caption, std::string_view text, bool error, bool rend
 		const SDL_Rect rect4 = MakeSdlRect(uiPosition.x + 264, uiPosition.y + 335, DialogButtonWidth, DialogButtonHeight);
 		vecOkDialog.push_back(std::make_unique<UiButton>(_("OK"), &DialogActionOK, rect4));
 	}
+	// POE2 Mashup: a popup over the screen stays where it is (UiSubtitleDrop).
+	UiKeepPlaces(vecOkDialog);
 	return true;
 }
 

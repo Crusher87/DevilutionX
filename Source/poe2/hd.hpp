@@ -420,6 +420,11 @@ void FinishMenuIntro();
  */
 bool BeginMenuIntroFrame(SDL_Renderer *renderer);
 void EndMenuIntroFrame(SDL_Renderer *renderer);
+/**
+ * @brief Whether the menu logos show the intro's subtitle and fire lines under them now (once it has played): the menu
+ * screens then make room for them (UiSubtitleDrop).
+ */
+bool MenuSubtitleShown();
 
 /** @brief A UI picture frame's HD art name (RegisterUiPicture) and where its art goes, by its pixels; false for none. */
 bool UiPictureFrameOf(const uint8_t *pixels, std::string &name, UiPictureLayer &layer);

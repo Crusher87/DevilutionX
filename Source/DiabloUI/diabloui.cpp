@@ -800,10 +800,74 @@ void UiAddBackground(std::vector<std::unique_ptr<UiItemBase>> *vecDialog)
 	}
 }
 
+namespace {
+
+/** @brief POE2 Mashup: how many menu logos are on screens (UiAddLogo) now. */
+int LogosShown = 0;
+
+/** @brief POE2 Mashup: the menu logo (UiAddLogo), counted while it is there. */
+class UiLogo : public UiImageAnimatedClx {
+public:
+	UiLogo(ClxSpriteList list, SDL_Rect rect)
+	    : UiImageAnimatedClx(list, rect, UiFlags::AlignCenter)
+	{
+		KeepPlace();
+		LogosShown++;
+	}
+	~UiLogo() override
+	{
+		LogosShown--;
+	}
+};
+
+/**
+ * @brief POE2 Mashup: the room the subtitle and its fire lines take under the logo, past the 161 rows the screens' titles
+ * are under the logo's top: the main menu's first item, at 192, is just clear of them.
+ */
+constexpr int SubtitleDrop = 32;
+
+void MoveUnderSubtitle(UiItemBase &item, int drop)
+{
+	if (!item.Placed())
+		item.MoveDown(drop);
+}
+
+} // namespace
+
 void UiAddLogo(std::vector<std::unique_ptr<UiItemBase>> *vecDialog, int y)
 {
-	vecDialog->push_back(std::make_unique<UiImageAnimatedClx>(
-	    *ArtLogo, MakeSdlRect(0, y, 0, 0), UiFlags::AlignCenter));
+	vecDialog->push_back(std::make_unique<UiLogo>(*ArtLogo, MakeSdlRect(0, y, 0, 0)));
+}
+
+int UiSubtitleDrop()
+{
+	if (LogosShown <= 0 || !hd::MenuSubtitleShown())
+		return 0;
+	return std::clamp(GetUIRectangle().position.y, 0, SubtitleDrop);
+}
+
+void UiMoveUnderSubtitle(const std::vector<UiItemBase *> &items)
+{
+	const int drop = UiSubtitleDrop();
+	if (drop == 0)
+		return;
+	for (UiItemBase *item : items)
+		MoveUnderSubtitle(*item, drop);
+}
+
+void UiMoveUnderSubtitle(const std::vector<std::unique_ptr<UiItemBase>> &items)
+{
+	const int drop = UiSubtitleDrop();
+	if (drop == 0)
+		return;
+	for (const std::unique_ptr<UiItemBase> &item : items)
+		MoveUnderSubtitle(*item, drop);
+}
+
+void UiKeepPlaces(const std::vector<std::unique_ptr<UiItemBase>> &items)
+{
+	for (const std::unique_ptr<UiItemBase> &item : items)
+		item->KeepPlace();
 }
 
 void UiFadeIn()
@@ -1158,12 +1222,14 @@ void UiRenderItem(const UiItemBase &item)
 
 void UiRenderItems(const std::vector<UiItemBase *> &items)
 {
+	UiMoveUnderSubtitle(items);
 	for (const UiItemBase *item : items)
 		UiRenderItem(*item);
 }
 
 void UiRenderItems(const std::vector<std::unique_ptr<UiItemBase>> &items)
 {
+	UiMoveUnderSubtitle(items);
 	for (const std::unique_ptr<UiItemBase> &item : items)
 		UiRenderItem(*item);
 }
@@ -1173,6 +1239,7 @@ bool UiItemMouseEvents(SDL_Event *event, const std::vector<UiItemBase *> &items)
 	if (items.empty()) {
 		return false;
 	}
+	UiMoveUnderSubtitle(items);
 
 	bool handled = false;
 	for (const auto &item : items) {
@@ -1201,6 +1268,7 @@ bool UiItemMouseEvents(SDL_Event *event, const std::vector<std::unique_ptr<UiIte
 	if (items.empty()) {
 		return false;
 	}
+	UiMoveUnderSubtitle(items);
 
 	bool handled = false;
 	for (const auto &item : items) {

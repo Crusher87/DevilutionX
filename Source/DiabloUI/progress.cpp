@@ -55,6 +55,8 @@ void ProgressLoadForeground()
 	const Point uiPosition = GetUIRectangle().position;
 	const SDL_Rect rect3 = { (Sint16)(uiPosition.x + 265), (Sint16)(uiPosition.y + 267), DialogButtonWidth, DialogButtonHeight };
 	vecProgress.push_back(std::make_unique<UiButton>(_("Cancel"), &DialogActionCancel, rect3));
+	// POE2 Mashup: it goes with the popup, which stays where it is.
+	UiKeepPlaces(vecProgress);
 }
 
 void ProgressFreeBackground()
