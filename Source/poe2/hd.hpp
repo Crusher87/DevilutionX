@@ -13,6 +13,7 @@
 #include "utils/sdl2_to_1_2_backports.h"
 #else
 struct SDL_Renderer;
+struct SDL_Texture;
 #endif
 
 namespace devilution {
@@ -425,6 +426,21 @@ void EndMenuIntroFrame(SDL_Renderer *renderer);
  * screens then make room for them (UiSubtitleDrop).
  */
 bool MenuSubtitleShown();
+
+/**
+ * @brief Whether the HD pack has the main menu's own background (hd\ui_art\mainmenu_wide.png, 21:9): the screens
+ * that show ui_art\mainmenu (the main menu, its ok screen, Hellfire's start) then show it in its place.
+ */
+bool HasMenuBackground();
+/** @brief The screen shown uses the main menu's background (false: any other, or none). */
+void ShowMenuBackground(bool shown);
+bool MenuBackgroundIsShown();
+/**
+ * @brief When the screen shown has it: draws the main menu's background over all of the renderer's viewport (as tall
+ * as it, centred and cut at the sides) and sets `ui`, the frame of the menus, to go over it with its black left out.
+ * False otherwise: nothing changes.
+ */
+bool DrawMenuBackground(SDL_Renderer *renderer, SDL_Texture *ui);
 
 /** @brief A UI picture frame's HD art name (RegisterUiPicture) and where its art goes, by its pixels; false for none. */
 bool UiPictureFrameOf(const uint8_t *pixels, std::string &name, UiPictureLayer &layer);

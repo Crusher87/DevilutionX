@@ -831,7 +831,13 @@ void RenderPresent()
 			if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
 			if (SDL_RenderClear(renderer) <= -1) ErrSdl();
 			if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
+			// POE2 Mashup: the main menu's HD background goes under the menu, whose black leaves it showing.
+			SDL_BlendMode blend = SDL_BLENDMODE_NONE;
+			SDL_GetTextureBlendMode(texture.get(), &blend);
+			const bool background = hd::DrawMenuBackground(renderer, texture.get());
 			if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+			if (background)
+				SDL_SetTextureBlendMode(texture.get(), blend);
 			// POE2 Mashup: the HD art of what was left out of the frame (BltFast) goes over it.
 			if (UiSpritesLeftOut)
 				hd::RenderUiSprites(renderer);

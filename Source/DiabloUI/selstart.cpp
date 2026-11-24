@@ -11,6 +11,7 @@
 #include "engine/load_clx.hpp"
 #include "engine/point.hpp"
 #include "options.h"
+#include "poe2/hd.hpp"
 #include "utils/language.h"
 #include "utils/ui_fwd.h"
 
@@ -40,8 +41,7 @@ void EscPressed()
 
 void UiSelStartUpGameOption()
 {
-	ArtBackgroundWidescreen = LoadOptionalClx("ui_art\\mainmenuw.clx");
-	LoadBackgroundArt("ui_art\\mainmenu");
+	LoadMainMenuBackground();
 	UiAddBackground(&vecDialog);
 	UiAddLogo(&vecDialog);
 
@@ -61,6 +61,7 @@ void UiSelStartUpGameOption()
 
 	ArtBackground = std::nullopt;
 	ArtBackgroundWidescreen = std::nullopt;
+	hd::ShowMenuBackground(false);
 	vecDialogItems.clear();
 	vecDialog.clear();
 }

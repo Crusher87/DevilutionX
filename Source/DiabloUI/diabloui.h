@@ -111,6 +111,11 @@ void DrawMouse();
 void UiLoadDefaultPalette();
 bool UiLoadBlackBackground();
 void LoadBackgroundArt(const char *pszFile, int frames = 1);
+/**
+ * @brief The main menu's background (ui_art\mainmenu and its wide sides; ui_art\swmmenu for `spawn`), or the HD
+ * pack's own in its place when it has it (hd::HasMenuBackground).
+ */
+void LoadMainMenuBackground(bool spawn = false);
 void UiAddBackground(std::vector<std::unique_ptr<UiItemBase>> *vecDialog);
 void UiAddLogo(std::vector<std::unique_ptr<UiItemBase>> *vecDialog, int y = GetUIRectangle().position.y);
 /**

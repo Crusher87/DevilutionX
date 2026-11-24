@@ -1585,6 +1585,65 @@ SDL_Texture *MenuLogoArt(SDL_Renderer *renderer)
 	return texture;
 }
 
+namespace {
+
+/** @brief The main menu's background art (hd\\ui_art\\mainmenu_wide.png), and whether the screen shown uses it. */
+constexpr const char *MenuBackgroundArt = "ui_art/mainmenu_wide";
+bool MenuBackgroundShown = false;
+
+/** @brief What is under it, less it: black takes none of what is under it, bright colours most of it. */
+SDL_BlendMode OverBackgroundBlend()
+{
+	return SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_COLOR, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
+}
+
+} // namespace
+
+bool HasMenuBackground()
+{
+	return Enabled() && HasArt(MenuBackgroundArt);
+}
+
+void ShowMenuBackground(bool shown)
+{
+	MenuBackgroundShown = shown && HasMenuBackground();
+}
+
+bool MenuBackgroundIsShown()
+{
+	return MenuBackgroundShown;
+}
+
+bool DrawMenuBackground(SDL_Renderer *renderer, SDL_Texture *ui)
+{
+	if (!MenuBackgroundShown || renderer == nullptr || ui == nullptr)
+		return false;
+	UseRenderer(renderer);
+	UiArt *art = ArtFor(MenuBackgroundArt);
+	if (art == nullptr)
+		return false;
+	SDL_Texture *texture = TextureOf(renderer, *art);
+	if (texture == nullptr || SDL_SetTextureBlendMode(ui, OverBackgroundBlend()) != 0)
+		return false;
+	// The whole of the part of the window the game draws to, whatever the UI's scale: as tall as it (as wide, on a
+	// screen wider than the art) and cut at the sides (top and bottom), centred.
+	SDL_Rect view { 0, 0, 0, 0 };
+	SDL_RenderGetViewport(renderer, &view);
+	const float w = static_cast<float>(view.w);
+	const float h = static_cast<float>(view.h);
+	const float scale = std::max(w / static_cast<float>(art->picture->w), h / static_cast<float>(art->picture->h));
+	const float aw = static_cast<float>(art->picture->w) * scale;
+	const float ah = static_cast<float>(art->picture->h) * scale;
+	const SDL_FRect dest { (w - aw) / 2, (h - ah) / 2, aw, ah };
+	SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
+	SDL_SetTextureColorMod(texture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(texture, 255);
+	SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+	SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+	return true;
+}
+
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height)
 {
 	ForgetShownUiDraws();
@@ -1936,6 +1995,10 @@ void RenderUiPanels(SDL_Renderer *) { }
 void DropUiDraws() { }
 void ForgetMenuFire() { }
 bool UiPictureFrameOf(const uint8_t *, std::string &, UiPictureLayer &) { return false; }
+bool HasMenuBackground() { return false; }
+void ShowMenuBackground(bool) { }
+bool MenuBackgroundIsShown() { return false; }
+bool DrawMenuBackground(SDL_Renderer *, SDL_Texture *) { return false; }
 void BeginUiExport(const std::string &) { }
 void ExportUiSurface(std::string_view, const Surface &) { }
 void EndUiExport() { }

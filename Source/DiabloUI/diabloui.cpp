@@ -38,6 +38,7 @@
 #include "effects.h"
 #include "engine/clx_sprite.hpp"
 #include "engine/dx.h"
+#include "engine/load_clx.hpp"
 #include "engine/load_pcx.hpp"
 #include "engine/palette.h"
 #include "engine/render/clx_render.hpp"
@@ -772,6 +773,7 @@ void UiLoadDefaultPalette()
 
 bool UiLoadBlackBackground()
 {
+	hd::ShowMenuBackground(false);
 	ArtBackground = std::nullopt;
 	UiLoadDefaultPalette();
 	UiOnBackgroundChange();
@@ -780,6 +782,7 @@ bool UiLoadBlackBackground()
 
 void LoadBackgroundArt(const char *pszFile, int frames)
 {
+	hd::ShowMenuBackground(false);
 	ArtBackground = std::nullopt;
 	ArtBackground = LoadPcxSpriteList(pszFile, static_cast<uint16_t>(frames), /*transparentColor=*/std::nullopt, logical_palette.data());
 	if (!ArtBackground)
@@ -787,6 +790,20 @@ void LoadBackgroundArt(const char *pszFile, int frames)
 
 	UpdateSystemPalette(logical_palette);
 	UiOnBackgroundChange();
+}
+
+void LoadMainMenuBackground(bool spawn)
+{
+	if (!spawn)
+		ArtBackgroundWidescreen = LoadOptionalClx("ui_art\\mainmenuw.clx");
+	LoadBackgroundArt(spawn ? "ui_art\\swmmenu" : "ui_art\\mainmenu");
+	// POE2 Mashup: the HD pack's own background (its palette still the old one's), drawn under the menu as the frame
+	// goes up (hd::DrawMenuBackground).
+	if (hd::HasMenuBackground()) {
+		ArtBackground = std::nullopt;
+		ArtBackgroundWidescreen = std::nullopt;
+		hd::ShowMenuBackground(true);
+	}
 }
 
 void UiAddBackground(std::vector<std::unique_ptr<UiItemBase>> *vecDialog)
