@@ -120,7 +120,8 @@ void MainmenuLoad(const char *name)
 		vecMenuItems.push_back(std::make_unique<UiListItem>(_("Support"), MAINMENU_SHOW_SUPPORT));
 	vecMenuItems.push_back(std::make_unique<UiListItem>(_("Show Credits"), MAINMENU_SHOW_CREDITS));
 #ifndef NOEXIT
-	vecMenuItems.push_back(std::make_unique<UiListItem>(gbIsHellfire ? _("Exit Hellfire") : _("Exit Diablo"), MAINMENU_EXIT_DIABLO));
+	// POE2 Mashup: "Exit Diablo" as in Diablo, Hellfire's data loaded or not.
+	vecMenuItems.push_back(std::make_unique<UiListItem>(_("Exit Diablo"), MAINMENU_EXIT_DIABLO));
 #endif
 
 	LoadMainMenuBackground(gbIsSpawn && !gbIsHellfire);

@@ -2,6 +2,8 @@
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 
+#include <algorithm>
+#include <cstring>
 #include <initializer_list>
 #include <utility>
 
@@ -28,13 +30,157 @@ FireLayer::FireLayer(FireSource source, FireSettings settings, uint32_t seed, in
 	// It opens already burning.
 	if (warm)
 		fire_->WarmUp();
+	gridWidth_ = fire_->Width();
+	gridHeight_ = fire_->Height();
 }
 
 // Its textures go with their renderer: at the game's end that may already be gone (ReleaseTextures lets them go before).
-FireLayer::~FireLayer() = default;
+FireLayer::~FireLayer()
+{
+#ifdef POE2_FIRE_LAYER_THREAD
+	if (thread_.joinable()) {
+		{
+			const std::lock_guard<std::mutex> guard(lock_);
+			quit_ = true;
+		}
+		wake_.notify_all();
+		thread_.join();
+	}
+#endif
+}
+
+void FireLayer::WaitForFrame()
+{
+#ifdef POE2_FIRE_LAYER_THREAD
+	std::unique_lock<std::mutex> guard(lock_);
+	done_.wait(guard, [this] { return !working_; });
+#endif
+}
+
+void FireLayer::Loop()
+{
+#ifdef POE2_FIRE_LAYER_THREAD
+	for (;;) {
+		{
+			std::unique_lock<std::mutex> guard(lock_);
+			wake_.wait(guard, [this] { return quit_ || working_; });
+			if (quit_)
+				return;
+		}
+		// The fire is this thread's alone while it works (the game's waits in Fire()).
+		const int pitch = gridWidth_ * 4;
+		fire_->Advance(frameSeconds_);
+		fire_->Paint(frameColour_.data(), pitch, frameHasCover_ ? frameCover_.data() : nullptr);
+		if (afterPaint_)
+			afterPaint_(frameColour_.data(), pitch);
+		if (!frameMultiply_.empty())
+			fire_->PaintLight(frameMultiply_.data(), fire_->LightWidth() * 4, frameAdd_.data(), fire_->LightWidth() * 4, doubled_);
+		{
+			const std::lock_guard<std::mutex> guard(lock_);
+			working_ = false;
+			frameReady_ = true;
+		}
+		done_.notify_all();
+	}
+#endif
+}
+
+namespace {
+
+void Upload(SDL_Texture *texture, const std::vector<uint8_t> &picture, int width, int height)
+{
+	if (texture == nullptr || picture.empty())
+		return;
+	void *pixels = nullptr;
+	int pitch = 0;
+	if (SDL_LockTexture(texture, nullptr, &pixels, &pitch) != 0)
+		return;
+	const size_t row = static_cast<size_t>(width) * 4;
+	for (int y = 0; y < height; y++)
+		std::memcpy(static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(y) * pitch, picture.data() + y * row, row);
+	SDL_UnlockTexture(texture);
+}
+
+} // namespace
+
+void FireLayer::UploadFrame()
+{
+	Upload(colour_, frameColour_, gridWidth_, gridHeight_);
+	if (multiply_ != nullptr && add_ != nullptr && !frameMultiply_.empty()) {
+		Upload(multiply_, frameMultiply_, fire_->LightWidth(), fire_->LightHeight());
+		Upload(add_, frameAdd_, fire_->LightWidth(), fire_->LightHeight());
+	}
+	frameReady_ = false;
+	frameShown_ = true;
+}
+
+bool FireLayer::DrawAsync(SDL_Renderer *renderer, const SDL_FRect &rect, float seconds, const uint8_t *cover)
+{
+#ifndef POE2_FIRE_LAYER_THREAD
+	return Draw(renderer, rect, seconds, cover);
+#else
+	if (renderer == nullptr || !MakeTextures(renderer))
+		return false;
+	owedSeconds_ += seconds;
+	bool start = false;
+	{
+		std::unique_lock<std::mutex> guard(lock_);
+		// The first frame (or the first after its textures went): waited for, so it never shows empty.
+		if (working_ && !frameShown_)
+			done_.wait(guard, [this] { return !working_; });
+		if (!working_) {
+			if (frameReady_)
+				UploadFrame();
+			// Up to 40 frames a second: the fire's slow movement needs no more, and it leaves the computer's cores
+			// to the game.
+			start = !frameShown_ || owedSeconds_ >= 1.F / 40.F;
+		}
+	}
+	if (start) {
+		const size_t grid = static_cast<size_t>(gridWidth_) * gridHeight_;
+		frameColour_.resize(grid * 4);
+		const bool light = multiply_ != nullptr && add_ != nullptr;
+		const size_t lightSize = light ? static_cast<size_t>(fire_->LightWidth()) * fire_->LightHeight() * 4 : 0;
+		frameMultiply_.resize(lightSize);
+		frameAdd_.resize(lightSize);
+		frameHasCover_ = cover != nullptr;
+		if (frameHasCover_)
+			frameCover_.assign(cover, cover + grid);
+		for (const PendingPush &push : pushes_)
+			fire_->Push(push.x0, push.y0, push.x1, push.y1, push.seconds);
+		pushes_.clear();
+		frameSeconds_ = std::min(owedSeconds_, 0.25F);
+		owedSeconds_ = 0;
+		const bool first = !frameShown_;
+		{
+			const std::lock_guard<std::mutex> guard(lock_);
+			working_ = true;
+		}
+		if (!thread_.joinable())
+			thread_ = std::thread([this] { Loop(); });
+		wake_.notify_all();
+		if (first) {
+			std::unique_lock<std::mutex> guard(lock_);
+			done_.wait(guard, [this] { return !working_; });
+			UploadFrame();
+		}
+	}
+	if (!frameShown_)
+		return false;
+	SDL_RenderCopyF(renderer, colour_, nullptr, &rect);
+	lightPainted_ = multiply_ != nullptr && add_ != nullptr && !frameMultiply_.empty();
+	return true;
+#endif
+}
 
 void FireLayer::ReleaseTextures()
 {
+	WaitForFrame();
+	if (frameShown_) {
+		// Its last frame goes up again to the next textures.
+		frameShown_ = false;
+		frameReady_ = true;
+	}
 	for (SDL_Texture *texture : { colour_, multiply_, add_, lit_ }) {
 		if (texture != nullptr)
 			SDL_DestroyTexture(texture);
@@ -44,6 +190,11 @@ void FireLayer::ReleaseTextures()
 
 void FireLayer::ForgetTextures()
 {
+	WaitForFrame();
+	if (frameShown_) {
+		frameShown_ = false;
+		frameReady_ = true;
+	}
 	colour_ = nullptr;
 	multiply_ = nullptr;
 	add_ = nullptr;
@@ -69,13 +220,13 @@ void FireLayer::Pointer(float x, float y, const SDL_FRect &rect, float seconds)
 		pointerKnown_ = false;
 		return;
 	}
-	const float w = static_cast<float>(fire_->Width());
-	const float h = static_cast<float>(fire_->Height());
+	const float w = static_cast<float>(gridWidth_);
+	const float h = static_cast<float>(gridHeight_);
 	const float gx = (x - rect.x) / rect.w * w;
 	const float gy = (1.F - (y - rect.y) / rect.h) * h;
 	const bool inside = gx >= 0 && gy >= 0 && gx <= w && gy <= h;
 	if (inside && pointerKnown_)
-		fire_->Push(pointerX_, pointerY_, gx, gy, seconds);
+		pushes_.push_back({ pointerX_, pointerY_, gx, gy, seconds });
 	pointerKnown_ = inside;
 	pointerX_ = gx;
 	pointerY_ = gy;
@@ -133,6 +284,13 @@ bool FireLayer::Draw(SDL_Renderer *renderer, const SDL_FRect &rect, float second
 	lightPainted_ = false;
 	if (renderer == nullptr || !MakeTextures(renderer))
 		return false;
+	WaitForFrame();
+	for (const PendingPush &push : pushes_)
+		fire_->Push(push.x0, push.y0, push.x1, push.y1, push.seconds);
+	pushes_.clear();
+	frameReady_ = false;
+	frameShown_ = false;
+	owedSeconds_ = 0;
 	fire_->Advance(seconds);
 	void *pixels = nullptr;
 	int pitch = 0;

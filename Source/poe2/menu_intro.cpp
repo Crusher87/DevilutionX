@@ -253,9 +253,9 @@ Lens LensAt(float t, float jitterX, float jitterY)
 
 const std::array<SoundCue, 4> &SoundCues()
 {
-	// Each through the reference's master gain of 0.9. The D2R swell is the file from its 3.0 s on (intro_sfx.wav).
+	// Each through the reference's master gain of 0.9. The first (apoc) fades in over 0.8 s, not starting all at once. The D2R swell is the file from its 3.0 s on (intro_sfx.wav).
 	static const std::array<SoundCue, 4> Cues { {
-		{ "apoc.wav", nullptr, FlightStart - 0.10F, 1.0F * 0.9F, 0.F },
+		{ "apoc.wav", nullptr, FlightStart - 0.10F, 1.0F * 0.9F, 0.8F },
 		{ "intro_sfx.wav", nullptr, Landing, 0.9F, 0.35F },
 		{ "diabloa1.wav", "diabloa2.wav", Slash - 0.06F, 1.0F * 0.9F, 0.F },
 		{ "flamwave.wav", nullptr, Slash + 0.15F, 0.9F * 0.9F, 0.F },

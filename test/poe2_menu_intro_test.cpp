@@ -112,6 +112,8 @@ TEST(MenuIntroTimelineTest, SoundsStartAsTheReferenceHasThem)
 {
 	const auto &cues = SoundCues();
 	EXPECT_STREQ(cues[0].file, "apoc.wav");
+	// It fades in, not starting all at once (11-24).
+	EXPECT_FLOAT_EQ(cues[0].fadeIn, 0.8F);
 	EXPECT_FLOAT_EQ(cues[0].at, 0.90F);
 	EXPECT_STREQ(cues[1].file, "intro_sfx.wav");
 	EXPECT_FLOAT_EQ(cues[1].at, 3.60F);

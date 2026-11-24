@@ -1551,8 +1551,9 @@ bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &d
 	SDL_Rect screen {};
 	SDL_RenderGetViewport(renderer, &screen);
 	const float screenRight = screen.w > 0 ? static_cast<float>(screen.w) : rect.x + rect.w;
-	const uint8_t *cover = MenuFireCoverOf(draw, rect, layer->Fire().Width(), layer->Fire().Height(), 0.F, screenRight);
-	if (!layer->Draw(renderer, rect, seconds, cover))
+	const uint8_t *cover = MenuFireCoverOf(draw, rect, layer->GridWidth(), layer->GridHeight(), 0.F, screenRight);
+	// Worked out off the game's thread: it costs the menus (the Esc menu over the game most) only sending it up.
+	if (!layer->DrawAsync(renderer, rect, seconds, cover))
 		return false;
 	// After the intro: its burning lines round the subtitle, behind the letters, and the subtitle over them.
 	if (subtitled)

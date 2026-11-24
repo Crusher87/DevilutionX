@@ -391,7 +391,7 @@ public:
 			lines_ = MakeLines(true);
 			reach_ = 1.F;
 		}
-		lines_->Draw(renderer, LineRect(picture), seconds);
+		lines_->DrawAsync(renderer, LineRect(picture), seconds);
 	}
 
 	/** @brief After the intro: the subtitle, cooled. */

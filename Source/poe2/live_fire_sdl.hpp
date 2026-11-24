@@ -15,6 +15,14 @@
 #include <memory>
 #include <vector>
 
+// Worked out off the game's thread where it has threads for sure (as live_fire.cpp's workers).
+#if defined(_WIN32) || defined(__APPLE__) || (defined(__linux__) && !defined(__ANDROID__))
+#define POE2_FIRE_LAYER_THREAD 1
+#include <condition_variable>
+#include <mutex>
+#include <thread>
+#endif
+
 #include <SDL.h>
 
 #include "poe2/live_fire.hpp"
@@ -34,7 +42,16 @@ public:
 	FireLayer(const FireLayer &) = delete;
 	FireLayer &operator=(const FireLayer &) = delete;
 
-	LiveFire &Fire() { return *fire_; }
+	/** @brief The fire itself, once any frame being worked out off the game's thread (DrawAsync) is done. */
+	LiveFire &Fire()
+	{
+		WaitForFrame();
+		return *fire_;
+	}
+
+	/** @brief The fire's grid size (fixed: safe while a frame is worked out). */
+	int GridWidth() const { return gridWidth_; }
+	int GridHeight() const { return gridHeight_; }
 
 	/** @brief Something painted over the fire's picture (LiveFire::Paint's, top row first) before it is sent up. */
 	void SetAfterPaint(std::function<void(uint8_t *, int)> afterPaint) { afterPaint_ = std::move(afterPaint); }
@@ -58,6 +75,13 @@ public:
 	bool Draw(SDL_Renderer *renderer, const SDL_FRect &rect, float seconds, const uint8_t *cover = nullptr);
 
 	/**
+	 * @brief As Draw, but the fire is worked out off the game's thread, up to 40 times a second: each call sends up
+	 * the last frame finished (if a new one is) and starts the next, then draws what it has. The game's frame only
+	 * pays for sending it up. (Without threads: Draw.)
+	 */
+	bool DrawAsync(SDL_Renderer *renderer, const SDL_FRect &rect, float seconds, const uint8_t *cover = nullptr);
+
+	/**
 	 * @brief Draws `picture` at `dest`, lit by the fire as it was last drawn, the fire's maps' picture (the grid without
 	 * its padding) being at `fire` (fractions of the picture: x, y, w, h). False when the renderer can't (no render
 	 * targets): the caller draws it unlit.
@@ -71,8 +95,16 @@ public:
 
 private:
 	bool MakeTextures(SDL_Renderer *renderer);
+	/** @brief Waits for the frame being worked out off the game's thread, if one is. */
+	void WaitForFrame();
+	/** @brief Sends the finished frame's pictures up to the textures. */
+	void UploadFrame();
+	/** @brief The thread's loop: works out each frame it is given. */
+	void Loop();
 
 	std::unique_ptr<LiveFire> fire_;
+	int gridWidth_ = 0;
+	int gridHeight_ = 0;
 	std::function<void(uint8_t *, int)> afterPaint_;
 	SDL_Renderer *renderer_ = nullptr;
 	SDL_Texture *colour_ = nullptr;
@@ -89,6 +121,30 @@ private:
 	bool pointerKnown_ = false;
 	float pointerX_ = 0;
 	float pointerY_ = 0;
+
+	// ---- DrawAsync's: what the thread works out, and into what ----
+	struct PendingPush {
+		float x0, y0, x1, y1, seconds;
+	};
+	std::vector<PendingPush> pushes_;
+	std::vector<uint8_t> frameColour_;
+	std::vector<uint8_t> frameMultiply_;
+	std::vector<uint8_t> frameAdd_;
+	std::vector<uint8_t> frameCover_;
+	bool frameHasCover_ = false;
+	float frameSeconds_ = 0;
+	/** @brief Seconds gone by since the last frame was started. */
+	float owedSeconds_ = 0;
+	bool frameReady_ = false;
+	bool frameShown_ = false;
+#ifdef POE2_FIRE_LAYER_THREAD
+	std::thread thread_;
+	std::mutex lock_;
+	std::condition_variable wake_;
+	std::condition_variable done_;
+	bool working_ = false;
+	bool quit_ = false;
+#endif
 };
 
 } // namespace fire

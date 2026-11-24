@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 
 #include "poe2/live_fire.hpp"
+#include "poe2/live_fire_sdl.hpp"
 
 // POE2 Mashup: the live fire behind the menus' logo (and, later, torches and braziers), worked out on the CPU.
 
@@ -433,6 +434,56 @@ TEST(LiveFireTest, PaddedLogoGridFrameTime)
 	// As the menus burn it: padded so flames lean out past the D and the O.
 	LogoGridFrameTime(LogoGridPad);
 }
+
+
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+TEST(FireLayerTest, DrawnOffTheGamesThreadItBurnsAndCostsTheFrameLittle)
+{
+	// A software renderer of its own (no window shown): the menus' fire, worked out on its thread.
+	SDL_Surface *target = SDL_CreateRGBSurfaceWithFormat(0, 1420, 432, 32, SDL_PIXELFORMAT_RGBA32);
+	ASSERT_NE(target, nullptr) << SDL_GetError();
+	SDL_Renderer *renderer = SDL_CreateSoftwareRenderer(target);
+	ASSERT_NE(renderer, nullptr) << SDL_GetError();
+	const int w = LogoGridWidth;
+	const int h = LogoGridHeight;
+	std::vector<uint8_t> rgba(static_cast<size_t>(w) * h * 4, 0);
+	for (int row = h / 2; row < h - 60; row++)
+		for (int x = 300; x < 800; x++)
+			rgba[(static_cast<size_t>(row) * w + x) * 4] = 200;
+	FireSource source;
+	ASSERT_TRUE(SourceFromMaps(rgba.data(), w, h, w * 4, source, LogoGridPad));
+	FireLayer layer(std::move(source), FireSettings {});
+	const SDL_FRect rect { 0, 0, 1420, 432 };
+	double worst = 0;
+	double total = 0;
+	for (int i = 0; i < 40; i++) {
+		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+		SDL_RenderClear(renderer);
+		const auto start = std::chrono::steady_clock::now();
+		ASSERT_TRUE(layer.DrawAsync(renderer, rect, 1.F / 70.F));
+		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+		// (The first waits for its first frame.)
+		if (i > 0) {
+			worst = std::max(worst, ms);
+			total += ms;
+		}
+		SDL_Delay(14);
+	}
+	std::printf("Fire drawn off the game's thread: %.2f ms a frame on average, %.2f at worst, on the game's (software renderer)\n", total / 39, worst);
+	// The fire as it was drawn: it burns.
+	uint64_t sum = 0;
+	for (int y = 0; y < target->h; y++) {
+		const auto *row = static_cast<const uint8_t *>(target->pixels) + static_cast<ptrdiff_t>(y) * target->pitch;
+		for (int x = 0; x < target->w; x++)
+			sum += row[x * 4];
+	}
+	EXPECT_GT(sum, 0U);
+	// The fire itself is the caller's again once asked for (its frame finished).
+	EXPECT_GT(Sum(layer.Fire().Heat()), 0.F);
+	SDL_DestroyRenderer(renderer);
+	SDL_FreeSurface(target);
+}
+#endif
 
 } // namespace
 } // namespace fire
