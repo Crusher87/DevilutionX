@@ -56,12 +56,16 @@ namespace {
 struct FireSpot {
 	const char *picture;
 	SDL_FRect rect;
+	/** @brief The HD art it shows, when not its own (the Esc menu's logo shows the main menu's). */
+	const char *art = nullptr;
 };
 const FireSpot FireSpots[] = {
 	{ "ui_art/logo", { 0.F, 0.F, 1.F, 1.F } },
 	// The title logo shrunk to 0.708 and moved as the HD art's is (its fit.json: x -5.24, y -5.586 from the master,
 	// whose origin is 8 logo pixels up and left), in the main menu's 390 x 154.
 	{ "ui_art/smlogo", { (0.708F * 8.F - 5.24F) / 390.F, (0.708F * 8.F - 5.586F) / 154.F, 0.708F * 550.F / 390.F, 0.708F * 216.F / 154.F } },
+	// The Esc menu's (gmenu.cpp): the main menu's logo, at whatever size the game draws its picture.
+	{ "ui_art/smlogo_esc", { (0.708F * 8.F - 5.24F) / 390.F, (0.708F * 8.F - 5.586F) / 154.F, 0.708F * 550.F / 390.F, 0.708F * 216.F / 154.F }, "ui_art/smlogo/d0_f00" },
 };
 /** @brief The fire's maps, as an HD art name (hd\\ui_art\\logo\\fire_maps.png). */
 constexpr const char *FireMapsArt = "ui_art/logo/fire_maps";
@@ -672,9 +676,9 @@ void RegisterUiPictureImpl(std::string_view path, ClxSpriteList sprites, UiPictu
 		named.panel = layer == UiPictureLayer::Under;
 		named.picture = true;
 		if (layer == UiPictureLayer::Over) {
-			named.stillArt = name + "/d0_f00";
 			named.exact = true;
 			named.fire = FireSpotOf(name);
+			named.stillArt = named.fire != nullptr && named.fire->art != nullptr ? std::string(named.fire->art) : name + "/d0_f00";
 		}
 		frames.push_back(sprite.pixelData());
 		if (!UiExportDir.empty()) {
@@ -1522,6 +1526,8 @@ bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &d
 	const SDL_FRect picture { dest.x + spot.x * dest.w, dest.y + spot.y * dest.h, spot.w * dest.w, spot.h * dest.h };
 	// The main menu's logo: while the intro plays it draws it itself, as it flies in and lands here.
 	const bool mainMenu = draw.name->fire == &FireSpots[1];
+	// The main menu's and the Esc menu's have the intro's subtitle and lines under them.
+	const bool subtitled = mainMenu || draw.name->fire == &FireSpots[2];
 	if (mainMenu && intro_sdl::HoldsMenuLogo(picture)) {
 		// (It is still shown: not let go as idle.)
 		MenuFireTicks = SDL_GetTicks();
@@ -1549,11 +1555,11 @@ bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &d
 	if (!layer->Draw(renderer, rect, seconds, cover))
 		return false;
 	// After the intro: its burning lines round the subtitle, behind the letters, and the subtitle over them.
-	if (mainMenu)
+	if (subtitled)
 		intro_sdl::DrawLines(renderer, picture, seconds);
 	if (!layer->DrawLit(renderer, texture, dest, spot))
 		SDL_RenderCopyF(renderer, texture, nullptr, &dest);
-	if (mainMenu)
+	if (subtitled)
 		intro_sdl::DrawSubtitle(renderer, picture);
 	return true;
 }
