@@ -333,8 +333,17 @@ public:
 		if (logo != nullptr)
 			LogoSettings();
 		const float look = intro::IntroLook(t_);
-		const float k = restKnown_ ? rest_.w / intro::BoxWidth / intro::RestScale : 1.F;
-		const SDL_FPoint anchor = restKnown_ ? SDL_FPoint { rest_.x + intro::AnchorX / intro::BoxWidth * rest_.w, rest_.y + (intro::BoxHeight - intro::AnchorY) / intro::PictureHeight * rest_.h } : SDL_FPoint { lw / 2, lh / 3 };
+		const float kRest = restKnown_ ? rest_.w / intro::BoxWidth / intro::RestScale : 1.F;
+		const SDL_FPoint rest = restKnown_ ? SDL_FPoint { rest_.x + intro::AnchorX / intro::BoxWidth * rest_.w, rest_.y + (intro::BoxHeight - intro::AnchorY) / intro::PictureHeight * rest_.h } : SDL_FPoint { lw / 2, lh / 3 };
+		// It flies in, lands and is clawed in the middle of the screen, as big as half the screen's width (up to half
+		// as big again as on the menu), then glides up to its place on the menu. Everything of it (the words, the
+		// lines, the claws, the lens) and the embers go with it.
+		const float glide = intro::Glide(t_);
+		const float middleScale = restKnown_ ? std::clamp(0.5F * lw / rest_.w, 1.F, 1.5F) : 1.F;
+		const float grow = middleScale + (1.F - middleScale) * glide;
+		const SDL_FPoint middle { lw / 2, lh * 0.47F };
+		const SDL_FPoint anchor { middle.x + (rest.x - middle.x) * glide, middle.y + (rest.y - middle.y) * glide };
+		const float k = kRest * grow;
 		// The embers fly over the whole screen, on the reference's stage as the logo is.
 		embers_.SetScreen(intro::StageAnchorX + (0.F - anchor.x) / k, intro::StageAnchorY - (lh - anchor.y) / k, intro::StageAnchorX + (lw - anchor.x) / k, intro::StageAnchorY + anchor.y / k);
 
@@ -355,11 +364,12 @@ public:
 			const float scale = intro::LogoScale(t_);
 			if (scale > 0.02F / intro::RestScale) {
 				const float knock = intro::Knock(t_) * k;
+				const float s = scale * grow;
 				const SDL_FRect picture {
-					anchor.x + (rest_.x - anchor.x) * scale + intro::ClawDirX * knock,
-					anchor.y + (rest_.y - anchor.y) * scale - intro::ClawDirY * knock,
-					rest_.w * scale,
-					rest_.h * scale,
+					anchor.x + (rest_.x - rest.x) * s + intro::ClawDirX * knock,
+					anchor.y + (rest_.y - rest.y) * s - intro::ClawDirY * knock,
+					rest_.w * s,
+					rest_.h * s,
 				};
 				DrawLogo(renderer, *logo, picture);
 			} else {
@@ -921,7 +931,8 @@ private:
 			SDL_RenderSetScale(renderer, static_cast<float>(gw) / lw, static_cast<float>(gh) / lh);
 			SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 			SDL_RenderClear(renderer);
-			constexpr int ZoomTaps = 5;
+			// More of them while it is strong (as it bursts out), so its copies smear rather than show one by one.
+			const int ZoomTaps = lens.zoom > 0.5F ? 9 : 5;
 			SDL_SetTextureBlendMode(targets.half, SDL_BLENDMODE_BLEND);
 			SDL_SetTextureColorMod(targets.half, 255, 255, 255);
 			for (int i = 0; i < ZoomTaps; i++) {
@@ -947,6 +958,13 @@ private:
 			SDL_SetTextureBlendMode(targets.scene, SDL_BLENDMODE_NONE);
 			SDL_SetTextureColorMod(targets.scene, 255, 255, 255);
 			SDL_RenderCopyF(renderer, targets.scene, nullptr, &sceneRect);
+		}
+		// Out of focus as it bursts out of the screen: the scene small, stretched back over it.
+		if (lens.defocus > 0.01F) {
+			SDL_SetTextureBlendMode(targets.eighth, SDL_BLENDMODE_BLEND);
+			SDL_SetTextureColorMod(targets.eighth, 255, 255, 255);
+			SDL_SetTextureAlphaMod(targets.eighth, Byte(lens.defocus));
+			SDL_RenderCopyF(renderer, targets.eighth, nullptr, &sceneRect);
 		}
 		if (zooming) {
 			SDL_SetTextureBlendMode(targets.zoom, SDL_BLENDMODE_BLEND);

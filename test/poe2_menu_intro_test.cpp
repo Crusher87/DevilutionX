@@ -8,6 +8,7 @@
 #include <fstream>
 #include <string>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -43,6 +44,19 @@ TEST(MenuIntroTimelineTest, TheLogoFliesInAndLands)
 	EXPECT_NEAR(LogoScale(Landing - 0.0001F), 0.848F, 0.01F);
 	EXPECT_NEAR(LogoScale(End), 1.F, 0.03F);
 	EXPECT_NEAR(LogoScale(Landing + 20.F), 1.F, 0.001F);
+}
+
+TEST(MenuIntroTimelineTest, ItFliesInInTheMiddleAndGlidesUpToTheMenu)
+{
+	// The first frames are all fire: the logo some twenty times its size, pulled back fast.
+	EXPECT_GT(LogoScale(FlightStart), 20.F);
+	EXPECT_LT(LogoScale(FlightStart + 1.3F), 2.F);
+	// In the middle until after the claws and the words, at its place as the menu shows.
+	EXPECT_EQ(Glide(Slash + 1.F), 0.F);
+	EXPECT_GT(Glide((GlideStart + GlideEnd) / 2.F), 0.4F);
+	EXPECT_LT(Glide((GlideStart + GlideEnd) / 2.F), 0.6F);
+	EXPECT_FLOAT_EQ(Glide(MenuAt + 0.1F), 1.F);
+	EXPECT_FLOAT_EQ(Glide(End), 1.F);
 }
 
 TEST(MenuIntroTimelineTest, HitStopsAreShort)
@@ -475,40 +489,44 @@ TEST_F(MenuIntroTest, DumpFrames)
 	SDL_RendererInfo info;
 	SDL_GetRendererInfo(gpu, &info);
 	std::printf("renderer: %s\n", info.name);
-	// The game's logical size: the reference's stage, scaled to the window.
-	SDL_RenderSetLogicalSize(gpu, 1600, 900);
+	// The game's logical size: the reference's stage's height, as wide as the window is (21:9 too).
+	const int lw = 900 * w / h;
+	SDL_RenderSetLogicalSize(gpu, lw, 900);
 	hd::ForgetMenuFire();
 	renderer = gpu;
-	const SDL_FRect picture { 800.F - 550.F * 0.9F, 300.F - (560.F - 278.F) * 0.9F, 1100.F * 0.9F, 432.F * 0.9F };
+	const SDL_FRect picture { static_cast<float>(lw) / 2.F - 550.F * 0.9F, 300.F - (560.F - 278.F) * 0.9F, 1100.F * 0.9F, 432.F * 0.9F };
 	std::vector<uint8_t> pixels(static_cast<size_t>(w) * h * 4);
-	for (const float t : { 0.5F, 2.F, 3.6F, 5.5F, 6.F, 8.2F, 11.5F }) {
+	for (const float t : { 0.5F, 1.05F, 1.2F, 1.5F, 2.F, 3.F, 3.6F, 5.5F, 6.F, 8.F, 8.2F, 9.F, 11.5F }) {
 		ASSERT_TRUE(hd::intro_sdl::RenderForTest(gpu, nullptr, picture, t));
 		ASSERT_EQ(SDL_RenderReadPixels(gpu, nullptr, SDL_PIXELFORMAT_RGBA32, pixels.data(), w * 4), 0) << SDL_GetError();
 		SDL_Surface *shot = SDL_CreateRGBSurfaceWithFormatFrom(pixels.data(), w, h, 32, w * 4, SDL_PIXELFORMAT_RGBA32);
 		char name[64];
-		std::snprintf(name, sizeof(name), "game_t%.1f.png", static_cast<double>(t));
+		std::snprintf(name, sizeof(name), "game_t%.2f.png", static_cast<double>(t));
 		IMG_SavePNG(shot, (root / name).string().c_str());
 		SDL_FreeSurface(shot);
 		SDL_RenderPresent(gpu);
 	}
 	hd::intro_sdl::EndForTest();
-	// Its frames' cost through the busy part, landing to menu, as the game draws them (each finished on the card).
-	ASSERT_TRUE(hd::intro_sdl::RenderForTest(gpu, nullptr, picture, 3.0F));
-	double worst = 0;
-	double total = 0;
-	int frames = 0;
-	for (float t = 3.0F + 1.F / 60.F; t < 9.F; t += 1.F / 60.F) {
-		const auto start = std::chrono::steady_clock::now();
-		hd::intro_sdl::RenderForTest(gpu, nullptr, picture, t);
-		const SDL_Rect one { 0, 0, 1, 1 };
-		SDL_RenderReadPixels(gpu, &one, SDL_PIXELFORMAT_RGBA32, pixels.data(), 4);
-		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
-		worst = std::max(worst, ms);
-		total += ms;
-		frames++;
+	// Its frames' cost through the flight, and through the busy part, landing to menu, as the game draws them (each
+	// finished on the card).
+	for (const auto &[from, to] : { std::pair { 1.F, 3.F }, std::pair { 3.F, 9.F } }) {
+		ASSERT_TRUE(hd::intro_sdl::RenderForTest(gpu, nullptr, picture, from));
+		double worst = 0;
+		double total = 0;
+		int frames = 0;
+		for (float t = from + 1.F / 60.F; t < to; t += 1.F / 60.F) {
+			const auto start = std::chrono::steady_clock::now();
+			hd::intro_sdl::RenderForTest(gpu, nullptr, picture, t);
+			const SDL_Rect one { 0, 0, 1, 1 };
+			SDL_RenderReadPixels(gpu, &one, SDL_PIXELFORMAT_RGBA32, pixels.data(), 4);
+			const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+			worst = std::max(worst, ms);
+			total += ms;
+			frames++;
+		}
+		std::printf("%dx%d, %.1f to %.1f s: %.2f ms a frame on average, %.2f ms at worst (%d frames)\n", w, h, static_cast<double>(from), static_cast<double>(to), total / frames, worst, frames);
+		hd::intro_sdl::EndForTest();
 	}
-	std::printf("%dx%d: %.2f ms a frame on average, %.2f ms at worst (%d frames)\n", w, h, total / frames, worst, frames);
-	hd::intro_sdl::EndForTest();
 	hd::ForgetMenuFire();
 	renderer = Renderer;
 	SDL_DestroyRenderer(gpu);

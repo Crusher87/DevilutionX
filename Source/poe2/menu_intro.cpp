@@ -126,13 +126,19 @@ float LogoScale(float t)
 	if (t < FlightStart)
 		return 0.F;
 	if (t < Landing) {
-		// From behind the viewer, far bigger than the screen, falling away into place.
+		// From behind the viewer, far bigger than the screen (all of it fire), pulled back fast, then falling into place.
 		const float u = (t - FlightStart) / (Landing - FlightStart);
-		return 0.848F + 9.F * std::pow(1.F - u, 1.8F);
+		return 0.848F + 3.F * std::pow(1.F - u, 1.8F) + 17.F * std::pow(1.F - u, 6.F);
 	}
 	// A short overshoot and spring back, then a slow drift back over 5 s.
 	const float d = t - Landing;
 	return (1.F + 0.06F * std::pow(1.F - SmoothStep(0.F, 5.F, d), 1.6F)) * (1.F - 0.20F * std::exp(-d / 0.13F) * std::cos(d * 13.F));
+}
+
+float Glide(float t)
+{
+	const float x = Clamp01((t - GlideStart) / (GlideEnd - GlideStart));
+	return x * x * x * (x * (x * 6.F - 15.F) + 10.F);
 }
 
 float Knock(float t)
@@ -239,7 +245,9 @@ Lens LensAt(float t, float jitterX, float jitterY)
 	lens.flash = (ts >= 0 ? 0.7F * std::exp(-ts / 0.05F) : 0.F) + (tt >= 0 ? 0.4F * std::exp(-tt / 0.05F) : 0.F);
 	lens.dim = t < Landing ? 1.F : (t < Slash ? 1.F - 0.7F * SmoothStep(Slash - 0.22F, Slash - 0.02F, t) : 1.F);
 	lens.rays = t < FlightStart ? 0.3F : (t < Landing ? 1.F : 0.28F + 0.25F * std::exp(-d / 0.7F) + (ts >= 0 ? 0.45F * std::exp(-ts / 0.35F) : 0.F));
-	lens.zoom = std::pow(fl, 0.7F) * 0.45F + 0.3F * hit;
+	// Strong as it bursts out of the screen, easing off as it falls into place.
+	lens.zoom = std::pow(fl, 1.3F) * 1.4F + 0.3F * hit;
+	lens.defocus = 0.9F * SmoothStep(0.68F, 1.F, fl);
 	return lens;
 }
 

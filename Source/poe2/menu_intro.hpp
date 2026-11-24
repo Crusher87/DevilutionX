@@ -41,6 +41,9 @@ constexpr float Hush = 4.8F;
 constexpr float Slash = 5.4F;
 /** @brief The words are stamped (a small second hit). */
 constexpr float Stamp = Slash + 0.10F;
+/** @brief The logo, landed in the middle of the screen, glides up to its place on the main menu. */
+constexpr float GlideStart = 7.3F;
+constexpr float GlideEnd = 8.5F;
 /** @brief The menu starts fading in. */
 constexpr float MenuAt = 8.4F;
 /** @brief The end: from here it is the main menu. */
@@ -63,8 +66,16 @@ constexpr float ClawDirY = -0.191F;
 
 float SmoothStep(float a, float b, float x);
 
-/** @brief The logo's size as it flies, lands and settles, 1 for landed; 0 before it shows. */
+/**
+ * @brief The logo's size as it flies, lands and settles, 1 for landed; 0 before it shows. It starts some twenty times
+ * its size (the screen all fire and the edges of its letters) and pulls back fast, slower as it lands.
+ */
 float LogoScale(float t);
+/**
+ * @brief How far the logo has glided from the middle of the screen (where it flies in, lands and is clawed: 0) to its
+ * place on the main menu (1).
+ */
+float Glide(float t);
 /** @brief How far the claws knock the logo along their way, in browser pixels. */
 float Knock(float t);
 /** @brief How much the logo's fire is fed (its FireSettings::amount). */
@@ -99,6 +110,8 @@ struct Lens {
 	float aberration = 0;
 	float flash = 0;
 	float dim = 1;
+	/** @brief How out of focus it is, 0..1: as it bursts out of the screen, the camera inside its fire. */
+	float defocus = 0;
 };
 /** @brief The lens at `t`; `jitterX` and `jitterY` (-0.5..0.5) shake it a little as the logo rushes in. */
 Lens LensAt(float t, float jitterX, float jitterY);
