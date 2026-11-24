@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_keycode.h>
@@ -36,6 +37,7 @@
 #include "poe2/hd.hpp"
 #include "poe2/telemetry.hpp"
 #include "stores.h"
+#include "utils/cel_to_clx.hpp"
 #include "utils/language.h"
 #include "utils/sdl_compat.h"
 #include "utils/str_cat.hpp"
@@ -69,6 +71,26 @@ OptionalOwnedClxSpriteList optbar_cel;
 OptionalOwnedClxSpriteList PentSpin_cel;
 OptionalOwnedClxSpriteList option_cel;
 OptionalOwnedClxSpriteList sgpLogo;
+
+/** @brief Size of Diablo's Esc menu logo (data\diabsmal). */
+constexpr uint16_t DiabsmalWidth = 296;
+constexpr uint16_t DiabsmalHeight = 100;
+
+/** @brief One fully transparent frame of the given size. */
+OwnedClxSpriteList BlankCel(uint16_t width, uint16_t height)
+{
+	std::vector<uint8_t> cel { 1, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0 };
+	for (uint16_t y = 0; y < height; ++y) {
+		for (int left = width; left > 0; left -= 127) {
+			const int run = std::min(left, 127);
+			cel.push_back(static_cast<uint8_t>(-run));
+		}
+	}
+	const uint32_t end = static_cast<uint32_t>(cel.size());
+	for (int i = 0; i < 4; ++i)
+		cel[8 + i] = static_cast<uint8_t>(end >> (8 * i));
+	return CelToClx(cel.data(), cel.size(), PointerOrValue<uint16_t> { width }).list();
+}
 bool isDraggingSlider;
 TMenuItem *sgpCurrItem;
 int LogoAnim_tick;
@@ -246,7 +268,10 @@ void gmenu_init_menu()
 		sgpLogo = LoadOptionalCel(logo, 430);
 	if (!sgpLogo.has_value()) {
 		logo = "data\\diabsmal";
-		sgpLogo = LoadCel(logo, 296);
+		// POE2 Mashup: Hellfire's own data\diabsmal is a different, smaller picture, so reading it as Diablo's 296 px
+		// wide logo runs past its end. The HD art covers the logo there anyway, so an empty picture of Diablo's size
+		// stands in for it.
+		sgpLogo = gbIsHellfire ? BlankCel(DiabsmalWidth, DiabsmalHeight) : LoadCel(logo, DiabsmalWidth);
 	}
 	PentSpin_cel = LoadCel("data\\pentspin", 48);
 	option_cel = LoadCel("data\\option", SliderMarkerWidth);
