@@ -671,6 +671,11 @@ void LoadUiGFX()
 	ArtFocus[FOCUS_SMALL] = LoadPcxSpriteList("ui_art\\focus16", /*numFrames=*/8, /*transparentColor=*/250);
 	ArtFocus[FOCUS_MED] = LoadPcxSpriteList("ui_art\\focus", /*numFrames=*/8, /*transparentColor=*/250);
 	ArtFocus[FOCUS_BIG] = LoadPcxSpriteList("ui_art\\focus42", /*numFrames=*/8, /*transparentColor=*/250);
+	// POE2 Mashup: the menus' spinning pentagrams show the HD pack's (hd\\ui_art\\focusNN), turning smoothly where it has
+	// their full turn (hd_ui.cpp's SpinningPictures).
+	hd::RegisterUiPicture("ui_art\\focus16", *ArtFocus[FOCUS_SMALL], hd::UiPictureLayer::Over);
+	hd::RegisterUiPicture("ui_art\\focus", *ArtFocus[FOCUS_MED], hd::UiPictureLayer::Over);
+	hd::RegisterUiPicture("ui_art\\focus42", *ArtFocus[FOCUS_BIG], hd::UiPictureLayer::Over);
 
 	ArtCursor = LoadPcx("ui_art\\cursor", /*transparentColor=*/0);
 
@@ -692,8 +697,10 @@ void UnloadUiGFX()
 	for (OptionalOwnedClxSpriteList &override : ArtHeroOverrides)
 		override = std::nullopt;
 	ArtCursor = std::nullopt;
-	for (auto &art : ArtFocus)
+	for (auto &art : ArtFocus) {
+		hd::ForgetUiPicture(art);
 		art = std::nullopt;
+	}
 	hd::ForgetUiPicture(ArtLogo);
 	ArtLogo = std::nullopt;
 	DifficultyIndicator = std::nullopt;

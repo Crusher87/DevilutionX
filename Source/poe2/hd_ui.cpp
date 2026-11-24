@@ -116,7 +116,31 @@ struct UiSpriteName {
 	bool exact = false;
 	/** @brief For a picture over the UI with a live fire behind it (a menu logo): where its fire goes. */
 	const FireSpot *fire = nullptr;
+	/**
+	 * @brief For a spinning picture (SpinningPictures): its art's smooth full turn, `<name>/spin/fNN` (64 frames), and
+	 * how long the game shows each of its own frames, in ms. Empty for the others.
+	 */
+	std::string spinArt;
+	uint16_t spinFrameMs = 0;
 };
+
+/**
+ * @brief The pentagrams that spin by the menu items, in shops and in the quest log: the game's 8 frames are half a
+ * turn, each shown for `frameMs`. Their HD art can have a smooth full turn of 64 frames (spin/f00..f63, f(4k) at the
+ * game's frame k), played at a quarter of that; without it, each game frame shows its own (d0_fNN).
+ */
+struct SpinningPicture {
+	const char *name;
+	uint16_t frameMs;
+};
+constexpr SpinningPicture SpinningPictures[] = {
+	{ "ui_art/focus16", 60 },
+	{ "ui_art/focus", 60 },
+	{ "ui_art/focus42", 60 },
+	{ "data/pentspin", 50 },
+	{ "data/pentspn2", 50 },
+};
+constexpr int SpinFrames = 64;
 
 /** @brief Each item picture frame, by the address of its pixels. */
 std::unordered_map<const uint8_t *, UiSpriteName> UiSpriteNames;
@@ -675,6 +699,12 @@ void RegisterUiPictureImpl(std::string_view path, ClxSpriteList sprites, UiPictu
 		UiSpriteName &named = UiSpriteNames[sprite.pixelData()];
 		named.panel = layer == UiPictureLayer::Under;
 		named.picture = true;
+		for (const SpinningPicture &spinning : SpinningPictures) {
+			if (name == spinning.name) {
+				named.spinArt = name + "/spin/f";
+				named.spinFrameMs = spinning.frameMs;
+			}
+		}
 		if (layer == UiPictureLayer::Over) {
 			named.exact = true;
 			named.fire = FireSpotOf(name);
@@ -1695,7 +1725,16 @@ void PrepareUiSprites()
 		UiHidden.assign(static_cast<size_t>(ui->w) * ui->h, 0);
 	}
 	for (UiDraw &draw : UiDraws) {
-		draw.art = draw.name->spellIcon ? SpellIconArtFor(draw.name->name) : ArtFor(draw.name->name);
+		draw.art = nullptr;
+		if (draw.name->spinFrameMs != 0) {
+			// Turning smoothly: a quarter of the game's frame each (its frame k is the turn's 4k, so they agree).
+			const uint32_t frame = SDL_GetTicks() * 4 / draw.name->spinFrameMs % SpinFrames;
+			char number[8];
+			std::snprintf(number, sizeof(number), "%02u", static_cast<unsigned>(frame));
+			draw.art = ArtFor(draw.name->spinArt + number);
+		}
+		if (draw.art == nullptr)
+			draw.art = draw.name->spellIcon ? SpellIconArtFor(draw.name->name) : ArtFor(draw.name->name);
 		if (draw.art == nullptr && !draw.name->stillArt.empty())
 			draw.art = ArtFor(draw.name->stillArt);
 		draw.outline.smooth = false;
