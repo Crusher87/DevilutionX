@@ -470,6 +470,9 @@ LiveFire::LiveFire(FireSource source, FireSettings settings, uint32_t seed, int 
 	wind_.assign(static_cast<size_t>(windWidth) * windHeight * 2, 0.F);
 	columnGain_.assign(width_, 1.F);
 	flareAt_.assign(source_.zones.size(), -10.0);
+	zoneBoost_.assign(source_.zones.size(), 1.F);
+	zoneBoostTarget_.assign(source_.zones.size(), 1.F);
+	zoneBoostRate_.assign(source_.zones.size(), 0.F);
 	// Mip levels down to the one the glow reads (5).
 	int w = width_;
 	int h = height_;
@@ -611,6 +614,16 @@ void LiveFire::AddSpark(float x, float y, float delay, float push)
 	s.oy = s.y;
 	s.moved = false;
 	sparks_.push_back(s);
+}
+
+void LiveFire::SetZoneBoost(size_t zone, float boost, float perSecond)
+{
+	if (zone >= zoneBoost_.size())
+		return;
+	zoneBoostTarget_[zone] = std::max(0.F, boost);
+	zoneBoostRate_[zone] = perSecond;
+	if (perSecond <= 0)
+		zoneBoost_[zone] = zoneBoostTarget_[zone];
 }
 
 void LiveFire::Flare(size_t zone)
@@ -880,7 +893,14 @@ void LiveFire::Step(float dt)
 		std::vector<float> g(source_.zones.size());
 		for (size_t z = 0; z < g.size(); z++) {
 			const FireZone &zone = source_.zones[z];
-			g[z] = static_cast<float>((1.0 + 0.35 * std::sin(6.283 * zone.beat * time_ / 4.0 + zone.phase)) * FlareGain(z, time_));
+			// Sanctuary Reforged: a zone's boost (the menu's secret) eases toward where it was sent.
+			float &boost = zoneBoost_[z];
+			const float target = zoneBoostTarget_[z];
+			if (boost != target) {
+				const float step = zoneBoostRate_[z] * dt;
+				boost = zoneBoostRate_[z] <= 0 || std::abs(target - boost) <= step ? target : boost + (target > boost ? step : -step);
+			}
+			g[z] = static_cast<float>((1.0 + 0.35 * std::sin(6.283 * zone.beat * time_ / 4.0 + zone.phase)) * FlareGain(z, time_)) * boost;
 		}
 		for (int i = 0; i < width_; i++) {
 			const float x = static_cast<float>(i) + 0.5F;

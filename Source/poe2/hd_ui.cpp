@@ -34,6 +34,7 @@
 #include "poe2/live_fire.hpp"
 #include "poe2/live_fire_sdl.hpp"
 #include "poe2/menu_intro_sdl.hpp"
+#include "poe2/menu_secret.hpp"
 #include "utils/file_util.h"
 #include "utils/log.hpp"
 #include "utils/png.h"
@@ -1578,6 +1579,11 @@ bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &d
 	MenuFireCounter = now;
 	MenuFireTicks = SDL_GetTicks();
 	layer->Pointer(static_cast<float>(MousePosition.x) + 0.5F, static_cast<float>(MousePosition.y) + 0.5F, rect, seconds);
+	// Sanctuary Reforged: the main menu's logo holds a step of the hidden trail (its letters lit from the outside in).
+	if (mainMenu)
+		menu_secret::Update(*layer, rect, static_cast<float>(MousePosition.x) + 0.5F, static_cast<float>(MousePosition.y) + 0.5F, seconds);
+	else
+		menu_secret::Leave();
 	SDL_Rect screen {};
 	SDL_RenderGetViewport(renderer, &screen);
 	const float screenRight = screen.w > 0 ? static_cast<float>(screen.w) : rect.x + rect.w;
@@ -2000,6 +2006,7 @@ void DropUiDraws()
 void ForgetMenuFire()
 {
 	intro_sdl::ReleaseLines();
+	menu_secret::Forget();
 	if (MenuFire != nullptr)
 		MenuFire->ReleaseTextures();
 	MenuFire = nullptr;

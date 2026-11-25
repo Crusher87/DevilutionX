@@ -64,6 +64,8 @@ set(libdevilutionx_SRCS
   poe2/hd_spell_icons.cpp
   poe2/hd_ui.cpp
   poe2/live_fire.cpp
+  poe2/menu_secret.cpp
+  poe2/secrets.cpp
   poe2/live_fire_sdl.cpp
   poe2/menu_intro.cpp
   poe2/menu_intro_sdl.cpp

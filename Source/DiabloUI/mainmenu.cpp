@@ -20,6 +20,7 @@
 #include "engine/sound.h"
 #include "game_mode.hpp"
 #include "poe2/hd.hpp"
+#include "poe2/menu_secret.hpp"
 #include "utils/language.h"
 #include "utils/ui_fwd.h"
 
@@ -51,8 +52,12 @@ void IntroEnded()
  */
 bool IntroEvent(SDL_Event &event)
 {
-	if (!hd::MenuIntroTakesInput())
+	if (!hd::MenuIntroTakesInput()) {
+		// Sanctuary Reforged: a click may land on the burning logo's letters (poe2/menu_secret.hpp); the menu gets it too.
+		if (event.type == SDL_MOUSEBUTTONDOWN && event.button.button == SDL_BUTTON_LEFT)
+			menu_secret::NoteClick();
 		return false;
+	}
 	switch (event.type) {
 	case SDL_KEYDOWN:
 		switch (event.key.keysym.sym) {

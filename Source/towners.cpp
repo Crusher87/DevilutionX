@@ -19,6 +19,7 @@
 #include "panels/anvil_panel.hpp"
 #include "panels/quest_reward_panel.hpp"
 #include "player.h"
+#include "poe2/secrets.hpp"
 #include "qol/visual_store.h"
 #include "stores.h"
 #include "tables/textdat.h"
@@ -569,6 +570,9 @@ void TalkToCow(Player &player, Towner &cow)
 			HeroSpeech::ImNoMilkmaid,
 		};
 		player.SaySpecific(SnSfx[CowMsg]);
+		// Sanctuary Reforged: the first step of the hidden trail (poe2/secrets.hpp); Gillian has heard about it.
+		if (&player == MyPlayer)
+			secrets::Set(secrets::Found::PesteredCow);
 		CowMsg++;
 		if (CowMsg >= 3)
 			CowMsg = 0;
