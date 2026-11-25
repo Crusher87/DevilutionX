@@ -6679,6 +6679,29 @@ void ShowKept(SDL_Renderer *renderer)
 	SDL_RenderSetScale(renderer, scaleX, scaleY);
 }
 
+/**
+ * @brief Makes the world's part of the kept picture opaque, as the window is where the world is drawn straight to it.
+ *
+ * POE2 Mashup: the joined shadows darken the floor with a blend that takes the alpha below away with its colour
+ * (DrawJoinedShadows' Darken). On the window that alpha is never looked at; in the kept picture it left the shadows'
+ * rectangles see-through, and laid on the frame those showed the game's world through the HD one, lighter, in blocks
+ * (seen while quitting: every step of the fade drew the picture again). Only the alpha is set; the colours stay.
+ * @return False where the renderer can't do that: the picture is then drawn again next frame instead of kept.
+ */
+bool SealKept(SDL_Renderer *renderer)
+{
+	static const SDL_BlendMode Seal = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ZERO, SDL_BLENDOPERATION_ADD);
+	SDL_BlendMode before = SDL_BLENDMODE_NONE;
+	SDL_GetRenderDrawBlendMode(renderer, &before);
+	if (SDL_SetRenderDrawBlendMode(renderer, Seal) != 0)
+		return false;
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+	const bool sealed = SDL_RenderFillRect(renderer, &ViewClip) == 0;
+	SDL_SetRenderDrawBlendMode(renderer, before);
+	return sealed;
+}
+
 /** @brief Makes the kept picture for the render target's size, or says it can't be made. */
 bool MakeKept(SDL_Renderer *renderer, int width, int height, float scaleX, float scaleY, Size worldSize, Size logicalSize)
 {
@@ -6715,7 +6738,11 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
 	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
 		return;
-	if (!KeepWanted || CacheRenderer != renderer) {
+	// POE2 Mashup: DrawView asks for the kept picture again in every frame it keeps the world. A frame shown without
+	// one (the palette fades of quitting or changing level draw no view) draws the world as it was recorded.
+	const bool keep = KeepWanted;
+	KeepWanted = false;
+	if (!keep || CacheRenderer != renderer) {
 		if (CacheRenderer == renderer)
 			DropKept(KeptHd.renderer == renderer);
 		RenderRecorded(renderer, worldSize, logicalSize);
@@ -6754,13 +6781,14 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	Capturing = true;
 	RenderRecorded(renderer, worldSize, logicalSize);
 	Capturing = false;
+	const bool sealed = SealKept(renderer);
 	SDL_SetRenderTarget(renderer, outer);
 	// (The rain's picture of the world doesn't take its scale back by itself as the window does.)
 	if (outer != nullptr)
 		SDL_RenderSetScale(renderer, scaleX, scaleY);
 	ShowKept(renderer);
 	// Kept only once nothing in it was still waiting for its picture or its outline.
-	KeptHd.valid = !FrameWaited && !PictureMadeThisFrame && !OutlineMadeThisFrame && SettledFrames >= SettlingFrames;
+	KeptHd.valid = sealed && !FrameWaited && !PictureMadeThisFrame && !OutlineMadeThisFrame && SettledFrames >= SettlingFrames;
 	KeptHd.lightUpdated = light::UpdateCount() != lightUpdates;
 	KeptHd.overPending = OverPending;
 	std::memcpy(KeptHd.logical.data(), logical_palette.data(), sizeof(KeptHd.logical));
@@ -6770,6 +6798,11 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 void KeepWorldPicture(bool keep)
 {
 	KeepWanted = keep;
+}
+
+bool KeepWorldPictureAsked()
+{
+	return KeepWanted;
 }
 
 void ForgetWorldPicture()
@@ -6910,6 +6943,7 @@ void RenderOver(SDL_Renderer *) { }
 void ClearCaches() { }
 void Render(SDL_Renderer *, Size, Size) { }
 void KeepWorldPicture(bool) { }
+bool KeepWorldPictureAsked() { return false; }
 bool ReplayWorld() { return false; }
 void ForgetWorldPicture() { }
 bool CoversView(Size) { return false; }

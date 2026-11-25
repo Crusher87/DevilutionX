@@ -509,6 +509,9 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
  */
 void KeepWorldPicture(bool keep);
 
+/** @brief POE2 Mashup: KeepWorldPicture(true) since the last Render, which takes the ask (one frame's). */
+bool KeepWorldPictureAsked();
+
 /**
  * @brief POE2 Mashup: the world wasn't drawn this frame because it stands still: the draws recorded for the last one are
  * this frame's too. False when there are none to use (the world must be drawn).
