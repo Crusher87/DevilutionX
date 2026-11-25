@@ -109,6 +109,7 @@ void FireLayer::UploadFrame()
 	if (multiply_ != nullptr && add_ != nullptr && !frameMultiply_.empty()) {
 		Upload(multiply_, frameMultiply_, fire_->LightWidth(), fire_->LightHeight());
 		Upload(add_, frameAdd_, fire_->LightWidth(), fire_->LightHeight());
+		lightVersion_++;
 	}
 	frameReady_ = false;
 	frameShown_ = true;
@@ -149,6 +150,8 @@ bool FireLayer::DrawAsync(SDL_Renderer *renderer, const SDL_FRect &rect, float s
 		for (const PendingPush &push : pushes_)
 			fire_->Push(push.x0, push.y0, push.x1, push.y1, push.seconds);
 		pushes_.clear();
+		// A few of its workers, so it keeps off most of the computer's cores (the game's frame needs them).
+		fire_->LimitWorkers(AsyncWorkers);
 		frameSeconds_ = std::min(owedSeconds_, 0.25F);
 		owedSeconds_ = 0;
 		const bool first = !frameShown_;
@@ -201,6 +204,7 @@ void FireLayer::ForgetTextures()
 	lit_ = nullptr;
 	litWidth_ = 0;
 	litHeight_ = 0;
+	litValid_ = false;
 	renderer_ = nullptr;
 	texturesFailed_ = false;
 	litFailed_ = false;
@@ -291,6 +295,7 @@ bool FireLayer::Draw(SDL_Renderer *renderer, const SDL_FRect &rect, float second
 	frameReady_ = false;
 	frameShown_ = false;
 	owedSeconds_ = 0;
+	fire_->LimitWorkers(-1);
 	fire_->Advance(seconds);
 	void *pixels = nullptr;
 	int pitch = 0;
@@ -311,6 +316,7 @@ bool FireLayer::Draw(SDL_Renderer *renderer, const SDL_FRect &rect, float second
 				fire_->PaintLight(static_cast<uint8_t *>(mul), mulPitch, static_cast<uint8_t *>(add), addPitch, doubled_);
 				SDL_UnlockTexture(add_);
 				lightPainted_ = true;
+				lightVersion_++;
 			}
 			SDL_UnlockTexture(multiply_);
 		}
@@ -338,6 +344,12 @@ bool FireLayer::DrawLit(SDL_Renderer *renderer, SDL_Texture *picture, const SDL_
 		}
 		SDL_SetTextureBlendMode(lit_, SDL_BLENDMODE_BLEND);
 		SetLinear(lit_);
+		litValid_ = false;
+	}
+	// The light as it was when last lit (DrawAsync sends it up only so often): the lit picture as it is.
+	if (litValid_ && litVersion_ == lightVersion_ && litPicture_ == picture && litFire_.x == fire.x && litFire_.y == fire.y && litFire_.w == fire.w && litFire_.h == fire.h) {
+		SDL_RenderCopyF(renderer, lit_, nullptr, &dest);
+		return true;
 	}
 	SDL_Texture *before = SDL_GetRenderTarget(renderer);
 	// Drawn into a picture of its own (the menu intro's), it goes back to that picture's scale after.
@@ -361,6 +373,10 @@ bool FireLayer::DrawLit(SDL_Renderer *renderer, SDL_Texture *picture, const SDL_
 	SDL_SetRenderTarget(renderer, before);
 	if (before != nullptr)
 		SDL_RenderSetScale(renderer, scaleX, scaleY);
+	litValid_ = true;
+	litVersion_ = lightVersion_;
+	litPicture_ = picture;
+	litFire_ = fire;
 	SDL_RenderCopyF(renderer, lit_, nullptr, &dest);
 	return true;
 }

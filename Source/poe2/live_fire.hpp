@@ -180,6 +180,8 @@ public:
 
 	/** @brief Moves it on by a frame's time: at most 0.05 s, in two half steps when over 0.024 s. */
 	void Advance(float seconds);
+	/** @brief At most `count` worker threads help work it out (with the caller's); -1 for all it has. */
+	void LimitWorkers(int count);
 	/** @brief One step of the simulation. */
 	void Step(float dt);
 	/** @brief Runs it this long in steps of 1/22.5 s without sparks, so it opens already burning. */

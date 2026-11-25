@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cmath>
+#include <cstdint>
 #include <cstring>
 #include <functional>
 #include <utility>
@@ -222,7 +223,7 @@ public:
 	{
 #ifdef POE2_FIRE_THREADS
 		for (int i = 0; i < count; i++)
-			threads_.emplace_back([this] { Loop(); });
+			threads_.emplace_back([this, i] { Loop(static_cast<size_t>(i)); });
 #else
 		(void)count;
 #endif
@@ -248,13 +249,15 @@ public:
 	void Run(int tasks, const std::function<void(int)> &job)
 	{
 #ifdef POE2_FIRE_THREADS
-		if (!threads_.empty() && tasks > 1) {
+		const size_t helpers = std::min(threads_.size(), limit_);
+		if (helpers > 0 && tasks > 1) {
 			{
 				const std::lock_guard<std::mutex> guard(lock_);
 				job_ = &job;
 				tasks_ = tasks;
 				next_.store(0);
-				pending_ = threads_.size();
+				active_ = helpers;
+				pending_ = helpers;
 				generation_++;
 			}
 			wake_.notify_all();
@@ -269,7 +272,11 @@ public:
 			job(task);
 	}
 
+	/** @brief At most this many of the workers help (the rest sleep on). */
+	void Limit(size_t count) { limit_ = count; }
+
 private:
+	size_t limit_ = SIZE_MAX;
 #ifdef POE2_FIRE_THREADS
 	void Work()
 	{
@@ -277,7 +284,7 @@ private:
 			(*job_)(task);
 	}
 
-	void Loop()
+	void Loop(size_t index)
 	{
 		uint64_t seen = 0;
 		for (;;) {
@@ -287,6 +294,9 @@ private:
 				if (quit_)
 					return;
 				seen = generation_;
+				// Not one of this job's helpers.
+				if (index >= active_)
+					continue;
 			}
 			Work();
 			{
@@ -305,6 +315,7 @@ private:
 	int tasks_ = 0;
 	std::atomic<int> next_ { 0 };
 	size_t pending_ = 0;
+	size_t active_ = 0;
 	uint64_t generation_ = 0;
 	bool quit_ = false;
 #endif
@@ -915,6 +926,11 @@ void LiveFire::Step(float dt)
 			nextFlare_ = 2.2 + Random() * 3.2;
 		}
 	}
+}
+
+void LiveFire::LimitWorkers(int count)
+{
+	workers_->Limit(count < 0 ? SIZE_MAX : static_cast<size_t>(count));
 }
 
 void LiveFire::Advance(float seconds)

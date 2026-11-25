@@ -119,6 +119,14 @@ private:
 	bool litFailed_ = false;
 	bool lightPainted_ = false;
 	bool pointerKnown_ = false;
+	/** @brief The light sent up (counted), and which of it, picture and place the lit picture (lit_) holds. */
+	uint64_t lightVersion_ = 0;
+	uint64_t litVersion_ = 0;
+	bool litValid_ = false;
+	SDL_Texture *litPicture_ = nullptr;
+	SDL_FRect litFire_ {};
+	/** @brief DrawAsync's: how many of the fire's workers help it (with its own thread). */
+	static constexpr int AsyncWorkers = 2;
 	float pointerX_ = 0;
 	float pointerY_ = 0;
 

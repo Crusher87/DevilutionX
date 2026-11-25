@@ -6,7 +6,10 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <cmath>
+#include <cstring>
+#include <future>
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -654,8 +657,22 @@ private:
 		MakeTextures(renderer);
 		if (words_ == nullptr || !subtitle_.Loaded())
 			return;
-		// Worked out 30 times a second at most (its flicker and cooling are slow); drawn every frame.
-		if (!wordsPainted_ || std::abs(t - wordsT_) >= 1.F / 30.F) {
+		// Worked out 30 times a second at most (its flicker and cooling are slow); drawn every frame. Once the intro is
+		// over (on the menus, the Esc menu over the game too) off the game's thread: it only sends the words up.
+		if (!running_ && wordsPainted_) {
+			if (wordsJob_.valid() && wordsJob_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+				wordsJob_.get();
+				UploadWords();
+			}
+			if (!wordsJob_.valid() && std::abs(t - wordsT_) >= 1.F / 30.F) {
+				wordsT_ = t;
+				wordsJob_ = std::async(std::launch::async, [this, t, sinceSlash] {
+					PaintWordsInto(wordsPicture_.data(), subtitle_.PictureWidth() * 4, t, sinceSlash);
+				});
+			}
+		} else if (!wordsPainted_ || std::abs(t - wordsT_) >= 1.F / 30.F) {
+			if (wordsJob_.valid())
+				wordsJob_.get();
 			PaintWords(t, sinceSlash);
 			wordsPainted_ = true;
 			wordsT_ = t;
@@ -674,11 +691,28 @@ private:
 
 	void PaintWords(float t, float sinceSlash)
 	{
+		wordsPicture_.resize(static_cast<size_t>(subtitle_.PictureWidth()) * subtitle_.PictureHeight() * 4);
+		PaintWordsInto(wordsPicture_.data(), subtitle_.PictureWidth() * 4, t, sinceSlash);
+		UploadWords();
+	}
+
+	/** @brief Sends the words' picture (wordsPicture_) up to their texture. */
+	void UploadWords()
+	{
 		void *pixels = nullptr;
 		int pitch = 0;
-		if (SDL_LockTexture(words_, nullptr, &pixels, &pitch) != 0)
+		if (words_ == nullptr || SDL_LockTexture(words_, nullptr, &pixels, &pitch) != 0)
 			return;
-		subtitle_.Paint(static_cast<uint8_t *>(pixels), pitch, t, sinceSlash, fire::FireSettings {}.red);
+		const size_t row = static_cast<size_t>(subtitle_.PictureWidth()) * 4;
+		for (int j = 0; j < subtitle_.PictureHeight(); j++)
+			std::memcpy(static_cast<uint8_t *>(pixels) + static_cast<ptrdiff_t>(j) * pitch, wordsPicture_.data() + j * row, row);
+		SDL_UnlockTexture(words_);
+	}
+
+	/** @brief Paints the words into `pixels` (any thread: it reads only the subtitle's pictures). */
+	void PaintWordsInto(uint8_t *pixels, int pitch, float t, float sinceSlash) const
+	{
+		subtitle_.Paint(pixels, pitch, t, sinceSlash, fire::FireSettings {}.red);
 		if (!premultiplied_) {
 			// Without the blend for it: straight alpha (the glow round the words is lost).
 			for (int j = 0; j < subtitle_.PictureHeight(); j++) {
@@ -692,7 +726,6 @@ private:
 				}
 			}
 		}
-		SDL_UnlockTexture(words_);
 	}
 
 	/** @brief Stage point (browser pixels, y up) to the screen (logical pixels), the logo landed at `anchor`. */
@@ -1050,6 +1083,9 @@ private:
 	bool clawsLit_ = false;
 	SDL_Texture *room_ = nullptr;
 	SDL_Texture *vignette_ = nullptr;
+	/** @brief The words' picture as last painted, and the painting of the next off the game's thread (last: it ends first). */
+	std::vector<uint8_t> wordsPicture_;
+	std::future<void> wordsJob_;
 };
 
 /** @brief The intro of this launch (kept after it ends, for the subtitle and the lines it leaves on the main menu). */
