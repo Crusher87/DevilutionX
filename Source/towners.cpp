@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <optional>
 #include <unordered_map>
 
 #include "cursor.h"
@@ -143,8 +144,16 @@ void InitTownerFromData(Towner &towner, const TownerDataEntry &entry)
 
 	// Set gossip from TSV data
 	if (!entry.gossipTexts.empty()) {
-		const auto index = std::max<int32_t>(GenerateRnd(static_cast<int32_t>(entry.gossipTexts.size())), 0);
-		towner.gossip = entry.gossipTexts[index];
+		// Sanctuary Reforged: once heard, and until the name is lit, Gillian's cow rumour is one more of her lines to
+		// pick from (still one roll, so the game's random sequence is unchanged).
+		std::optional<_speech_id> rumour;
+		if (towner._ttype == TOWN_BMAID && secrets::Has(secrets::Found::HeardRumour) && !secrets::Has(secrets::Found::LitName)) {
+			if (const auto id = ParseSpeechId("TEXT_SECRET_RUMOUR"); id.has_value())
+				rumour = *id;
+		}
+		const auto count = static_cast<int32_t>(entry.gossipTexts.size()) + (rumour.has_value() ? 1 : 0);
+		const auto index = std::max<int32_t>(GenerateRnd(count), 0);
+		towner.gossip = static_cast<size_t>(index) < entry.gossipTexts.size() ? entry.gossipTexts[index] : *rumour;
 	}
 }
 
