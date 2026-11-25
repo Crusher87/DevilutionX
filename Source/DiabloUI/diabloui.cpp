@@ -633,6 +633,8 @@ void LoadHeros()
 	if (!ArtHero)
 		return;
 	const uint16_t numPortraits = ClxSpriteList { *ArtHero }.numSprites();
+	// POE2 Mashup: the select screen's hero pictures show the HD pack's (hd\\ui_art\\heros\\d0_fNN.png), over the UI.
+	hd::RegisterUiPicture("ui_art\\heros", *ArtHero, hd::UiPictureLayer::Over);
 
 	ArtHeroPortraitOrder.resize(GetNumPlayerClasses() + 1);
 	for (size_t i = 0; i < GetNumPlayerClasses(); ++i) {
@@ -693,6 +695,7 @@ ClxSprite UiGetHeroDialogSprite(size_t heroClassIndex)
 
 void UnloadUiGFX()
 {
+	hd::ForgetUiPicture(ArtHero);
 	ArtHero = std::nullopt;
 	for (OptionalOwnedClxSpriteList &override : ArtHeroOverrides)
 		override = std::nullopt;
