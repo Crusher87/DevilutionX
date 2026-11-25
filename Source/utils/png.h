@@ -51,6 +51,9 @@ inline void QuitPNG()
 inline SDL_Surface *LoadPNG(const char *file)
 {
 	auto *rwops = OpenAssetAsSdlRwOps(file);
+	// POE2 Mashup: a missing (or unreadable) file gives no picture, not a crash closing nothing.
+	if (rwops == nullptr)
+		return nullptr;
 #ifdef USE_SDL3
 	SDL_Surface *surface = IMG_LoadPNG_IO(rwops);
 	SDL_CloseIO(rwops);
