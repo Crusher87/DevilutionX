@@ -1757,6 +1757,75 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 #endif
 }
 
+/** @brief POE2 Mashup: what the world last drawn while it stands still was drawn for (KeepWorldPicture), and since when. */
+std::optional<WorldPictureKey> KeptWorld;
+uint32_t KeptWorldSince = 0;
+/** @brief How long the world stands still before its HD picture is kept too: the cursor's outline fades in over 140 ms. */
+constexpr uint32_t KeepHdWorldAfterMs = 250;
+
+WorldPictureKey CurrentWorldPictureKey(Point view, Displacement offset)
+{
+	return WorldPictureKey {
+		.view = view,
+		.offset = offset,
+		.screenWidth = gnScreenWidth,
+		.screenHeight = gnScreenHeight,
+		.renderWidth = gnRenderWidth,
+		.renderHeight = gnRenderHeight,
+		.viewportHeight = gnViewportHeight,
+		.worldLayer = WorldLayerGeneration(),
+		.options = OptionChangeCount(),
+		.menu = sgpCurrentMenu,
+		.renderer = renderer,
+		.level = currlevel,
+		.levelType = leveltype,
+		.setLevel = setlevel ? static_cast<int>(setlvlnum) : -1,
+		.zoom = *GetOptions().Graphics.zoom,
+		.hd = hd::Active(),
+		.effects = vfx::Enabled(),
+		.leftPanel = IsLeftPanelOpen(),
+		.rightPanel = IsRightPanelOpen(),
+		.floorCopy = vfx::WantsFloorCopy(),
+	};
+}
+
+/**
+ * @brief POE2 Mashup: while a single player game stands still under the game menu, the world drawn for the first frame
+ * of it is shown again in the frames after, instead of being drawn anew each one (Curtis 2026-11-25: the menu's frames
+ * cost more than the game's). The world's 8-bit frame keeps it; the HD world shows its picture again
+ * (hd::KeepWorldPicture), the effects, the rain on the screen and the UI over them are still drawn every frame. Anything
+ * that changes the view draws it again: the size, the UI scale or zoom, an option, a sub-menu, the palette (in HD),
+ * another renderer, leaving the menu.
+ * @return Whether this frame shows the kept world, so it isn't drawn.
+ */
+bool KeepWorldPicture(Point view, Displacement offset)
+{
+	const WorldStillness world {
+		.gameMenuOpen = gmenu_is_active(),
+		.multiplayer = gbIsMultiplayer,
+		.heroDead = MyPlayerIsDead,
+		.redrawAll = IsRedrawEverything(),
+		.layerKeepsWorld = WorldLayerKeepsWorld(),
+	};
+	const WorldPictureKey now = CurrentWorldPictureKey(view, offset);
+	bool keep = MayShowKeptWorld(world, KeptWorld, now);
+	// The HD world draws again what was recorded for the frame that was drawn.
+	if (keep && now.hd && !hd::ReplayWorld())
+		keep = false;
+	if (!keep) {
+		KeptWorld = WorldStandsStill(world) ? std::optional<WorldPictureKey>(now) : std::nullopt;
+		KeptWorldSince = SDL_GetTicks();
+		hd::KeepWorldPicture(false);
+		return false;
+	}
+	// What was noted as the world was drawn holds for this frame too.
+	vfx::KeepWorld();
+	QueueKeptItemNameLabels();
+	QueueKeptOverheadBars();
+	hd::KeepWorldPicture(SDL_GetTicks() - KeptWorldSince >= KeepHdWorldAfterMs);
+	return true;
+}
+
 /**
  * @brief Start rendering of screen, town variation
  * @param out Buffer to render to
@@ -1775,7 +1844,9 @@ void DrawView(const Surface &out, Point startPosition)
 		// POE2 Mashup: heavy hits jolt the view.
 		offset += CameraShakeOffset();
 		const FramePartScope part(FramePart::World);
-		DrawGame(HasWorldLayer() ? WorldBackBuffer() : out, startPosition, offset);
+		// POE2 Mashup: under the game menu the world stands still, and the one already drawn is shown again.
+		if (!KeepWorldPicture(startPosition, offset))
+			DrawGame(HasWorldLayer() ? WorldBackBuffer() : out, startPosition, offset);
 	}
 	TelemetryDrawStep("drawing the map, names and banners");
 	PrepareScaledUi();
@@ -2447,6 +2518,18 @@ void DrawAndBlit()
 	}
 
 	RenderPresent();
+}
+
+bool WorldStandsStill(const WorldStillness &world)
+{
+	// A single player game stops under the game menu (ProcessInput); a multiplayer one goes on. Everything drawn again
+	// (the window shown again, a display option changed) draws the world again too.
+	return world.gameMenuOpen && !world.multiplayer && !world.heroDead && !world.redrawAll && world.layerKeepsWorld;
+}
+
+bool MayShowKeptWorld(const WorldStillness &world, const std::optional<WorldPictureKey> &kept, const WorldPictureKey &now)
+{
+	return WorldStandsStill(world) && kept.has_value() && *kept == now;
 }
 
 } // namespace devilution

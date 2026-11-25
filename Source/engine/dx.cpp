@@ -99,6 +99,8 @@ bool HaveScaledWorld = false;
  * (SyncWorldLayer). Kept across a new back buffer, which only SyncWorldLayer decides.
  */
 bool WorldLayerUnscaled = false;
+/** POE2 Mashup: goes up each time the world's frame is made anew (WorldLayerGeneration). */
+uint32_t WorldSurfacesMade = 0;
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 /** POE2 Mashup: a frame waiting to be presented in layers: the world, the effects, then the UI over them. */
 bool LayeredFramePending = false;
@@ -378,6 +380,7 @@ void CreateWorldSurface()
 	if (!IsUiScaled() && !WorldLayerUnscaled)
 		return;
 	WorldSurface = SDLWrap::CreateRGBSurfaceWithFormat(0, gnRenderWidth, gnRenderHeight, 8, SDL_PIXELFORMAT_INDEX8);
+	WorldSurfacesMade++;
 #ifdef USE_SDL3
 	if (!SDL_SetSurfacePalette(WorldSurface.get(), Palette.get())) ErrSdl();
 #elif !defined(USE_SDL1)
@@ -573,6 +576,21 @@ void PrepareScaledUi()
 bool HasWorldLayer()
 {
 	return WorldSurface != nullptr;
+}
+
+bool WorldLayerKeepsWorld()
+{
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+	// Presented in layers (PresentLayeredFrame), the UI goes up over the world's frame without being drawn into it.
+	return WorldSurface != nullptr && renderer != nullptr && !HeadlessMode && !RenderDirectlyToOutputSurface && (vfx::Enabled() || hd::Active());
+#else
+	return false;
+#endif
+}
+
+uint32_t WorldLayerGeneration()
+{
+	return WorldSurfacesMade;
 }
 
 void SyncWorldLayer()

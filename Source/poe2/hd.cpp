@@ -326,7 +326,58 @@ SDL_Rect OverClip {};
 SDL_FPoint OverHero {};
 float OverTilePixels = 0;
 
+/**
+ * POE2 Mashup: the HD world as last drawn, kept while the game stands still under the game menu (KeepWorldPicture), so
+ * the frames after it show it again instead of drawing it all again. A picture of the render target's own pixels, one
+ * for one, drawn at the target's scale as the rain's picture of the world is (vfx::BeginScene).
+ */
+struct KeptPicture {
+	SDL_Renderer *renderer = nullptr;
+	SDL_Texture *texture = nullptr;
+	/** @brief Its size in the render target's own pixels, and the scale from the UI's pixels to them. */
+	int width = 0;
+	int height = 0;
+	float scaleX = 1;
+	float scaleY = 1;
+	Size worldSize;
+	Size logicalSize;
+	/** @brief The palettes it was drawn with: the brightness setting, a fade and the lava's moving colours change it. */
+	std::array<SDL_Color, 256> logical {};
+	std::array<SDL_Color, 256> screen {};
+	/** @brief It holds a whole frame of the HD world, one where nothing was still waiting for its picture. */
+	bool valid = false;
+	/** @brief That frame worked the HD light out (the effects read it) and left the moments to draw over it. */
+	bool lightUpdated = false;
+	bool overPending = false;
+};
+KeptPicture KeptHd;
+/** @brief The world stands still and may be kept (KeepWorldPicture), and the recorded draws may be drawn again (ReplayWorld). */
+bool KeepWanted = false;
+bool WorldReplayable = false;
+/** @brief The HD world is being drawn into the kept picture right now. */
+bool Capturing = false;
+
+/** @brief For whoever draws into a texture of their own while the world goes into the kept picture and then goes back (vfx::ResumeScene). */
+void ResumeKept(SDL_Renderer *renderer, const SDL_Rect *clip)
+{
+	if (!Capturing)
+		return;
+	SDL_RenderSetScale(renderer, KeptHd.scaleX, KeptHd.scaleY);
+	SDL_RenderSetClipRect(renderer, clip);
+}
+
 SDL_Renderer *CacheRenderer = nullptr;
+
+/** @brief Lets the kept picture go; `destroy` when its renderer is still there to free it. */
+void DropKept(bool destroy)
+{
+	if (destroy && KeptHd.texture != nullptr && KeptHd.renderer != nullptr)
+		SDL_DestroyTexture(KeptHd.texture);
+	KeptHd.texture = nullptr;
+	KeptHd.renderer = nullptr;
+	KeptHd.valid = false;
+}
+
 const std::byte *CacheCels = nullptr;
 dungeon_type CacheLevelType = DTYPE_NONE;
 
@@ -553,6 +604,8 @@ void KeepTilePictures();
 
 void DestroyTextures()
 {
+	DropKept(CacheRenderer != nullptr && KeptHd.renderer == CacheRenderer);
+	WorldReplayable = false;
 #ifdef POE2_HD_BATCH
 	batch::Release(CacheRenderer != nullptr);
 #endif
@@ -904,6 +957,11 @@ int SettledFrames = 0;
 constexpr int SettlingFrames = 3;
 /** @brief A picture was not in yet when it was asked for, since this was last cleared: what was chosen is not kept. */
 bool ArtLater = false;
+/**
+ * POE2 Mashup: something in this frame's HD world showed the game's own pixels for want of its picture or its outline,
+ * so the next frame may look different: the world isn't kept as it is under the game menu (KeepWorldPicture).
+ */
+bool FrameWaited = false;
 uint64_t PictureBudgetEnd = 0;
 bool PictureMadeThisFrame = false;
 /** @brief The dungeon pieces whose pictures were asked for ahead (ReadAheadTiles). */
@@ -1549,6 +1607,7 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 	art.waiting = mayComeLater && ReaderOn() && SettledFrames >= SettlingFrames && !PictureIsIn(PicturePath(name), false);
 	if (art.waiting) {
 		ArtLater = true;
+		FrameWaited = true;
 		ReadAheadSprite(name, withoutShadow);
 		return art;
 	}
@@ -2021,6 +2080,7 @@ HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &dr
 	art.waiting = ReaderOn() && SettledFrames >= SettlingFrames && !PictureIsIn(path, true);
 	if (art.waiting) {
 		ArtLater = true;
+		FrameWaited = true;
 		return nullptr;
 	}
 	const SlowWorkScope timed(SlowWork::HdArt);
@@ -2240,8 +2300,10 @@ const Outline *SmoothOutline(SDL_Renderer *renderer, const Draw &sprite, Outline
 		if (choice.art != nullptr) {
 			Outline &outline = choice.art->outlines[index];
 			if (!outline.tried) {
-				if (!MayMakeOutline())
+				if (!MayMakeOutline()) {
+					FrameWaited = true;
 					return nullptr;
+				}
 				outline = MakeArtOutline(renderer, *choice.art, sprite, cut);
 				OutlineMadeThisFrame = true;
 			}
@@ -2251,8 +2313,10 @@ const Outline *SmoothOutline(SDL_Renderer *renderer, const Draw &sprite, Outline
 	Raster &raster = FallbackRaster(sprite, false);
 	Outline &outline = raster.outlines[index];
 	if (!outline.tried) {
-		if (!MayMakeOutline())
+		if (!MayMakeOutline()) {
+			FrameWaited = true;
 			return nullptr;
+		}
 		outline = MakeRasterOutline(renderer, sprite, cut);
 		OutlineMadeThisFrame = true;
 	}
@@ -4821,6 +4885,7 @@ bool DrawJoinedShadows(SDL_Renderer *renderer, Size worldSize, float toLogical)
 		SDL_SetRenderTarget(renderer, screen);
 		// (In a storm the world goes to a picture of its own, which doesn't take its scale and clip back by itself.)
 		vfx::ResumeScene(renderer, &ViewClip);
+		ResumeKept(renderer, &ViewClip);
 		// With room for the soft edges round the shapes drawn.
 		if (pass.x1 >= pass.x0) {
 			ShadeUsed = ShadeRect(pass.x0 - BlockMostSoft, pass.y0 - BlockMostSoft, pass.x1 + BlockMostSoft, pass.y1 + BlockMostSoft);
@@ -5888,6 +5953,9 @@ void BeginWorld(const Surface &out, Rectangle viewport)
 	RecordSpriteHook = RecordSpriteImpl;
 	Recording = true;
 	WorldRecorded = true;
+	// POE2 Mashup: a world drawn anew is drawn in HD anew too, kept again once it has stood still (KeepWorldPicture).
+	WorldReplayable = true;
+	KeptHd.valid = false;
 }
 
 void EndWorld()
@@ -6079,6 +6147,9 @@ void RegisterRecolour(const uint8_t *trn, std::string_view name)
 void ForgetSprites(ClxSpriteListOrSheet sprites)
 {
 	ArtChoices.clear();
+	// POE2 Mashup: the recorded draws may point at them, so they aren't drawn again (ReplayWorld).
+	WorldReplayable = false;
+	KeptHd.valid = false;
 	const auto forgetList = [](ClxSpriteList list) {
 		for (size_t frame = 0; frame < list.numSprites(); frame++)
 			SpriteNames.erase(list[frame].pixelData());
@@ -6437,12 +6508,14 @@ struct BatchFrame {
 } // namespace
 #endif
 
-void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
+namespace {
+
+/** @brief Draws the recorded world in full colour (Render, which may keep the picture under the game menu). */
+void RenderRecorded(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
-	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
-		return;
 	if (CacheRenderer != renderer) {
 		// The old renderer took its textures with it.
+		DropKept(false);
 		Art.clear();
 		Rasters.clear();
 		ArtChoices.clear();
@@ -6580,6 +6653,138 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	WorldRecorded = false;
 }
 
+/** @brief The size of the render target in its own pixels, and its scale from the UI's pixels to them (vfx::BeginScene). */
+void TargetPixels(SDL_Renderer *renderer, int &width, int &height, float &scaleX, float &scaleY)
+{
+	scaleX = 1;
+	scaleY = 1;
+	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+	SDL_Rect view { 0, 0, 0, 0 };
+	SDL_RenderSetScale(renderer, 1, 1);
+	SDL_RenderGetViewport(renderer, &view);
+	SDL_RenderSetScale(renderer, scaleX, scaleY);
+	width = view.w;
+	height = view.h;
+}
+
+/** @brief Lays the kept picture on the render target, its pixels on the target's one for one. */
+void ShowKept(SDL_Renderer *renderer)
+{
+	float scaleX = 1;
+	float scaleY = 1;
+	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+	SDL_RenderSetScale(renderer, 1, 1);
+	const SDL_Rect whole { 0, 0, KeptHd.width, KeptHd.height };
+	SDL_RenderCopy(renderer, KeptHd.texture, nullptr, &whole);
+	SDL_RenderSetScale(renderer, scaleX, scaleY);
+}
+
+/** @brief Makes the kept picture for the render target's size, or says it can't be made. */
+bool MakeKept(SDL_Renderer *renderer, int width, int height, float scaleX, float scaleY, Size worldSize, Size logicalSize)
+{
+	DropKept(KeptHd.renderer == renderer);
+	if (width <= 0 || height <= 0 || !SDL_RenderTargetSupported(renderer))
+		return false;
+	// The HD world is drawn opaque over black where it lies (Render's clip) and leaves the rest clear, so laid on as it
+	// was drawn (its colours already carry their alpha) it shows the game's world round it, as drawing it there did.
+	static const SDL_BlendMode Laid = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
+	SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, width, height);
+	if (texture == nullptr)
+		return false;
+	if (SDL_SetTextureBlendMode(texture, Laid) != 0) {
+		SDL_DestroyTexture(texture);
+		return false;
+	}
+	SDL_SetTextureScaleMode(texture, SDL_ScaleModeNearest);
+	KeptHd.renderer = renderer;
+	KeptHd.texture = texture;
+	KeptHd.width = width;
+	KeptHd.height = height;
+	KeptHd.scaleX = scaleX;
+	KeptHd.scaleY = scaleY;
+	KeptHd.worldSize = worldSize;
+	KeptHd.logicalSize = logicalSize;
+	KeptHd.valid = false;
+	return true;
+}
+
+} // namespace
+
+void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
+{
+	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
+		return;
+	if (!KeepWanted || CacheRenderer != renderer) {
+		if (CacheRenderer == renderer)
+			DropKept(KeptHd.renderer == renderer);
+		RenderRecorded(renderer, worldSize, logicalSize);
+		return;
+	}
+	// POE2 Mashup: under the game menu the world stands still (KeepWorldPicture), so its HD picture is drawn once more
+	// into a picture of its own and then shown again, until the view, the palette or the target's size changes.
+	int width = 0;
+	int height = 0;
+	float scaleX = 1;
+	float scaleY = 1;
+	TargetPixels(renderer, width, height, scaleX, scaleY);
+	const bool fits = KeptHd.texture != nullptr && KeptHd.renderer == renderer && KeptHd.width == width && KeptHd.height == height
+	    && KeptHd.scaleX == scaleX && KeptHd.scaleY == scaleY && KeptHd.worldSize == worldSize && KeptHd.logicalSize == logicalSize;
+	if (fits && KeptHd.valid && std::memcmp(KeptHd.logical.data(), logical_palette.data(), sizeof(KeptHd.logical)) == 0
+	    && std::memcmp(KeptHd.screen.data(), system_palette.data(), sizeof(KeptHd.screen)) == 0) {
+		ShowKept(renderer);
+		// As drawing it did: the moments go over it, and the effects read the light it was drawn in.
+		OverPending = KeptHd.overPending;
+		if (KeptHd.lightUpdated)
+			light::Hold();
+		WorldRecorded = false;
+		return;
+	}
+	if (!fits && !MakeKept(renderer, width, height, scaleX, scaleY, worldSize, logicalSize)) {
+		RenderRecorded(renderer, worldSize, logicalSize);
+		return;
+	}
+	SDL_Texture *outer = SDL_GetRenderTarget(renderer);
+	SDL_SetRenderTarget(renderer, KeptHd.texture);
+	SDL_RenderSetScale(renderer, scaleX, scaleY);
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+	SDL_RenderClear(renderer);
+	FrameWaited = false;
+	const uint32_t lightUpdates = light::UpdateCount();
+	Capturing = true;
+	RenderRecorded(renderer, worldSize, logicalSize);
+	Capturing = false;
+	SDL_SetRenderTarget(renderer, outer);
+	// (The rain's picture of the world doesn't take its scale back by itself as the window does.)
+	if (outer != nullptr)
+		SDL_RenderSetScale(renderer, scaleX, scaleY);
+	ShowKept(renderer);
+	// Kept only once nothing in it was still waiting for its picture or its outline.
+	KeptHd.valid = !FrameWaited && !PictureMadeThisFrame && !OutlineMadeThisFrame && SettledFrames >= SettlingFrames;
+	KeptHd.lightUpdated = light::UpdateCount() != lightUpdates;
+	KeptHd.overPending = OverPending;
+	std::memcpy(KeptHd.logical.data(), logical_palette.data(), sizeof(KeptHd.logical));
+	std::memcpy(KeptHd.screen.data(), system_palette.data(), sizeof(KeptHd.screen));
+}
+
+void KeepWorldPicture(bool keep)
+{
+	KeepWanted = keep;
+}
+
+void ForgetWorldPicture()
+{
+	DropKept(CacheRenderer != nullptr && KeptHd.renderer == CacheRenderer);
+}
+
+bool ReplayWorld()
+{
+	if (!WorldReplayable)
+		return false;
+	WorldRecorded = true;
+	return true;
+}
+
 /** @brief How much of the dark's picture, from its middle out, is clear. */
 constexpr float IrisClear = 0.45F;
 
@@ -6704,6 +6909,9 @@ void RenderUi(SDL_Renderer *) { }
 void RenderOver(SDL_Renderer *) { }
 void ClearCaches() { }
 void Render(SDL_Renderer *, Size, Size) { }
+void KeepWorldPicture(bool) { }
+bool ReplayWorld() { return false; }
+void ForgetWorldPicture() { }
 bool CoversView(Size) { return false; }
 bool ExportLevelTiles(const std::string &) { return false; }
 const char *PackPalette(uint8_t) { return nullptr; }

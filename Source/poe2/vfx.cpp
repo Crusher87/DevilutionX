@@ -5620,8 +5620,20 @@ constexpr uint8_t FrontPiece = 128;
 /** @brief The world's pixels under a standing piece before it's drawn, and where (see BeginFrontPiece). */
 std::vector<uint8_t> PieceBefore;
 SDL_Rect PieceArea {};
+/**
+ * POE2 Mashup: whether the floor's copy and the front record were this frame's when the effects were last drawn: a
+ * frame that shows the same world again (KeepWorld) has them as that one did.
+ */
+bool FloorFreshDrawn = false;
+bool FrontFreshDrawn = false;
 
 } // namespace
+
+void KeepWorld()
+{
+	FloorFresh = FloorFreshDrawn && FloorSurface != nullptr;
+	FrontFresh = FrontFreshDrawn && FrontSurface != nullptr;
+}
 
 bool WantsFloorCopy()
 {
@@ -5787,6 +5799,10 @@ void NoteReflection(const Surface &out, Point position, ClxSprite sprite)
 	MirroredFigures.push_back({ out.region.x + position.x, out.region.y + position.y, sprite });
 }
 #else
+void KeepWorld()
+{
+}
+
 bool WantsFloorCopy()
 {
 	return false;
@@ -12298,6 +12314,8 @@ void DrawReflections(SDL_Renderer *renderer, Size worldSize, float toLogical)
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 {
 #if SDL_VERSION_ATLEAST(2, 0, 18)
+	FloorFreshDrawn = FloorFresh;
+	FrontFreshDrawn = FrontFresh;
 	const uint32_t now = SDL_GetTicks();
 	const float elapsed = LastTicks == 0 ? 0.F : static_cast<float>(std::min<uint32_t>(now - LastTicks, 50));
 	LastTicks = now;

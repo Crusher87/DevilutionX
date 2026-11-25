@@ -2107,6 +2107,11 @@ uint32_t UpdateCount()
 	return Updates;
 }
 
+void Hold()
+{
+	Updates++;
+}
+
 int FieldWidth()
 {
 	return WinW;

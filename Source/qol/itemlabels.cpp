@@ -36,6 +36,8 @@ struct ItemLabel {
 };
 
 std::vector<ItemLabel> labelQueue;
+/** POE2 Mashup: the labels of the world last drawn, as it noted them, for a frame that shows that world again. */
+std::vector<ItemLabel> keptLabels;
 
 bool highlightKeyPressed = false;
 bool isLabelHighlighted = false;
@@ -150,10 +152,16 @@ bool IsMouseOverGameArea()
 	return !IsCursorOverUi(MousePosition);
 }
 
+void QueueKeptItemNameLabels()
+{
+	labelQueue = std::vector<ItemLabel>(keptLabels.begin(), keptLabels.end());
+}
+
 void DrawItemNameLabels(const Surface &out)
 {
 	const Surface clippedOut = out.subregionY(0, gnViewportHeight);
 	isLabelHighlighted = false;
+	keptLabels = std::vector<ItemLabel>(labelQueue.begin(), labelQueue.end());
 	if (labelQueue.empty())
 		return;
 	UsedX usedX;

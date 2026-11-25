@@ -92,6 +92,12 @@ bool Update(const Look &look, float x0, float y0, float x1, float y1, float hero
 /** @brief Goes up each time Update works the light out: when it moved since the last frame, At and the rest are this frame's. */
 uint32_t UpdateCount();
 
+/**
+ * @brief POE2 Mashup: the light worked out for the HD world shown again under the game menu (hd::KeepWorldPicture) is
+ * this frame's too: counts as worked out, so the effects read it as they did when it was drawn.
+ */
+void Hold();
+
 /** @brief The light over the rectangle as a picture: one ARGB pixel per sample, row by row, up to full. */
 int FieldWidth();
 int FieldHeight();

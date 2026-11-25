@@ -40,6 +40,9 @@ struct QueuedBar {
 
 std::vector<QueuedBar> Queue;
 const Player *QueuedHero;
+/** POE2 Mashup: the bars the world last drawn noted, for a frame that shows that world again. */
+std::vector<QueuedBar> KeptQueue;
+const Player *KeptHero;
 
 void QueueBar(BarOwner owner, size_t index, Point anchor)
 {
@@ -335,8 +338,16 @@ void QueueMonsterOverheadBar(const Monster &monster, Point spritePosition, ClxSp
 	QueueBar(BarOwner::Monster, monster.getId(), AnchorOver(spritePosition, sprite, standHeight, standTopRow));
 }
 
+void QueueKeptOverheadBars()
+{
+	Queue = KeptQueue;
+	QueuedHero = KeptHero;
+}
+
 void DrawOverheadBars(const Surface &out)
 {
+	KeptQueue = Queue;
+	KeptHero = QueuedHero;
 	if (Queue.empty())
 		return;
 	const Surface view = out.subregionY(0, gnViewportHeight);

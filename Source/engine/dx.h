@@ -33,6 +33,13 @@ Surface WorldBackBuffer();
  * and at UI Scale 100 with HD Graphics or Modern Effects on (WantsWorldLayer), where that frame is the UI's size.
  */
 bool HasWorldLayer();
+/**
+ * @brief POE2 Mashup: the world's frame holds only the world from one frame to the next (the UI goes up over it in
+ * layers, never into it), so a world that stands still needn't be drawn into it again (KeepWorldPicture in scrollrt.cpp).
+ */
+bool WorldLayerKeepsWorld();
+/** @brief POE2 Mashup: goes up each time the world's frame is made anew, empty. */
+uint32_t WorldLayerGeneration();
 /** @brief Makes or drops the world's frame at UI Scale 100 as HD Graphics and Modern Effects are switched; before a frame is drawn. */
 void SyncWorldLayer();
 /** @brief The world is drawn: put a shrunk copy of it under the UI, which is drawn next. */

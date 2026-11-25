@@ -1037,6 +1037,9 @@ struct Options {
  */
 [[nodiscard]] Options &GetOptions();
 
+/** @brief POE2 Mashup: goes up each time an option's value is changed, so a picture drawn with the old ones can tell. */
+[[nodiscard]] uint32_t OptionChangeCount();
+
 bool HardwareCursorSupported();
 
 /**

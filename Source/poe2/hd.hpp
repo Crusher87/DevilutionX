@@ -503,6 +503,22 @@ extern RegisterSpritesFn RegisterSpritesHook;
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
 
 /**
+ * @brief POE2 Mashup: the world stands still under the game menu (KeepWorldPicture in scrollrt.cpp), so Render may keep
+ * the HD world it draws and show that picture again in the frames after, while the palette and the view stay the same.
+ * False lets the picture go: every frame is drawn again.
+ */
+void KeepWorldPicture(bool keep);
+
+/**
+ * @brief POE2 Mashup: the world wasn't drawn this frame because it stands still: the draws recorded for the last one are
+ * this frame's too. False when there are none to use (the world must be drawn).
+ */
+bool ReplayWorld();
+
+/** @brief POE2 Mashup: the renderer lost what was drawn into its textures: the kept HD world is made again. */
+void ForgetWorldPicture();
+
+/**
  * @brief Draws the Atmosphere option's moments over the HD world and the effects on it: the dark that closes in round the
  * hero going down a floor or dying, and the red of a death. Nothing when the HD world wasn't drawn in this present.
  */

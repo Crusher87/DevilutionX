@@ -297,8 +297,19 @@ void OptionEntryBase::SetValueChangedCallback(tl::function_ref<void()> callback)
 {
 	callback_ = callback;
 }
+namespace {
+/** POE2 Mashup: how many times an option has changed (OptionChangeCount). */
+uint32_t OptionChanges = 0;
+} // namespace
+
+uint32_t OptionChangeCount()
+{
+	return OptionChanges;
+}
+
 void OptionEntryBase::NotifyValueChanged()
 {
+	OptionChanges++;
 	if (callback_.has_value()) (*callback_)();
 }
 
