@@ -369,7 +369,9 @@ std::expected<void, std::string> LoadCharPanel()
 	hd::ForgetUiPicture(Panel);
 	Panel = SurfaceToClx(out);
 	// POE2 Mashup: the sheet, as put together here (boxes and labels), shows the HD pack's art of it.
-	hd::RegisterUiPicture("ui/char_panel", *Panel);
+	// The HD art has the labels painted in, so POE2 rules (Armour / Evasion, Resist cold) use their own picture
+	// and Sanctuary Reforged keeps the vanilla words (Armor class, Resist magic).
+	hd::RegisterUiPicture(gbIsPoe2 ? "ui/char_panel_poe2" : "ui/char_panel", *Panel);
 	return {};
 }
 
