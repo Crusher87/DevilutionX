@@ -136,7 +136,9 @@ set(poe2_mod
   txtdata/poe2/unique_lore.tsv
   txtdata/poe2/uniques.tsv)
 
-if(APPLE)
+if(APPLE AND REFORGED_PACKAGE)
+  # A Sanctuary Reforged app bundle carries no POE2 Mashup files.
+elseif(APPLE)
   foreach(asset_file ${poe2_mod})
     set(src "${CMAKE_CURRENT_SOURCE_DIR}/mods/poe2/${asset_file}")
     get_filename_component(_asset_dir "${asset_file}" DIRECTORY)
@@ -177,20 +179,22 @@ endif()
 
 # Sanctuary Reforged mod (requires Hellfire): the HD look and the comfort features on plain Diablo and Hellfire rules.
 # It carries only the tables those features read, and the designed rooms its floor layouts are built from; the game's own
-# rules tables stay Hellfire's. The tables are copies of POE2 Mashup's, kept the same by test/reforged_mode_test.cpp.
+# rules tables stay Hellfire's. The look tables are copies of POE2 Mashup's; the rooms are too, less the reward column
+# Reforged has no use for, and the map icons less the strongbox and rare monster markers. test/reforged_mode_test.cpp
+# keeps them in step.
 set(reforged_mod
   manifest.ini
   lua/mods/reforged/init.lua
-  txtdata/poe2/atmosphere.tsv
-  txtdata/poe2/catacombs_rooms.tsv
-  txtdata/poe2/cathedral_rooms.tsv
-  txtdata/poe2/caves_rooms.tsv
-  txtdata/poe2/crypt_rooms.tsv
-  txtdata/poe2/hell_rooms.tsv
-  txtdata/poe2/hive_rooms.tsv
-  txtdata/poe2/map_icons.tsv
-  txtdata/poe2/quest_tracker.tsv
-  txtdata/poe2/skill_looks.tsv)
+  txtdata/reforged/atmosphere.tsv
+  txtdata/reforged/catacombs_rooms.tsv
+  txtdata/reforged/cathedral_rooms.tsv
+  txtdata/reforged/caves_rooms.tsv
+  txtdata/reforged/crypt_rooms.tsv
+  txtdata/reforged/hell_rooms.tsv
+  txtdata/reforged/hive_rooms.tsv
+  txtdata/reforged/map_icons.tsv
+  txtdata/reforged/quest_tracker.tsv
+  txtdata/reforged/skill_looks.tsv)
 
 if(APPLE)
   foreach(asset_file ${reforged_mod})

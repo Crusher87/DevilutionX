@@ -2631,6 +2631,9 @@ size_t OnFreshFloor(const TCmdFreshFloor &message, const Player &player)
 		return sizeof(message);
 	if (&player == MyPlayer)
 		return sizeof(message);
+	// Floors are only rolled anew in POE2 Mashup; a Sanctuary Reforged floor is never rerolled.
+	if (!gbIsPoe2)
+		return sizeof(message);
 	const bool isSetLevel = message.isSetLevel != 0;
 	const int level = message.level;
 	// Someone standing on that floor keeps the copy they have; the roll only applies to floors nobody is on.

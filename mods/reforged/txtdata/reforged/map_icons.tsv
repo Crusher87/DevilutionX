@@ -8,6 +8,4 @@ exit	triangle_up	gold	Exit
 portal	circle	blue	Portal
 red_portal	circle	red	Portal
 shrine	cross	lightblue	Shrine
-strongbox	square	orange	Strongbox
-rare_monster	circle	yellow	-
 unique_monster	circle	orange	-

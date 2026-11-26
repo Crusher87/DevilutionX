@@ -9,6 +9,7 @@
 #include <magic_enum/magic_enum.hpp>
 
 #include "data/file.hpp"
+#include "data/mode_tables.hpp"
 #include "effects.h"
 #include "poe2/telemetry.hpp"
 #include "tables/spelldat.h"
@@ -33,7 +34,6 @@ namespace devilution {
 
 namespace {
 
-constexpr std::string_view ShippedFile = "txtdata\\poe2\\skill_looks.tsv";
 constexpr std::string_view EditsFileName = "skill_looks_mine.tsv";
 constexpr std::string_view Header = "key\tname\tsize\tamount\tlength\tbrightness\tspeed\tshake\ttint\tcolour\tsound\n";
 
@@ -156,7 +156,7 @@ std::vector<std::string_view> SplitTabs(std::string_view line)
 void LoadShipped()
 {
 	Shipped.clear();
-	auto dataFile = DataFile::load(ShippedFile);
+	auto dataFile = DataFile::load(ModeTablePath("skill_looks.tsv"));
 	if (!dataFile.has_value())
 		return;
 	// Just the header is an empty table, not a broken file.
