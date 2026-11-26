@@ -3032,7 +3032,10 @@ void InitPlayer(Player &player, bool firstTime)
 		player._pRSpell = SpellID::Invalid;
 		if (&player == MyPlayer) {
 			LoadHotkeys();
-			LoadPoe2HeroData(player);
+			if (gbIsReforged)
+				LoadReforgedHero(player);
+			else
+				LoadPoe2HeroData(player);
 		}
 		player._pSBkSpell = SpellID::Invalid;
 		player.queuedSpell.spellId = player._pRSpell;

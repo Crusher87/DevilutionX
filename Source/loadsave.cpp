@@ -11,8 +11,11 @@
 #include <cstdint>
 #include <cstring>
 #include <expected>
+#include <initializer_list>
 #include <numeric>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <ankerl/unordered_dense.h>
@@ -2904,20 +2907,50 @@ uint8_t ReadPoe2HeroData(Player &player)
 
 } // namespace
 
-void ReadPoe2Floors()
+namespace {
+
+/** @brief The bytes of a hero save entry written as a 32 bit length and then the bytes; nothing if it isn't there. */
+std::optional<std::vector<uint8_t>> ReadSizedEntry(const char *name)
 {
-	Poe2FloorsReset();
-	LoadHelper file(OpenSaveArchive(gSaveNumber), "poe2floors");
+	LoadHelper file(OpenSaveArchive(gSaveNumber), name);
 	if (!file.IsValid(sizeof(uint32_t)))
-		return;
+		return std::nullopt;
 	const uint32_t size = file.NextLE<uint32_t>();
 	if (size == 0 || !file.IsValid(size))
-		return;
+		return std::nullopt;
 	std::vector<uint8_t> data(size);
 	for (uint8_t &byte : data)
 		byte = file.NextLE<uint8_t>();
-	if (!Poe2UnpackFloors(data))
-		Poe2FloorsReset();
+	return data;
+}
+
+void WriteSizedEntry(SaveWriter &saveWriter, const char *name, const std::vector<uint8_t> &data)
+{
+	SaveHelper file(saveWriter, name, sizeof(uint32_t) + data.size());
+	file.WriteLE<uint32_t>(static_cast<uint32_t>(data.size()));
+	for (const uint8_t byte : data)
+		file.WriteLE<uint8_t>(byte);
+}
+
+/** @brief Reads the floor records from the first of the entries that is there. */
+void ReadFloors(std::initializer_list<const char *> entries)
+{
+	Poe2FloorsReset();
+	for (const char *entry : entries) {
+		const std::optional<std::vector<uint8_t>> data = ReadSizedEntry(entry);
+		if (!data)
+			continue;
+		if (!Poe2UnpackFloors(*data))
+			Poe2FloorsReset();
+		return;
+	}
+}
+
+} // namespace
+
+void ReadPoe2Floors()
+{
+	ReadFloors({ "poe2floors" });
 }
 
 /** @brief The hero's shrine buffs, in their own entry; a save from before shrine buffs has none. */
@@ -2948,6 +2981,15 @@ namespace {
 constexpr const char *ReforgedHeroEntry = "srvhero";
 constexpr uint8_t ReforgedHeroDataVersion = 1;
 constexpr uint8_t ReforgedHardcoreFlag = 1 << 0;
+/** Which floors were built from the designed rooms, and from which rooms: the same records POE2 Mashup keeps. */
+constexpr const char *ReforgedFloorsEntry = "srvfloors";
+/** The designed rooms the saved floors were built from, so a game update that changes the rooms keeps their layouts. */
+constexpr const char *ReforgedRoomsEntry = "srvrooms";
+/**
+ * Entries a Reforged hero saved by an older build also has. They are read once, if the hero has no entries of
+ * Reforged's own yet, and are left out when the hero is saved again.
+ */
+constexpr const char *OldReforgedEntries[] = { "poe2hero", "poe2mode", "poe2floors", "poe2shrines" };
 
 } // namespace
 
@@ -3007,8 +3049,44 @@ void SaveReforgedHeroData(SaveWriter &saveWriter, const Player &player)
 	}
 }
 
+void LoadReforgedHero(Player &player)
+{
+	// Reforged has none of POE2 Mashup's hero state: whatever an older save's POE2 entries hold stays unread.
+	player.poe2.clear();
+	for (Item &jewel : player.jewels)
+		jewel.clear();
+	for (Item &item : player.swapHands)
+		item.clear();
+	if (&player == MyPlayer) {
+		// A hero saved by an older build has its floor records under the old name only.
+		ReadFloors({ ReforgedFloorsEntry, "poe2floors" });
+		UnpackKeptFloorRooms(ReadSizedEntry(ReforgedRoomsEntry).value_or(std::vector<uint8_t> {}));
+	}
+	LoadReforgedHeroData(player);
+}
+
+void SaveReforgedHero(SaveWriter &saveWriter, const Player &player)
+{
+	if (!gbIsReforged)
+		return;
+	for (const char *entry : OldReforgedEntries) {
+		// The old floor records go only where the new ones are written.
+		if (&player == MyPlayer || std::string_view(entry) != "poe2floors")
+			saveWriter.RemoveHashEntry(entry);
+	}
+	if (&player == MyPlayer) {
+		WriteSizedEntry(saveWriter, ReforgedFloorsEntry, Poe2PackFloors());
+		WriteSizedEntry(saveWriter, ReforgedRoomsEntry, PackKeptFloorRooms());
+	}
+	SaveReforgedHeroData(saveWriter, player);
+}
+
 void LoadPoe2HeroData(Player &player)
 {
+	if (gbIsReforged) {
+		LoadReforgedHero(player);
+		return;
+	}
 	player.poe2.clear();
 	for (Item &jewel : player.jewels)
 		jewel.clear();
@@ -3067,6 +3145,9 @@ void LoadPoe2HeroData(Player &player)
 
 void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 {
+	// Sanctuary Reforged writes its own entries alone (SaveReforgedHero).
+	if (gbIsReforged)
+		return;
 	{
 		// The league on its own, so the hero list can show it without reading the rest.
 		SaveHelper mode(saveWriter, "poe2mode", 1);

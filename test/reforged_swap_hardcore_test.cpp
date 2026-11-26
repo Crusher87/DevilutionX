@@ -22,6 +22,10 @@
 #include "menu.h"
 #include "pfile.h"
 #include "player.h"
+#include "options.h"
+#include "poe2/cathedral_floors.hpp"
+#include "poe2/flasks.hpp"
+#include "poe2/floors.hpp"
 #include "poe2/hardcore.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/weapon_swap.hpp"
@@ -172,6 +176,25 @@ public:
 	static std::string SavePath()
 	{
 		return pfile_hero_save_path();
+	}
+
+	/** @brief The entries an older Reforged build wrote beside its own. */
+	static constexpr const char *OldEntries[] = { "poe2hero", "poe2mode", "poe2floors", "poe2shrines" };
+
+	/** @brief The local hero has been on a floor built from the designed rooms, which is saved and kept. */
+	static void VisitDesignedFloor(int level)
+	{
+		Poe2FloorsReset();
+		GetOptions().Gameplay.newCathedralFloors.SetValue(true);
+		MyPlayer->_pLvlVisited[level] = false;
+		currlevel = static_cast<uint8_t>(level);
+		leveltype = DTYPE_CATHEDRAL;
+		Poe2ApplyFreshFloor(level, false, 4321, 1);
+		EXPECT_TRUE(Poe2FloorBuildFor(level).cathedralFunnel);
+		Poe2FloorSaved(level, false);
+		MyPlayer->_pLvlVisited[level] = true;
+		for (uint32_t tick = 0; tick < 100; tick++)
+			Poe2FloorsTick();
 	}
 
 	static bool HeroListShowsHardcore()
@@ -430,6 +453,131 @@ TEST_F(ReforgedSwapHardcoreTest, AFallenHardcoreHeroCarriesOnAsNormal)
 	EXPECT_FALSE(HeroListShowsHardcore());
 	RemoveFile(SavePath().c_str());
 	RemoveFile(hardcoreStash.c_str());
+}
+
+TEST_F(ReforgedSwapHardcoreTest, AReforgedHeroIsSavedInReforgedsOwnEntriesAndLoadsBack)
+{
+	if (!MakeHero(/*hardcore=*/true))
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+	Player &player = *MyPlayer;
+	for (const char *entry : OldEntries)
+		EXPECT_FALSE(HasEntry(entry)) << "a new hero has no " << entry;
+
+	VisitDesignedFloor(2);
+	const std::vector<uint8_t> floors = Poe2PackFloors();
+	const std::vector<uint8_t> rooms = PackKeptFloorRooms();
+	ASSERT_GT(rooms.size(), 2U) << "the floor's rooms";
+	const Item shield = OneHanded(ItemType::Shield);
+	player.swapHands[0] = TwoHandedSword();
+	player.swapHands[1] = shield;
+	player.poe2.weaponSet = 1;
+	pfile_write_hero(/*writeGameData=*/false);
+
+	EXPECT_TRUE(HasEntry("srvhero"));
+	EXPECT_TRUE(HasEntry("srvfloors"));
+	EXPECT_TRUE(HasEntry("srvrooms"));
+	for (const char *entry : OldEntries)
+		EXPECT_FALSE(HasEntry(entry)) << entry;
+
+	// Read back as a new session would.
+	Poe2FloorsReset();
+	player.poe2.clear();
+	player.swapHands[0].clear();
+	player.swapHands[1].clear();
+	pfile_read_player_from_save(SaveSlot, player);
+	LoadReforgedHero(player);
+	EXPECT_EQ(std::string_view(player._pName), "Swapper");
+	EXPECT_EQ(player._pClass, HeroClass::Warrior);
+	EXPECT_TRUE(player.poe2.hardcore);
+	EXPECT_TRUE(HeroListShowsHardcore());
+	EXPECT_EQ(player.poe2.weaponSet, 1);
+	EXPECT_EQ(player.swapHands[0].IDidx, TwoHandedSword().IDidx);
+	EXPECT_EQ(player.swapHands[1].IDidx, shield.IDidx);
+	EXPECT_EQ(Poe2PackFloors(), floors) << "the floor records";
+	EXPECT_EQ(PackKeptFloorRooms(), rooms) << "the rooms the floor was built from";
+
+	// LoadPoe2HeroData, which tests and older callers use, reads a Reforged hero the same way.
+	Poe2FloorsReset();
+	player.poe2.clear();
+	LoadPoe2HeroData(player);
+	EXPECT_TRUE(player.poe2.hardcore);
+	EXPECT_EQ(player.poe2.weaponSet, 1);
+	EXPECT_EQ(Poe2PackFloors(), floors);
+	RemoveFile(SavePath().c_str());
+}
+
+TEST_F(ReforgedSwapHardcoreTest, AnOlderReforgedSaveWithPoe2EntriesLoadsAndIsSavedUnderTheNewNames)
+{
+	if (!MakeHero(/*hardcore=*/true))
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+	Player &player = *MyPlayer;
+	VisitDesignedFloor(2);
+	const std::vector<uint8_t> floors = Poe2PackFloors();
+	const Item shield = OneHanded(ItemType::Shield);
+	player.swapHands[1] = shield;
+	player.poe2.weaponSet = 1;
+	// POE2 state an older build left in the hero's POE2 entry, which Reforged never used.
+	player.poe2.spiritSkulls = 3;
+	player.poe2.flaskCharges[0] = 0;
+	{
+		// What the older build wrote: the POE2 entries (poe2floors holding the floor records), then srvhero.
+		SaveWriter saveWriter(SavePath());
+		saveWriter.RemoveHashEntry("srvfloors");
+		saveWriter.RemoveHashEntry("srvrooms");
+		gbIsReforged = false;
+		SavePoe2HeroData(saveWriter, player);
+		gbIsReforged = true;
+		SaveReforgedHeroData(saveWriter, player);
+	}
+	for (const char *entry : OldEntries)
+		ASSERT_TRUE(HasEntry(entry)) << entry;
+	ASSERT_FALSE(HasEntry("srvfloors"));
+	ASSERT_FALSE(HasEntry("srvrooms"));
+
+	Poe2FloorsReset();
+	player.poe2.clear();
+	player.swapHands[1].clear();
+	pfile_read_player_from_save(SaveSlot, player);
+	LoadReforgedHero(player);
+	EXPECT_EQ(std::string_view(player._pName), "Swapper");
+	EXPECT_TRUE(player.poe2.hardcore);
+	EXPECT_TRUE(HeroListShowsHardcore());
+	EXPECT_EQ(player.poe2.weaponSet, 1);
+	EXPECT_EQ(player.swapHands[1].IDidx, shield.IDidx);
+	EXPECT_EQ(Poe2PackFloors(), floors) << "the floor records, read from poe2floors";
+	EXPECT_EQ(player.poe2.spiritSkulls, 0) << "POE2 Mashup's hero entry isn't read";
+	EXPECT_EQ(player.poe2.flaskCharges[0], MaxFlaskCharges) << "as a new hero has them";
+	// The floor is still built from its rooms, which the next save keeps.
+	EXPECT_GT(PackKeptFloorRooms().size(), 2U);
+
+	// The next save writes Reforged's names and drops the old ones.
+	pfile_write_hero(/*writeGameData=*/false);
+	EXPECT_TRUE(HasEntry("srvhero"));
+	EXPECT_TRUE(HasEntry("srvfloors"));
+	EXPECT_TRUE(HasEntry("srvrooms"));
+	for (const char *entry : OldEntries)
+		EXPECT_FALSE(HasEntry(entry)) << entry;
+	Poe2FloorsReset();
+	player.poe2.clear();
+	LoadReforgedHero(player);
+	EXPECT_EQ(Poe2PackFloors(), floors);
+	EXPECT_TRUE(player.poe2.hardcore);
+	EXPECT_EQ(player.swapHands[1].IDidx, shield.IDidx);
+	RemoveFile(SavePath().c_str());
+}
+
+TEST_F(ReforgedSwapHardcoreTest, Poe2SavesKeepTheirEntries)
+{
+	gbIsReforged = false;
+	gbIsPoe2 = true;
+	if (!MakeHero(/*hardcore=*/true, { "hf", "poe2" }))
+		GTEST_SKIP() << "MPQ assets (spawn.mpq or DIABDAT.MPQ) not found - skipping test";
+	pfile_write_hero(/*writeGameData=*/false);
+	for (const char *entry : OldEntries)
+		EXPECT_TRUE(HasEntry(entry)) << entry;
+	for (const char *entry : { "srvhero", "srvfloors", "srvrooms" })
+		EXPECT_FALSE(HasEntry(entry)) << entry;
+	RemoveFile(SavePath().c_str());
 }
 
 } // namespace
