@@ -1478,7 +1478,7 @@ constexpr float ShapeLeastShare = 0.004F;
  * the screen, y left and down, z up) and shared out among the axes it leans to by the square of its lean, which adds up
  * to one: its colour goes into each axis's picture at that share of its alpha.
  */
-void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name, bool tile = false)
+void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name, bool tile = false, bool deadBody = false)
 {
 	if (picture->format->format != SDL_PIXELFORMAT_RGBA32)
 		return;
@@ -1530,6 +1530,13 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 				right = 0;
 				up = 0;
 				toEye = 1;
+			}
+			// A dead body's own soft shadow painted under it (as WithoutPaintedShadow finds it) is floor, not body:
+			// it faces straight up, so the body's bumps never light it.
+			if (deadBody && pixel[3] < 160 && std::max({ pixel[0], pixel[1], pixel[2] }) < 24) {
+				right = 0;
+				up = ViewCos;
+				toEye = ViewSin;
 			}
 			float nx = (right - up * ViewSin + toEye * ViewCos) / Root2;
 			float ny = (-right - up * ViewSin + toEye * ViewCos) / Root2;
@@ -1649,7 +1656,7 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 	}
 	art.texture = SDL_CreateTextureFromSurface(renderer, surface);
 	if (art.texture != nullptr && object != nullptr && (withoutShadow || object->corpse))
-		MakeShape(renderer, art, surface, name);
+		MakeShape(renderer, art, surface, name, false, object->corpse && !withoutShadow);
 	SDL_FreeSurface(surface);
 	if (art.texture != nullptr) {
 		SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
