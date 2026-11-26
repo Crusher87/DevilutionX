@@ -2358,7 +2358,7 @@ size_t OnPlayerJoinLevel(const TCmdLocParam2 &message, Player &player)
 			if (!player.hasNoLife()) {
 				StartStand(player, Direction::South);
 			} else {
-				player._pgfxnum &= ~0xFU;
+				UseDeathLook(player);
 				player._pmode = PM_DEATH;
 				NewPlrAnim(player, player_graphic::Death, Direction::South);
 				player.AnimInfo.currentFrame = static_cast<int8_t>(player.AnimInfo.numberOfFrames - 2);
@@ -2629,7 +2629,11 @@ size_t OnFreshFloor(const TCmdFreshFloor &message, const Player &player)
 {
 	if (gbBufferMsgs == 1)
 		return sizeof(message);
-	if (&player == MyPlayer)
+	// Only POE2 Mashup rolls floors afresh in multiplayer; Sanctuary Reforged keeps them as Diablo does and never sends this.
+	if (&player == MyPlayer || !gbIsPoe2)
+		return sizeof(message);
+	// Floors are only rolled anew in POE2 Mashup; a Sanctuary Reforged floor is never rerolled.
+	if (!gbIsPoe2)
 		return sizeof(message);
 	const bool isSetLevel = message.isSetLevel != 0;
 	const int level = message.level;

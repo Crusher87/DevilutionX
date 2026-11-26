@@ -9,6 +9,7 @@
 #include "engine/render/clx_render.hpp"
 #include "engine/render/primitive_render.hpp"
 #include "game_mode.hpp"
+#include "poe2/hd.hpp"
 
 namespace devilution {
 
@@ -23,6 +24,21 @@ OptionalOwnedClxSpriteList SmallSpellIcons;
 OptionalOwnedClxSpriteList LargeSpellIcons;
 
 uint8_t SplTransTbl[256];
+
+/** POE2 Mashup: the colours SetSpellTrans last set: an icon's HD art has its stone plate in each of them. */
+SpellType SplTransType = SpellType::Skill;
+
+/**
+ * POE2 Mashup: tells the HD renderer an icon is about to be drawn (`drawn` false) and that it has been (true), so the
+ * icon's painted picture can show over it (hd::RecordUiSpellIconHook). The game's own icon is always drawn.
+ */
+void NoteIconForHd(const Surface &out, Point position, ClxSprite sprite, uint8_t frame, bool large, bool drawn)
+{
+	if (hd::RecordUiSpellIconHook == nullptr)
+		return;
+	const Rectangle box { Point { position.x, position.y - sprite.height() + 1 }, Size { sprite.width(), sprite.height() } };
+	hd::RecordUiSpellIconHook(out, box, frame, large, static_cast<uint8_t>(SplTransType), drawn);
+}
 
 /** Maps from SpellID to spelicon.cel frame number. */
 const SpellIcon SpellITbl[] = {
@@ -137,44 +153,58 @@ uint8_t GetSpellIconFrame(SpellID spell)
 
 void DrawLargeSpellIcon(const Surface &out, Point position, SpellID spell)
 {
+	const uint8_t frame = GetSpellIconFrame(spell);
+	const ClxSprite sprite = (*LargeSpellIcons)[frame];
+	NoteIconForHd(out, position, sprite, frame, /*large=*/true, /*drawn=*/false);
 #ifdef UNPACKED_MPQS
 	ClxDrawTRN(out, position, (*LargeSpellIconsBackground)[0], SplTransTbl);
 #endif
-	ClxDrawTRN(out, position, (*LargeSpellIcons)[GetSpellIconFrame(spell)], SplTransTbl);
+	ClxDrawTRN(out, position, sprite, SplTransTbl);
+	NoteIconForHd(out, position, sprite, frame, /*large=*/true, /*drawn=*/true);
 }
 
 void DrawSmallSpellIcon(const Surface &out, Point position, SpellID spell)
 {
-#ifdef UNPACKED_MPQS
-	ClxDrawTRN(out, position, (*SmallSpellIconsBackground)[0], SplTransTbl);
-#endif
-	ClxDrawTRN(out, position, (*SmallSpellIcons)[GetSpellIconFrame(spell)], SplTransTbl);
+	DrawSmallSpellIcon(out, position, static_cast<SpellIcon>(GetSpellIconFrame(spell)));
 }
 
 void DrawSmallSpellIcon(const Surface &out, Point position, SpellIcon icon)
 {
+	const auto frame = static_cast<uint8_t>(icon);
+	const ClxSprite sprite = (*SmallSpellIcons)[frame];
+	NoteIconForHd(out, position, sprite, frame, /*large=*/false, /*drawn=*/false);
 #ifdef UNPACKED_MPQS
 	ClxDrawTRN(out, position, (*SmallSpellIconsBackground)[0], SplTransTbl);
 #endif
-	ClxDrawTRN(out, position, (*SmallSpellIcons)[static_cast<uint8_t>(icon)], SplTransTbl);
+	ClxDrawTRN(out, position, sprite, SplTransTbl);
+	NoteIconForHd(out, position, sprite, frame, /*large=*/false, /*drawn=*/true);
 }
 
 void DrawLargeSpellIconBorder(const Surface &out, Point position, uint8_t color)
 {
 	const int width = (*LargeSpellIcons)[0].width();
 	const int height = (*LargeSpellIcons)[0].height();
-	UnsafeDrawBorder2px(out, Rectangle { Point { position.x, position.y - height + 1 }, Size { width, height } }, color);
+	const Rectangle box { Point { position.x, position.y - height + 1 }, Size { width, height } };
+	UnsafeDrawBorder2px(out, box, color);
+	// POE2 Mashup: the icon's HD art leaves the border out.
+	if (hd::CoverUiSpellIconHook != nullptr)
+		hd::CoverUiSpellIconHook(out, box);
 }
 
 void DrawSmallSpellIconBorder(const Surface &out, Point position)
 {
 	const int width = (*SmallSpellIcons)[0].width();
 	const int height = (*SmallSpellIcons)[0].height();
-	UnsafeDrawBorder2px(out, Rectangle { Point { position.x, position.y - height + 1 }, Size { width, height } }, SplTransTbl[PAL8_YELLOW + 2]);
+	const Rectangle box { Point { position.x, position.y - height + 1 }, Size { width, height } };
+	UnsafeDrawBorder2px(out, box, SplTransTbl[PAL8_YELLOW + 2]);
+	// POE2 Mashup: the icon's HD art leaves the border out.
+	if (hd::CoverUiSpellIconHook != nullptr)
+		hd::CoverUiSpellIconHook(out, box);
 }
 
 void SetSpellTrans(SpellType t)
 {
+	SplTransType = t;
 	if (t == SpellType::Skill) {
 		for (int i = 0; i < 128; i++)
 			SplTransTbl[i] = i;

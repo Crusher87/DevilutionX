@@ -20,6 +20,7 @@
 #include "automap.h"
 #include "engine/backbuffer_state.hpp"
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "gamemenu.h"
 #include "gmenu.h"
 #include "inv.h"
@@ -302,6 +303,8 @@ int AdminGiveGold(Player &player, int amount)
 
 void AdminMenuOpen(bool bActivate)
 {
+	if (!AdminToolsOn())
+		return;
 	AdminMain(bActivate);
 }
 

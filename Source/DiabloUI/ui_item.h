@@ -66,6 +66,28 @@ public:
 		uiFlags_ &= ~UiFlags::ElementHidden;
 	}
 
+	/**
+	 * @brief POE2 Mashup: whether it has been moved down clear of the logo's subtitle (UiMoveUnderSubtitle), or is to
+	 * stay where it is (a background, the logo itself, a dialog over the screen).
+	 */
+	[[nodiscard]] bool Placed() const
+	{
+		return placed_;
+	}
+
+	void KeepPlace()
+	{
+		placed_ = true;
+	}
+
+	/** @brief POE2 Mashup: moves it `dy` pixels down, once (Placed). */
+	void MoveDown(int dy)
+	{
+		placed_ = true;
+		m_rect.y += dy;
+		OnMovedDown(dy);
+	}
+
 protected:
 	UiItemBase(UiType type, SDL_Rect rect, UiFlags flags)
 	    : type_(type)
@@ -79,6 +101,11 @@ protected:
 		uiFlags_ = flags;
 	}
 
+	/** @brief POE2 Mashup: for an item with a place of its own besides its rect. */
+	virtual void OnMovedDown(int /*dy*/)
+	{
+	}
+
 private:
 	UiType type_;
 
@@ -87,6 +114,7 @@ public:
 
 private:
 	UiFlags uiFlags_;
+	bool placed_ = false;
 };
 
 //=============================================================================
@@ -426,6 +454,13 @@ public:
 		pressed_item_index_ = -1;
 	}
 
+protected:
+	void OnMovedDown(int dy) override
+	{
+		m_y = static_cast<Sint16>(m_y + dy);
+	}
+
+public:
 	// private:
 	size_t viewportSize;
 	Sint16 m_x, m_y;

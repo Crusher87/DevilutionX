@@ -124,8 +124,22 @@ enum class Knob : uint8_t {
 	TileShapes,
 	/** In a Tristram storm, raindrops land on the screen as on a window: they sit, dry off, and now and then run down. */
 	Lens,
+	/** An experiment, off unless asked for: the HD world's tiles drawn from a few big pictures in few draws (hd_batch.hpp). */
+	Batch,
+	/**
+	 * Dead bodies on the floor take its light smoothly across them, the shadows of whoever and whatever stands between
+	 * them and a light fall over them, and a body with a shape map is lit by its shape; at 0, one flat light each as before.
+	 */
+	Corpses,
+	/**
+	 * Heroes' and monsters' shadows are cast from their carved bodies (carved_bodies.hpp), as each light sees them from
+	 * its side, where the bodies have been made; at 0, from the drawing that faces the viewer as before.
+	 */
+	Carved,
+	/** Heroes and monsters with a carved body are lit by its shape: the side turned to a light brighter, the far side darker. */
+	BodyLight,
 };
-inline constexpr size_t NumKnobs = 43;
+inline constexpr size_t NumKnobs = 47;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

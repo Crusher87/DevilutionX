@@ -36,6 +36,8 @@ struct ItemLabel {
 };
 
 std::vector<ItemLabel> labelQueue;
+/** POE2 Mashup: the labels of the world last drawn, as it noted them, for a frame that shows that world again. */
+std::vector<ItemLabel> keptLabels;
 
 bool highlightKeyPressed = false;
 bool isLabelHighlighted = false;
@@ -112,7 +114,7 @@ void AddItemToLabelQueue(int id, Point position)
 	if (IsItemHiddenByLootFilter(item))
 		return;
 	// POE2 Mashup: no names through closed doors or in rooms not yet seen (Curtis 2026-11-07).
-	if (gbIsPoe2 && !HeroHasSeenGroundItem(item))
+	if (HasEnhancements() && !HeroHasSeenGroundItem(item))
 		return;
 	// POE2 Mashup: gold has no label; picking it up shows the amount over the hero.
 	if (gbIsPoe2 && item._itype == ItemType::Gold)
@@ -150,10 +152,16 @@ bool IsMouseOverGameArea()
 	return !IsCursorOverUi(MousePosition);
 }
 
+void QueueKeptItemNameLabels()
+{
+	labelQueue = std::vector<ItemLabel>(keptLabels.begin(), keptLabels.end());
+}
+
 void DrawItemNameLabels(const Surface &out)
 {
 	const Surface clippedOut = out.subregionY(0, gnViewportHeight);
 	isLabelHighlighted = false;
+	keptLabels = std::vector<ItemLabel>(labelQueue.begin(), labelQueue.end());
 	if (labelQueue.empty())
 		return;
 	UsedX usedX;
@@ -217,7 +225,7 @@ void DrawItemNameLabels(const Surface &out)
 			    && !MyPlayerIsDead
 			    && !IsPlayerInStore()
 			    && IsMouseOverGameArea()
-			    && (gbIsPoe2 ? sgbMouseDown == CLICK_NONE : LastPlayerAction == PlayerActionType::None)) {
+			    && (HasEnhancements() ? sgbMouseDown == CLICK_NONE : LastPlayerAction == PlayerActionType::None)) {
 				isLabelHighlighted = true;
 				cursPosition = item.position;
 				pcursitem = label.id;

@@ -39,6 +39,7 @@
 #include "poe2/stash_tabs.hpp"
 #include "poe2/telemetry.hpp"
 #include "stores.h"
+#include "utils/algorithm/container.hpp"
 #include "utils/display.h"
 #include "utils/format_int.hpp"
 #include "utils/is_of.hpp"
@@ -62,7 +63,7 @@ constexpr unsigned LastStashPage = CountStashPages - 1;
 /** @brief Pages the player can reach: the POE2 stash only has the tabs added so far. */
 unsigned UsableStashPages()
 {
-	return gbIsPoe2 ? std::clamp(StashTabs.count(), 1U, CountStashPages) : CountStashPages;
+	return HasStashTabs() ? std::clamp(StashTabs.count(), 1U, CountStashPages) : CountStashPages;
 }
 
 unsigned LastUsableStashPage()
@@ -329,6 +330,8 @@ Point GetStashSlotCoord(Point slot)
 
 void FreeStashGFX()
 {
+	hd::ForgetUiPicture(StashNavButtonArt);
+	hd::ForgetUiPicture(StashPanelArt);
 	StashNavButtonArt = std::nullopt;
 	StashPanelArt = std::nullopt;
 }
@@ -338,6 +341,9 @@ void InitStash()
 	if (!HeadlessMode) {
 		StashPanelArt = LoadClx("data\\stash.clx");
 		StashNavButtonArt = LoadClx("data\\stashnavbtns.clx");
+		// POE2 Mashup: the stash and its buttons show the HD pack's art of them.
+		hd::RegisterUiPicture("data\\stash.clx", *StashPanelArt);
+		hd::RegisterUiPicture("data\\stashnavbtns.clx", *StashNavButtonArt);
 	}
 }
 
@@ -411,8 +417,8 @@ void CheckStashButtonRelease(Point mousePosition)
 
 void CheckStashButtonPress(Point mousePosition)
 {
-	// POE2 Mashup: the stash is drawn in code; its tab strip has the buttons.
-	if (gbIsPoe2) {
+	// POE2 Mashup and Sanctuary Reforged: the stash is drawn in code; its tab strip has the buttons.
+	if (HasStashTabs()) {
 		StashButtonPressed = -1;
 		return;
 	}
@@ -432,8 +438,9 @@ void CheckStashButtonPress(Point mousePosition)
 
 void DrawStash(const Surface &out)
 {
-	// POE2 Mashup: no gold box or withdraw button; the frame, tab strip and premade tabs are drawn in code.
-	if (gbIsPoe2) {
+	// POE2 Mashup: no gold box or withdraw button; the frame, tab strip and premade tabs are drawn in code. Sanctuary
+	// Reforged has the same stash, with its gold and withdraw button in the tab's header.
+	if (HasStashTabs()) {
 		DrawPoe2StashFrame(out);
 		if (StashTabs.kind(Stash.GetPage()) != StashTabKind::Blank) {
 			DrawStashTabUi(out);
@@ -450,7 +457,7 @@ void DrawStash(const Surface &out)
 
 	constexpr Displacement offset { 0, INV_SLOT_SIZE_PX - 1 };
 
-	if (gbIsPoe2)
+	if (HasStashTabs())
 		DrawPoe2StashGridBack(out);
 
 	for (auto slot : StashGridRange) {
@@ -489,7 +496,7 @@ void DrawStash(const Surface &out)
 
 		DrawItem(item, out, position, sprite);
 		// POE2 Mashup: a search frames the items that match and dims the rest.
-		if (gbIsPoe2 && StashSearch.searching())
+		if (HasStashTabs() && StashSearch.searching())
 			DrawItemSearchMark(out, { { position.x, position.y - sprite.height() + 1 }, { sprite.width(), sprite.height() } }, StashSearch.matches(item));
 	}
 
@@ -497,23 +504,23 @@ void DrawStash(const Surface &out)
 	const UiFlags style = UiFlags::VerticalCenter | UiFlags::ColorWhite;
 	const int textboxHeight = 13;
 
-	if (!gbIsPoe2) {
+	if (!HasStashTabs()) {
 		DrawString(out, StrCat(Stash.GetPage() + 1), { position + Displacement { 132, 0 }, { 57, textboxHeight } },
 		    { .flags = UiFlags::AlignCenter | style });
 	}
 	// POE2 Mashup: gold isn't deposited; the league's gold shows in the inventory.
-	if (!gbIsPoe2) {
+	if (!HasStashTabs()) {
 		DrawString(out, FormatInteger(Stash.gold), { position + Displacement { 122, 19 }, { 107, textboxHeight } },
 		    { .flags = UiFlags::AlignRight | style });
 	}
-	if (gbIsPoe2)
+	if (HasStashTabs())
 		DrawStashTabUi(out);
 }
 
 void CheckStashItem(Point mousePosition, bool isShiftHeld, bool isCtrlHeld)
 {
 	// POE2 Mashup: the tab strip, and the premade tabs' own layouts.
-	if (gbIsPoe2 && HandlePoe2StashClick(mousePosition, isShiftHeld, isCtrlHeld))
+	if (HasStashTabs() && HandlePoe2StashClick(mousePosition, isShiftHeld, isCtrlHeld))
 		return;
 	if (!MyPlayer->HoldItem.isEmpty()) {
 		CheckStashPaste(mousePosition);
@@ -1490,6 +1497,29 @@ void ConsolidateStashTabs()
 		if (emptied && IsStashTabEmpty(page))
 			RemoveEmptyStashTab(page);
 	}
+}
+
+void KeepReforgedStashTabsBlank()
+{
+	for (StashTab &tab : StashTabs.tabs) {
+		tab.kind = StashTabKind::Blank;
+		tab.affinities = 0;
+		tab.bigPictures = false;
+	}
+	unsigned usedPages = 0;
+	for (const auto &[key, grid] : Stash.stashGrids) {
+		if (c_any_of(grid, [](const auto &row) { return c_any_of(row, [](StashStruct::StashCell cell) { return cell > 0; }); }))
+			usedPages = std::max(usedPages, StashGridPage(key) + 1);
+	}
+	StashTabs.ensureCount(usedPages);
+}
+
+bool RemoveStashTab(unsigned page)
+{
+	if (page >= StashTabs.count() || StashTabs.count() <= 1 || !IsStashTabEmpty(page))
+		return false;
+	RemoveEmptyStashTab(page);
+	return true;
 }
 
 void FitOneCellStashItems()

@@ -13,18 +13,6 @@ namespace {
 /** Where the open window's fountain stands, so the trade can use it up. */
 WorldTilePosition TearsFountainPosition;
 
-int StartingValue(const Player &player, CharacterAttribute attribute)
-{
-	const ClassAttributes &base = player.getClassAttributes();
-	switch (attribute) {
-	case CharacterAttribute::Strength: return base.baseStr;
-	case CharacterAttribute::Magic: return base.baseMag;
-	case CharacterAttribute::Dexterity: return base.baseDex;
-	case CharacterAttribute::Vitality: return base.baseVit;
-	}
-	return 0;
-}
-
 void ModifyAttribute(Player &player, CharacterAttribute attribute, int delta)
 {
 	switch (attribute) {
@@ -39,7 +27,9 @@ void ModifyAttribute(Player &player, CharacterAttribute attribute, int delta)
 
 bool TearsCanGive(const Player &player, CharacterAttribute attribute)
 {
-	return player.GetBaseAttributeValue(attribute) > StartingValue(player, attribute);
+	// Any stat, as Diablo's fountain could lower any: a hero of the mod gets no stat points per level, so a stat rarely
+	// rises above where it started (Curtis 2026-11-14: every line was greyed). It stays at 1 or more.
+	return player.GetBaseAttributeValue(attribute) > TearsLowestValue;
 }
 
 bool TearsCanTake(const Player &player, CharacterAttribute attribute)

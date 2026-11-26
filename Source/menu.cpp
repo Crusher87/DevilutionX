@@ -23,6 +23,7 @@
 #include "movie.h"
 #include "options.h"
 #include "pfile.h"
+#include "poe2/hd.hpp"
 #include "poe2/skill_lab.hpp"
 #include "storm/storm_net.hpp"
 #include "utils/language.h"
@@ -163,7 +164,9 @@ void mainmenu_loop()
 {
 	bool done;
 
-	RefreshMusic();
+	// POE2 Mashup: the main menu's intro has sounds of its own, and starts the music when it ends.
+	if (demo::IsRunning() || !hd::MenuIntroWanted())
+		RefreshMusic();
 	done = false;
 
 	do {

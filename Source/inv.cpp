@@ -1232,6 +1232,17 @@ int CreateGoldItemInInventorySlot(Player &player, int slotIndex, int value)
 	return value;
 }
 
+/**
+ * @brief Sanctuary Reforged: shows "+N gold" over the hero for gold picked up from the ground, as POE2 Mashup's purse
+ * does (AddGoldToInventory shows it there). Gold still goes into piles in the bag.
+ */
+void ShowReforgedGoldPickedUp(const Player &player, int pickedUp)
+{
+	if (!gbIsReforged || gbIsPoe2 || &player != MyPlayer || pickedUp <= 0)
+		return;
+	AddFloatingNumber(player.position.tile, { 0, -80 }, StrCat("+", FormatInteger(pickedUp), " ", _("gold")), UiFlags::ColorGold | UiFlags::FontSize12, 0x601D);
+}
+
 } // namespace
 
 item_quality SlotBackQuality(const Item &item)
@@ -1255,9 +1266,9 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 		return;
 
 	uint8_t colorShift;
-	if (gbIsPoe2 && !IsInspectingPlayer()) {
+	if (HasEnhancements() && !IsInspectingPlayer()) {
 		// POE2 Mashup: the slot shows the item's rarity: plain grey for normal items, blue magic, yellow rare
-		// and orange unique.
+		// and orange unique. Sanctuary Reforged has Diablo's rarities only: plain, blue magic and gold unique.
 		switch (itemQuality) {
 		case ITEM_QUALITY_MAGIC:
 			colorShift = PAL16_GRAY - PAL16_BLUE - 1;
@@ -1266,7 +1277,7 @@ void InvDrawSlotBack(const Surface &out, Point targetPosition, Size size, item_q
 			colorShift = PAL16_GRAY - PAL16_YELLOW - 1;
 			break;
 		case ITEM_QUALITY_UNIQUE:
-			colorShift = PAL16_GRAY - PAL16_ORANGE - 1;
+			colorShift = PAL16_GRAY - (gbIsPoe2 ? PAL16_ORANGE : PAL16_YELLOW) - 1;
 			break;
 		default:
 			return;
@@ -1310,6 +1321,7 @@ bool CanBePlacedOnBelt(const Player &player, const Item &item)
 
 void FreeInvGFX()
 {
+	hd::ForgetUiPicture(pInvCels);
 	pInvCels = std::nullopt;
 }
 
@@ -1320,12 +1332,16 @@ void InitInv()
 	if (gbIsSpawn && (playerClassData.inv == "inv_rog" || playerClassData.inv == "inv_sor")) {
 		invName = "inv";
 	}
-	pInvCels = LoadCel(StrCat("data\\inv\\", invName).c_str(), static_cast<uint16_t>(SidePanelSize.width));
+	// POE2 Mashup: the inventory shows the HD pack's art of it (hd/data/inv/<name>), and another class's goes.
+	hd::ForgetUiPicture(pInvCels);
+	const std::string path = StrCat("data\\inv\\", invName);
+	pInvCels = LoadCel(path.c_str(), static_cast<uint16_t>(SidePanelSize.width));
+	hd::RegisterUiPicture(path, *pInvCels);
 }
 
 namespace {
 
-/** @brief POE2 Mashup: the weapon set I and II buttons above the left hand slot. */
+/** @brief POE2 Mashup and Sanctuary Reforged: the weapon set I and II buttons above the left hand slot; the lit one is out. */
 Rectangle WeaponSetButton(uint8_t set)
 {
 	return { GetPanelPosition(UiPanels::Inventory, { 17 + (set * 30), 60 }), { 28, 14 } };
@@ -1344,7 +1360,7 @@ void DrawWeaponSetButtons(const Surface &out, const Player &player)
 /** @brief A click on the other set's button swaps to it. */
 bool CheckWeaponSetButtons(Player &player)
 {
-	if (!gbIsPoe2 || !player.HoldItem.isEmpty())
+	if (!HasWeaponSwap() || !player.HoldItem.isEmpty())
 		return false;
 	for (uint8_t set = 0; set < NumWeaponSets; set++) {
 		if (!WeaponSetButton(set).contains(MousePosition))
@@ -1475,8 +1491,9 @@ void DrawInv(const Surface &out)
 		}
 	}
 
-	if (gbIsPoe2) {
+	if (HasWeaponSwap())
 		DrawWeaponSetButtons(out, myPlayer);
+	if (gbIsPoe2) {
 		// The league's gold, shared by every hero in it.
 		DrawString(out, FormatRuntime(_("Gold: {:s}"), FormatInteger(Stash.gold)), { GetPanelPosition(UiPanels::Inventory, { 80, 184 }), { 164, 16 } },
 		    { .flags = UiFlags::AlignCenter | UiFlags::ColorGold | UiFlags::FontSize12 });
@@ -1958,7 +1975,9 @@ void InvGetItem(Player &player, int ii)
 	item.updateRequiredStatsCacheForPlayer(player);
 	TelemetryItemPickedUp(player, item);
 
+	const int goldOffered = item._itype == ItemType::Gold ? item._ivalue : 0;
 	if (item._itype == ItemType::Gold && GoldAutoPlace(player, item)) {
+		ShowReforgedGoldPickedUp(player, goldOffered);
 		if (MyPlayer == &player) {
 			// Non-gold items (or gold when you have a full inventory) go to the hand then provide audible feedback on
 			//  paste. To give the same feedback for auto-placed gold we play the sound effect now.
@@ -2033,7 +2052,10 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii)
 	bool autoEquipped = false;
 
 	if (item._itype == ItemType::Gold) {
+		// Taken before GoldAutoPlace leaves only what didn't fit in the item.
+		const int goldOffered = item._ivalue;
 		done = GoldAutoPlace(player, item);
+		ShowReforgedGoldPickedUp(player, goldOffered - item._ivalue);
 		if (!done) {
 			SetPlrHandGoldCurs(item);
 		}
@@ -2052,8 +2074,8 @@ void AutoGetItem(Player &player, Item *itemPointer, int ii)
 	}
 
 	if (done) {
-		if (gbIsPoe2 && item._itype == ItemType::Gold && &player == MyPlayer) {
-			// POE2 Mashup: gold picked up by walking near it just clinks.
+		if (HasEnhancements() && item._itype == ItemType::Gold && &player == MyPlayer) {
+			// POE2 Mashup and Sanctuary Reforged: gold picked up by walking near it just clinks.
 			PlaySFX(SfxID::ItemGold);
 		} else if (!autoEquipped && *GetOptions().Audio.itemPickupSound && &player == MyPlayer) {
 			PlaySFX(SfxID::GrabItem);
@@ -2300,7 +2322,7 @@ int8_t CheckInvHLight()
 		if (rv >= INVITEM_INV_FIRST)
 			PrintItemComparison(*pi);
 		// POE2 Mashup: at a vendor, your own items show what they sell for.
-		if (gbIsPoe2 && rv >= INVITEM_INV_FIRST) {
+		if (UsesShopTabs() && rv >= INVITEM_INV_FIRST) {
 			if (const std::optional<int> price = VisualStoreSellPrice(*pi); price) {
 				CurrentInfoLineStyle = InfoLineStyle::Note;
 				// Only the price: how to sell is in the help, and the hint lines cluttered every hover (Curtis 2026-10-21).

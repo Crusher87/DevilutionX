@@ -8,7 +8,10 @@
 #include <algorithm>
 #include <array>
 #include <cstring>
+#include <utility>
+#include <vector>
 
+#include "game_mode.hpp"
 #include "interfac.h"
 #include "levels/gendung.h"
 #include "msg.h"
@@ -61,6 +64,15 @@ std::array<FloorRecord, SetLevelCount> SetFloors;
 uint32_t FloorRollState = 0;
 /** The designed rooms of the last floors built by the new Cathedral builder, newest first. */
 std::array<uint64_t, 5> RecentRooms {};
+
+/** Sanctuary Reforged: a room collection a saved floor was built from, read back from the save. */
+struct KeptRooms {
+	RoomCollection collection = RoomCollection::Cathedral;
+	uint32_t stamp = 0;
+	std::vector<CathedralRoomDef> rooms;
+};
+std::vector<KeptRooms> KeptFloorRooms;
+constexpr uint8_t KeptRoomsVersion = 1;
 
 FloorRecord *RecordFor(int level, bool isSetLevel)
 {
@@ -118,6 +130,9 @@ bool BuiltFromOtherRooms(int level, bool isSetLevel)
  */
 void RebuildFloorsFromOtherRooms()
 {
+	// Sanctuary Reforged never builds a visited floor anew: it keeps the rooms the floor was built from (KeepFloorRooms).
+	if (gbIsReforged)
+		return;
 	Player &myPlayer = *MyPlayer;
 	if (MyPlayerId < MAXPORTAL) {
 		const Portal &portal = Portals[MyPlayerId];
@@ -137,6 +152,34 @@ void RebuildFloorsFromOtherRooms()
 	EventPlrMsg(_("The game was updated, so this floor was built anew."), UiFlags::ColorWhitegold);
 	Poe2ForceFreshFloor = true;
 	StartNewLvl(myPlayer, WM_DIABNEXTLVL, currlevel);
+}
+
+RoomCollection CollectionOfLevel(int level)
+{
+	return RoomCollectionOf(GetLevelType(level));
+}
+
+/**
+ * Sanctuary Reforged: a saved floor is built again from the rooms it was built from, so it keeps its layout under the
+ * monsters, objects and items saved on it, even after a game update changed the rooms. If the save doesn't have those
+ * rooms (or the builder itself changed, which changes the stamp of any rooms) the floor is built from today's rooms and
+ * loaded as saved, as Diablo always loads a visited floor; from then on it counts as built from today's rooms.
+ */
+void KeepFloorRooms(int level, FloorRecord &record)
+{
+	const RoomCollection collection = CollectionOfLevel(level);
+	const uint32_t shipped = RoomCollectionStamp(ShippedRoomCollection(collection));
+	if (record.roomsStamp == shipped)
+		return;
+	for (const KeptRooms &kept : KeptFloorRooms) {
+		if (kept.collection != collection || kept.stamp != record.roomsStamp || RoomCollectionStamp(kept.rooms) != kept.stamp)
+			continue;
+		KeepRoomCollection(collection, &kept.rooms);
+		TelemetryLog("floor", StrCat("floor ", level, " built from the rooms it was saved with"));
+		return;
+	}
+	TelemetryLog("floor", StrCat("floor ", level, " was saved with rooms this save doesn't have: built from today's rooms"));
+	record.roomsStamp = shipped;
 }
 
 bool AnyoneElseOnFloor(int level, bool isSetLevel)
@@ -263,6 +306,8 @@ void Poe2FloorsReset()
 	CheckRoomsAfterLoad = false;
 	FloorRollState = MixSeed(sgGameInitInfo.gameSeed[0] ^ 0x5F10EDU);
 	RecentRooms.fill(0);
+	ForgetKeptRoomCollections();
+	KeptFloorRooms.clear();
 }
 
 void Poe2FloorsTick()
@@ -367,6 +412,15 @@ void Poe2BeginFloorVisit(bool firstflag, lvl_entry lvldir)
 	}
 	if (FloorIsFinalBossRest(level, setlevel))
 		return;
+	// Sanctuary Reforged keeps every floor as Diablo does, also after a game update changed the rooms it was built from:
+	// it is built again from the rooms it was saved with (see KeepFloorRooms).
+	if (gbIsReforged) {
+		if (!gbIsMultiplayer && force) {
+			Poe2RollFreshFloor(level, setlevel);
+			Poe2FloorFresh = true;
+		}
+		return;
+	}
 	if (gbIsMultiplayer) {
 		// Every player has a different clock, so only the Ctrl+click roll is used, and only when nobody else
 		// is already standing on that floor (they would keep a different copy of it).
@@ -467,11 +521,19 @@ bool Poe2UnpackFloors(std::span<const uint8_t> data)
 	return true;
 }
 
+bool UsesDesignedFloors()
+{
+	return (gbIsPoe2 || gbIsReforged) && !gbIsMultiplayer;
+}
+
 Poe2FloorBuild Poe2FloorBuildFor(int level)
 {
+	ForgetKeptRoomCollections();
 	FloorRecord *record = RecordFor(level, false);
 	if (record == nullptr)
 		return {};
+	if (gbIsReforged && record->stamped && record->cathedralFunnel)
+		KeepFloorRooms(level, *record);
 	if (!record->stamped) {
 		record->stamped = true;
 		const bool catacombs = leveltype == DTYPE_CATACOMBS;
@@ -490,8 +552,10 @@ Poe2FloorBuild Poe2FloorBuildFor(int level)
 			wanted = *GetOptions().Gameplay.newCavesFloors;
 		else if (catacombs)
 			wanted = *GetOptions().Gameplay.newCatacombsFloors;
-		// A kept floor that was never settled was built before its dungeon had the new builder: it stays Diablo's.
-		record->cathedralFunnel = !record->kept && wanted;
+		// A kept floor that was never settled was built before its dungeon had the new builder: it stays Diablo's. Sanctuary
+		// Reforged keeps every floor it has saved, so there that is any floor visited before and not being built fresh.
+		const bool builtBefore = gbIsReforged ? EverVisited(level, false) && !Poe2FloorFresh : record->kept;
+		record->cathedralFunnel = !builtBefore && wanted;
 		record->avoidRooms = record->cathedralFunnel ? CathedralRoomsToAvoid(RecentRooms, catacombs, caves || hive, hell, hive, crypt) : 0;
 		record->roomsPending = record->cathedralFunnel;
 		record->roomsStamp = record->cathedralFunnel ? CathedralRoomsStamp(catacombs, caves, hell, hive, crypt) : 0;
@@ -507,6 +571,62 @@ void Poe2NoteFloorRooms(int level, uint64_t rooms)
 	record->roomsPending = false;
 	std::copy_backward(RecentRooms.begin(), RecentRooms.end() - 1, RecentRooms.end());
 	RecentRooms[0] = rooms;
+}
+
+std::vector<uint8_t> PackKeptFloorRooms()
+{
+	std::vector<uint8_t> out;
+	out.push_back(KeptRoomsVersion);
+	out.push_back(0);
+	uint8_t count = 0;
+	std::vector<std::pair<RoomCollection, uint32_t>> written;
+	for (int level = 1; level < NUMLEVELS; level++) {
+		const FloorRecord &record = Floors[level];
+		if (!record.stamped || !record.cathedralFunnel || record.roomsStamp == 0 || count == UINT8_MAX)
+			continue;
+		const RoomCollection collection = CollectionOfLevel(level);
+		if (std::find(written.begin(), written.end(), std::make_pair(collection, record.roomsStamp)) != written.end())
+			continue;
+		const std::vector<CathedralRoomDef> *rooms = nullptr;
+		for (const KeptRooms &kept : KeptFloorRooms) {
+			if (kept.collection == collection && kept.stamp == record.roomsStamp)
+				rooms = &kept.rooms;
+		}
+		if (rooms == nullptr && RoomCollectionStamp(ShippedRoomCollection(collection)) == record.roomsStamp)
+			rooms = &ShippedRoomCollection(collection);
+		if (rooms == nullptr)
+			continue;
+		written.emplace_back(collection, record.roomsStamp);
+		out.push_back(static_cast<uint8_t>(collection));
+		Put32(out, record.roomsStamp);
+		PackRoomCollection(out, *rooms);
+		count++;
+	}
+	out[1] = count;
+	return out;
+}
+
+void UnpackKeptFloorRooms(std::span<const uint8_t> data)
+{
+	ForgetKeptRoomCollections();
+	KeptFloorRooms.clear();
+	if (data.size() < 2 || data[0] == 0 || data[0] > KeptRoomsVersion)
+		return;
+	const uint8_t count = data[1];
+	size_t pos = 2;
+	for (uint8_t i = 0; i < count; i++) {
+		if (data.size() < pos + 1 + 4)
+			return;
+		KeptRooms kept;
+		const uint8_t collection = data[pos++];
+		kept.stamp = Get32(data, pos);
+		if (!UnpackRoomCollection(data, pos, kept.rooms))
+			return;
+		if (collection > static_cast<uint8_t>(RoomCollection::Crypt))
+			continue;
+		kept.collection = static_cast<RoomCollection>(collection);
+		KeptFloorRooms.push_back(std::move(kept));
+	}
 }
 
 } // namespace devilution

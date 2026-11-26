@@ -38,6 +38,7 @@
 #include "effects.h"
 #include "engine/clx_sprite.hpp"
 #include "engine/dx.h"
+#include "engine/load_clx.hpp"
 #include "engine/load_pcx.hpp"
 #include "engine/palette.h"
 #include "engine/render/clx_render.hpp"
@@ -50,6 +51,7 @@
 #include "init.hpp"
 #include "options.h"
 #include "player.h"
+#include "poe2/hd.hpp"
 #include "sound_effect_enums.h"
 #include "tables/playerdat.hpp"
 #include "utils/algorithm/container.hpp"
@@ -631,6 +633,8 @@ void LoadHeros()
 	if (!ArtHero)
 		return;
 	const uint16_t numPortraits = ClxSpriteList { *ArtHero }.numSprites();
+	// POE2 Mashup: the select screen's hero pictures show the HD pack's (hd\\ui_art\\heros\\d0_fNN.png), over the UI.
+	hd::RegisterUiPicture("ui_art\\heros", *ArtHero, hd::UiPictureLayer::Over);
 
 	ArtHeroPortraitOrder.resize(GetNumPlayerClasses() + 1);
 	for (size_t i = 0; i < GetNumPlayerClasses(); ++i) {
@@ -652,14 +656,28 @@ void LoadHeros()
 
 void LoadUiGFX()
 {
-	ArtLogo = LoadPcxSpriteList("ui_art\\hf_logo2", /*numFrames=*/16, /*transparentColor=*/0, nullptr, false);
+	const char *logo = "ui_art\\hf_logo2";
+	// POE2 Mashup: with the HD pack's Diablo logo, Hellfire's main menu shows it too (Diablo's smlogo, where Diablo has
+	// it) in place of hf_logo2.
+	if (!hd::ShowsHdLogo("ui_art/smlogo"))
+		ArtLogo = LoadPcxSpriteList(logo, /*numFrames=*/16, /*transparentColor=*/0, nullptr, false);
 	if (!ArtLogo.has_value()) {
-		ArtLogo = LoadPcxSpriteList("ui_art\\smlogo", /*numFrames=*/15, /*transparentColor=*/250);
+		logo = "ui_art\\smlogo";
+		ArtLogo = LoadPcxSpriteList(logo, /*numFrames=*/15, /*transparentColor=*/250);
 	}
+	// POE2 Mashup: the HD pack's sharp logo (hd\\ui_art\\smlogo\\d0_fNN.png) goes over the UI in its place, and none of the
+	// old one (its fire too) shows round it. Without the art, the old one shows as it was.
+	if (ArtLogo.has_value())
+		hd::RegisterUiPicture(logo, *ArtLogo, hd::UiPictureLayer::Over);
 	DifficultyIndicator = LoadPcx("ui_art\\r1_gry", /*transparentColor=*/0);
 	ArtFocus[FOCUS_SMALL] = LoadPcxSpriteList("ui_art\\focus16", /*numFrames=*/8, /*transparentColor=*/250);
 	ArtFocus[FOCUS_MED] = LoadPcxSpriteList("ui_art\\focus", /*numFrames=*/8, /*transparentColor=*/250);
 	ArtFocus[FOCUS_BIG] = LoadPcxSpriteList("ui_art\\focus42", /*numFrames=*/8, /*transparentColor=*/250);
+	// POE2 Mashup: the menus' spinning pentagrams show the HD pack's (hd\\ui_art\\focusNN), turning smoothly where it has
+	// their full turn (hd_ui.cpp's SpinningPictures).
+	hd::RegisterUiPicture("ui_art\\focus16", *ArtFocus[FOCUS_SMALL], hd::UiPictureLayer::Over);
+	hd::RegisterUiPicture("ui_art\\focus", *ArtFocus[FOCUS_MED], hd::UiPictureLayer::Over);
+	hd::RegisterUiPicture("ui_art\\focus42", *ArtFocus[FOCUS_BIG], hd::UiPictureLayer::Over);
 
 	ArtCursor = LoadPcx("ui_art\\cursor", /*transparentColor=*/0);
 
@@ -677,12 +695,16 @@ ClxSprite UiGetHeroDialogSprite(size_t heroClassIndex)
 
 void UnloadUiGFX()
 {
+	hd::ForgetUiPicture(ArtHero);
 	ArtHero = std::nullopt;
 	for (OptionalOwnedClxSpriteList &override : ArtHeroOverrides)
 		override = std::nullopt;
 	ArtCursor = std::nullopt;
-	for (auto &art : ArtFocus)
+	for (auto &art : ArtFocus) {
+		hd::ForgetUiPicture(art);
 		art = std::nullopt;
+	}
+	hd::ForgetUiPicture(ArtLogo);
 	ArtLogo = std::nullopt;
 	DifficultyIndicator = std::nullopt;
 }
@@ -761,6 +783,7 @@ void UiLoadDefaultPalette()
 
 bool UiLoadBlackBackground()
 {
+	hd::ShowMenuBackground(false);
 	ArtBackground = std::nullopt;
 	UiLoadDefaultPalette();
 	UiOnBackgroundChange();
@@ -769,6 +792,7 @@ bool UiLoadBlackBackground()
 
 void LoadBackgroundArt(const char *pszFile, int frames)
 {
+	hd::ShowMenuBackground(false);
 	ArtBackground = std::nullopt;
 	ArtBackground = LoadPcxSpriteList(pszFile, static_cast<uint16_t>(frames), /*transparentColor=*/std::nullopt, logical_palette.data());
 	if (!ArtBackground)
@@ -776,6 +800,20 @@ void LoadBackgroundArt(const char *pszFile, int frames)
 
 	UpdateSystemPalette(logical_palette);
 	UiOnBackgroundChange();
+}
+
+void LoadMainMenuBackground(bool spawn)
+{
+	if (!spawn)
+		ArtBackgroundWidescreen = LoadOptionalClx("ui_art\\mainmenuw.clx");
+	LoadBackgroundArt(spawn ? "ui_art\\swmmenu" : "ui_art\\mainmenu");
+	// POE2 Mashup: the HD pack's own background (its palette still the old one's), drawn under the menu as the frame
+	// goes up (hd::DrawMenuBackground).
+	if (hd::HasMenuBackground()) {
+		ArtBackground = std::nullopt;
+		ArtBackgroundWidescreen = std::nullopt;
+		hd::ShowMenuBackground(true);
+	}
 }
 
 void UiAddBackground(std::vector<std::unique_ptr<UiItemBase>> *vecDialog)
@@ -789,10 +827,74 @@ void UiAddBackground(std::vector<std::unique_ptr<UiItemBase>> *vecDialog)
 	}
 }
 
+namespace {
+
+/** @brief POE2 Mashup: how many menu logos are on screens (UiAddLogo) now. */
+int LogosShown = 0;
+
+/** @brief POE2 Mashup: the menu logo (UiAddLogo), counted while it is there. */
+class UiLogo : public UiImageAnimatedClx {
+public:
+	UiLogo(ClxSpriteList list, SDL_Rect rect)
+	    : UiImageAnimatedClx(list, rect, UiFlags::AlignCenter)
+	{
+		KeepPlace();
+		LogosShown++;
+	}
+	~UiLogo() override
+	{
+		LogosShown--;
+	}
+};
+
+/**
+ * @brief POE2 Mashup: the room the subtitle and its fire lines take under the logo, past the 161 rows the screens' titles
+ * are under the logo's top: the main menu's first item, at 192, is just clear of them.
+ */
+constexpr int SubtitleDrop = 32;
+
+void MoveUnderSubtitle(UiItemBase &item, int drop)
+{
+	if (!item.Placed())
+		item.MoveDown(drop);
+}
+
+} // namespace
+
 void UiAddLogo(std::vector<std::unique_ptr<UiItemBase>> *vecDialog, int y)
 {
-	vecDialog->push_back(std::make_unique<UiImageAnimatedClx>(
-	    *ArtLogo, MakeSdlRect(0, y, 0, 0), UiFlags::AlignCenter));
+	vecDialog->push_back(std::make_unique<UiLogo>(*ArtLogo, MakeSdlRect(0, y, 0, 0)));
+}
+
+int UiSubtitleDrop()
+{
+	if (LogosShown <= 0 || !hd::MenuSubtitleShown())
+		return 0;
+	return std::clamp(GetUIRectangle().position.y, 0, SubtitleDrop);
+}
+
+void UiMoveUnderSubtitle(const std::vector<UiItemBase *> &items)
+{
+	const int drop = UiSubtitleDrop();
+	if (drop == 0)
+		return;
+	for (UiItemBase *item : items)
+		MoveUnderSubtitle(*item, drop);
+}
+
+void UiMoveUnderSubtitle(const std::vector<std::unique_ptr<UiItemBase>> &items)
+{
+	const int drop = UiSubtitleDrop();
+	if (drop == 0)
+		return;
+	for (const std::unique_ptr<UiItemBase> &item : items)
+		MoveUnderSubtitle(*item, drop);
+}
+
+void UiKeepPlaces(const std::vector<std::unique_ptr<UiItemBase>> &items)
+{
+	for (const std::unique_ptr<UiItemBase> &item : items)
+		item->KeepPlace();
 }
 
 void UiFadeIn()
@@ -1147,12 +1249,14 @@ void UiRenderItem(const UiItemBase &item)
 
 void UiRenderItems(const std::vector<UiItemBase *> &items)
 {
+	UiMoveUnderSubtitle(items);
 	for (const UiItemBase *item : items)
 		UiRenderItem(*item);
 }
 
 void UiRenderItems(const std::vector<std::unique_ptr<UiItemBase>> &items)
 {
+	UiMoveUnderSubtitle(items);
 	for (const std::unique_ptr<UiItemBase> &item : items)
 		UiRenderItem(*item);
 }
@@ -1162,6 +1266,7 @@ bool UiItemMouseEvents(SDL_Event *event, const std::vector<UiItemBase *> &items)
 	if (items.empty()) {
 		return false;
 	}
+	UiMoveUnderSubtitle(items);
 
 	bool handled = false;
 	for (const auto &item : items) {
@@ -1190,6 +1295,7 @@ bool UiItemMouseEvents(SDL_Event *event, const std::vector<std::unique_ptr<UiIte
 	if (items.empty()) {
 		return false;
 	}
+	UiMoveUnderSubtitle(items);
 
 	bool handled = false;
 	for (const auto &item : items) {

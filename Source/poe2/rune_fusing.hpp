@@ -1,8 +1,8 @@
 /**
  * @file poe2/rune_fusing.hpp
  *
- * POE2 Mashup: Cain fuses runes (build spec step 5). Three Lesser runes make one plain rune, three plain make one
- * Greater, and five Greater and gold make one Perfect, once Diablo, the Act 3 boss, is dead (PerfectFusingOpen). The
+ * POE2 Mashup: Cain fuses runes (build spec step 5). Runes come in POE2's three strengths (Curtis 2026-11-13): three
+ * plain runes make one Greater, and five Greater and gold make one Perfect, once Diablo, the Act 3 boss, is dead (PerfectFusingOpen). The
  * runes come from the hero's bag and then the stash; the fusing goes through a command (CMD_POE2_FUSERUNES) with the
  * new rune's seed.
  */
@@ -29,7 +29,7 @@ constexpr int PerfectFusionGold = 5000;
 struct RuneFusion {
 	RuneFamily family = RuneFamily::Count;
 	/** The strength of the runes it takes. */
-	RuneStrength from = RuneStrength::Lesser;
+	RuneStrength from = RuneStrength::Normal;
 	AugmentId input = AugmentId::None;
 	AugmentId output = AugmentId::None;
 	int count = 0;
@@ -47,7 +47,7 @@ struct RuneFusion {
 /** @brief The fusings the hero has the runes for, in the Runes tab's order. */
 [[nodiscard]] std::vector<RuneFusion> RuneFusionsToOffer(const Player &player);
 
-/** @brief The fusing's line in Cain's list: "3 Lesser Ral Runes: 1 Ral Rune". */
+/** @brief The fusing's line in Cain's list: "3 Ral Runes: 1 Greater Ral Rune". */
 [[nodiscard]] std::string RuneFusionText(const RuneFusion &fusion);
 
 /**

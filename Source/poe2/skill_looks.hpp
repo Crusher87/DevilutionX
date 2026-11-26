@@ -3,7 +3,7 @@
  *
  * POE2 Mashup skill looks: how big, dense, long, bright, fast and what colour each skill's effects are, and how hard
  * they shake the screen. The numbers come from txtdata/poe2/skill_looks.tsv, then from the player's own edits in
- * poe2_logs/skill_looks_mine.tsv (made with the Skill Lab's sliders). While a skill's effects are made, a
+ * poe2_logs/skill_looks_mine.tsv (made with the Skill Lab's sliders; Sanctuary Reforged reads no edits). While a skill's effects are made, a
  * SkillLookScope says whose they are, and the effects engine (poe2/vfx.cpp) shapes everything it adds by that look.
  */
 #pragma once

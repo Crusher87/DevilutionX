@@ -451,6 +451,20 @@ TEST_F(Poe2TelemetryTest, StatsSplitEachFrameIntoItsParts)
 	EXPECT_NE(stats.find(", effects 0.0, ui layer 0.0, present 0.0"), std::string::npos) << stats;
 }
 
+TEST_F(Poe2TelemetryTest, StatsSayHowManyDrawsTheHdWorldTakes)
+{
+	// The batching experiment (feel("batch")): the stats line shows the HD world's draws a frame, before and after.
+	TelemetryFrameDrawn();
+	EXPECT_EQ(TelemetryStatsText().find("hd draws a frame"), std::string::npos) << "nothing to say without the HD world";
+	TelemetryHdDraws(3000, 2800, 0);
+	TelemetryFrameDrawn();
+	TelemetryHdDraws(200, 100, 2900);
+	TelemetryFrameDrawn();
+	const std::string stats = TelemetryStatsText();
+	// Three frames counted, one of them without the HD world.
+	EXPECT_NE(stats.find(", hd draws a frame 1067 (967 texture switches, 967 more merged by batch)"), std::string::npos) << stats;
+}
+
 TEST_F(Poe2TelemetryTest, TreeTrackerLogsEveryNodeAndKeepsHistory)
 {
 	LoadSpellData();

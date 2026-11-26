@@ -5,6 +5,7 @@
 #include <magic_enum/magic_enum.hpp>
 
 #include "data/file.hpp"
+#include "data/mode_tables.hpp"
 #include "data/record_reader.hpp"
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
@@ -21,7 +22,6 @@ namespace devilution {
 
 namespace {
 
-constexpr std::string_view QuestTrackerFile = "txtdata\\poe2\\quest_tracker.tsv";
 
 std::vector<QuestTrackerRow> Rows;
 bool RowsLoaded = false;
@@ -46,6 +46,8 @@ void LoadQuestTracker()
 {
 	Rows.clear();
 	RowsLoaded = true;
+	const std::string filename = ModeTablePath("quest_tracker.tsv");
+	const std::string_view QuestTrackerFile = filename;
 	auto dataFile = DataFile::load(QuestTrackerFile);
 	if (!dataFile.has_value()) {
 		LogError("Couldn't load the quest tracker: {}", QuestTrackerFile);

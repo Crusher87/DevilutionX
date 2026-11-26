@@ -33,6 +33,11 @@ bool IsUiScaled()
 	return ActiveScale != 100;
 }
 
+bool WantsWorldLayer(bool uiScaled, bool layeredFrames, bool hdOrEffects)
+{
+	return uiScaled || (layeredFrames && hdOrEffects);
+}
+
 Size SetRenderSize(Size renderSize, int requestedScalePercent, bool canScale)
 {
 	gnRenderWidth = static_cast<uint16_t>(renderSize.width);

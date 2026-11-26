@@ -3,6 +3,7 @@
 #include <sol/sol.hpp>
 
 #include "engine/point.hpp"
+#include "game_mode.hpp"
 #include "lua/metadoc.hpp"
 #include "qol/floatingnumbers.h"
 
@@ -17,6 +18,9 @@ sol::table LuaFloatingNumbersModule(sol::state_view &lua)
 	    [](const std::string &text, Point pos, UiFlags style, std::optional<int> id, std::optional<bool> reverseDirection) {
 		    AddFloatingNumber(pos, { 0, 0 }, text, style, id.value_or(0), reverseDirection.value_or(false));
 	    });
+	LuaSetDocFn(table, "magic_is_cold", "()",
+	    "Whether the magic damage type is cold damage in this game, rather than Diablo's magic",
+	    []() { return gbIsPoe2; });
 
 	return table;
 }

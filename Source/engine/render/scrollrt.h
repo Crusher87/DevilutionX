@@ -5,6 +5,9 @@
  */
 #pragma once
 
+#include <cstdint>
+#include <optional>
+
 #include "engine/animationinfo.h"
 #include "engine/direction.hpp"
 #include "engine/displacement.hpp"
@@ -89,5 +92,60 @@ void scrollrt_draw_game_screen();
  * @brief Render the game
  */
 void DrawAndBlit();
+
+/**
+ * @brief POE2 Mashup: what a frame's world was drawn for. While the game stands still under the game menu and none of
+ * this changes, the world drawn for an earlier frame is shown again instead of being drawn anew (KeepWorldPicture).
+ */
+struct WorldPictureKey {
+	/** @brief The view's first tile and how far it is moved (walking, a shake). */
+	Point view;
+	Displacement offset;
+	int screenWidth = 0;
+	int screenHeight = 0;
+	int renderWidth = 0;
+	int renderHeight = 0;
+	int viewportHeight = 0;
+	/** @brief The world's frame (WorldLayerGeneration), the options (OptionChangeCount), the menu's items, the renderer. */
+	uint32_t worldLayer = 0;
+	uint32_t options = 0;
+	const void *menu = nullptr;
+	const void *renderer = nullptr;
+	int level = 0;
+	int levelType = 0;
+	int setLevel = -1;
+	bool zoom = false;
+	bool hd = false;
+	bool effects = false;
+	bool leftPanel = false;
+	bool rightPanel = false;
+	/** @brief The effects wanted the floor's copy made as the world was drawn (vfx::WantsFloorCopy). */
+	bool floorCopy = false;
+
+	bool operator==(const WorldPictureKey &) const = default;
+};
+
+/** @brief POE2 Mashup: what says whether the world stands still from one frame to the next. */
+struct WorldStillness {
+	bool gameMenuOpen = false;
+	bool multiplayer = false;
+	bool heroDead = false;
+	/** @brief Everything is to be drawn again (RedrawEverything: the window shown again, a display option changed). */
+	bool redrawAll = false;
+	/** @brief The world's frame keeps the world as drawn between frames (WorldLayerKeepsWorld). */
+	bool layerKeepsWorld = false;
+};
+
+/**
+ * @brief POE2 Mashup: whether nothing in the world can change: a single player game stops under the game menu (a
+ * multiplayer one goes on), and the frame the world is drawn into keeps it.
+ */
+bool WorldStandsStill(const WorldStillness &world);
+
+/**
+ * @brief POE2 Mashup: whether this frame may show the world drawn for the frame `kept` was noted for, instead of drawing
+ * it again: the world stands still and nothing it was drawn for has changed. The first frame that stands still is drawn.
+ */
+bool MayShowKeptWorld(const WorldStillness &world, const std::optional<WorldPictureKey> &kept, const WorldPictureKey &now);
 
 } // namespace devilution

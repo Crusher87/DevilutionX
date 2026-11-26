@@ -48,6 +48,7 @@
 #include "engine/dx.h"
 #include "engine/events.hpp"
 #include "engine/load_cel.hpp"
+#include "engine/load_clx.hpp"
 #include "engine/load_file.hpp"
 #include "engine/random.hpp"
 #include "engine/render/clx_render.hpp"
@@ -307,8 +308,8 @@ void LeftMouseCmd(bool bShift)
 		ForgetChosenPortal();
 		ForgetChosenLevelExit();
 	}
-	// POE2 Mashup: Ctrl+click on stairs asks for a fresh floor on the other side.
-	Poe2ForceFreshFloor = trigflag && pcursitem == -1 && pcursmonst == -1 && (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
+	// POE2 Mashup: Ctrl+click on stairs asks for a fresh floor on the other side (Sanctuary Reforged keeps its floors).
+	Poe2ForceFreshFloor = !gbIsReforged && trigflag && pcursitem == -1 && pcursmonst == -1 && (SDL_GetModState() & SDL_KMOD_CTRL) != 0;
 
 	// POE2 Mashup: clicking a portal or stairs walks into it, even with WASD movement.
 	if (wasdMovement && trigflag && pcursitem == -1 && pcursmonst == -1) {
@@ -490,8 +491,9 @@ void LeftMouseDown(uint16_t modState)
 	}
 
 	if (IsPlayerInStore()) {
-		// POE2 Mashup: a click outside a towner's talk menu closes it and goes on, so the hero walks off at once.
-		if (gbIsPoe2 && !StoreWindowContainsMouse()) {
+		// POE2 Mashup and Sanctuary Reforged: a click outside a towner's talk menu closes it and goes on, so the hero
+		// walks off at once.
+		if (HasEnhancements() && !StoreWindowContainsMouse()) {
 			CloseTalkMenu();
 		} else {
 			CheckStoreBtn();
@@ -620,8 +622,8 @@ void RightMouseDown(bool isShiftHeld)
 			PlaySFX(SfxID::ItemGold);
 		return;
 	}
-	// POE2 Mashup: right-clicking equipment in the inventory puts it on, swapping out what was worn.
-	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
+	// POE2 Mashup and Sanctuary Reforged: right-clicking equipment in the inventory puts it on, swapping out what was worn.
+	if (HasEnhancements() && MyPlayer->HoldItem.isEmpty() && EquipInvItem(*MyPlayer, pcursinvitem))
 		return;
 	SetStickyItemUse(isShiftHeld);
 	if (pcursinvitem != -1 && UseInvItem(pcursinvitem))
@@ -735,8 +737,8 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	}
 
 	if (!ChatFlag && WasdMovementKeyPressed(vkey)) {
-		// POE2 Mashup: walking off closes a towner's talk menu, like the stash, and the walk goes on.
-		if (gbIsPoe2 && IsPlayerInStore())
+		// POE2 Mashup and Sanctuary Reforged: walking off closes a towner's talk menu, like the stash, and the walk goes on.
+		if (HasEnhancements() && IsPlayerInStore())
 			CloseTalkMenu();
 		return;
 	}
@@ -763,7 +765,7 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	case SDLK_KP_EQUALS:
 		if (AutomapActive) {
 			AutomapZoomIn();
-		} else if (gbIsPoe2) {
+		} else if (HasEnhancements()) {
 			CornerMapZoomKey(1);
 		}
 		return;
@@ -772,7 +774,7 @@ void PressKey(SDL_Keycode vkey, uint16_t modState)
 	case SDLK_UNDERSCORE:
 		if (AutomapActive) {
 			AutomapZoomOut();
-		} else if (gbIsPoe2) {
+		} else if (HasEnhancements()) {
 			CornerMapZoomKey(-1);
 		}
 		return;
@@ -1036,7 +1038,7 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				ChatLogScrollUp();
 			} else if (IsStashOpen) {
 				Stash.PreviousPage();
-			} else if (gbIsPoe2 && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
+			} else if (UsesShopTabs() && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
 				VisualStorePreviousPage();
 			} else if (SDL_GetModState() & SDL_KMOD_CTRL) {
 				if (AutomapActive) {
@@ -1056,7 +1058,7 @@ void GameEventHandler(const SDL_Event &event, uint16_t modState)
 				ChatLogScrollDown();
 			} else if (IsStashOpen) {
 				Stash.NextPage();
-			} else if (gbIsPoe2 && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
+			} else if (UsesShopTabs() && IsVisualStoreOpen && GetLeftPanel().contains(MousePosition)) {
 				VisualStoreNextPage();
 			} else if (SDL_GetModState() & SDL_KMOD_CTRL) {
 				if (AutomapActive) {
@@ -1269,6 +1271,7 @@ extern "C" void SdlLogToFile(void *userdata, int /*category*/, SDL_LogPriority p
 	PrintHelpOption("-n", _(/* TRANSLATORS: Commandline Option */ "Skip startup videos"));
 	PrintHelpOption("-f", _(/* TRANSLATORS: Commandline Option */ "Display frames per second"));
 	PrintHelpOption("--verbose", _(/* TRANSLATORS: Commandline Option */ "Enable verbose logging"));
+	PrintHelpOption("--admin", _(/* TRANSLATORS: Commandline Option */ "Enable the admin tools for testing"));
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 	PrintHelpOption("--log-to-file <path>", _(/* TRANSLATORS: Commandline Option */ "Log to a file instead of stderr"));
 #endif
@@ -1408,6 +1411,8 @@ void DiabloParseFlags(int argc, char **argv)
 			forceHellfire = true;
 		} else if (arg == "--vanilla") {
 			gbVanilla = true;
+		} else if (arg == "--admin") {
+			gbAdminSwitch = true;
 		} else if (arg == "--verbose") {
 			SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -1583,7 +1588,8 @@ void DiabloSplash()
 		}
 	}
 
-	if (IsAnyOf(*GetOptions().StartUp.splash, StartUpSplash::TitleDialog, StartUpSplash::LogoAndTitleDialog))
+	// POE2 Mashup: the main menu's intro takes the title screen's place.
+	if (IsAnyOf(*GetOptions().StartUp.splash, StartUpSplash::TitleDialog, StartUpSplash::LogoAndTitleDialog) && (demo::IsRunning() || !hd::MenuIntroWanted()))
 		UiTitleDialog();
 }
 
@@ -1674,6 +1680,46 @@ std::expected<void, std::string> LoadLvlGFX()
 	}
 }
 
+/**
+ * @brief Writes the UI panels' pictures for the HD pack maker (POE2 Mashup `--hd-export`), loaded as a game loads them,
+ * in the town's palette: each is written as it is named (hd::RegisterUiPicture), the bottom panel as put together.
+ * A hero of each class is made up for the inventories, and the game is taken as multiplayer, so the bottom panel has
+ * its chat half and the chat buttons are loaded.
+ */
+void HdExportUi()
+{
+	LoadPaletteAndInitBlending(hd::PackPalette(static_cast<uint8_t>(DTYPE_TOWN)));
+	hd::BeginUiExport(HdExportDir);
+	if (Players.empty())
+		Players.resize(1);
+	MyPlayerId = 0;
+	MyPlayer = &Players[0];
+	InspectPlayer = MyPlayer;
+	const bool wasMultiplayer = gbIsMultiplayer;
+	gbIsMultiplayer = true;
+	LoadSmallSelectionSpinner();
+	if (const std::expected<void, std::string> panel = InitMainPanel(); !panel.has_value())
+		LogError("HD export: the panels didn't load: {}", panel.error());
+	for (size_t heroClass = 0; heroClass < GetNumPlayerClasses(); heroClass++) {
+		MyPlayer->_pClass = static_cast<HeroClass>(heroClass);
+		InitInv();
+	}
+	InitQuestText();
+	InitInfoBoxGfx();
+	InitStash();
+	InitVisualStore();
+	// The experience bar's frame is loaded only with its option on.
+	if (OptionalOwnedClxSpriteList xpbar = LoadOptionalClx("data\\xpbar.clx"); xpbar) {
+		hd::RegisterUiPicture("data\\xpbar.clx", *xpbar);
+		hd::ForgetUiPicture(xpbar);
+	}
+	gmenu_init_menu();
+	if (BottomBuffer)
+		hd::ExportUiSurface("ui/bottom_panel", *BottomBuffer);
+	hd::EndUiExport();
+	gbIsMultiplayer = wasMultiplayer;
+}
+
 /** @brief Writes every dungeon type's frames for the HD pack maker (POE2 Mashup `--hd-export`). */
 void HdExportAll()
 {
@@ -1699,6 +1745,7 @@ void HdExportAll()
 	pDungeonCels = nullptr;
 	pMegaTiles = nullptr;
 	pSpecialCels = std::nullopt;
+	HdExportUi();
 }
 
 std::expected<void, std::string> LoadAllGFX()
@@ -2258,7 +2305,7 @@ void InitKeymapActions()
 	    // POE2 Mashup: Alt toggles the labels, which stay up until it's pressed again; the loot filter decides which show.
 	    // Over an item it only shows the item's modifier details, so checking an item doesn't flip the labels.
 	    [] {
-		    if (gbIsPoe2) {
+		    if (HasEnhancements()) {
 			    if (pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursitem == -1)
 				    ToggleItemLabelHighlight();
 		    } else {
@@ -2266,7 +2313,7 @@ void InitKeymapActions()
 		    }
 	    },
 	    [] {
-		    if (!gbIsPoe2)
+		    if (!HasEnhancements())
 			    HighlightKeyPressed(false);
 	    });
 	options.Keymapper.AddAction(
@@ -2321,11 +2368,12 @@ void InitKeymapActions()
 	    "QuestLog",
 	    N_("Quest log"),
 	    N_("Open Quest log."),
-	    // POE2 Mashup: Q is the first skill tray key.
-	    'L',
+	    'Q',
 	    QuestLogKeyPressed,
 	    nullptr,
 	    CanPlayerTakeAction);
+	// POE2 Mashup: Q is the first skill tray key.
+	options.Keymapper.LastAction().SetPoe2DefaultKey('L').RestoreDefaultOutsidePoe2();
 	options.Keymapper.AddAction(
 	    "SpellBook",
 	    N_("Spellbook"),
@@ -2405,13 +2453,15 @@ void InitKeymapActions()
 		    EventPlrMsg(*hd ? _("HD on") : _("HD off"));
 	    },
 	    nullptr,
-	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
+	    [] { return HasEnhancements() && CanPlayerTakeAction(); });
 	options.Keymapper.AddAction(
 	    "PauseGame",
 	    N_("Pause Game"),
 	    N_("Pauses the game."),
 	    'P',
 	    diablo_pause_game);
+	// POE2 Mashup's Passive Tree takes P there.
+	options.Keymapper.LastAction().RestoreDefaultOutsidePoe2();
 	options.Keymapper.AddAction(
 	    "PauseGameAlternate",
 	    N_("Pause Game (Alternate)"),
@@ -2498,15 +2548,16 @@ void InitKeymapActions()
 	options.Keymapper.AddAction(
 	    "ItemSpawner",
 	    N_("Item Spawner"),
-	    N_("Opens the searchable item spawner for testing (POE2 Mashup, single player)."),
+	    N_("Opens the searchable item spawner for testing (single player)."),
 	    SDLK_INSERT,
 	    ToggleItemSpawner,
 	    nullptr,
-	    [] { return !gbIsMultiplayer && !gmenu_is_active(); });
+	    [] { return AdminToolsOn() && !gbIsMultiplayer && !gmenu_is_active(); });
+	options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::AdminTool);
 	options.Keymapper.AddAction(
 	    "SkillsPanel",
 	    N_("Skills"),
-	    N_("Opens the skills panel: your skill gems and their support sockets (POE2 Mashup)."),
+	    N_("Opens the skills panel: your skill gems and their support sockets."),
 	    'K',
 	    [] {
 		    if (!gbIsPoe2 || IsPlayerInStore())
@@ -2515,10 +2566,11 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    [] { return gbIsPoe2 && !gmenu_is_active(); });
+	options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::OnlyPoe2);
 	options.Keymapper.AddAction(
 	    "AtlasPassives",
 	    N_("Atlas"),
-	    N_("Opens the Atlas passives, where completed maps give points (POE2 Mashup)."),
+	    N_("Opens the Atlas passives, where completed maps give points."),
 	    'U',
 	    [] {
 		    if (!gbIsPoe2 || IsPlayerInStore())
@@ -2527,11 +2579,12 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    [] { return gbIsPoe2 && !gmenu_is_active(); });
-	// POE2 opens the passive tree with P. Outside the mod (or in multiplayer) P still pauses.
+	options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::OnlyPoe2);
+	// POE2 opens the passive tree with P (in multiplayer P still pauses). The other modes have only Pause Game on P.
 	options.Keymapper.AddAction(
 	    "PassiveTree",
 	    N_("Passive Tree"),
-	    N_("Opens the passive skill tree (POE2 Mashup, single player). Pauses the game otherwise."),
+	    N_("Opens the passive skill tree (single player). Pauses the game otherwise."),
 	    'P',
 	    [] {
 		    if (gbIsPoe2 && !gbIsMultiplayer)
@@ -2541,35 +2594,38 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    [] { return !gmenu_is_active(); });
+	options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::OnlyPoe2);
 	// POE2 Mashup skill tray. Added last so its keys win over older saved bindings.
 	constexpr std::array<uint32_t, NumTrayKeys> TrayKeys { 'Q', 'E', 'R', 'T', 'F', 'G' };
 	for (uint32_t i = 0; i < NumTrayKeys; ++i) {
 		options.Keymapper.AddAction(
 		    "TraySlot{}",
 		    N_("Skill tray key {}"),
-		    N_("Use the skill on this skill tray slot (POE2 Mashup)."),
+		    N_("Use the skill on this skill tray slot."),
 		    TrayKeys[i],
 		    [i] { PressTraySlot(TrayKeySlot(i)); },
 		    [i] { ReleaseTraySlot(TrayKeySlot(i)); },
-		    CanPlayerTakeAction,
+		    [] { return gbIsPoe2 && CanPlayerTakeAction(); },
 		    i + 1);
+		options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::OnlyPoe2);
 	}
 	options.Keymapper.AddAction(
 	    "TraySlotMiddle",
 	    N_("Skill tray middle button"),
-	    N_("Use the skill on the middle mouse button's skill tray slot (POE2 Mashup)."),
+	    N_("Use the skill on the middle mouse button's skill tray slot."),
 	    SDL_BUTTON_MIDDLE | KeymapperMouseButtonMask,
 	    [] { PressTraySlot(TraySlot::MiddleMouse); },
 	    [] { ReleaseTraySlot(TraySlot::MiddleMouse); },
-	    CanPlayerTakeAction);
+	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
+	options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::OnlyPoe2);
 	options.Keymapper.AddAction(
 	    "SwapWeapons",
 	    N_("Swap weapons"),
-	    N_("Swaps between weapon sets I and II (POE2 Mashup)."),
+	    N_("Swaps between weapon sets I and II."),
 	    'X',
 	    [] { SwapWeapons(*MyPlayer); },
 	    nullptr,
-	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
+	    [] { return HasWeaponSwap() && CanPlayerTakeAction(); });
 	options.Keymapper.CommitActions();
 }
 

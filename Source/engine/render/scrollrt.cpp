@@ -517,7 +517,7 @@ void DrawMonster(const Surface &out, Point tilePosition, Point targetBufferPosit
 	// POE2 Mashup: the HD light gives a monster a shadow, and lights it in its colour unless it's drawn in a recolour.
 	const hd::CasterScope caster(hd::Caster::Monster);
 	// POE2 Mashup: a monster in front of a brazier or a portal goes over its effects.
-	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
+	if (HasEnhancements() && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, targetBufferPosition, sprite);
 
 	if (!IsTileLit(tilePosition)) {
@@ -709,13 +709,13 @@ void DrawPlayer(const Surface &out, const Player &player, Point tilePosition, Po
 	const hd::SubFrameScope subFrame(player.previewCelSprite ? 0.F : player.AnimInfo.getFrameFraction());
 	const Point spriteBufferPosition = targetBufferPosition + player.getRenderingOffset(sprite);
 	// POE2 Mashup: the mini life bar over the hero is drawn later, with the UI.
-	if (gbIsPoe2 && &player == MyPlayer)
+	if (HasEnhancements() && &player == MyPlayer)
 		QueueHeroOverheadBar(player, spriteBufferPosition, sprite);
 	DrawDodgeAfterimages(out, player, sprite, spriteBufferPosition);
-	if (gbIsPoe2 && vfx::InFrontOfEffects(tilePosition))
+	if (HasEnhancements() && vfx::InFrontOfEffects(tilePosition))
 		vfx::MarkFront(out, spriteBufferPosition, sprite);
 	// POE2 Mashup: Tristram's stream shows whoever stands by it (idea 66).
-	if (gbIsPoe2 && leveltype == DTYPE_TOWN)
+	if (HasEnhancements() && leveltype == DTYPE_TOWN)
 		vfx::NoteReflection(out, spriteBufferPosition, sprite);
 
 	// POE2 Mashup: in HD the outline under the cursor fades in.
@@ -892,7 +892,7 @@ void DrawCell(const Surface &out, const Lightmap lightmap, Point tilePosition, P
 #endif
 	// POE2 Mashup: walls and pillars in front of a portal hide it, as heroes and monsters do (Curtis, Rogue run 2: the
 	// town portal was drawn over them). One gone see-through lets it show.
-	const bool marksFront = gbIsPoe2 && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
+	const bool marksFront = HasEnhancements() && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
 	if (marksFront) {
 		const int columnHeight = MicroTileLen / 2 * TILE_HEIGHT;
 		vfx::BeginFrontPiece(out, targetBufferPosition + Displacement { 0, 1 - columnHeight }, Size { TILE_WIDTH, columnHeight });
@@ -1115,7 +1115,7 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 		const hd::CasterScope caster(hd::Caster::Monster);
 		ClxDraw(out, position, sprite);
 		// And the stream shows them, as it does a hero (idea 66).
-		if (gbIsPoe2)
+		if (HasEnhancements())
 			vfx::NoteReflection(out, position, sprite);
 		return;
 	}
@@ -1160,7 +1160,7 @@ void DrawMonsterHelper(const Surface &out, Point tilePosition, Point targetBuffe
 
 	const Point monsterRenderPosition = targetBufferPosition + offset;
 	// POE2 Mashup: a hurt monster's life bar is drawn later, with the UI.
-	if (gbIsPoe2 && !IsBoundDemon(monster))
+	if (HasEnhancements() && !IsBoundDemon(monster))
 		QueueMonsterOverheadBar(monster, monsterRenderPosition, sprite);
 	// POE2 Mashup: in HD the outline fades in under the cursor.
 	const hd::OutlineScope outlineLook(MonsterOutlineLook(mi));
@@ -1214,6 +1214,8 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 	// POE2 Mashup: a corpse whose slot holds no picture (a monster spawned in for testing, then the level reloaded) is left out.
 	if (lightTableIndex < LightsMax && (bDead & 0x1F) != 0 && Corpses[(bDead & 0x1F) - 1].sprites) {
 		const Corpse &corpse = Corpses[(bDead & 0x1F) - 1];
+		// POE2 Mashup: with HD Lighting a body takes the floor's light and the shadows across it (hd.cpp CorpseLight).
+		const hd::CorpseScope corpseScope;
 		const Point position { targetBufferPosition.x - CalculateSpriteTileCenterX(corpse.width), targetBufferPosition.y };
 		const ClxSprite sprite = corpse.spritesForDirection(static_cast<Direction>((bDead >> 5) & 7))[corpse.frame];
 		if (corpse.translationPaletteIndex != 0) {
@@ -1332,7 +1334,7 @@ void DrawDungeon(const Surface &out, const Lightmap &lightmap, Point tilePositio
 #endif
 			// POE2 Mashup: an arch in front of a portal hides it, as the walls do (see DrawCell).
 			const ClxSprite arch = (*pSpecialCels)[bArch];
-			const bool marksFront = gbIsPoe2 && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
+			const bool marksFront = HasEnhancements() && !transparency && vfx::StandsInFrontOfPortal(tilePosition);
 			if (marksFront)
 				vfx::BeginFrontPiece(out, targetBufferPosition + Displacement { 0, 1 - arch.height() }, Size { arch.width(), arch.height() });
 			if (perPixelLighting) {
@@ -1720,11 +1722,11 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 	DrawFloor(out, lightmap, position, Point {} + offset, rows, columns);
 	hd::EndFloor();
 	// POE2 Mashup: the effects lying on the floor hide behind whatever is drawn over it from here on.
-	const bool floorCopy = IsUiScaled() && vfx::WantsFloorCopy();
+	const bool floorCopy = HasWorldLayer() && vfx::WantsFloorCopy();
 	if (floorCopy)
 		vfx::CopyFloor(fullOut);
 	// POE2 Mashup: and a hero in front of a portal goes over it (not with the HD replay, which draws the world itself).
-	if (IsUiScaled() && !hd::Active())
+	if (HasWorldLayer() && !hd::Active())
 		vfx::BeginFront(fullOut);
 	DrawTileContent(out, lightmap, position, Point {} + offset, rows, columns);
 	DrawOOB(out, lightmap, position, Point {} + offset, rows, columns);
@@ -1757,6 +1759,75 @@ void DrawGame(const Surface &fullOut, Point position, Displacement offset)
 #endif
 }
 
+/** @brief POE2 Mashup: what the world last drawn while it stands still was drawn for (KeepWorldPicture), and since when. */
+std::optional<WorldPictureKey> KeptWorld;
+uint32_t KeptWorldSince = 0;
+/** @brief How long the world stands still before its HD picture is kept too: the cursor's outline fades in over 140 ms. */
+constexpr uint32_t KeepHdWorldAfterMs = 250;
+
+WorldPictureKey CurrentWorldPictureKey(Point view, Displacement offset)
+{
+	return WorldPictureKey {
+		.view = view,
+		.offset = offset,
+		.screenWidth = gnScreenWidth,
+		.screenHeight = gnScreenHeight,
+		.renderWidth = gnRenderWidth,
+		.renderHeight = gnRenderHeight,
+		.viewportHeight = gnViewportHeight,
+		.worldLayer = WorldLayerGeneration(),
+		.options = OptionChangeCount(),
+		.menu = sgpCurrentMenu,
+		.renderer = renderer,
+		.level = currlevel,
+		.levelType = leveltype,
+		.setLevel = setlevel ? static_cast<int>(setlvlnum) : -1,
+		.zoom = *GetOptions().Graphics.zoom,
+		.hd = hd::Active(),
+		.effects = vfx::Enabled(),
+		.leftPanel = IsLeftPanelOpen(),
+		.rightPanel = IsRightPanelOpen(),
+		.floorCopy = vfx::WantsFloorCopy(),
+	};
+}
+
+/**
+ * @brief POE2 Mashup: while a single player game stands still under the game menu, the world drawn for the first frame
+ * of it is shown again in the frames after, instead of being drawn anew each one (Curtis 2026-11-25: the menu's frames
+ * cost more than the game's). The world's 8-bit frame keeps it; the HD world shows its picture again
+ * (hd::KeepWorldPicture), the effects, the rain on the screen and the UI over them are still drawn every frame. Anything
+ * that changes the view draws it again: the size, the UI scale or zoom, an option, a sub-menu, the palette (in HD),
+ * another renderer, leaving the menu.
+ * @return Whether this frame shows the kept world, so it isn't drawn.
+ */
+bool KeepWorldPicture(Point view, Displacement offset)
+{
+	const WorldStillness world {
+		.gameMenuOpen = gmenu_is_active(),
+		.multiplayer = gbIsMultiplayer,
+		.heroDead = MyPlayerIsDead,
+		.redrawAll = IsRedrawEverything(),
+		.layerKeepsWorld = WorldLayerKeepsWorld(),
+	};
+	const WorldPictureKey now = CurrentWorldPictureKey(view, offset);
+	bool keep = MayShowKeptWorld(world, KeptWorld, now);
+	// The HD world draws again what was recorded for the frame that was drawn.
+	if (keep && now.hd && !hd::ReplayWorld())
+		keep = false;
+	if (!keep) {
+		KeptWorld = WorldStandsStill(world) ? std::optional<WorldPictureKey>(now) : std::nullopt;
+		KeptWorldSince = SDL_GetTicks();
+		hd::KeepWorldPicture(false);
+		return false;
+	}
+	// What was noted as the world was drawn holds for this frame too.
+	vfx::KeepWorld();
+	QueueKeptItemNameLabels();
+	QueueKeptOverheadBars();
+	hd::KeepWorldPicture(SDL_GetTicks() - KeptWorldSince >= KeepHdWorldAfterMs);
+	return true;
+}
+
 /**
  * @brief Start rendering of screen, town variation
  * @param out Buffer to render to
@@ -1775,7 +1846,9 @@ void DrawView(const Surface &out, Point startPosition)
 		// POE2 Mashup: heavy hits jolt the view.
 		offset += CameraShakeOffset();
 		const FramePartScope part(FramePart::World);
-		DrawGame(IsUiScaled() ? WorldBackBuffer() : out, startPosition, offset);
+		// POE2 Mashup: under the game menu the world stands still, and the one already drawn is shown again.
+		if (!KeepWorldPicture(startPosition, offset))
+			DrawGame(HasWorldLayer() ? WorldBackBuffer() : out, startPosition, offset);
 	}
 	TelemetryDrawStep("drawing the map, names and banners");
 	PrepareScaledUi();
@@ -1851,23 +1924,24 @@ void DrawView(const Surface &out, Point startPosition)
 	}
 #endif
 	DrawItemNameLabels(out);
-	if (gbIsPoe2)
+	if (HasEnhancements())
 		DrawOverheadBars(out);
-	if (gbIsPoe2)
+	// Sanctuary Reforged has the banner too, with Diablo's own facts, in place of the small health bar.
+	if (HasEnhancements())
 		DrawMonsterBanner(out);
 	else
 		DrawMonsterHealthBar(out);
 	DrawFloatingNumbers(out, startPosition, offset);
 	// POE2 Mashup: the corner map, under the open windows.
-	if (gbIsPoe2)
+	if (HasEnhancements())
 		DrawPoe2CornerMap(out.subregionY(0, gnViewportHeight));
-	if (gbIsPoe2)
+	if (HasEnhancements())
 		DrawPoe2QuestTracker(out.subregionY(0, gnViewportHeight));
 	// POE2 Mashup: the effects layer lines up with this frame's view.
 	TelemetryDrawStep("finding effects to draw");
 	vfx::SetCamera(startPosition, offset, *GetOptions().Graphics.zoom);
 	vfx::ScanMissiles();
-	if (IsUiScaled())
+	if (HasWorldLayer())
 		vfx::ScanWorld(WorldBackBuffer());
 
 	TelemetryDrawStep("drawing the open windows");
@@ -1922,7 +1996,11 @@ void DrawView(const Surface &out, Point startPosition)
 		DrawChatLog(out);
 	}
 	if (MyPlayerIsDead) {
-		RedBack(out);
+		// POE2 Mashup and Sanctuary Reforged: the HD world shows the death itself (moments: the dark closing in and its
+		// red). The game's red, drawn over the UI's copy of the 8-bit world, would show over all of it once the UI is
+		// scaled, as the whole world in Diablo's red at the UI's size.
+		if (!hd::Active())
+			RedBack(out);
 		DrawDeathText(out);
 	} else if (PauseMode != 0) {
 		gmenu_draw_pause(out);
@@ -2326,6 +2404,8 @@ void DrawAndBlit()
 	if (!gbRunGame || HeadlessMode) {
 		return;
 	}
+	// POE2 Mashup: at UI Scale 100 the world gets a frame of its own while HD Graphics or Modern Effects are on.
+	SyncWorldLayer();
 
 	int hgt = 0;
 	bool drawHealth = IsRedrawComponent(PanelDrawComponent::Health);
@@ -2399,7 +2479,7 @@ void DrawAndBlit()
 			    (HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) || MyPlayer->hasNoMana()) ? 0 : MyPlayer->_pMana.whole(),
 			    HasAnyOf(InspectPlayer->_pIFlags, ItemSpecialEffect::NoMana) ? 0 : MyPlayer->_pMaxMana.whole());
 	}
-	if (gbIsPoe2 || *GetOptions().Gameplay.floatingInfoBox)
+	if (HasEnhancements() || *GetOptions().Gameplay.floatingInfoBox)
 		DrawFloatingInfoBox(out);
 	DrawStashTabTooltip(out);
 	DrawMinionHud(out);
@@ -2440,6 +2520,18 @@ void DrawAndBlit()
 	}
 
 	RenderPresent();
+}
+
+bool WorldStandsStill(const WorldStillness &world)
+{
+	// A single player game stops under the game menu (ProcessInput); a multiplayer one goes on. Everything drawn again
+	// (the window shown again, a display option changed) draws the world again too.
+	return world.gameMenuOpen && !world.multiplayer && !world.heroDead && !world.redrawAll && world.layerKeepsWorld;
+}
+
+bool MayShowKeptWorld(const WorldStillness &world, const std::optional<WorldPictureKey> &kept, const WorldPictureKey &now)
+{
+	return WorldStandsStill(world) && kept.has_value() && *kept == now;
 }
 
 } // namespace devilution

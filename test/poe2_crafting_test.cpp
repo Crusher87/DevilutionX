@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <map>
 #include <set>
 #include <string>
 #include <vector>
@@ -782,7 +783,13 @@ TEST_F(Poe2CraftingTest, CraftingTablesHoldTheRowsTheCodeHad)
 		EXPECT_EQ(GetAugment(old.id).name, old.name);
 		EXPECT_FALSE(GetAugment(old.id).drops);
 		EXPECT_TRUE(GetAugment(CurrentAugmentId(old.id)).drops);
-		EXPECT_EQ(AugmentBeforeRuneNumbers(CurrentAugmentId(old.id)), old.id);
+		// A save of before step 5 held the id it became then: for the first four runes the Lesser one, which itself
+		// becomes the plain rune since runes went to three strengths (Curtis 2026-11-13).
+		const std::map<AugmentId, AugmentId> lesserThen = { { AugmentId::EmberRune, AugmentId::LesserRal },
+			{ AugmentId::FrostRune, AugmentId::LesserThul }, { AugmentId::StormRune, AugmentId::LesserOrt }, { AugmentId::IronRune, AugmentId::LesserOhm } };
+		const AugmentId then = lesserThen.count(old.id) != 0 ? lesserThen.at(old.id) : CurrentAugmentId(old.id);
+		EXPECT_EQ(CurrentAugmentId(then), CurrentAugmentId(old.id));
+		EXPECT_EQ(AugmentBeforeRuneNumbers(then), old.id);
 		const Augment &now = GetAugment(CurrentAugmentId(old.id));
 		EXPECT_TRUE(now.weaponValues != old.weaponValues || now.armourValues != old.armourValues || now.weaponEffect != old.weaponEffect || now.staffEffect != old.weaponEffect
 		    || now.armourText != old.armourText || now.weaponText != old.weaponText)
@@ -812,12 +819,17 @@ TEST_F(Poe2CraftingTest, CraftingTablesHoldTheRowsTheCodeHad)
 
 TEST_F(Poe2CraftingTest, LegacyIdsBecomeTheRunesReworkOnes)
 {
-	// Runes rework build spec, step 2.
+	// Runes rework build spec, step 2; the rune ids go to the plain runes since runes went to three strengths (Curtis
+	// 2026-11-13), and the Lesser ones with them.
 	const std::pair<AugmentId, AugmentId> augments[] = {
-		{ AugmentId::EmberRune, AugmentId::LesserRal },
-		{ AugmentId::FrostRune, AugmentId::LesserThul },
-		{ AugmentId::StormRune, AugmentId::LesserOrt },
-		{ AugmentId::IronRune, AugmentId::LesserOhm },
+		{ AugmentId::LesserRal, AugmentId::Ral },
+		{ AugmentId::LesserOhm, AugmentId::Ohm },
+		{ AugmentId::LesserAmn, AugmentId::Amn },
+		{ AugmentId::LesserLum, AugmentId::Lum },
+		{ AugmentId::EmberRune, AugmentId::Ral },
+		{ AugmentId::FrostRune, AugmentId::Thul },
+		{ AugmentId::StormRune, AugmentId::Ort },
+		{ AugmentId::IronRune, AugmentId::Ohm },
 		{ AugmentId::WindRune, AugmentId::LesserShael },
 		{ AugmentId::HeartCore, AugmentId::LordOfThePit },
 		{ AugmentId::MindCore, AugmentId::TheDefiler },
@@ -909,7 +921,7 @@ TEST_F(Poe2CraftingTest, CraftStateWideAugmentsRoundTrip)
 	wide.explicitMods = true;
 	wide.rarity = ITEM_QUALITY_RARE;
 	wide.sockets = 2;
-	wide.augments = { static_cast<uint8_t>(AugmentId::LesserRal), static_cast<uint8_t>(AugmentId::RelicOfAkarat), 0 };
+	wide.augments = { static_cast<uint8_t>(AugmentId::Ral), static_cast<uint8_t>(AugmentId::RelicOfAkarat), 0 };
 	wide.mods[0] = { 12, 3, 5 };
 	wide.mods[1] = { 40, 1, 7 };
 	wide.enchant = 7;
@@ -930,7 +942,7 @@ TEST_F(Poe2CraftingTest, CraftStateWideAugmentsRoundTrip)
 	EXPECT_FALSE(SavedBeforeRuneNumbers(stepFiveBytes));
 	EXPECT_TRUE(SavedBeforeSoulstoneNumbers(stepFiveBytes));
 	EXPECT_EQ(UnpackCraftState(stepFiveBytes), wide);
-	EXPECT_EQ(wideBytes[4], static_cast<uint8_t>(AugmentId::LesserRal));
+	EXPECT_EQ(wideBytes[4], static_cast<uint8_t>(AugmentId::Ral));
 	EXPECT_EQ(wideBytes[5], static_cast<uint8_t>(AugmentId::RelicOfAkarat));
 	EXPECT_EQ(UnpackCraftState(wideBytes), wide);
 	// One wide socket and an empty one; the highest id the layout keeps for runes.
@@ -1018,11 +1030,11 @@ TEST_F(Poe2CraftingTest, LegacyCraftingItemsConvertAndGetTheirTabSlots)
 	ASSERT_EQ(armour._iPoe2Craft.sockets, 2);
 	Item converted = armour;
 	EXPECT_TRUE(ConvertLegacyCraftingIds(converted));
-	EXPECT_EQ(converted._iPoe2Craft.augments[0], static_cast<uint8_t>(AugmentId::LesserOhm));
+	EXPECT_EQ(converted._iPoe2Craft.augments[0], static_cast<uint8_t>(AugmentId::Ohm));
 	EXPECT_EQ(converted._iPoe2Craft.augments[1], static_cast<uint8_t>(AugmentId::RelicOfAkarat));
 	const Item rebuilt = Rebuilt(converted);
 	ExpectSameMods(rebuilt, armour);
-	// A save of it from then moves to the Lesser Ohm Rune's numbers of today.
+	// A save of it from then moves to the Ohm Rune's numbers of today.
 	Item loaded = armour;
 	loaded._iPoe2Craft = converted._iPoe2Craft;
 	EXPECT_TRUE(MigrateRuneNumbers(loaded, armour._iPoe2Craft));
@@ -1064,16 +1076,17 @@ TEST_F(Poe2CraftingTest, EveryRuneAndEssenceHasATabSlotOfItsOwn)
 		if (CurrentAugmentId(augment) == augment)
 			EXPECT_TRUE(GetAugment(augment).drops) << item._iIName;
 	}
-	EXPECT_EQ(GetAugment(AugmentId::LesserRal).name, "Lesser Ral Rune");
+	EXPECT_EQ(GetAugment(AugmentId::Ral).name, "Ral Rune");
+	EXPECT_EQ(GetAugment(AugmentId::LesserShael).name, "Shael Rune");
 	EXPECT_EQ(GetAugment(AugmentId::PerfectLum).name, "Perfect Lum Rune");
 	EXPECT_EQ(GetAugment(AugmentId::Zod).name, "Zod Rune");
 	EXPECT_EQ(GetAugment(AugmentId::TalicsRune).name, "Talic's Rune");
 	EXPECT_EQ(GetAugment(AugmentId::Zamphir).name, "Greater Soulstone of Zamphir");
 	// Step 5 gave the strengths of a family the same effect, stronger each time.
-	EXPECT_EQ(GetAugment(AugmentId::PerfectRal).weaponEffect, GetAugment(AugmentId::LesserRal).weaponEffect);
-	EXPECT_GT(GetAugment(AugmentId::PerfectRal).weaponValues[0], GetAugment(AugmentId::LesserRal).weaponValues[0]);
+	EXPECT_EQ(GetAugment(AugmentId::PerfectRal).weaponEffect, GetAugment(AugmentId::Ral).weaponEffect);
+	EXPECT_GT(GetAugment(AugmentId::PerfectRal).weaponValues[0], GetAugment(AugmentId::Ral).weaponValues[0]);
 
-	// Rune kinds go both ways; Ith has no Lesser.
+	// Rune kinds go both ways; no family has a Lesser rune since runes went to three strengths.
 	for (int family = 0; family < static_cast<int>(RuneFamily::Count); family++) {
 		for (int strength = 0; strength < 4; strength++) {
 			const AugmentId id = RuneOf(static_cast<RuneFamily>(family), static_cast<RuneStrength>(strength));
@@ -1086,6 +1099,7 @@ TEST_F(Poe2CraftingTest, EveryRuneAndEssenceHasATabSlotOfItsOwn)
 		}
 	}
 	EXPECT_EQ(RuneOf(RuneFamily::Ith, RuneStrength::Lesser), AugmentId::None);
+	EXPECT_EQ(RuneOf(RuneFamily::Ral, RuneStrength::Lesser), AugmentId::None);
 	EXPECT_FALSE(GetRuneKind(AugmentId::LordOfThePit).has_value());
 	EXPECT_EQ(GetRuneKind(AugmentId::EmberRune)->family, RuneFamily::Ral) << "A legacy id is the rune it became";
 

@@ -4,6 +4,7 @@
  */
 #include <algorithm>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -11,6 +12,7 @@
 
 #include "cursor.h"
 #include "engine/assets.hpp"
+#include "engine/surface.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
 #include "inv.h"
@@ -22,10 +24,12 @@
 #include "poe2/crafting_items.hpp"
 #include "poe2/currency.hpp"
 #include "poe2/effect_primitives.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/loot.hpp"
 #include "poe2/mix.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/rune_fusing.hpp"
+#include "poe2/rune_icons.hpp"
 #include "poe2/stacking.hpp"
 #include "poe2/stash_layouts.hpp"
 #include "qol/stash.h"
@@ -175,7 +179,8 @@ TEST_F(Poe2RunesTest, StrengthsHaveTheirLevelsAndDrop)
 			if (id == AugmentId::None || id == AugmentId::Zod || id == AugmentId::VenomRune)
 				continue;
 			const Augment &rune = GetAugment(id);
-			constexpr int Levels[] = { 1, 15, 30, 50 };
+			// Plain, Greater and Perfect (Curtis 2026-11-13); the one-strength Shael Rune, in the old Lesser column, is plain.
+			constexpr int Levels[] = { 1, 1, 30, 50 };
 			EXPECT_EQ(rune.level, Levels[strength]) << rune.name;
 			EXPECT_EQ(rune.dropLevel, Levels[strength]) << rune.name;
 			EXPECT_TRUE(rune.drops) << rune.name;
@@ -202,20 +207,20 @@ TEST_F(Poe2RunesTest, ARuneDoesWhatItsKindOfItemSays)
 	ASSERT_EQ(AugmentKindOf(axe), AugmentKind::Weapon);
 	ASSERT_EQ(AugmentKindOf(staff), AugmentKind::Staff);
 	ASSERT_EQ(AugmentKindOf(plate), AugmentKind::Armour);
-	const Augment &ral = GetAugment(AugmentId::LesserRal);
+	const Augment &ral = GetAugment(AugmentId::Ral);
 
-	const Item axeRal = Socketed(axe, 1, { AugmentId::LesserRal });
+	const Item axeRal = Socketed(axe, 1, { AugmentId::Ral });
 	EXPECT_EQ(axeRal._iFMinDam - axe._iFMinDam, ral.weaponValues[0]);
 	EXPECT_EQ(axeRal._iFMaxDam - axe._iFMaxDam, ral.weaponValues[1]);
 	// The tooltip has only this kind's line.
 	ASSERT_EQ(AugmentSocketText(axeRal).size(), 1u);
 	EXPECT_EQ(AugmentSocketText(axeRal)[0], StrCat(ral.name, ": ", ral.weaponText));
 
-	const Item plateRal = Socketed(plate, 1, { AugmentId::LesserRal });
+	const Item plateRal = Socketed(plate, 1, { AugmentId::Ral });
 	EXPECT_EQ(plateRal._iPLFR - plate._iPLFR, ral.armourValues[0]);
 	EXPECT_EQ(AugmentSocketText(plateRal)[0], StrCat(ral.name, ": ", ral.armourText));
 
-	const Item staffRal = Socketed(staff, 1, { AugmentId::LesserRal });
+	const Item staffRal = Socketed(staff, 1, { AugmentId::Ral });
 	EXPECT_EQ(Stat(staffRal, Poe2ItemStat::FireAsExtra) - Stat(staff, Poe2ItemStat::FireAsExtra), ral.staffValues[0]);
 	EXPECT_EQ(AugmentSocketText(staffRal)[0], StrCat(ral.name, ": ", ral.staffText));
 
@@ -227,18 +232,22 @@ TEST_F(Poe2RunesTest, ARuneDoesWhatItsKindOfItemSays)
 
 TEST_F(Poe2RunesTest, ARuneNeedsItsLevel)
 {
-	MyPlayer->setCharacterLevel(14);
+	MyPlayer->setCharacterLevel(29);
 	Item axe = Socketed(MakeItem("Splitting Greataxe"), 1, {});
-	EXPECT_FALSE(Insert(axe, AugmentId::Ral));
-	MyPlayer->setCharacterLevel(15);
-	EXPECT_TRUE(Insert(axe, AugmentId::Ral));
-	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 0), AugmentId::Ral);
+	EXPECT_FALSE(Insert(axe, AugmentId::GreaterRal));
+	MyPlayer->setCharacterLevel(30);
+	EXPECT_TRUE(Insert(axe, AugmentId::GreaterRal));
+	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 0), AugmentId::GreaterRal);
+	// A plain rune goes in from level 1 (Curtis 2026-11-13: plain is the lowest of the three strengths).
+	MyPlayer->setCharacterLevel(1);
+	Item club = Socketed(MakeItem("Splitting Greataxe"), 1, {});
+	EXPECT_TRUE(Insert(club, AugmentId::Ral));
 }
 
 TEST_F(Poe2RunesTest, BondedLinesNeedBothSocketsToMatch)
 {
 	const Item bare = MakeItem("Splitting Greataxe");
-	Item axe = Socketed(bare, 2, { AugmentId::LesserRal, AugmentId::LesserThul });
+	Item axe = Socketed(bare, 2, { AugmentId::Ral, AugmentId::Thul });
 	EXPECT_FALSE(BondedRuneFamily(axe).has_value());
 	EXPECT_EQ(Stat(axe, Poe2ItemStat::IgniteMagnitude), 0);
 	// Both runes' bonded lines show, greyed.
@@ -249,8 +258,8 @@ TEST_F(Poe2RunesTest, BondedLinesNeedBothSocketsToMatch)
 	EXPECT_EQ(lines[2].text, "Bonded: 15% stronger ignites (match both sockets)");
 	EXPECT_TRUE(lines[3].inactive);
 
-	// A second Lesser Ral replaces the Thul, which is destroyed, and the two bond.
-	ASSERT_TRUE(Insert(axe, AugmentId::LesserRal));
+	// A second Ral replaces the Thul, which is destroyed, and the two bond.
+	ASSERT_TRUE(Insert(axe, AugmentId::Ral));
 	ASSERT_EQ(BondedRuneFamily(axe), RuneFamily::Ral);
 	EXPECT_EQ(Stat(axe, Poe2ItemStat::IgniteMagnitude), 15);
 	EXPECT_EQ(Stat(Rebuilt(axe), Poe2ItemStat::IgniteMagnitude), 15) << "The bonded line comes back from the seed";
@@ -259,44 +268,44 @@ TEST_F(Poe2RunesTest, BondedLinesNeedBothSocketsToMatch)
 	EXPECT_EQ(lines[2].text, "Bonded: 15% stronger ignites");
 	EXPECT_FALSE(lines[2].inactive);
 	// The fire of both sockets, and no more.
-	EXPECT_EQ(axe._iFMinDam - bare._iFMinDam, 2 * GetAugment(AugmentId::LesserRal).weaponValues[0]);
+	EXPECT_EQ(axe._iFMinDam - bare._iFMinDam, 2 * GetAugment(AugmentId::Ral).weaponValues[0]);
 
 	// Strengths must match too.
-	ASSERT_TRUE(Insert(axe, AugmentId::Ral));
+	ASSERT_TRUE(Insert(axe, AugmentId::GreaterRal));
 	EXPECT_FALSE(BondedRuneFamily(axe).has_value());
 
 	// Armour bonds give life and mana; a body armour has two sockets.
 	const Item plate = MakeItem("Full Plate");
-	const Item bonded = Socketed(plate, 2, { AugmentId::LesserOhm, AugmentId::LesserOhm });
+	const Item bonded = Socketed(plate, 2, { AugmentId::Ohm, AugmentId::Ohm });
 	EXPECT_EQ(bonded._iPLHP.raw() - plate._iPLHP.raw(), Fixed10_6::fromInt(10).raw());
 	EXPECT_EQ(bonded._iPLMana.raw() - plate._iPLMana.raw(), Fixed10_6::fromInt(10).raw());
 
 	// A one-socket item has no bonded line.
-	const Item cap = Socketed(MakeItem("Iron Cap"), 1, { AugmentId::LesserRal });
+	const Item cap = Socketed(MakeItem("Iron Cap"), 1, { AugmentId::Ral });
 	EXPECT_EQ(AugmentSocketLines(cap).size(), 1u);
 }
 
 TEST_F(Poe2RunesTest, ZodRaisesARuneOnceAndNotPastTheHeroLevel)
 {
 	MyPlayer->setCharacterLevel(10);
-	Item axe = Socketed(MakeItem("Splitting Greataxe"), 2, { AugmentId::LesserRal });
-	EXPECT_FALSE(Insert(axe, AugmentId::Zod)) << "Ral Rune needs level 15";
-	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 0), AugmentId::LesserRal);
-
-	MyPlayer->setCharacterLevel(20);
-	ASSERT_TRUE(Insert(axe, AugmentId::Zod));
+	Item axe = Socketed(MakeItem("Splitting Greataxe"), 2, { AugmentId::Ral });
+	EXPECT_FALSE(Insert(axe, AugmentId::Zod)) << "Greater Ral Rune needs level 30";
 	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 0), AugmentId::Ral);
+
+	MyPlayer->setCharacterLevel(30);
+	ASSERT_TRUE(Insert(axe, AugmentId::Zod));
+	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 0), AugmentId::GreaterRal);
 	EXPECT_TRUE(SocketRaised(axe._iPoe2Craft, 0));
 	EXPECT_EQ(axe._iPoe2Craft.augments[1], 0) << "Zod raises, it doesn't take a socket";
 	EXPECT_NE(AugmentSocketText(axe)[0].find("(raised)"), std::string::npos);
-	const Augment &ral = GetAugment(AugmentId::Ral);
+	const Augment &ral = GetAugment(AugmentId::GreaterRal);
 	EXPECT_EQ(Rebuilt(axe)._iFMinDam, axe._iFMinDam);
 	EXPECT_EQ(axe._iFMinDam - MakeItem("Splitting Greataxe")._iFMinDam, ral.weaponValues[0]);
 
 	// Once per rune.
 	MyPlayer->setCharacterLevel(60);
 	EXPECT_FALSE(Insert(axe, AugmentId::Zod));
-	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 0), AugmentId::Ral);
+	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 0), AugmentId::GreaterRal);
 
 	// The mark is saved, and the item's values load from the seed the same.
 	const auto bytes = PackCraftState(axe._iPoe2Craft);
@@ -306,13 +315,13 @@ TEST_F(Poe2RunesTest, ZodRaisesARuneOnceAndNotPastTheHeroLevel)
 	EXPECT_EQ(loaded.raised, 1);
 
 	// A rune put in its place can be raised again.
-	ASSERT_TRUE(Insert(axe, AugmentId::LesserThul));
-	ASSERT_TRUE(Insert(axe, AugmentId::LesserOrt));
-	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 1), AugmentId::LesserOrt);
+	ASSERT_TRUE(Insert(axe, AugmentId::Thul));
+	ASSERT_TRUE(Insert(axe, AugmentId::Ort));
+	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 1), AugmentId::Ort);
 	EXPECT_TRUE(SocketRaised(axe._iPoe2Craft, 0));
 	EXPECT_FALSE(SocketRaised(axe._iPoe2Craft, 1));
 	ASSERT_TRUE(Insert(axe, AugmentId::Zod));
-	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 1), AugmentId::Ort);
+	EXPECT_EQ(SocketAugment(axe._iPoe2Craft, 1), AugmentId::GreaterOrt);
 	EXPECT_EQ(axe._iPoe2Craft.raised, 3);
 	EXPECT_EQ(UnpackCraftState(PackCraftState(axe._iPoe2Craft)), axe._iPoe2Craft);
 	// A Perfect rune goes no higher, and a full socket's replacement isn't raised.
@@ -371,39 +380,39 @@ TEST_F(Poe2RunesTest, DropsFollowAreaLevelAndAct)
 		return seen;
 	};
 	const auto strength = [](AugmentId id) { return GetRuneKind(id) ? static_cast<int>(GetRuneKind(id)->strength) : -1; };
-	// Act 1: Lesser runes only, and no Zod.
+	// Act 1: plain runes only, and no Zod.
 	for (const auto &[id, count] : counts(10, 1)) {
 		EXPECT_NE(id, AugmentId::None);
 		EXPECT_NE(id, AugmentId::Zod);
 		EXPECT_LE(GetAugment(id).dropLevel, 10) << GetAugment(id).name;
 		if (GetRuneKind(id))
-			EXPECT_EQ(strength(id), 0) << GetAugment(id).name;
+			EXPECT_LE(strength(id), 1) << GetAugment(id).name;
 	}
 	// Act 3 at area level 32: Greater runes and Zod, no Perfect.
 	const std::map<AugmentId, int> act3 = counts(32, 3);
 	EXPECT_GT(act3.count(AugmentId::Zod), 0u);
 	EXPECT_GT(act3.count(AugmentId::GreaterRal), 0u);
 	EXPECT_EQ(act3.count(AugmentId::PerfectRal), 0u);
-	// Lesser runes stay the commonest.
-	EXPECT_GT(act3.at(AugmentId::LesserRal), act3.at(AugmentId::GreaterRal));
+	// Plain runes stay the commonest.
+	EXPECT_GT(act3.at(AugmentId::Ral), act3.at(AugmentId::GreaterRal));
 	// Past the story, Perfect runes.
 	EXPECT_GT(counts(60, PastStoryAct).count(AugmentId::PerfectRal), 0u);
 }
 
 TEST_F(Poe2RunesTest, RunesStackToTen)
 {
-	Item a = Rune(AugmentId::LesserRal, 8);
-	Item b = Rune(AugmentId::LesserRal, 8);
+	Item a = Rune(AugmentId::Ral, 8);
+	Item b = Rune(AugmentId::Ral, 8);
 	EXPECT_EQ(StackMax(a), RuneStackMax);
 	EXPECT_FALSE(MergeStack(a, b));
 	EXPECT_EQ(StackCount(a), 10);
 	EXPECT_EQ(StackCount(b), 6);
 	// A stack saved when runes stacked to 40 keeps its count, and takes no more.
-	Item old = Rune(AugmentId::LesserRal);
+	Item old = Rune(AugmentId::Ral);
 	old._iCharges = 35;
 	EXPECT_EQ(StackCount(old), 35);
 	EXPECT_EQ(StackRoom(old), 0);
-	Item one = Rune(AugmentId::LesserRal);
+	Item one = Rune(AugmentId::Ral);
 	EXPECT_TRUE(MergeStack(one, old) == false);
 	EXPECT_EQ(StackCount(one) + StackCount(old), 36);
 }
@@ -415,35 +424,35 @@ TEST_F(Poe2RunesTest, CainFusesRunes)
 	// The bag's changes go out as commands.
 	SNetInitializeProvider(SELCONN_LOOPBACK, nullptr);
 	Player &player = *MyPlayer;
-	ASSERT_TRUE(AutoPlaceItemInInventory(player, Rune(AugmentId::LesserRal, 4)));
-	const std::optional<RuneFusion> fusion = GetRuneFusion(RuneFamily::Ral, RuneStrength::Lesser);
+	ASSERT_TRUE(AutoPlaceItemInInventory(player, Rune(AugmentId::Ral, 4)));
+	const std::optional<RuneFusion> fusion = GetRuneFusion(RuneFamily::Ral, RuneStrength::Normal);
 	ASSERT_TRUE(fusion.has_value());
-	EXPECT_EQ(fusion->output, AugmentId::Ral);
-	EXPECT_EQ(RuneFusionText(*fusion), "3 Lesser Ral Runes: 1 Ral Rune");
+	EXPECT_EQ(fusion->output, AugmentId::GreaterRal);
+	EXPECT_EQ(RuneFusionText(*fusion), "3 Ral Runes: 1 Greater Ral Rune");
 	EXPECT_EQ(RuneFusionText(*GetRuneFusion(RuneFamily::Ort, RuneStrength::Greater)), "5 Greater Ort Runes: 1 Perfect Ort Rune");
 	ASSERT_EQ(RuneFusionsToOffer(player).size(), 1u);
-	ASSERT_TRUE(FuseRunes(player, RuneFamily::Ral, RuneStrength::Lesser, 1234));
-	EXPECT_EQ(BagCount(AugmentId::LesserRal), 1);
+	ASSERT_TRUE(FuseRunes(player, RuneFamily::Ral, RuneStrength::Normal, 1234));
 	EXPECT_EQ(BagCount(AugmentId::Ral), 1);
-	EXPECT_FALSE(FuseRunes(player, RuneFamily::Ral, RuneStrength::Lesser, 1235)) << "One left";
+	EXPECT_EQ(BagCount(AugmentId::GreaterRal), 1);
+	EXPECT_FALSE(FuseRunes(player, RuneFamily::Ral, RuneStrength::Normal, 1235)) << "One left";
 	EXPECT_TRUE(RuneFusionsToOffer(player).empty());
 	// The new rune is made with the command's seed.
 	for (int i = 0; i < player._pNumInv; i++) {
-		if (GetAugmentId(player.InvList[i]) == AugmentId::Ral)
+		if (GetAugmentId(player.InvList[i]) == AugmentId::GreaterRal)
 			EXPECT_EQ(player.InvList[i]._iSeed, 1234 >> 1);
 	}
 	EXPECT_FALSE(CainFusingLine(1234).empty());
 
 	// The stash makes up what the bag lacks.
-	ASSERT_TRUE(AutoPlaceItemInInventory(player, Rune(AugmentId::LesserThul)));
-	Item stored = Rune(AugmentId::LesserThul);
+	ASSERT_TRUE(AutoPlaceItemInInventory(player, Rune(AugmentId::Thul)));
+	Item stored = Rune(AugmentId::Thul);
 	SetStoredStackCount(stored, 4);
 	Stash.stashList.push_back(stored);
-	EXPECT_EQ(OwnedRuneCount(player, AugmentId::LesserThul), 5);
-	ASSERT_TRUE(FuseRunes(player, RuneFamily::Thul, RuneStrength::Lesser, 99));
-	EXPECT_EQ(OwnedRuneCount(player, AugmentId::LesserThul), 2);
-	EXPECT_EQ(BagCount(AugmentId::LesserThul), 0);
-	EXPECT_EQ(BagCount(AugmentId::Thul), 1);
+	EXPECT_EQ(OwnedRuneCount(player, AugmentId::Thul), 5);
+	ASSERT_TRUE(FuseRunes(player, RuneFamily::Thul, RuneStrength::Normal, 99));
+	EXPECT_EQ(OwnedRuneCount(player, AugmentId::Thul), 2);
+	EXPECT_EQ(BagCount(AugmentId::Thul), 0);
+	EXPECT_EQ(BagCount(AugmentId::GreaterThul), 1);
 
 	// Five Greater and gold make a Perfect, once Diablo is dead.
 	ASSERT_TRUE(AutoPlaceItemInInventory(player, Rune(AugmentId::GreaterOrt, 5)));
@@ -464,6 +473,7 @@ TEST_F(Poe2RunesTest, CainFusesRunes)
 
 	// No fusing where a strength is missing.
 	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ith, RuneStrength::Lesser).has_value());
+	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ral, RuneStrength::Lesser).has_value()) << "No Lesser runes since 2026-11-13";
 	EXPECT_FALSE(GetRuneFusion(RuneFamily::Shael, RuneStrength::Lesser).has_value());
 	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ral, RuneStrength::Perfect).has_value());
 	// The command carries the family, the strength and the seed.
@@ -520,7 +530,6 @@ TEST_F(Poe2RunesTest, PerfectFusingOpensPastTheStory)
 
 	// Plain and Greater fusing never waited.
 	reset();
-	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ort, RuneStrength::Lesser)->needsActThreeBoss);
 	EXPECT_FALSE(GetRuneFusion(RuneFamily::Ort, RuneStrength::Normal)->needsActThreeBoss);
 	Quests[Q_DIABLO]._qactive = QUEST_NOTAVAIL;
 }
@@ -542,6 +551,9 @@ TEST_F(Poe2RunesTest, AnItemSavedBeforeTheRunesNumbersGetsThem)
 	loaded._iPoe2Craft.augments[0] = static_cast<uint8_t>(AugmentId::LesserRal);
 	loaded._iPLToHit += 3; // something else changed it after it dropped, which stays
 	const Poe2Craft saved = loaded._iPoe2Craft;
+	// The Lesser Ral Rune has become the Ral Rune since runes went to three strengths.
+	ASSERT_TRUE(ConvertLegacyCraftingIds(loaded));
+	EXPECT_EQ(SocketAugment(loaded._iPoe2Craft, 0), AugmentId::Ral);
 	ASSERT_TRUE(MigrateRuneNumbers(loaded, saved));
 	const Item now = Rebuilt(loaded);
 	EXPECT_EQ(loaded._iFMinDam, now._iFMinDam);
@@ -633,7 +645,7 @@ TEST_F(Poe2RunesTest, SoulstonesAndRelicsHaveTheirLevelsAndDrop)
 	EXPECT_EQ(at60.count(AugmentId::HeartCore), 0u);
 	EXPECT_EQ(at60.count(AugmentId::HunterTalisman), 0u);
 	// Runes stay far commoner than any soulstone.
-	EXPECT_GT(at60.at(AugmentId::LesserRal), at60.at(AugmentId::Plaguewrath));
+	EXPECT_GT(at60.at(AugmentId::Ral), at60.at(AugmentId::Plaguewrath));
 }
 
 TEST_F(Poe2RunesTest, SoulstonesGoWhereTheirLinesSay)
@@ -757,13 +769,13 @@ TEST_F(Poe2RunesTest, AnAugmentThatDoesNothingHereIsReplacedFirstAndNotCounted)
 	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 1), AugmentId::RelicOfAkarat);
 
 	// With every socket full, a new augment replaces the one that does nothing, not the last one.
-	EXPECT_TRUE(Insert(plate, AugmentId::LesserRal));
-	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 0), AugmentId::LesserRal);
+	EXPECT_TRUE(Insert(plate, AugmentId::Ral));
+	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 0), AugmentId::Ral);
 	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 1), AugmentId::RelicOfAkarat);
 	// Once all of them work, it is the last one again.
-	EXPECT_TRUE(Insert(plate, AugmentId::LesserAmn));
-	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 0), AugmentId::LesserRal);
-	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 1), AugmentId::LesserAmn);
+	EXPECT_TRUE(Insert(plate, AugmentId::Amn));
+	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 0), AugmentId::Ral);
+	EXPECT_EQ(SocketAugment(plate._iPoe2Craft, 1), AugmentId::Amn);
 
 	// The same for a Horadric soulstone that doesn't fit: Tal Rasha's, a helmet's, in body armour.
 	Item other = Socketed(bare, 2, {});
@@ -779,12 +791,12 @@ TEST_F(Poe2RunesTest, ASoulstoneSavedBeforeItsNumbersGetsThem)
 {
 	EXPECT_EQ(AugmentBeforeSoulstoneNumbers(AugmentId::LordOfThePit), AugmentId::HeartCore);
 	EXPECT_EQ(AugmentBeforeSoulstoneNumbers(AugmentId::RelicOfRakkis), AugmentId::HunterTalisman);
-	EXPECT_EQ(AugmentBeforeSoulstoneNumbers(AugmentId::LesserRal), AugmentId::LesserRal);
+	EXPECT_EQ(AugmentBeforeSoulstoneNumbers(AugmentId::Ral), AugmentId::Ral);
 	EXPECT_EQ(AugmentBeforeSoulstoneNumbers(AugmentId::Plaguewrath), AugmentId::Plaguewrath);
 
 	// Saved in step 5, a Lord of the Pit soulstone had the Soul Core of Heart's +30 life; the Ral beside it doesn't move.
 	const Item bare = MakeItem("Full Plate");
-	const Item then = Socketed(bare, 2, { AugmentId::LesserRal, AugmentId::HeartCore });
+	const Item then = Socketed(bare, 2, { AugmentId::Ral, AugmentId::HeartCore });
 	Item loaded = then;
 	loaded._iPoe2Craft.augments[1] = static_cast<uint8_t>(AugmentId::LordOfThePit);
 	loaded._iPLToHit += 3; // something else changed it after it dropped, which stays
@@ -797,8 +809,126 @@ TEST_F(Poe2RunesTest, ASoulstoneSavedBeforeItsNumbersGetsThem)
 	EXPECT_EQ(loaded._iPLFR, now._iPLFR);
 	EXPECT_EQ(loaded._iPLToHit, now._iPLToHit + 3);
 	// Runes alone don't move then.
-	Item runes = Socketed(MakeItem("Full Plate"), 1, { AugmentId::LesserRal });
+	Item runes = Socketed(MakeItem("Full Plate"), 1, { AugmentId::Ral });
 	EXPECT_FALSE(MigrateRuneNumbers(runes, runes._iPoe2Craft, /*soulstonesOnly=*/true));
+}
+
+TEST_F(Poe2RunesTest, ALesserRuneBecomesItsFamilysPlainOne)
+{
+	// Curtis 2026-11-13: runes come in POE2's three strengths, plain, Greater and Perfect, and the plain one is named
+	// just for its rune. A Lesser rune of before becomes its family's plain one.
+	EXPECT_EQ(CurrentAugmentId(AugmentId::LesserRal), AugmentId::Ral);
+	EXPECT_EQ(CurrentAugmentId(AugmentId::LesserLum), AugmentId::Lum);
+	EXPECT_EQ(CurrentAugmentId(AugmentId::EmberRune), AugmentId::Ral) << "A step 2 id goes straight to the plain rune";
+	EXPECT_EQ(GetRuneKind(AugmentId::LesserRal)->strength, RuneStrength::Normal);
+	EXPECT_EQ(GetAugment(AugmentId::Ral).name, "Ral Rune");
+	// The one-strength Shael Rune stays, named just for its rune too.
+	EXPECT_EQ(CurrentAugmentId(AugmentId::LesserShael), AugmentId::LesserShael);
+	EXPECT_EQ(GetAugment(AugmentId::LesserShael).name, "Shael Rune");
+	EXPECT_EQ(AugmentBeforeRuneNumbers(AugmentId::LesserRal), AugmentId::EmberRune) << "Before step 5 it had the Ember Rune's numbers";
+
+	// A loose stack.
+	Item loose = Rune(AugmentId::LesserLum, 3);
+	EXPECT_TRUE(ConvertLegacyCraftingIds(loose));
+	EXPECT_EQ(GetAugmentId(loose), AugmentId::Lum);
+	EXPECT_EQ(std::string(loose._iIName), "Lum Rune");
+	EXPECT_EQ(StackCount(loose), 3);
+
+	// In a socket of an item saved since step 6, when it had the Lesser Ral Rune's own numbers: its share of the item's
+	// values becomes the Ral Rune's, and what else changed the item stays.
+	const Item bare = MakeItem("Splitting Greataxe");
+	Item then = Socketed(bare, 2, { AugmentId::Ral, AugmentId::GreaterThul });
+	then._iPoe2Craft.augments[0] = static_cast<uint8_t>(AugmentId::LesserRal);
+	then = Rebuilt(then);
+	EXPECT_EQ(then._iFMinDam - bare._iFMinDam, GetAugment(AugmentId::LesserRal).weaponValues[0]);
+	Item loaded = then;
+	loaded._iPLToHit += 3;
+	const Poe2Craft saved = loaded._iPoe2Craft;
+	ASSERT_TRUE(ConvertLegacyCraftingIds(loaded));
+	EXPECT_EQ(SocketAugment(loaded._iPoe2Craft, 0), AugmentId::Ral);
+	EXPECT_EQ(SocketAugment(loaded._iPoe2Craft, 1), AugmentId::GreaterThul);
+	ASSERT_TRUE(MigrateRenamedAugmentNumbers(loaded, saved));
+	const Item now = Rebuilt(loaded);
+	EXPECT_EQ(now._iFMinDam - bare._iFMinDam, GetAugment(AugmentId::Ral).weaponValues[0]);
+	EXPECT_EQ(loaded._iFMinDam, now._iFMinDam);
+	EXPECT_EQ(loaded._iFMaxDam, now._iFMaxDam);
+	EXPECT_EQ(loaded._iPLToHit, now._iPLToHit + 3);
+	// Nothing moves for the ids of today.
+	Item today = now;
+	EXPECT_FALSE(MigrateRenamedAugmentNumbers(today, today._iPoe2Craft));
+}
+
+// The runes' painted pictures (hd/runes/<key>_<strength>.png): each rune drawn asks for its own, with what its box held.
+struct RecordedPicture {
+	std::string name;
+	Rectangle box;
+	std::vector<uint8_t> before;
+};
+std::vector<RecordedPicture> RecordedPictures;
+
+void RecordPicture(const Surface & /*out*/, const Rectangle &box, const std::string &name, const uint8_t *before)
+{
+	RecordedPictures.push_back({ name, box, std::vector<uint8_t>(before, before + static_cast<size_t>(box.size.width) * box.size.height) });
+}
+
+TEST(RunePictures, EachRuneAsksForItsOwnPaintedPicture)
+{
+	const hd::RecordUiPictureFn saved = hd::RecordUiPictureHook;
+	hd::RecordUiPictureHook = RecordPicture;
+	OwnedSurface out { 40, 40 };
+	const Rectangle box { { 6, 5 }, { 28, 28 } };
+	const auto draw = [&](AugmentId id, bool dim) {
+		RecordedPictures.clear();
+		for (int y = 0; y < 40; y++) {
+			for (int x = 0; x < 40; x++)
+				out[{ x, y }] = 77;
+		}
+		DrawRuneIcon(out, box, id, dim);
+	};
+
+	const std::vector<std::string_view> keys = { "ral", "thul", "ort", "ohm", "amn", "vex", "io", "tir", "sol", "gul", "fal", "ko", "lum", "ith", "shael", "zod", "venom" };
+	std::set<std::string> asked;
+	for (size_t family = 0; family < static_cast<size_t>(RuneFamily::Count); family++) {
+		for (const RuneStrength strength : { RuneStrength::Lesser, RuneStrength::Normal, RuneStrength::Greater, RuneStrength::Perfect }) {
+			const AugmentId id = RuneOf(static_cast<RuneFamily>(family), strength);
+			if (id == AugmentId::None)
+				continue;
+			draw(id, /*dim=*/false);
+			ASSERT_EQ(RecordedPictures.size(), 1U) << keys[family];
+			const RecordedPicture &picture = RecordedPictures[0];
+			EXPECT_EQ(picture.name.rfind(StrCat("runes/", keys[family], "_"), 0), 0U) << picture.name;
+			EXPECT_EQ(picture.box.position, box.position);
+			EXPECT_EQ(picture.box.size, box.size);
+			// What the box held before the rune went on.
+			EXPECT_TRUE(std::all_of(picture.before.begin(), picture.before.end(), [](uint8_t pixel) { return pixel == 77; })) << picture.name;
+			asked.insert(picture.name);
+		}
+	}
+	for (int legend = 0; legend < RunesOfLegendCount; legend++) {
+		draw(static_cast<AugmentId>(static_cast<int>(FirstRuneOfLegend) + legend), /*dim=*/false);
+		ASSERT_EQ(RecordedPictures.size(), 1U);
+		asked.insert(RecordedPictures[0].name);
+	}
+
+	// Three strengths for each family; one picture for Shael, Zod, Venom and each Rune of Legend.
+	std::set<std::string> expected;
+	for (size_t family = 0; family < keys.size(); family++) {
+		const bool one = keys[family] == "shael" || keys[family] == "zod" || keys[family] == "venom";
+		for (const std::string_view strength : { "normal", "greater", "perfect" }) {
+			if (!one || strength == "normal")
+				expected.insert(StrCat("runes/", keys[family], "_", strength));
+		}
+	}
+	for (const std::string_view legend : { "talic", "madawc", "korlic", "bulkathos", "talrasha", "horazon", "jeredcain", "zoltunkulle" })
+		expected.insert(StrCat("runes/", legend, "_normal"));
+	EXPECT_EQ(asked, expected);
+	EXPECT_EQ(expected.size(), 53U);
+
+	// An empty Runes tab slot's dim rune keeps the drawn one.
+	draw(RuneOf(RuneFamily::Ral, RuneStrength::Normal), /*dim=*/true);
+	EXPECT_TRUE(RecordedPictures.empty());
+
+	hd::RecordUiPictureHook = saved;
 }
 
 } // namespace

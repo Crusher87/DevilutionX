@@ -57,10 +57,19 @@ set(libdevilutionx_SRCS
   poe2/atmosphere.cpp
   poe2/moments.cpp
   poe2/props.cpp
+  poe2/carved_bodies.cpp
   poe2/hd.cpp
+  poe2/hd_batch.cpp
   poe2/hd_light.cpp
   poe2/hd_outline.cpp
+  poe2/hd_spell_icons.cpp
   poe2/hd_ui.cpp
+  poe2/live_fire.cpp
+  poe2/menu_secret.cpp
+  poe2/secrets.cpp
+  poe2/live_fire_sdl.cpp
+  poe2/menu_intro.cpp
+  poe2/menu_intro_sdl.cpp
   poe2/loot_filter.cpp
   poe2/rune_icons.cpp
   poe2/stash_layouts.cpp
@@ -136,6 +145,7 @@ set(libdevilutionx_SRCS
   lua/modules/audio.cpp
   lua/modules/hellfire.cpp
   lua/modules/poe2.cpp
+  lua/modules/reforged.cpp
   lua/modules/dev.cpp
   lua/modules/dev/display.cpp
   lua/modules/dev/items.cpp
@@ -251,12 +261,22 @@ target_link_dependencies(libdevilutionx_mod_identity PUBLIC
   libdevilutionx_sdl2_to_1_2_backports
 )
 
+add_devilutionx_object_library(libdevilutionx_hd_pack
+  poe2/hd_pack.cpp
+)
+target_link_dependencies(libdevilutionx_hd_pack PUBLIC
+  DevilutionX::SDL
+  libdevilutionx_file_util
+  libdevilutionx_log
+)
+
 add_devilutionx_object_library(libdevilutionx_assets
   engine/assets.cpp
 )
 target_link_dependencies(libdevilutionx_assets PUBLIC
   DevilutionX::SDL
   tl
+  libdevilutionx_hd_pack
   libdevilutionx_headless_mode
   libdevilutionx_game_mode
   libdevilutionx_mod_identity

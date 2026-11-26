@@ -109,6 +109,8 @@ option(ENABLE_CODECOVERAGE "Instrument code for code coverage (only enabled with
 RELEASE_OPTION(CPACK "Configure CPack")
 option(MACOSX_STANDALONE_APP_BUNDLE "Generate a portable app bundle to use on other devices (requires sudo)" OFF)
 option(WIN_NSIS "Generate an NSIS installer" OFF)
+# A Sanctuary Reforged package: Diablo, Hellfire and Reforged only, without POE2 Mashup's mod or the link map.
+option(REFORGED_PACKAGE "Package Sanctuary Reforged alone (leave out mods/poe2.mpq and devilutionx.map)" OFF)
 
 # Network options
 cmake_dependent_option(DISABLE_TCP "Disable TCP multiplayer option" OFF "NOT NONET" ON)
@@ -638,7 +640,9 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
     if(MINGW)
       # POE2 Mashup: a link map, so the crash offsets in poe2_logs can be named.
       target_link_options(${BIN_TARGET} PRIVATE "-Wl,-Map=${CMAKE_BINARY_DIR}/devilutionx.map")
-      install(FILES "${CMAKE_BINARY_DIR}/devilutionx.map" DESTINATION ".")
+      if(NOT REFORGED_PACKAGE)
+        install(FILES "${CMAKE_BINARY_DIR}/devilutionx.map" DESTINATION ".")
+      endif()
     endif()
     install(FILES "${PROJECT_SOURCE_DIR}/Packaging/windows/README.txt"
       DESTINATION "."
@@ -649,7 +653,12 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
     install(FILES "${HELLFIRE_MPQ}"
       DESTINATION "mods"
     )
-    install(FILES "${POE2_MPQ}"
+    if(NOT REFORGED_PACKAGE)
+      install(FILES "${POE2_MPQ}"
+        DESTINATION "mods"
+      )
+    endif()
+    install(FILES "${REFORGED_MPQ}"
       DESTINATION "mods"
     )
 
@@ -716,7 +725,12 @@ if(CPACK AND (APPLE OR BUILD_ASSETS_MPQ OR SRC_DIST))
     install(FILES "${HELLFIRE_MPQ}"
       DESTINATION "share/diasurgical/${project_name}/mods"
     )
-    install(FILES "${POE2_MPQ}"
+    if(NOT REFORGED_PACKAGE)
+      install(FILES "${POE2_MPQ}"
+        DESTINATION "share/diasurgical/${project_name}/mods"
+      )
+    endif()
+    install(FILES "${REFORGED_MPQ}"
       DESTINATION "share/diasurgical/${project_name}/mods"
     )
     install(FILES "${PROJECT_SOURCE_DIR}/Packaging/resources/icon_flat.png"

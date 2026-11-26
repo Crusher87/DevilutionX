@@ -23,6 +23,7 @@
 #include "engine/render/clx_render.hpp"
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
+#include "game_mode.hpp"
 #include "inv.h"
 #include "msg.h"
 #include "multi.h"
@@ -811,7 +812,8 @@ bool IsItemSpawnerOpen()
 
 void OpenItemSpawner()
 {
-	if (gbIsMultiplayer || MyPlayer == nullptr)
+	// An admin tool: POE2 Mashup's, or any mode's with --admin.
+	if (gbIsMultiplayer || MyPlayer == nullptr || !AdminToolsOn())
 		return;
 	IsOpen = true;
 	Catalog = BuildItemSpawnerCatalog();

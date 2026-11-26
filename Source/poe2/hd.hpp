@@ -13,6 +13,7 @@
 #include "utils/sdl2_to_1_2_backports.h"
 #else
 struct SDL_Renderer;
+struct SDL_Texture;
 #endif
 
 namespace devilution {
@@ -100,6 +101,16 @@ struct CasterScope {
 	~CasterScope() { CurrentCaster = Caster::None; }
 	CasterScope(const CasterScope &) = delete;
 	CasterScope &operator=(const CasterScope &) = delete;
+};
+
+/** @brief Set while a dead body lying on the floor is drawn. */
+extern bool CurrentCorpse;
+
+struct CorpseScope {
+	CorpseScope() { CurrentCorpse = true; }
+	~CorpseScope() { CurrentCorpse = false; }
+	CorpseScope(const CorpseScope &) = delete;
+	CorpseScope &operator=(const CorpseScope &) = delete;
 };
 
 /**
@@ -245,11 +256,138 @@ using RecordUiOutlineFn = void (*)(const Surface &out, Point position, ClxSprite
  */
 extern RecordUiOutlineFn RecordUiOutlineHook;
 
+using RecordUiPictureFn = void (*)(const Surface &out, const Rectangle &box, const std::string &name, const uint8_t *before);
+
+/**
+ * @brief Notes a picture the game draws in code in the UI (a rune), with what was in its box before it went on (set by
+ * the HD renderer; null without it). `before` holds the box's pixels a row at a time, box.size.width to a row. Where
+ * there is HD art for it (hd/<name>.png), the art shows over the UI in the box as an item picture's does, where the
+ * pixels it drew still show; without the art, or with HD off, the game's own drawing stays.
+ */
+extern RecordUiPictureFn RecordUiPictureHook;
+
 /** @brief An item picture frame (data/inv/objcurs) and its HD art's name. */
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height);
 
 /** @brief A one-cell shrunken copy of an item picture: it shows the full picture's HD art, shrunk the same way. */
 void RegisterFittedUiSprite(ClxSprite small, ClxSprite full);
+
+/** @brief Where a UI picture's HD art goes (RegisterUiPicture). */
+enum class UiPictureLayer : uint8_t {
+	/** Under the UI, which leaves out the picture's pixels there (a panel: text and items drawn on it stay over it). Only
+	 * frames presented in layers (in the game) show it. */
+	Under,
+	/**
+	 * Over the UI, as item pictures: where the picture's own pixels still show, the UI shows what was under them, so
+	 * nothing of the game's picture shows round its art. Any frame shows it, the menus' too (the logos, whose fire the
+	 * HD art leaves out).
+	 */
+	Over,
+};
+
+using RegisterUiPictureFn = void (*)(std::string_view path, ClxSpriteList sprites, UiPictureLayer layer);
+using ForgetUiPictureFn = void (*)(ClxSpriteList sprites);
+using RecordUiBlitFn = void (*)(const Surface &out, const Surface &src, Rectangle srcRect, Point targetPosition, std::string_view name);
+
+/** @brief RegisterUiPicture, ForgetUiPicture and RecordUiBlit when the HD renderer is linked in, otherwise null (hd_hooks.cpp). */
+extern RegisterUiPictureFn RegisterUiPictureHook;
+extern ForgetUiPictureFn ForgetUiPictureHook;
+extern RecordUiBlitFn RecordUiBlitHook;
+
+/**
+ * @brief Names a UI panel's picture (the inventory, the spell book, a button strip...) so its HD art shows over the UI
+ * where its own pixels still show, as item pictures do. Each frame's art is hd\\<name>\\d0_fNN.png, the name being the
+ * asset's path in lower case with / and no extension (data/inv/inv), or a fixed one for a picture the game puts
+ * together itself (ui/char_panel). A picture named again forgets the frames it had before. A frame with no art keeps
+ * the game's own. `layer` says whether its art goes under the UI (panels) or over it (the menus' logos).
+ */
+inline void RegisterUiPicture(std::string_view path, ClxSpriteList sprites, UiPictureLayer layer = UiPictureLayer::Under)
+{
+	if (RegisterUiPictureHook != nullptr)
+		RegisterUiPictureHook(path, sprites, layer);
+}
+
+using RegisterUiLettersFn = void (*)(ClxSpriteList sprites, const uint8_t *trn, std::string_view name);
+
+/** @brief RegisterUiLetters when the HD renderer is linked in, otherwise null (hd_hooks.cpp). */
+extern RegisterUiLettersFn RegisterUiLettersHook;
+
+/**
+ * @brief Names a font's letters (one frame per character code) for when they are drawn with `trn` (null for none):
+ * each letter then shows its HD art hd\\<name>\\d0_fNN.png over the UI, NN being the character code, as item pictures
+ * do. A letter drawn in another colour, or with no art, keeps the game's own. ForgetUiPicture forgets them.
+ */
+inline void RegisterUiLetters(ClxSpriteList sprites, const uint8_t *trn, std::string_view name)
+{
+	if (RegisterUiLettersHook != nullptr)
+		RegisterUiLettersHook(sprites, trn, name);
+}
+
+using RecordUiSpellIconFn = void (*)(const Surface &out, Rectangle box, uint8_t frame, bool large, uint8_t tint, bool drawn);
+
+/**
+ * @brief Notes a spell icon drawn in the UI (set by the HD renderer; null without it): called with `drawn` false just
+ * before the game draws the icon in `box`, and with it true just after. `frame` is the icon's frame (SpellIcon),
+ * `large` tells the 56x56 icons from the 37x38 ones, `tint` is the SpellType whose colours it is drawn in
+ * (SetSpellTrans). Where the HD art has the icon (hd_spell_icons.hpp), its painted picture shows over the UI in the box
+ * as an item picture's does, made for the size the box has on screen; without the art, with HD off, or for a label
+ * frame, the game's own icon stays.
+ */
+extern RecordUiSpellIconFn RecordUiSpellIconHook;
+
+using CoverUiSpellIconFn = void (*)(const Surface &out, Rectangle box);
+
+/**
+ * @brief Notes the 2 pixel border the game drew just inside `box`, over a spell icon (set by the HD renderer; null
+ * without it): the icon's HD art leaves it out, whatever its colour.
+ */
+extern CoverUiSpellIconFn CoverUiSpellIconHook;
+
+/** @brief Forgets a UI panel's picture before its pixels are freed, so another picture loaded there doesn't take its art. */
+inline void ForgetUiPicture(ClxSpriteList sprites)
+{
+	if (ForgetUiPictureHook != nullptr)
+		ForgetUiPictureHook(sprites);
+}
+
+/** @brief ForgetUiPicture for a picture that may not be loaded. */
+inline void ForgetUiPicture(const OptionalOwnedClxSpriteList &sprites)
+{
+	if (sprites.has_value())
+		ForgetUiPicture(ClxSpriteList { *sprites });
+}
+
+/**
+ * @brief Notes a copy of part of a surface the game drew a panel on (the bottom panel, BottomBuffer) into the UI:
+ * that part of the HD art `<name>/d0_f00` (the whole surface's picture, at twice the size) goes under the UI there,
+ * and the UI leaves out the copied pixels that still show.
+ */
+inline void RecordUiBlit(const Surface &out, const Surface &src, Rectangle srcRect, Point targetPosition, std::string_view name)
+{
+	if (RecordUiBlitHook != nullptr)
+		RecordUiBlitHook(out, src, srcRect, targetPosition, name);
+}
+
+/**
+ * @brief While the UI overlay is made: the UI pixels to leave out (1), since a panel's HD art goes under the UI there
+ * (RenderUiPanels). Indexed by row times @p width; null when there are none, or the UI isn't that size.
+ */
+const uint8_t *UiHiddenPixels(int width, int height);
+
+/** @brief Draws the HD art of this frame's UI panels, under the UI overlay (whose panel pixels are left out there). */
+void RenderUiPanels(SDL_Renderer *renderer);
+
+/**
+ * @brief From now on each UI picture named (RegisterUiPicture) is also written as PNGs to `dir`/ui/<name>/d0_fNN.png,
+ * in full colour in the current palette, where the picture lays no pixel transparent (for the HD pack maker).
+ */
+void BeginUiExport(const std::string &dir);
+
+/** @brief Writes a surface the game puts a panel together on as `dir`/ui/<name>/d0_f00.png; colour 0 is transparent. */
+void ExportUiSurface(std::string_view name, const Surface &surface);
+
+/** @brief Stops writing UI pictures, and writes `dir`/ui/list.json: each picture's name, frame count and frame sizes. */
+void EndUiExport();
 
 /**
  * @brief Before the UI overlay is made from the UI frame: where an item picture with HD art still shows, the frame
@@ -260,6 +398,62 @@ void RestoreUiSprites();
 
 /** @brief Draws the HD art of this frame's item pictures over the UI, where their own pixels still show. */
 void RenderUiSprites(SDL_Renderer *renderer);
+
+/** @brief Forgets this frame's UI draws without showing them: the frame went up without its HD art (UI not scaled). */
+void DropUiDraws();
+
+/**
+ * @brief Lets the menu logos' live fire go now (its maps are looked for again the next time a logo shows). Without its
+ * maps (hd\\ui_art\\logo\\fire_maps.png) the logos show without a fire.
+ */
+void ForgetMenuFire();
+
+/**
+ * @brief Whether the main menu's intro (poe2/menu_intro.hpp) should play now: once a launch, the Menu Intro option on,
+ * the HD pack's main menu logo shown (ShowsHdLogo) and its art there (hd\ui_art\intro\steel.png and textmaps.png, and
+ * the logo's fire maps). The game then leaves out the title screen and plays it as the main menu opens.
+ */
+bool MenuIntroWanted();
+/** @brief Starts the intro (MenuIntroWanted): the main menu's logo flies in, and the menu fades in under it. */
+void StartMenuIntro();
+/** @brief Whether the intro is still playing (until it ends on the menu as it always is). */
+bool MenuIntroPlaying();
+/** @brief Whether the menu isn't showing yet: a click or a key skips the intro, and does nothing else. */
+bool MenuIntroTakesInput();
+/** @brief Jumps to the intro's end: the logo in place and burning, the words cooled, the menu shown; its sounds stop. */
+void SkipMenuIntro();
+/** @brief The main menu closes: whatever is left of the intro ends (its sounds play out). */
+void FinishMenuIntro();
+/**
+ * @brief Around the drawing of a frame of the menus (RenderPresent): while the intro plays, the frame is drawn into a
+ * picture of its own, and the intro puts it on the screen with everything else (EndMenuIntroFrame). False when it
+ * isn't playing: nothing changes.
+ */
+bool BeginMenuIntroFrame(SDL_Renderer *renderer);
+void EndMenuIntroFrame(SDL_Renderer *renderer);
+/**
+ * @brief Whether the menu logos show the intro's subtitle and fire lines under them now (once it has played): the menu
+ * screens then make room for them (UiSubtitleDrop).
+ */
+bool MenuSubtitleShown();
+
+/**
+ * @brief Whether the HD pack has the main menu's own background (hd\ui_art\mainmenu_wide.png, 21:9): the screens
+ * that show ui_art\mainmenu (the main menu, its ok screen, Hellfire's start) then show it in its place.
+ */
+bool HasMenuBackground();
+/** @brief The screen shown uses the main menu's background (false: any other, or none). */
+void ShowMenuBackground(bool shown);
+bool MenuBackgroundIsShown();
+/**
+ * @brief When the screen shown has it: draws the main menu's background over all of the renderer's viewport (as tall
+ * as it, centred and cut at the sides) and sets `ui`, the frame of the menus, to go over it with its black left out.
+ * False otherwise: nothing changes.
+ */
+bool DrawMenuBackground(SDL_Renderer *renderer, SDL_Texture *ui);
+
+/** @brief A UI picture frame's HD art name (RegisterUiPicture) and where its art goes, by its pixels; false for none. */
+bool UiPictureFrameOf(const uint8_t *pixels, std::string &name, UiPictureLayer &layer);
 
 /** @brief Names every frame of a loaded sprite file, so its HD art can be found. */
 void RegisterSprites(std::string_view path, ClxSpriteListOrSheet sprites);
@@ -278,12 +472,30 @@ void ForgetSprites(ClxSpriteListOrSheet sprites);
 bool HasArt(std::string_view name);
 
 /**
+ * @brief Whether a menu shows the HD pack's Diablo logo `picture` (ui_art/logo on the title screen, ui_art/smlogo in the
+ * main menu, data/diabsmal in the Esc menu): HD Graphics is on and the pack has its art. Hellfire's menus then load the
+ * Diablo logo in place of their own (hf_logo1, hf_logo2, hf_logo3), so it shows there too, with its fire.
+ */
+inline bool ShowsHdLogo(std::string_view picture)
+{
+	return Enabled() && HasArt(std::string(picture) + "/d0_f00");
+}
+
+/**
  * @brief Shows a sprite's HD art over the UI this frame, filling @p dest (UI pixels), for a preview in a panel.
  * Only one such sprite is shown at a time.
  * @param subFrame How far the sprite is towards its next frame, for the in-between drawings.
+ * @param recolour For a unique monster, its colour table's name in lower case: its own art is shown
+ * (UniqueArtName); empty for the sprite's own.
  * @return false when HD art isn't shown or the sprite has none: the caller then draws the game's own pixels.
  */
-bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame);
+bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame, std::string_view recolour = {});
+
+/**
+ * @brief The name of a unique monster's own HD art, beside its type's (monsters/sking/skinga@skelaxe/white+genrl/d3_f05):
+ * the type's art name with "+<recolour>" before its last part; the type's own name when @p recolour is empty.
+ */
+std::string UniqueArtName(std::string_view typeArtName, std::string_view recolour);
 
 /** @brief Draws what DrawUiSprite asked for, over the UI. */
 void RenderUi(SDL_Renderer *renderer);
@@ -299,6 +511,25 @@ extern RegisterSpritesFn RegisterSpritesHook;
 
 /** @brief Draws the recorded world in full colour. */
 void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
+
+/**
+ * @brief POE2 Mashup: the world stands still under the game menu (KeepWorldPicture in scrollrt.cpp), so Render may keep
+ * the HD world it draws and show that picture again in the frames after, while the palette and the view stay the same.
+ * False lets the picture go: every frame is drawn again.
+ */
+void KeepWorldPicture(bool keep);
+
+/** @brief POE2 Mashup: KeepWorldPicture(true) since the last Render, which takes the ask (one frame's). */
+bool KeepWorldPictureAsked();
+
+/**
+ * @brief POE2 Mashup: the world wasn't drawn this frame because it stands still: the draws recorded for the last one are
+ * this frame's too. False when there are none to use (the world must be drawn).
+ */
+bool ReplayWorld();
+
+/** @brief POE2 Mashup: the renderer lost what was drawn into its textures: the kept HD world is made again. */
+void ForgetWorldPicture();
 
 /**
  * @brief Draws the Atmosphere option's moments over the HD world and the effects on it: the dark that closes in round the

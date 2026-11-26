@@ -136,7 +136,9 @@ set(poe2_mod
   txtdata/poe2/unique_lore.tsv
   txtdata/poe2/uniques.tsv)
 
-if(APPLE)
+if(APPLE AND REFORGED_PACKAGE)
+  # A Sanctuary Reforged app bundle carries no POE2 Mashup files.
+elseif(APPLE)
   foreach(asset_file ${poe2_mod})
     set(src "${CMAKE_CURRENT_SOURCE_DIR}/mods/poe2/${asset_file}")
     get_filename_component(_asset_dir "${asset_file}" DIRECTORY)
@@ -172,5 +174,63 @@ else()
     add_custom_target(poe2_copied_assets DEPENDS ${POE2_OUTPUT_FILES})
     add_dependencies(poe2_copied_assets poe2_trim_assets)
     add_dependencies(libdevilutionx poe2_copied_assets)
+  endif()
+endif()
+
+# Sanctuary Reforged mod (requires Hellfire): the HD look and the comfort features on plain Diablo and Hellfire rules.
+# It carries only the tables those features read, and the designed rooms its floor layouts are built from; the game's own
+# rules tables stay Hellfire's. The look tables are copies of POE2 Mashup's; the rooms are too, less the reward column
+# Reforged has no use for, and the map icons less the strongbox and rare monster markers. test/reforged_mode_test.cpp
+# keeps them in step.
+set(reforged_mod
+  manifest.ini
+  lua/mods/reforged/init.lua
+  txtdata/reforged/atmosphere.tsv
+  txtdata/reforged/catacombs_rooms.tsv
+  txtdata/reforged/cathedral_rooms.tsv
+  txtdata/reforged/caves_rooms.tsv
+  txtdata/reforged/crypt_rooms.tsv
+  txtdata/reforged/hell_rooms.tsv
+  txtdata/reforged/hive_rooms.tsv
+  txtdata/reforged/map_icons.tsv
+  txtdata/reforged/quest_tracker.tsv
+  txtdata/reforged/skill_looks.tsv)
+
+if(APPLE)
+  foreach(asset_file ${reforged_mod})
+    set(src "${CMAKE_CURRENT_SOURCE_DIR}/mods/reforged/${asset_file}")
+    get_filename_component(_asset_dir "${asset_file}" DIRECTORY)
+    set_source_files_properties("${src}" PROPERTIES
+      MACOSX_PACKAGE_LOCATION "Resources/mods/reforged/${_asset_dir}"
+      XCODE_EXPLICIT_FILE_TYPE compiled)
+    target_sources(${BIN_TARGET} PRIVATE "${src}")
+  endforeach()
+else()
+  copy_files(
+    FILES ${reforged_mod}
+    SRC_PREFIX "mods/reforged/"
+    OUTPUT_DIR "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/reforged"
+    OUTPUT_VARIABLE REFORGED_OUTPUT_FILES)
+  add_trim_target(reforged_trim_assets
+    ROOT_FOLDER "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/reforged"
+    CURRENT_FILES ${reforged_mod})
+
+  if(BUILD_ASSETS_MPQ)
+    set(REFORGED_MPQ "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/reforged.mpq")
+    add_custom_command(
+      COMMENT "Building reforged.mpq"
+      OUTPUT "${REFORGED_MPQ}"
+      COMMAND ${CMAKE_COMMAND} -E remove -f "${REFORGED_MPQ}"
+      COMMAND ${SMPQ} -A -M 1 -C BZIP2 -c "${REFORGED_MPQ}" ${reforged_mod}
+      WORKING_DIRECTORY "${DEVILUTIONX_MODS_OUTPUT_DIRECTORY}/reforged"
+      DEPENDS ${TRIM_COMMAND_BYPRODUCT} ${REFORGED_OUTPUT_FILES}
+      VERBATIM)
+    add_custom_target(reforged_mpq DEPENDS "${REFORGED_MPQ}")
+    add_dependencies(reforged_mpq reforged_trim_assets)
+    add_dependencies(libdevilutionx reforged_mpq)
+  else()
+    add_custom_target(reforged_copied_assets DEPENDS ${REFORGED_OUTPUT_FILES})
+    add_dependencies(reforged_copied_assets reforged_trim_assets)
+    add_dependencies(libdevilutionx reforged_copied_assets)
   endif()
 endif()

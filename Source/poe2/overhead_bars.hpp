@@ -108,6 +108,11 @@ void QueueHeroOverheadBar(const Player &player, Point spritePosition, ClxSprite 
 void QueueMonsterOverheadBar(const Monster &monster, Point spritePosition, ClxSprite sprite);
 /** @brief Draws the noted bars over the view and forgets them. */
 void DrawOverheadBars(const Surface &out);
+/**
+ * @brief POE2 Mashup: notes again the bars the world last drawn noted, for a frame that shows that world again instead
+ * of drawing it (it stands still under the game menu).
+ */
+void QueueKeptOverheadBars();
 void ClearOverheadBars();
 
 } // namespace devilution

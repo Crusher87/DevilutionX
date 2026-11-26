@@ -17,6 +17,7 @@
 #include "engine/point.hpp"
 #include "engine/render/text_render.hpp"
 #include "game_mode.hpp"
+#include "poe2/hd.hpp"
 #include "utils/language.h"
 #include "utils/ui_fwd.h"
 #include "utils/utf8.hpp"
@@ -39,6 +40,8 @@ std::vector<std::unique_ptr<UiItemBase>> vecSelOkDialog;
 void selok_Free()
 {
 	ArtBackground = std::nullopt;
+	ArtBackgroundWidescreen = std::nullopt;
+	hd::ShowMenuBackground(false);
 
 	vecSelOkDialogItems.clear();
 
@@ -60,11 +63,7 @@ void UiSelOkDialog(const char *title, const char *body, bool background)
 	if (!background) {
 		UiLoadBlackBackground();
 	} else {
-		if (!gbIsSpawn) {
-			LoadBackgroundArt("ui_art\\mainmenu");
-		} else {
-			LoadBackgroundArt("ui_art\\swmmenu");
-		}
+		LoadMainMenuBackground(gbIsSpawn);
 	}
 
 	UiAddBackground(&vecSelOkDialog);

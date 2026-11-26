@@ -11,8 +11,11 @@
 #include <cstdint>
 #include <cstring>
 #include <expected>
+#include <initializer_list>
 #include <numeric>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <ankerl/unordered_dense.h>
@@ -431,6 +434,10 @@ struct LevelConversionData {
 	// And one saved after that but before the soulstones and relics took theirs (step 6) gets what they do now.
 	else if (gbIsPoe2 && (item.dwBuff & CF_POE2) != 0 && SavedBeforeSoulstoneNumbers(craftBytes))
 		MigrateRuneNumbers(item, savedCraft, /*soulstonesOnly=*/true);
+	// And one saved since then whose sockets held an id that is legacy now (a Lesser rune, which became plain) gets
+	// what the new id does.
+	else if (gbIsPoe2 && (item.dwBuff & CF_POE2) != 0)
+		MigrateRenamedAugmentNumbers(item, savedCraft);
 	// POE2 Mashup: a caster weapon of the rework keeps the modifiers it rolled, written out, from now on.
 	LockCasterWeaponMods(item);
 	FinishFlask(item);
@@ -2900,20 +2907,50 @@ uint8_t ReadPoe2HeroData(Player &player)
 
 } // namespace
 
-void ReadPoe2Floors()
+namespace {
+
+/** @brief The bytes of a hero save entry written as a 32 bit length and then the bytes; nothing if it isn't there. */
+std::optional<std::vector<uint8_t>> ReadSizedEntry(const char *name)
 {
-	Poe2FloorsReset();
-	LoadHelper file(OpenSaveArchive(gSaveNumber), "poe2floors");
+	LoadHelper file(OpenSaveArchive(gSaveNumber), name);
 	if (!file.IsValid(sizeof(uint32_t)))
-		return;
+		return std::nullopt;
 	const uint32_t size = file.NextLE<uint32_t>();
 	if (size == 0 || !file.IsValid(size))
-		return;
+		return std::nullopt;
 	std::vector<uint8_t> data(size);
 	for (uint8_t &byte : data)
 		byte = file.NextLE<uint8_t>();
-	if (!Poe2UnpackFloors(data))
-		Poe2FloorsReset();
+	return data;
+}
+
+void WriteSizedEntry(SaveWriter &saveWriter, const char *name, const std::vector<uint8_t> &data)
+{
+	SaveHelper file(saveWriter, name, sizeof(uint32_t) + data.size());
+	file.WriteLE<uint32_t>(static_cast<uint32_t>(data.size()));
+	for (const uint8_t byte : data)
+		file.WriteLE<uint8_t>(byte);
+}
+
+/** @brief Reads the floor records from the first of the entries that is there. */
+void ReadFloors(std::initializer_list<const char *> entries)
+{
+	Poe2FloorsReset();
+	for (const char *entry : entries) {
+		const std::optional<std::vector<uint8_t>> data = ReadSizedEntry(entry);
+		if (!data)
+			continue;
+		if (!Poe2UnpackFloors(*data))
+			Poe2FloorsReset();
+		return;
+	}
+}
+
+} // namespace
+
+void ReadPoe2Floors()
+{
+	ReadFloors({ "poe2floors" });
 }
 
 /** @brief The hero's shrine buffs, in their own entry; a save from before shrine buffs has none. */
@@ -2932,8 +2969,124 @@ void ReadPoe2Shrines(Player &player)
 	UnpackShrineBuffs(player.poe2.shrines, data);
 }
 
+namespace {
+
+/**
+ * @brief Sanctuary Reforged's own hero entry, "srvhero": the few things Reforged adds to a Diablo hero.
+ *
+ * Version 1: version (1 byte), flags (1 byte: bit 0 hardcore), the weapon set that is out (1 byte), then the weapon set
+ * that isn't, main hand and off hand: a byte saying whether the hand holds an item, and the item if it does.
+ * Later versions only add fields at the end, so a newer save is read as far as this build knows.
+ */
+constexpr const char *ReforgedHeroEntry = "srvhero";
+constexpr uint8_t ReforgedHeroDataVersion = 1;
+constexpr uint8_t ReforgedHardcoreFlag = 1 << 0;
+/** Which floors were built from the designed rooms, and from which rooms: the same records POE2 Mashup keeps. */
+constexpr const char *ReforgedFloorsEntry = "srvfloors";
+/** The designed rooms the saved floors were built from, so a game update that changes the rooms keeps their layouts. */
+constexpr const char *ReforgedRoomsEntry = "srvrooms";
+/**
+ * Entries a Reforged hero saved by an older build also has. They are read once, if the hero has no entries of
+ * Reforged's own yet, and are left out when the hero is saved again.
+ */
+constexpr const char *OldReforgedEntries[] = { "poe2hero", "poe2mode", "poe2floors", "poe2shrines" };
+
+} // namespace
+
+bool ReadReforgedHardcoreFlag(SaveReader &archive)
+{
+	size_t length = 0;
+	const std::unique_ptr<std::byte[]> data = ReadArchive(archive, ReforgedHeroEntry, &length);
+	return data != nullptr && length >= 2 && data[0] != std::byte { 0 } && (static_cast<uint8_t>(data[1]) & ReforgedHardcoreFlag) != 0;
+}
+
+void LoadReforgedHeroData(Player &player)
+{
+	if (!gbIsReforged)
+		return;
+	// A Reforged hero saved before this entry existed has no second weapon set and is a normal hero.
+	player.poe2.weaponSet = 0;
+	player.poe2.hardcore = false;
+	for (Item &item : player.swapHands)
+		item.clear();
+	LoadHelper file(OpenSaveArchive(gSaveNumber), ReforgedHeroEntry);
+	if (!file.IsValid(3))
+		return;
+	const uint8_t version = file.NextLE<uint8_t>();
+	if (version == 0)
+		return;
+	if (version > ReforgedHeroDataVersion)
+		LogError("Sanctuary Reforged hero data version {} is newer than this build's {}; reading the parts this build knows", version, ReforgedHeroDataVersion);
+	const uint8_t flags = file.NextLE<uint8_t>();
+	player.poe2.hardcore = (flags & ReforgedHardcoreFlag) != 0;
+	player.poe2.weaponSet = static_cast<uint8_t>(file.NextLE<uint8_t>() % NumWeaponSets);
+	const size_t itemSize = gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize;
+	for (Item &item : player.swapHands) {
+		if (!file.IsValid(1))
+			return;
+		if (file.NextLE<uint8_t>() == 0 || !file.IsValid(itemSize))
+			continue;
+		LoadItem(file, item);
+	}
+}
+
+void SaveReforgedHeroData(SaveWriter &saveWriter, const Player &player)
+{
+	if (!gbIsReforged)
+		return;
+	const size_t itemSize = gbIsHellfire ? HellfireItemSaveSize : DiabloItemSaveSize;
+	size_t size = 3;
+	for (const Item &item : player.swapHands)
+		size += 1 + (item.isEmpty() ? 0 : itemSize);
+	SaveHelper file(saveWriter, ReforgedHeroEntry, size);
+	file.WriteLE<uint8_t>(ReforgedHeroDataVersion);
+	file.WriteLE<uint8_t>(player.poe2.hardcore ? ReforgedHardcoreFlag : 0);
+	file.WriteLE<uint8_t>(player.poe2.weaponSet);
+	for (const Item &item : player.swapHands) {
+		file.WriteLE<uint8_t>(item.isEmpty() ? 0 : 1);
+		if (!item.isEmpty())
+			SaveItem(file, item);
+	}
+}
+
+void LoadReforgedHero(Player &player)
+{
+	// Reforged has none of POE2 Mashup's hero state: whatever an older save's POE2 entries hold stays unread.
+	player.poe2.clear();
+	for (Item &jewel : player.jewels)
+		jewel.clear();
+	for (Item &item : player.swapHands)
+		item.clear();
+	if (&player == MyPlayer) {
+		// A hero saved by an older build has its floor records under the old name only.
+		ReadFloors({ ReforgedFloorsEntry, "poe2floors" });
+		UnpackKeptFloorRooms(ReadSizedEntry(ReforgedRoomsEntry).value_or(std::vector<uint8_t> {}));
+	}
+	LoadReforgedHeroData(player);
+}
+
+void SaveReforgedHero(SaveWriter &saveWriter, const Player &player)
+{
+	if (!gbIsReforged)
+		return;
+	for (const char *entry : OldReforgedEntries) {
+		// The old floor records go only where the new ones are written.
+		if (&player == MyPlayer || std::string_view(entry) != "poe2floors")
+			saveWriter.RemoveHashEntry(entry);
+	}
+	if (&player == MyPlayer) {
+		WriteSizedEntry(saveWriter, ReforgedFloorsEntry, Poe2PackFloors());
+		WriteSizedEntry(saveWriter, ReforgedRoomsEntry, PackKeptFloorRooms());
+	}
+	SaveReforgedHeroData(saveWriter, player);
+}
+
 void LoadPoe2HeroData(Player &player)
 {
+	if (gbIsReforged) {
+		LoadReforgedHero(player);
+		return;
+	}
 	player.poe2.clear();
 	for (Item &jewel : player.jewels)
 		jewel.clear();
@@ -2986,10 +3139,15 @@ void LoadPoe2HeroData(Player &player)
 		if (&player == MyPlayer && gbIsPoe2 && (refunded || bookChange != 0))
 			QueueTreeNotice(redrawn, refunded, bookChange);
 	}
+	// Sanctuary Reforged keeps its weapon sets and hardcore flag in its own entry, which has the last word.
+	LoadReforgedHeroData(player);
 }
 
 void SavePoe2HeroData(SaveWriter &saveWriter, const Player &player)
 {
+	// Sanctuary Reforged writes its own entries alone (SaveReforgedHero).
+	if (gbIsReforged)
+		return;
 	{
 		// The league on its own, so the hero list can show it without reading the rest.
 		SaveHelper mode(saveWriter, "poe2mode", 1);
@@ -3297,8 +3455,14 @@ void LoadStash()
 	const uint32_t openPage = file.NextLE<uint32_t>();
 
 	// POE2 tab names, colours, affinities and kinds; every page with items gets a tab.
-	if (gbIsPoe2) {
+	if (HasStashTabs()) {
 		const uint8_t tabsVersion = LoadTabs(gbIsMultiplayer ? "mpstashtabs" : "spstashtabs");
+		// Sanctuary Reforged: blank tabs only; a stash from before its tabs keeps each page as a tab.
+		if (gbIsReforged) {
+			KeepReforgedStashTabsBlank();
+			Stash.SetPage(openPage);
+			return;
+		}
 		if (tabsVersion == 0) {
 			// A stash from before tabs: its pages are blank tabs.
 			StashTabs.tabs.assign(DefaultBlankStashTabs, StashTab {});
@@ -3388,6 +3552,9 @@ std::expected<void, std::string> LoadGame(bool firstflag)
 	Player &myPlayer = *MyPlayer;
 
 	LoadPlayer(file, myPlayer);
+	// Sanctuary Reforged: the hands just loaded and the weapon set that isn't out go back together, so a swap made
+	// after the save can't leave a weapon in both places (the hero entry is written with every single player save).
+	LoadReforgedHeroData(myPlayer);
 
 	if (sgGameInitInfo.nDifficulty < DIFF_NORMAL || sgGameInitInfo.nDifficulty > DIFF_HELL)
 		sgGameInitInfo.nDifficulty = DIFF_NORMAL;
@@ -3577,7 +3744,7 @@ void SaveHeroItems(SaveWriter &saveWriter, Player &player)
 
 void SaveStash(SaveWriter &stashWriter)
 {
-	if (gbIsPoe2) {
+	if (HasStashTabs()) {
 		const std::vector<uint8_t> tabs = SerializeStashTabs(StashTabs, StashTabsSaveVersion);
 		SaveHelper tabsFile(stashWriter, gbIsMultiplayer ? "mpstashtabs" : "spstashtabs", sizeof(uint32_t) + tabs.size());
 		tabsFile.WriteLE<uint32_t>(static_cast<uint32_t>(tabs.size()));

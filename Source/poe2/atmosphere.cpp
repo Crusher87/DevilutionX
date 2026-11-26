@@ -8,10 +8,10 @@
 #include <format>
 #include <string>
 #include <string_view>
-#include <unordered_map>
 #include <vector>
 
 #include "data/file.hpp"
+#include "data/mode_tables.hpp"
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "levels/gendung.h"
@@ -20,12 +20,13 @@
 #include "quests.h"
 #include "utils/log.hpp"
 #include "utils/str_cat.hpp"
+#include "utils/string_view_hash.hpp"
 
 namespace devilution::atmosphere {
 
 namespace {
 
-constexpr std::string_view Filename = "txtdata\\poe2\\atmosphere.tsv";
+constexpr std::string_view TableFile = "atmosphere.tsv";
 
 /** @brief A number (or a colour) for one area: at its first floor and at its last. */
 struct Row {
@@ -35,7 +36,7 @@ struct Row {
 };
 
 /** @brief The table, by area (the level type) and then by the number's name. */
-std::array<std::unordered_map<std::string, Row>, 8> Areas;
+std::array<ankerl::unordered_dense::map<std::string, Row, StringViewHash, StringViewEquals>, 8> Areas;
 bool Loaded = false;
 uint32_t LoadCount = 0;
 
@@ -90,6 +91,10 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "reflect", 1.F, "you show in Tristram's stream when you stand at its edge, and the water takes a little of the sky (idea 66)" },
 	{ "tileshapes", 1.F, "walls and floors that have a shape map are lit by their shape, so stone edges and pillars catch the light; 0 lights them flat (works with Atmosphere off)" },
 	{ "lens", 1.F, "in a Tristram storm rain gathers on the screen as on a window: droplets, pools where it lands close together, and now and then a run down the glass; 2 twice as much" },
+	{ "batch", 0.F, "an experiment for the frame rate: the HD world's tiles are drawn from a few big pictures in few draws; the picture should not change (works with Atmosphere off)" },
+	{ "corpses", 1.F, "dead bodies take the floor's light smoothly across them, shadows fall over them, and those with a shape map are lit by their shape; 0 gives each one flat light as before (works with Atmosphere off)" },
+	{ "carved", 1.F, "heroes' and monsters' shadows are cast from their carved bodies, each light seeing the body from its own side, where the bodies have been made; 0 casts the drawing facing you as before (works with Atmosphere off)" },
+	{ "bodylight", 1.F, "heroes and monsters with a carved body are lit by its shape: the side turned to a light brighter, the far side darker; 2 twice as strong, up to 3; 0 lights each one flat as before (turning it on or off shows after the level changes; works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
@@ -154,8 +159,10 @@ void Load()
 	LoadCount++;
 	for (auto &area : Areas)
 		area.clear();
-	if (!gbIsPoe2)
+	if (!HasEnhancements())
 		return;
+	const std::string filename = ModeTablePath(TableFile);
+	const std::string_view Filename = filename;
 	auto dataFile = DataFile::load(Filename);
 	if (!dataFile.has_value()) {
 		// The areas keep the look they had before the table.
@@ -195,7 +202,9 @@ const Row *FindIn(int area, std::string_view name)
 	if (area < 0)
 		return nullptr;
 	const auto &rows = Areas[static_cast<size_t>(area)];
-	const auto it = rows.find(std::string(name));
+	// Looked up by the name as given: the drawing asks for dozens of numbers a frame, and a std::string made for each
+	// is a trip to the heap for every name longer than fifteen letters.
+	const auto it = rows.find(name);
 	return it != rows.end() ? &it->second : nullptr;
 }
 
@@ -206,7 +215,7 @@ const Row *Find(std::string_view name)
 
 float OptionScale()
 {
-	if (!gbIsPoe2)
+	if (!HasEnhancements())
 		return 0;
 	const GraphicsOptions &graphics = GetOptions().Graphics;
 	// Everything here works on the HD world's own light.
@@ -366,7 +375,7 @@ std::string Feel(const std::optional<std::string> &name, const std::optional<dou
 	}
 	if (*name == "reload") {
 		Load();
-		return StrCat("Read the table again (", Filename, ").\n", Listing());
+		return StrCat("Read the table again (", ModeTablePath(TableFile), ").\n", Listing());
 	}
 	for (size_t i = 0; i < NumKnobs; i++) {
 		if (Knobs[i].name != *name)

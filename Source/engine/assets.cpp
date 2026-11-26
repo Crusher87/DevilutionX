@@ -20,6 +20,7 @@
 #include "appfat.h"
 #include "game_mode.hpp"
 #include "mods/mod_identity.h"
+#include "poe2/hd_pack.hpp"
 #include "utils/file_util.h"
 #include "utils/format.hpp"
 #include "utils/log.hpp"
@@ -224,6 +225,16 @@ AssetRef FindAsset(std::string_view filename)
 	result.directHandle = OpenOptionalRWops(paths::AssetsPath() + relativePath);
 	if (result.directHandle != nullptr)
 		return result;
+
+#ifdef POE2_HD_PACK
+	// POE2 Mashup: HD art that is no loose file may be in the HD pack files (hd\index.hdx, made by tools/hd_pack.py).
+	if (hdpack::IsPackPath(filename)) {
+		hdpack::MountFromGameFolders(OverridePaths, paths::AssetsPath());
+		result.directHandle = hdpack::Open(filename);
+		if (result.directHandle != nullptr)
+			return result;
+	}
+#endif
 
 #if (defined(__ANDROID__) && !defined(TERMUX)) || defined(__APPLE__)
 	// Fall back to the bundled assets on supported systems.

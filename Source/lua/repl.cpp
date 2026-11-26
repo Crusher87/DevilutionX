@@ -21,6 +21,7 @@
 #include "poe2/aim.hpp"
 #include "poe2/atmosphere.hpp"
 #include "poe2/floor_chests.hpp"
+#include "poe2/secrets.hpp"
 #include "poe2/gem_levels.hpp"
 #include "poe2/hit_trace.hpp"
 #include "poe2/level_census.hpp"
@@ -166,6 +167,16 @@ void CreateReplEnvironment()
 	// strongbox() puts a strongbox with 5 guards next to you, to try one.
 	env["strongbox"] = []() {
 		return PlaceTestStrongbox();
+	};
+	// secrets() shows how far this PC is along the hidden trail; secrets("reset") starts it again.
+	env["secrets"] = [](sol::optional<std::string> what) {
+		if (what.value_or("") == "reset") {
+			secrets::Reset();
+			return std::string("The hidden trail starts again.");
+		}
+		const auto mark = [](secrets::Found step) { return secrets::Has(step) ? "yes" : "no"; };
+		return StrCat("Cow pestered: ", mark(secrets::Found::PesteredCow), ". Rumour heard: ", mark(secrets::Found::HeardRumour),
+		    ". Name lit: ", mark(secrets::Found::LitName), ".");
 	};
 	env["mark"] = [](std::string_view text) {
 		TelemetryMark(text);

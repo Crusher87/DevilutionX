@@ -67,6 +67,21 @@ enum text_color : uint8_t {
 /** @brief Gives the text renderer the game's palette, which it needs for green text. */
 void SetTextRenderPalette(const std::array<SDL_Color, 256> *palette);
 
+/**
+ * @brief POE2 Mashup: while one lives, small (size 12) text is drawn with the character panel's own copies of the colour
+ * tables, so it shows the HD pack's panel letters (hd\fonts\12-00-panel and its -gold/-red/-blue sets) where those exist.
+ */
+class PanelLettersScope {
+public:
+	PanelLettersScope();
+	~PanelLettersScope();
+	PanelLettersScope(const PanelLettersScope &) = delete;
+	PanelLettersScope &operator=(const PanelLettersScope &) = delete;
+
+private:
+	bool wasOn_;
+};
+
 constexpr GameFontTables GetFontSizeFromUiFlags(UiFlags flags)
 {
 	if (HasAnyOf(flags, UiFlags::FontSize24))

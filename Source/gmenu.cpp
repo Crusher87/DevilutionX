@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <optional>
+#include <vector>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_keycode.h>
@@ -33,8 +34,10 @@
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "options.h"
+#include "poe2/hd.hpp"
 #include "poe2/telemetry.hpp"
 #include "stores.h"
+#include "utils/cel_to_clx.hpp"
 #include "utils/language.h"
 #include "utils/sdl_compat.h"
 #include "utils/str_cat.hpp"
@@ -68,6 +71,75 @@ OptionalOwnedClxSpriteList optbar_cel;
 OptionalOwnedClxSpriteList PentSpin_cel;
 OptionalOwnedClxSpriteList option_cel;
 OptionalOwnedClxSpriteList sgpLogo;
+
+/** @brief Size of Diablo's Esc menu logo (data\diabsmal). */
+constexpr uint16_t DiabsmalWidth = 296;
+constexpr uint16_t DiabsmalHeight = 100;
+
+/** @brief One fully transparent frame of the given size. */
+OwnedClxSpriteList BlankCel(uint16_t width, uint16_t height)
+{
+	std::vector<uint8_t> cel { 1, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0 };
+	for (uint16_t y = 0; y < height; ++y) {
+		for (int left = width; left > 0; left -= 127) {
+			const int run = std::min(left, 127);
+			cel.push_back(static_cast<uint8_t>(-run));
+		}
+	}
+	const uint32_t end = static_cast<uint32_t>(cel.size());
+	for (int i = 0; i < 4; ++i)
+		cel[8 + i] = static_cast<uint8_t>(end >> (8 * i));
+	return CelToClx(cel.data(), cel.size(), PointerOrValue<uint16_t> { width }).list();
+}
+
+/** @brief One frame of the given size, every pixel of it colour 0. */
+OwnedClxSpriteList SolidCel(uint16_t width, uint16_t height)
+{
+	std::vector<uint8_t> cel { 1, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0 };
+	for (uint16_t y = 0; y < height; ++y) {
+		for (int left = width; left > 0; left -= 127) {
+			const int run = std::min(left, 127);
+			cel.push_back(static_cast<uint8_t>(run));
+			cel.insert(cel.end(), run, 0);
+		}
+	}
+	const uint32_t end = static_cast<uint32_t>(cel.size());
+	for (int i = 0; i < 4; ++i)
+		cel[8 + i] = static_cast<uint8_t>(end >> (8 * i));
+	return CelToClx(cel.data(), cel.size(), PointerOrValue<uint16_t> { width }).list();
+}
+
+/**
+ * @brief POE2 Mashup: with the HD pack's main menu logo, the Esc menu shows it too, burning, with the subtitle and its
+ * fire lines as on the main menu. The game draws a solid picture of the logo's size (the main menu's 390 x 154, made
+ * smaller where the screen is short), named ui_art\smlogo_esc; the HD art goes over it with its fire (hd_ui.cpp).
+ */
+bool BurningLogo = false;
+/** @brief The main menu logo's size, and how far its subtitle and fire lines reach under it, of its height. */
+constexpr int BurningLogoWidth = 390;
+constexpr int BurningLogoHeight = 154;
+constexpr float BurningLogoUnder = 0.21F;
+constexpr int BurningLogoMinHeight = 48;
+
+/** @brief Draws the burning logo above the items, which start at `itemsTop`, as big as fits up to the main menu's. */
+void DrawBurningLogo(const Surface &out, int itemsTop)
+{
+	constexpr int Gap = 6;
+	constexpr int Margin = 2;
+	const int room = itemsTop - Gap - Margin;
+	const int height = std::min(BurningLogoHeight, static_cast<int>(static_cast<float>(room) / (1.F + BurningLogoUnder)));
+	if (height < BurningLogoMinHeight)
+		return;
+	if (!sgpLogo.has_value() || (*sgpLogo)[0].height() != height) {
+		hd::ForgetUiPicture(sgpLogo);
+		const int width = (height * BurningLogoWidth + BurningLogoHeight / 2) / BurningLogoHeight;
+		sgpLogo = SolidCel(static_cast<uint16_t>(width), static_cast<uint16_t>(height));
+		hd::RegisterUiPicture("ui_art\\smlogo_esc", *sgpLogo, hd::UiPictureLayer::Over);
+	}
+	const ClxSprite sprite = (*sgpLogo)[0];
+	const int bottom = itemsTop - Gap - static_cast<int>(static_cast<float>(height) * BurningLogoUnder + 0.5F);
+	ClxDraw(out, { (gnScreenWidth - sprite.width()) / 2, bottom }, sprite);
+}
 bool isDraggingSlider;
 TMenuItem *sgpCurrItem;
 int LogoAnim_tick;
@@ -208,8 +280,18 @@ void gmenu_draw_pause(const Surface &out)
 	}
 }
 
+/** @brief POE2 Mashup: forgets the menu's pictures' HD art names, before their pixels go. */
+void ForgetGMenuArt()
+{
+	hd::ForgetUiPicture(sgpLogo);
+	hd::ForgetUiPicture(PentSpin_cel);
+	hd::ForgetUiPicture(option_cel);
+	hd::ForgetUiPicture(optbar_cel);
+}
+
 void FreeGMenu()
 {
+	ForgetGMenuArt();
 	sgpLogo = std::nullopt;
 	PentSpin_cel = std::nullopt;
 	option_cel = std::nullopt;
@@ -228,12 +310,31 @@ void gmenu_init_menu()
 	if (HeadlessMode)
 		return;
 
-	sgpLogo = LoadOptionalCel("data\\hf_logo3", 430);
-	if (!sgpLogo.has_value())
-		sgpLogo = LoadCel("data\\diabsmal", 296);
+	ForgetGMenuArt();
+	sgpLogo = std::nullopt;
+	// POE2 Mashup: the main menu's burning logo, made to size as it is drawn (DrawBurningLogo).
+	BurningLogo = hd::ShowsHdLogo("ui_art/smlogo");
 	PentSpin_cel = LoadCel("data\\pentspin", 48);
 	option_cel = LoadCel("data\\option", SliderMarkerWidth);
 	optbar_cel = LoadCel("data\\optbar", SliderValueBoxWidth);
+	hd::RegisterUiPicture("data\\pentspin", *PentSpin_cel);
+	hd::RegisterUiPicture("data\\option", *option_cel);
+	hd::RegisterUiPicture("data\\optbar", *optbar_cel);
+	if (BurningLogo)
+		return;
+	const char *logo = "data\\hf_logo3";
+	// POE2 Mashup: with the HD pack's Diablo logo, Hellfire's Esc menu shows Diablo's (diabsmal) in place of hf_logo3.
+	if (!hd::ShowsHdLogo("data/diabsmal"))
+		sgpLogo = LoadOptionalCel(logo, 430);
+	if (!sgpLogo.has_value()) {
+		logo = "data\\diabsmal";
+		// POE2 Mashup: Hellfire's own data\diabsmal is a different, smaller picture, so reading it as Diablo's 296 px
+		// wide logo runs past its end. The HD art covers the logo there anyway, so an empty picture of Diablo's size
+		// stands in for it.
+		sgpLogo = gbIsHellfire ? BlankCel(DiabsmalWidth, DiabsmalHeight) : LoadCel(logo, DiabsmalWidth);
+	}
+	// POE2 Mashup: the menu's logo, spinner and sliders show the HD pack's art of them.
+	hd::RegisterUiPicture(logo, *sgpLogo);
 }
 
 bool gmenu_is_active()
@@ -272,7 +373,7 @@ void gmenu_draw(const Surface &out)
 		GameMenuMove();
 		if (gmenu_current_option != nullptr)
 			gmenu_current_option();
-		if (sgpLogo->numSprites() > 1) {
+		if (!BurningLogo && sgpLogo->numSprites() > 1) {
 			const uint32_t ticks = SDL_GetTicks();
 			if ((int)(ticks - LogoAnim_tick) > 25) {
 				++LogoAnim_frame;
@@ -281,9 +382,13 @@ void gmenu_draw(const Surface &out)
 			}
 		}
 		const int uiPositionY = GmenuTop();
-		const ClxSprite sprite = (*sgpLogo)[LogoAnim_frame];
-		if (102 + uiPositionY - sprite.height() >= 0)
-			ClxDraw(out, { (gnScreenWidth - sprite.width()) / 2, 102 + uiPositionY }, sprite);
+		if (BurningLogo) {
+			DrawBurningLogo(out, 110 + uiPositionY);
+		} else {
+			const ClxSprite sprite = (*sgpLogo)[LogoAnim_frame];
+			if (102 + uiPositionY - sprite.height() >= 0)
+				ClxDraw(out, { (gnScreenWidth - sprite.width()) / 2, 102 + uiPositionY }, sprite);
+		}
 		int y = 110 + uiPositionY;
 		TMenuItem *i = sgpCurrentMenu;
 		if (sgpCurrentMenu->fnMenu != nullptr) {
@@ -296,6 +401,9 @@ void gmenu_draw(const Surface &out)
 		// POE2 Mashup: the mod's version, under the menu rather than always in the corner of the screen.
 		if (gbIsPoe2 && !Poe2ModVersion.empty())
 			DrawString(out, StrCat("POE2 Mashup ", Poe2ModVersion), { { 0, y + 8 }, { gnScreenWidth, 20 } }, { .flags = UiFlags::AlignCenter | UiFlags::ColorWhitegold });
+		// Sanctuary Reforged says so in the same place, so it's easy to tell which flavour is running.
+		else if (gbIsReforged)
+			DrawString(out, "Sanctuary Reforged", { { 0, y + 8 }, { gnScreenWidth, 20 } }, { .flags = UiFlags::AlignCenter | UiFlags::ColorWhitegold });
 	}
 }
 

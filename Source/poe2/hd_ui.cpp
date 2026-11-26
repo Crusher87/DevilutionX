@@ -1,10 +1,17 @@
 #include "poe2/hd.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cctype>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <functional>
+#include <memory>
+#include <map>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <utility>
 #include <vector>
@@ -15,6 +22,7 @@
 #include <SDL.h>
 #endif
 
+#include "diablo.h"
 #include "engine/assets.hpp"
 #include "engine/dx.h"
 #include "engine/palette.h"
@@ -22,6 +30,13 @@
 #include "engine/surface.hpp"
 #include "engine/trn.hpp"
 #include "poe2/hd_outline.hpp"
+#include "poe2/hd_spell_icons.hpp"
+#include "poe2/live_fire.hpp"
+#include "poe2/live_fire_sdl.hpp"
+#include "poe2/menu_intro_sdl.hpp"
+#include "poe2/menu_secret.hpp"
+#include "utils/file_util.h"
+#include "utils/log.hpp"
 #include "utils/png.h"
 #include "utils/sdl_compat.h"
 
@@ -32,6 +47,43 @@ namespace hd {
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 
 namespace {
+
+/**
+ * @brief A picture over the UI with a live fire behind it (poe2/live_fire.hpp): the title screen's and the main menu's
+ * logos. Its fire burns from the maps hd\\ui_art\\logo\\fire_maps.png (R: feed, G: height above the letters, B: spark
+ * spots), its grid set over the picture at `rect` (fractions of it). Both logos share the one fire, which goes on
+ * burning from the title screen into the main menu.
+ */
+struct FireSpot {
+	const char *picture;
+	SDL_FRect rect;
+	/** @brief The HD art it shows, when not its own (the Esc menu's logo shows the main menu's). */
+	const char *art = nullptr;
+};
+const FireSpot FireSpots[] = {
+	{ "ui_art/logo", { 0.F, 0.F, 1.F, 1.F } },
+	// The title logo shrunk to 0.708 and moved as the HD art's is (its fit.json: x -5.24, y -5.586 from the master,
+	// whose origin is 8 logo pixels up and left), in the main menu's 390 x 154.
+	{ "ui_art/smlogo", { (0.708F * 8.F - 5.24F) / 390.F, (0.708F * 8.F - 5.586F) / 154.F, 0.708F * 550.F / 390.F, 0.708F * 216.F / 154.F } },
+	// The Esc menu's (gmenu.cpp): the main menu's logo, at whatever size the game draws its picture.
+	{ "ui_art/smlogo_esc", { (0.708F * 8.F - 5.24F) / 390.F, (0.708F * 8.F - 5.586F) / 154.F, 0.708F * 550.F / 390.F, 0.708F * 216.F / 154.F }, "ui_art/smlogo/d0_f00" },
+};
+/** @brief The fire's maps, as an HD art name (hd\\ui_art\\logo\\fire_maps.png). */
+constexpr const char *FireMapsArt = "ui_art/logo/fire_maps";
+/**
+ * @brief How far the fire's grid reaches past its maps on each side, on maps of the title logo's grid (1100 wide;
+ * other sizes in proportion): flames leaning out past the D and the O aren't cut off. It is drawn past the logo's rect.
+ */
+constexpr int FireMapsPad = fire::LogoGridPad;
+
+const FireSpot *FireSpotOf(const std::string &picture)
+{
+	for (const FireSpot &spot : FireSpots) {
+		if (picture == spot.picture)
+			return &spot;
+	}
+	return nullptr;
+}
 
 // The pictures of items in the inventory, the stash, the belt, the shops and on the cursor are drawn with the UI,
 // which the HD world doesn't redraw. Each draw of one is noted here, with the pixels it lays down and the UI pixels it
@@ -46,14 +98,77 @@ struct UiSpriteName {
 	/** @brief For a shrunken copy of a picture (one inventory cell): the full picture's size; 0 for a picture of its own. */
 	uint16_t fullWidth = 0;
 	uint16_t fullHeight = 0;
+	/** @brief A UI panel's picture (RegisterUiPicture): its HD art goes under the UI, which leaves out its pixels there. */
+	bool panel = false;
+	/** @brief A spell icon: its HD art is put together from a plate and a layer, and shrunk to its size on screen. */
+	bool spellIcon = false;
+	/** @brief A frame of a picture named by RegisterUiPicture (under or over the UI), forgotten with it. */
+	bool picture = false;
+	/**
+	 * @brief For a picture over the UI (a menu logo): the art its frames show when they have none of their own, its first
+	 * frame's. The HD logo is still while the game's cycles through its fire, so one picture serves every frame.
+	 */
+	std::string stillArt;
+	/**
+	 * @brief Its draws and pattern sit exactly where the game draws it. The others sit a row higher and leave out the
+	 * picture's bottom row, as the frames --hd-export wrote (and the pack's art made from them) do; a picture over the UI
+	 * has art made from the game's own file, and none of the old picture may be left under it.
+	 */
+	bool exact = false;
+	/** @brief For a picture over the UI with a live fire behind it (a menu logo): where its fire goes. */
+	const FireSpot *fire = nullptr;
+	/**
+	 * @brief For a spinning picture (SpinningPictures): its art's smooth full turn, `<name>/spin/fNN` (64 frames), and
+	 * how long the game shows each of its own frames, in ms. Empty for the others.
+	 */
+	std::string spinArt;
+	uint16_t spinFrameMs = 0;
 };
+
+/**
+ * @brief The pentagrams that spin by the menu items, in shops and in the quest log: the game's 8 frames are half a
+ * turn, each shown for `frameMs`. Their HD art can have a smooth full turn of 64 frames (spin/f00..f63, f(4k) at the
+ * game's frame k), played at a quarter of that; without it, each game frame shows its own (d0_fNN).
+ */
+struct SpinningPicture {
+	const char *name;
+	uint16_t frameMs;
+};
+constexpr SpinningPicture SpinningPictures[] = {
+	{ "ui_art/focus16", 60 },
+	{ "ui_art/focus", 60 },
+	{ "ui_art/focus42", 60 },
+	{ "data/pentspin", 50 },
+	{ "data/pentspn2", 50 },
+};
+constexpr int SpinFrames = 64;
 
 /** @brief Each item picture frame, by the address of its pixels. */
 std::unordered_map<const uint8_t *, UiSpriteName> UiSpriteNames;
 
+// A font's letters (RegisterUiLetters) show their HD art the same way, over the UI, but only in the colours they were
+// named for: the same letter drawn with another colour table keeps the game's own.
+
+/** @brief A letter frame drawn in one colour: the address of its pixels and of its colour table (0 for none). */
+using UiLetterKey = std::pair<uintptr_t, uintptr_t>;
+
+UiLetterKey LetterKey(const uint8_t *pixels, const uint8_t *trn)
+{
+	return { reinterpret_cast<uintptr_t>(pixels), reinterpret_cast<uintptr_t>(trn) };
+}
+
+/** @brief Each letter's HD art name, by its frame and colour (std::map, so a draw's pointer to one stays good). */
+std::map<UiLetterKey, UiSpriteName> UiLetterNames;
+
 /** @brief A smooth outline round an item picture's HD art, as shown at one size: its shape, and its texture as last made. */
 struct UiOutlineArt {
 	OutlineShape shape;
+	SDL_Texture *texture = nullptr;
+};
+
+/** @brief A spell icon's HD art shrunk to one size on screen, and its texture as last made. */
+struct UiFittedArt {
+	SDL_Surface *picture = nullptr;
 	SDL_Texture *texture = nullptr;
 };
 
@@ -66,6 +181,8 @@ struct UiArt {
 	SDL_Texture *red = nullptr;
 	/** @brief Its smooth outlines, made the first time each shows, by the size it is shown at and their cut. */
 	std::unordered_map<uint64_t, UiOutlineArt> outlines;
+	/** @brief A spell icon's picture at each size it has been shown at on screen (FittedArtOf), by width and height. */
+	std::unordered_map<uint32_t, UiFittedArt> fitted;
 };
 std::unordered_map<std::string, UiArt> UiArts;
 SDL_Renderer *UiArtRenderer = nullptr;
@@ -74,6 +191,7 @@ SDL_Renderer *UiArtRenderer = nullptr;
 struct UiPattern {
 	uint16_t width = 0;
 	uint16_t height = 0;
+	bool exact = false;
 	std::vector<int16_t> pixels;
 };
 /** @brief Each picture's pattern, plain and red, by the address of its pixels (and 1 for red). */
@@ -119,6 +237,8 @@ struct UiDraw {
 	const UiSpriteName *name = nullptr;
 	const UiPattern *pattern = nullptr;
 	bool red = false;
+	/** @brief The pattern of a picture drawn in code (a rune), which only this draw has; `pattern` points to it. */
+	std::shared_ptr<const UiPattern> ownPattern;
 	/** @brief Where it is drawn in the UI. */
 	SDL_Rect rect {};
 	/** @brief The UI's pixels under it before it was drawn. */
@@ -130,22 +250,136 @@ struct UiDraw {
 	UiArt *art = nullptr;
 	/** @brief The outline the game drew round it, if it drew one. */
 	UiOutline outline;
+	/** @brief When in the frame it was drawn, among the draws and the copies (UiBlit), so panels go under in that order. */
+	uint32_t order = 0;
 };
 std::vector<UiDraw> UiDraws;
+uint32_t UiOrder = 0;
 
 /** @brief The UI pixels set to what was under an item picture while the UI overlay is made: where, and what they were. */
 std::vector<std::pair<size_t, uint8_t>> Swapped;
 
 /** @brief Textures of pictures partly covered, by their art, colour and what of them shows. */
 std::unordered_map<uint64_t, SDL_Texture *> MaskedTextures;
+/** @brief The pixels of all those textures: a big picture (a menu logo under the cursor) makes a big one each time. */
+size_t MaskedTexturePixels = 0;
+/** @brief How many pixels of them are kept before all are let go (about 128 MB). */
+constexpr size_t MaskedTexturePixelBudget = 32 * 1024 * 1024;
 
-const UiPattern &PatternOf(ClxSprite clx, const uint8_t *trn)
+/** @brief The menu logos' live fire (FireSpot), made the first time one shows and let go a while after none does. */
+std::unique_ptr<fire::FireLayer> MenuFire;
+/** @brief Whether its maps were looked for since it was last let go (none: the logos show without it). */
+bool MenuFireTried = false;
+/** @brief When it was last drawn: the performance counter (for its frame time) and the ticks (for letting it go). */
+uint64_t MenuFireCounter = 0;
+uint32_t MenuFireTicks = 0;
+/** @brief Where it shows when a logo is partly covered (grid size, top row first). */
+std::vector<uint8_t> MenuFireCover;
+
+/** @brief Keeps a new partly covered texture, counting its pixels. */
+void KeepMaskedTexture(SDL_Texture *&slot, SDL_Texture *texture, int width, int height)
 {
-	UiPattern &pattern = UiPatterns[trn != nullptr ? 1 : 0][clx.pixelData()];
-	if (pattern.width == clx.width() && pattern.height == clx.height() && !pattern.pixels.empty())
-		return pattern;
+	slot = texture;
+	if (texture != nullptr)
+		MaskedTexturePixels += static_cast<size_t>(width) * static_cast<size_t>(height);
+}
+
+// UI panels (the inventory, the spell book, the bottom panel...) show their HD art the same way, but under the UI: the UI
+// leaves out their pixels that still show (UiHiddenPixels), so whatever was drawn over them (text, items, the cursor)
+// stays over their art.
+
+/** @brief Each UI panel picture's frames, by the address of their pixels, by its name (RegisterUiPicture). */
+std::unordered_map<std::string, std::vector<const uint8_t *>> UiPictures;
+
+/** @brief One copy of part of a surface a panel was put together on (the bottom panel) into this frame's UI. */
+struct UiBlit {
+	/** @brief The HD art of the whole surface. */
+	std::string name;
+	/** @brief The part copied, in the surface, and the surface's width (its art is that many times smaller). */
+	SDL_Rect src {};
+	int sourceWidth = 0;
+	/** @brief Where it went in the UI. */
+	SDL_Rect dest {};
+	/** @brief The pixels it copied. */
+	std::vector<uint8_t> pixels;
+	int shown = 0;
+	UiArt *art = nullptr;
+	uint32_t order = 0;
+};
+std::vector<UiBlit> UiBlits;
+
+/**
+ * @brief The draws and copies of the frame last shown. A frame shown again with nothing drawn since (a palette fade, or
+ * the frames shown while quitting) shows their HD art again, where the frame still has their pixels; without them it
+ * would fall back to the game's own letters and panels.
+ */
+std::vector<UiDraw> ShownUiDraws;
+std::vector<UiBlit> ShownUiBlits;
+
+/** @brief The draws now are the frame last shown's, taken up again (PrepareUiSprites) and not shown yet. */
+bool ShowingShownUiDraws = false;
+
+/** @brief A new frame is being drawn: the draws of the one shown before give way to its own. */
+void LeaveShownUiDraws()
+{
+	if (!ShowingShownUiDraws)
+		return;
+	ShowingShownUiDraws = false;
+	UiDraws.clear();
+	UiBlits.clear();
+	UiOrder = 0;
+}
+
+/** @brief Forgets the frame last shown, before what its draws point at (names, patterns, rings) can go. */
+void ForgetShownUiDraws()
+{
+	LeaveShownUiDraws();
+	ShownUiDraws.clear();
+	ShownUiBlits.clear();
+}
+
+/** @brief How much of each channel the screen palette keeps of the game's, at most all of it: a fade dims the HD art too. */
+std::array<float, 3> UiFade()
+{
+	std::array<float, 3> logical {};
+	std::array<float, 3> screen {};
+	for (int color = 0; color < 256; color++) {
+		logical[0] += logical_palette[color].r;
+		logical[1] += logical_palette[color].g;
+		logical[2] += logical_palette[color].b;
+		screen[0] += system_palette[color].r;
+		screen[1] += system_palette[color].g;
+		screen[2] += system_palette[color].b;
+	}
+	std::array<float, 3> fade;
+	for (int c = 0; c < 3; c++)
+		fade[c] = logical[c] > 0 ? std::clamp(screen[c] / logical[c], 0.F, 1.F) : 1.F;
+	return fade;
+}
+
+/** @brief This present's fade (UiFade). */
+std::array<float, 3> UiFadeNow { 1.F, 1.F, 1.F };
+
+/** @brief The UI pixels the overlay leaves out this frame (1), since a panel's HD art goes under them; and its size. */
+std::vector<uint8_t> UiHidden;
+int UiHiddenWidth = 0;
+int UiHiddenHeight = 0;
+bool UiHiddenAny = false;
+
+/** @brief Where `--hd-export` writes the UI pictures (empty when it isn't), and what it wrote: frame sizes by name. */
+std::string UiExportDir;
+std::map<std::string, std::vector<std::pair<int, int>>> UiExported;
+
+/**
+ * @brief Draws a picture on two colours to find the pixels it lays down: those that come out the same. ClxDraw takes the
+ * bottom row's place: `exact` puts the picture's rows where they are, otherwise they sit a row low, the last left out
+ * (UiSpriteName::exact).
+ */
+void MakePattern(UiPattern &pattern, ClxSprite clx, const uint8_t *trn, bool exact = false)
+{
 	pattern.width = clx.width();
 	pattern.height = clx.height();
+	pattern.exact = exact;
 	const int w = clx.width();
 	const int h = clx.height();
 	// Drawn once on 0 and once on 255: the pixels that come out the same are the ones it lays down.
@@ -154,10 +388,11 @@ const UiPattern &PatternOf(ClxSprite clx, const uint8_t *trn)
 	SDL_FillSurfaceRect(low.surface, nullptr, 0);
 	SDL_FillSurfaceRect(high.surface, nullptr, 255);
 	for (OwnedSurface *target : { &low, &high }) {
+		const Point bottom { 0, exact ? h - 1 : h };
 		if (trn != nullptr)
-			ClxDrawTRN(*target, { 0, h }, clx, trn);
+			ClxDrawTRN(*target, bottom, clx, trn);
 		else
-			ClxDraw(*target, { 0, h }, clx);
+			ClxDraw(*target, bottom, clx);
 	}
 	pattern.pixels.assign(static_cast<size_t>(w) * h, -1);
 	for (int y = 0; y < h; y++) {
@@ -168,6 +403,26 @@ const UiPattern &PatternOf(ClxSprite clx, const uint8_t *trn)
 				pattern.pixels[static_cast<size_t>(y) * w + x] = a[x];
 		}
 	}
+}
+
+const UiPattern &PatternOf(ClxSprite clx, const uint8_t *trn, bool exact)
+{
+	UiPattern &pattern = UiPatterns[trn != nullptr ? 1 : 0][clx.pixelData()];
+	if (pattern.width == clx.width() && pattern.height == clx.height() && pattern.exact == exact && !pattern.pixels.empty())
+		return pattern;
+	MakePattern(pattern, clx, trn, exact);
+	return pattern;
+}
+
+/** @brief The pixels a letter lays down in its colour, by its frame and colour. */
+std::map<UiLetterKey, UiPattern> UiLetterPatterns;
+
+const UiPattern &LetterPatternOf(ClxSprite clx, const uint8_t *trn)
+{
+	UiPattern &pattern = UiLetterPatterns[LetterKey(clx.pixelData(), trn)];
+	if (pattern.width == clx.width() && pattern.height == clx.height() && !pattern.pixels.empty())
+		return pattern;
+	MakePattern(pattern, clx, trn);
 	return pattern;
 }
 
@@ -260,8 +515,14 @@ void ForgetTextures()
 		art.red = nullptr;
 		for (auto &[key, outline] : art.outlines)
 			outline.texture = nullptr;
+		for (auto &[size, fitted] : art.fitted)
+			fitted.texture = nullptr;
 	}
 	MaskedTextures.clear();
+	MaskedTexturePixels = 0;
+	if (MenuFire != nullptr)
+		MenuFire->ForgetTextures();
+	intro_sdl::ForgetTextures();
 }
 
 void RecordUiOutlineImpl(const Surface &out, Point position, ClxSprite clx, uint8_t colour)
@@ -306,23 +567,34 @@ void RecordUiSpriteImpl(const Surface &out, Point position, ClxSprite clx, const
 	// The outline the game drew round it just before, if it did; only the next picture can be the one it goes round.
 	UiOutline outline = std::move(PendingUiOutline);
 	PendingUiOutline = {};
-	const auto it = UiSpriteNames.find(clx.pixelData());
-	if (it == UiSpriteNames.end() || it->second.width != clx.width() || it->second.height != clx.height())
-		return;
-	// Other colourings (a Book of Specialisation's gold binding) keep the game's own picture.
-	if (trn != nullptr && trn != GetInfravisionTRN())
+	const UiSpriteName *name = nullptr;
+	bool letter = false;
+	if (const auto it = UiSpriteNames.find(clx.pixelData()); it != UiSpriteNames.end()) {
+		// Other colourings (a Book of Specialisation's gold binding) keep the game's own picture.
+		if (trn != nullptr && trn != GetInfravisionTRN())
+			return;
+		name = &it->second;
+	} else if (const auto found = UiLetterNames.find(LetterKey(clx.pixelData(), trn)); found != UiLetterNames.end()) {
+		// A letter in a colour it has art for; it has no outline of its own to smooth.
+		name = &found->second;
+		letter = true;
+		outline = {};
+	}
+	if (name == nullptr || name->width != clx.width() || name->height != clx.height())
 		return;
 	if (!Enabled())
 		return;
+	LeaveShownUiDraws();
 	if (UiDraws.size() >= 512)
 		UiDraws.clear();
 	UiDraw &draw = UiDraws.emplace_back();
-	draw.name = &it->second;
-	draw.pattern = &PatternOf(clx, trn);
-	draw.red = trn != nullptr;
+	draw.order = UiOrder++;
+	draw.name = name;
+	draw.pattern = letter ? &LetterPatternOf(clx, trn) : &PatternOf(clx, trn, name->exact);
+	draw.red = !letter && trn != nullptr;
 	const int w = clx.width();
 	const int h = clx.height();
-	draw.rect = SDL_Rect { out.region.x + position.x, out.region.y + position.y - h, w, h };
+	draw.rect = SDL_Rect { out.region.x + position.x, out.region.y + position.y - h + (name->exact ? 1 : 0), w, h };
 	if (outline.pixels == clx.pixelData() && outline.at == Point { out.region.x + position.x, out.region.y + position.y })
 		draw.outline = std::move(outline);
 	// What it is drawn over; pixels outside the surface it is drawn on (clipped) lay nothing down.
@@ -346,6 +618,285 @@ void RecordUiSpriteImpl(const Surface &out, Point position, ClxSprite clx, const
 
 [[maybe_unused]] const bool RecordUiSpriteHookSet = (RecordUiSpriteHook = RecordUiSpriteImpl, true);
 [[maybe_unused]] const bool RecordUiOutlineHookSet = (RecordUiOutlineHook = RecordUiOutlineImpl, true);
+
+/** @brief A UI picture's HD art name from its asset's path: lower case, with / and no extension (data/inv/inv). */
+std::string UiPictureName(std::string_view path)
+{
+	std::string name(path);
+	std::replace(name.begin(), name.end(), '\\', '/');
+	std::transform(name.begin(), name.end(), name.begin(), [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+	for (const std::string_view ext : { ".cl2", ".clx", ".cel" }) {
+		if (name.size() > ext.size() && name.ends_with(ext))
+			name.resize(name.size() - ext.size());
+	}
+	return name;
+}
+
+/** @brief Writes one frame of a UI picture for `--hd-export`: `colourAt` gives each pixel's palette colour, or -1 for none. */
+template <typename ColourAt>
+void WriteUiFrame(const std::string &name, size_t frame, int width, int height, const ColourAt &colourAt)
+{
+	const std::string dir = UiExportDir + "/ui/" + name;
+	RecursivelyCreateDir(dir.c_str());
+	SDL_Surface *surface = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+	if (surface == nullptr)
+		return;
+	for (int y = 0; y < height; y++) {
+		auto *row = static_cast<uint8_t *>(surface->pixels) + static_cast<ptrdiff_t>(y) * surface->pitch;
+		for (int x = 0; x < width; x++) {
+			uint8_t *p = row + static_cast<ptrdiff_t>(x) * 4;
+			const int colour = colourAt(x, y);
+			if (colour < 0) {
+				p[0] = p[1] = p[2] = p[3] = 0;
+				continue;
+			}
+			const SDL_Color &c = logical_palette[colour];
+			p[0] = c.r;
+			p[1] = c.g;
+			p[2] = c.b;
+			p[3] = 255;
+		}
+	}
+	char file[32];
+	std::snprintf(file, sizeof(file), "/d0_f%02zu.png", frame);
+	if (IMG_SavePNG(surface, (dir + file).c_str()) != 0)
+		LogError("HD export: couldn't write {}{}", dir, file);
+	SDL_FreeSurface(surface);
+	std::vector<std::pair<int, int>> &sizes = UiExported[name];
+	if (sizes.size() <= frame)
+		sizes.resize(frame + 1);
+	sizes[frame] = { width, height };
+}
+
+/** @brief Forgets the frames at these pixels, and this frame's draws (which may point at their names). */
+void ForgetUiFrames(const std::vector<const uint8_t *> &frames)
+{
+	UiDraws.clear();
+	ForgetShownUiDraws();
+	PendingUiOutline = {};
+	for (const uint8_t *pixels : frames) {
+		const auto it = UiSpriteNames.find(pixels);
+		if (it != UiSpriteNames.end() && it->second.picture)
+			UiSpriteNames.erase(it);
+		for (auto &patterns : UiPatterns)
+			patterns.erase(pixels);
+		UiRings.erase(pixels);
+	}
+}
+
+void RegisterUiPictureImpl(std::string_view path, ClxSpriteList sprites, UiPictureLayer layer)
+{
+	const std::string name = UiPictureName(path);
+	std::vector<const uint8_t *> &frames = UiPictures[name];
+	// A picture loaded again under its name: the old one's pixels are freed, or soon will be.
+	if (!frames.empty())
+		ForgetUiFrames(frames);
+	frames.clear();
+	for (size_t frame = 0; frame < sprites.numSprites(); frame++) {
+		const ClxSprite sprite = sprites[frame];
+		char suffix[32];
+		std::snprintf(suffix, sizeof(suffix), "/d0_f%02zu", frame);
+		RegisterUiSprite(sprite.pixelData(), name + suffix, sprite.width(), sprite.height());
+		UiSpriteName &named = UiSpriteNames[sprite.pixelData()];
+		named.panel = layer == UiPictureLayer::Under;
+		named.picture = true;
+		for (const SpinningPicture &spinning : SpinningPictures) {
+			if (name == spinning.name) {
+				named.spinArt = name + "/spin/f";
+				named.spinFrameMs = spinning.frameMs;
+			}
+		}
+		if (layer == UiPictureLayer::Over) {
+			named.exact = true;
+			named.fire = FireSpotOf(name);
+			named.stillArt = named.fire != nullptr && named.fire->art != nullptr ? std::string(named.fire->art) : name + "/d0_f00";
+		}
+		frames.push_back(sprite.pixelData());
+		if (!UiExportDir.empty()) {
+			UiPattern pattern;
+			MakePattern(pattern, sprite, nullptr, layer == UiPictureLayer::Over);
+			WriteUiFrame(name, frame, pattern.width, pattern.height, [&](int x, int y) {
+				return static_cast<int>(pattern.pixels[static_cast<size_t>(y) * pattern.width + x]);
+			});
+		}
+	}
+}
+
+void RegisterUiLettersImpl(ClxSpriteList sprites, const uint8_t *trn, std::string_view name)
+{
+	ForgetShownUiDraws();
+	for (size_t frame = 0; frame < sprites.numSprites(); frame++) {
+		const ClxSprite sprite = sprites[frame];
+		if (sprite.width() == 0 || sprite.height() == 0)
+			continue;
+		char suffix[32];
+		std::snprintf(suffix, sizeof(suffix), "/d0_f%02zu", frame);
+		const UiLetterKey key = LetterKey(sprite.pixelData(), trn);
+		UiLetterNames[key] = UiSpriteName { std::string(name) + suffix, sprite.width(), sprite.height() };
+		UiLetterPatterns.erase(key);
+	}
+}
+
+/** @brief Forgets the letters of a font whose pixels are about to be freed, in every colour. */
+void ForgetUiLetters(ClxSpriteList sprites)
+{
+	ForgetShownUiDraws();
+	bool any = false;
+	for (size_t frame = 0; frame < sprites.numSprites(); frame++) {
+		const uintptr_t pixels = reinterpret_cast<uintptr_t>(sprites[frame].pixelData());
+		const auto from = UiLetterKey { pixels, 0 };
+		for (auto it = UiLetterNames.lower_bound(from); it != UiLetterNames.end() && it->first.first == pixels;) {
+			// This frame's draws may point at its name.
+			if (!any) {
+				UiDraws.clear();
+				any = true;
+			}
+			it = UiLetterNames.erase(it);
+		}
+		for (auto it = UiLetterPatterns.lower_bound(from); it != UiLetterPatterns.end() && it->first.first == pixels;)
+			it = UiLetterPatterns.erase(it);
+	}
+}
+
+void ForgetUiPictureImpl(ClxSpriteList sprites)
+{
+	if (sprites.numSprites() == 0)
+		return;
+	ForgetUiLetters(sprites);
+	const uint8_t *first = sprites[0].pixelData();
+	for (auto it = UiPictures.begin(); it != UiPictures.end(); ++it) {
+		if (!it->second.empty() && it->second.front() == first) {
+			ForgetUiFrames(it->second);
+			UiPictures.erase(it);
+			return;
+		}
+	}
+}
+
+void RecordUiBlitImpl(const Surface &out, const Surface &src, Rectangle srcRect, Point targetPosition, std::string_view name)
+{
+	if (out.surface == nullptr || out.surface != PalSurface || src.surface == nullptr)
+		return;
+	if (!Enabled())
+		return;
+	// Clipped as the copy is (Surface::BlitFrom).
+	SDL_Rect rect { srcRect.position.x, srcRect.position.y, srcRect.size.width, srcRect.size.height };
+	Point at = targetPosition;
+	out.Clip(&rect, &at);
+	if (rect.w <= 0 || rect.h <= 0 || rect.x < 0 || rect.y < 0 || rect.x + rect.w > src.w() || rect.y + rect.h > src.h())
+		return;
+	LeaveShownUiDraws();
+	if (UiBlits.size() >= 256)
+		UiBlits.clear();
+	UiBlit &blit = UiBlits.emplace_back();
+	blit.order = UiOrder++;
+	blit.name = std::string(name) + "/d0_f00";
+	blit.src = rect;
+	blit.sourceWidth = src.w();
+	blit.dest = SDL_Rect { out.region.x + at.x, out.region.y + at.y, rect.w, rect.h };
+	// A copy: the surface can change, or go, before the frame is shown.
+	blit.pixels.resize(static_cast<size_t>(rect.w) * rect.h);
+	for (int y = 0; y < rect.h; y++) {
+		const uint8_t *line = src.at(rect.x, rect.y + y);
+		std::copy(line, line + rect.w, blit.pixels.begin() + static_cast<ptrdiff_t>(y) * rect.w);
+	}
+}
+
+[[maybe_unused]] const bool RegisterUiPictureHookSet = (RegisterUiPictureHook = RegisterUiPictureImpl, true);
+[[maybe_unused]] const bool ForgetUiPictureHookSet = (ForgetUiPictureHook = ForgetUiPictureImpl, true);
+[[maybe_unused]] const bool RecordUiBlitHookSet = (RecordUiBlitHook = RecordUiBlitImpl, true);
+[[maybe_unused]] const bool RegisterUiLettersHookSet = (RegisterUiLettersHook = RegisterUiLettersImpl, true);
+
+/** @brief Leaves a UI pixel out of the overlay this frame. */
+void HideUiPixel(int ux, int uy)
+{
+	UiHidden[static_cast<size_t>(uy) * UiHiddenWidth + ux] = 1;
+	UiHiddenAny = true;
+}
+
+/**
+ * @brief Where a UI panel's picture still shows (its own pixels still there), leaves the UI out, as its HD art goes
+ * under it there. Item pictures with HD art over it have already been taken out, so the panel shows under them.
+ */
+void PrepareUiPanel(UiDraw &draw, const SDL_Surface *ui)
+{
+	draw.shown = 0;
+	draw.whole = false;
+	const int w = draw.rect.w;
+	int laid = 0;
+	for (int y = 0; y < draw.rect.h; y++) {
+		const int uy = draw.rect.y + y;
+		const auto *line = uy >= 0 && uy < ui->h ? static_cast<const uint8_t *>(ui->pixels) + static_cast<ptrdiff_t>(uy) * ui->pitch : nullptr;
+		for (int x = 0; x < w; x++) {
+			const size_t i = static_cast<size_t>(y) * w + x;
+			const int16_t own = draw.pattern->pixels[i];
+			if (own < 0) {
+				draw.shows[i] = 0;
+				continue;
+			}
+			laid++;
+			draw.shows[i] = line != nullptr && draw.shows[i] != 0 && line[draw.rect.x + x] == own ? 1 : 0;
+			draw.shown += draw.shows[i];
+		}
+	}
+	// A panel all but covered keeps the game's own few pixels.
+	if (draw.shown * 10 < laid) {
+		draw.shown = 0;
+		return;
+	}
+	for (int y = 0; y < draw.rect.h; y++) {
+		for (int x = 0; x < w; x++) {
+			if (draw.shows[static_cast<size_t>(y) * w + x] != 0)
+				HideUiPixel(draw.rect.x + x, draw.rect.y + y);
+		}
+	}
+}
+
+/** @brief As PrepareUiPanel, for a copy of part of a panel's surface. Its colour 0 stays: the art has none there. */
+void PrepareUiBlit(UiBlit &blit, const SDL_Surface *ui)
+{
+	blit.shown = 0;
+	blit.art = ArtFor(blit.name);
+	if (blit.art == nullptr || blit.sourceWidth <= 0)
+		return;
+	int laid = 0;
+	for (int y = 0; y < blit.dest.h; y++) {
+		const int uy = blit.dest.y + y;
+		if (uy < 0 || uy >= ui->h)
+			continue;
+		const auto *line = static_cast<const uint8_t *>(ui->pixels) + static_cast<ptrdiff_t>(uy) * ui->pitch;
+		for (int x = 0; x < blit.dest.w; x++) {
+			const int ux = blit.dest.x + x;
+			const uint8_t own = blit.pixels[static_cast<size_t>(y) * blit.dest.w + x];
+			if (ux < 0 || ux >= ui->w || own == 0)
+				continue;
+			laid++;
+			if (line[ux] != own)
+				continue;
+			HideUiPixel(ux, uy);
+			blit.shown++;
+		}
+	}
+	if (laid == 0)
+		blit.shown = 0;
+}
+
+/** @brief The renderer the textures are made for: a new one took the old one's textures with it. */
+void UseRenderer(SDL_Renderer *renderer)
+{
+	if (renderer != UiArtRenderer) {
+		ForgetTextures();
+		UiArtRenderer = renderer;
+	}
+}
+
+/** @brief An HD art's whole picture as a texture, made the first time it shows. */
+SDL_Texture *TextureOf(SDL_Renderer *renderer, UiArt &art)
+{
+	if (art.texture == nullptr)
+		art.texture = MakeTexture(renderer, art.picture);
+	return art.texture;
+}
 
 /**
  * @brief Before any item picture is taken out of the UI: where the outline round a draw may show. That is where the UI
@@ -377,7 +928,7 @@ void FindWhereOutlineShows(size_t index)
 	std::vector<const UiDraw *> later;
 	for (size_t i = index + 1; i < UiDraws.size(); i++) {
 		const UiDraw &other = UiDraws[i];
-		if (other.art != nullptr && other.rect.x < area.x + area.w && other.rect.y < area.y + area.h && other.rect.x + other.rect.w > area.x && other.rect.y + other.rect.h > area.y)
+		if (other.art != nullptr && !other.name->panel && other.rect.x < area.x + area.w && other.rect.y < area.y + area.h && other.rect.x + other.rect.w > area.x && other.rect.y + other.rect.h > area.y)
 			later.push_back(&other);
 	}
 	outline.shows.assign(left.size(), 0);
@@ -430,6 +981,12 @@ void HideGameOutline(UiDraw &draw)
 Uint8 UiColourByte(float value)
 {
 	return static_cast<Uint8>(std::clamp(value, 0.F, 1.F) * 255.F + 0.5F);
+}
+
+/** @brief Dims a picture's texture as the screen palette is dimmed (UiFade), so the HD art fades with the game's. */
+void FadeUiTexture(SDL_Texture *texture)
+{
+	SDL_SetTextureColorMod(texture, UiColourByte(UiFadeNow[0]), UiColourByte(UiFadeNow[1]), UiColourByte(UiFadeNow[2]));
 }
 
 /** @brief A texture of an outline's shape (white, its shape in the alpha); a glow adds light to what is under it. */
@@ -505,7 +1062,7 @@ SDL_Texture *MaskedOutline(SDL_Renderer *renderer, const UiDraw &draw, const SDL
 				alpha[static_cast<size_t>(y) * shape.width + x] = 0;
 		}
 	}
-	it->second = OutlineTexture(renderer, shape, alpha, cut);
+	KeepMaskedTexture(it->second, OutlineTexture(renderer, shape, alpha, cut), shape.width, shape.height);
 	return it->second;
 }
 
@@ -534,6 +1091,8 @@ void DrawUiOutline(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &
 	float alpha = 1.F;
 	const uint32_t now = SDL_GetTicks();
 	UiOutlines.Fade(look, now, colour, alpha);
+	for (int c = 0; c < 3; c++)
+		colour[c] *= UiFadeNow[c];
 	const auto drawCut = [&](OutlineCut cut, float strength) {
 		if (strength <= 0)
 			return;
@@ -553,10 +1112,578 @@ void DrawUiOutline(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &
 	drawCut(OutlineCutFor(look), alpha);
 }
 
+/** @brief The names of pictures drawn in code (runes), by their HD art's name and the size of the box they are drawn in. */
+std::unordered_map<std::string, UiSpriteName> UiPictureNames;
+
+void RecordUiPictureImpl(const Surface &out, const Rectangle &box, const std::string &name, const uint8_t *before)
+{
+	if (out.surface == nullptr || out.surface != PalSurface || before == nullptr)
+		return;
+	const int w = box.size.width;
+	const int h = box.size.height;
+	if (w <= 0 || h <= 0 || w > UINT16_MAX || h > UINT16_MAX)
+		return;
+	if (!Enabled())
+		return;
+	const auto [named, inserted] = UiPictureNames.try_emplace(name + '@' + std::to_string(w) + 'x' + std::to_string(h));
+	if (inserted)
+		named->second = UiSpriteName { name, static_cast<uint16_t>(w), static_cast<uint16_t>(h) };
+	LeaveShownUiDraws();
+	if (UiDraws.size() >= 512)
+		UiDraws.clear();
+	UiDraw &draw = UiDraws.emplace_back();
+	draw.name = &named->second;
+	auto pattern = std::make_shared<UiPattern>();
+	pattern->width = static_cast<uint16_t>(w);
+	pattern->height = static_cast<uint16_t>(h);
+	pattern->pixels.assign(static_cast<size_t>(w) * h, -1);
+	draw.rect = SDL_Rect { out.region.x + box.position.x, out.region.y + box.position.y, w, h };
+	// What it was drawn over, and the pixels it changed: those are the ones it lays down. Pixels outside the surface it
+	// is drawn on (clipped) lay nothing down.
+	draw.under.assign(static_cast<size_t>(w) * h, 0);
+	draw.shows.assign(static_cast<size_t>(w) * h, 0);
+	const SDL_Surface *ui = PalSurface;
+	for (int y = 0; y < h; y++) {
+		const int uy = draw.rect.y + y;
+		if (uy < 0 || uy >= ui->h || uy < out.region.y || uy >= out.region.y + out.region.h)
+			continue;
+		const auto *line = static_cast<const uint8_t *>(ui->pixels) + static_cast<ptrdiff_t>(uy) * ui->pitch;
+		for (int x = 0; x < w; x++) {
+			const int ux = draw.rect.x + x;
+			if (ux < 0 || ux >= ui->w || ux < out.region.x || ux >= out.region.x + out.region.w)
+				continue;
+			const size_t i = static_cast<size_t>(y) * w + x;
+			draw.under[i] = before[i];
+			draw.shows[i] = 1; // inside the surface: may show
+			if (line[ux] != before[i])
+				pattern->pixels[i] = line[ux];
+		}
+	}
+	draw.pattern = pattern.get();
+	draw.ownPattern = std::move(pattern);
+}
+
+[[maybe_unused]] const bool RecordUiPictureHookSet = (RecordUiPictureHook = RecordUiPictureImpl, true);
+
+// Spell icons (the skill bar, the spell book, the spell list...) show painted pictures the same way, over the UI where
+// the icon's own pixels still show. An icon's picture is its stone plate, in the colours the icon is drawn in, with the
+// icon's symbol laid over it. The art is far bigger than an icon is on screen, so the picture is shrunk once to the
+// exact screen size (an area filter) and then drawn pixel for pixel, rather than scaled down by the graphics card every
+// frame, which would skip most of its pixels.
+
+/** @brief The number of colourings SetSpellTrans has (SpellType). */
+constexpr size_t NumSpellIconTints = 5;
+
+/** @brief Each icon's name, by its colours, its size and its frame: null until asked for, then its name or NoSpellIcon. */
+const UiSpriteName *SpellIconNames[NumSpellIconTints][2][SpellIconLastFrame + 1];
+const UiSpriteName NoSpellIcon;
+
+/** @brief The icons' names, by their HD art's name (the nodes stay where they are, so draws can point at them). */
+std::unordered_map<std::string, UiSpriteName> SpellIconNamesByArt;
+
+/** @brief The name a spell icon's draw goes by; null when it has no HD art name (a label frame, colours with no plate). */
+const UiSpriteName *SpellIconNameOf(uint8_t frame, bool large, uint8_t tint, int width, int height)
+{
+	if (!SpellIconHasHdArt(frame) || tint >= NumSpellIconTints)
+		return nullptr;
+	const UiSpriteName *&name = SpellIconNames[tint][large ? 1 : 0][frame];
+	if (name == nullptr) {
+		const std::string art = SpellIconArtName(frame, large, static_cast<SpellType>(tint));
+		if (art.empty()) {
+			name = &NoSpellIcon;
+		} else {
+			const auto [it, inserted] = SpellIconNamesByArt.try_emplace(art + (large ? "@big" : "@small"));
+			if (inserted) {
+				it->second = UiSpriteName { art, static_cast<uint16_t>(width), static_cast<uint16_t>(height) };
+				it->second.spellIcon = true;
+			}
+			name = &it->second;
+		}
+	}
+	return name != &NoSpellIcon && name->width == width && name->height == height ? name : nullptr;
+}
+
+/** @brief Loads one picture of the HD art (hd\<name>.png), 4 bytes a pixel; null when the art hasn't got it. */
+SDL_Surface *LoadUiPicture(const std::string &name)
+{
+	std::string path = "hd\\" + name + ".png";
+	std::replace(path.begin(), path.end(), '/', '\\');
+	if (!FindAsset(path).ok())
+		return nullptr;
+	SDL_Surface *loaded = LoadPNG(path.c_str());
+	if (loaded == nullptr)
+		return nullptr;
+	SDL_Surface *picture = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
+	SDL_FreeSurface(loaded);
+	return picture;
+}
+
+/**
+ * @brief A spell icon's HD art by its name (SpellIconArtName): the plate, with the symbol's layer laid over it. Null
+ * when either file is missing (or they differ in size): the icon then keeps the game's own drawing.
+ */
+UiArt *SpellIconArtFor(const std::string &name)
+{
+	UiArt &art = UiArts[name];
+	if (!art.tried) {
+		art.tried = true;
+		const size_t plus = name.find('+');
+		if (plus == std::string::npos) {
+			art.picture = LoadUiPicture(name);
+			// A small icon's own plate may be missing from older art: the large plate then.
+			if (const std::string_view fallback = SpellIconPlateFallback(name); art.picture == nullptr && !fallback.empty())
+				art.picture = LoadUiPicture(std::string(fallback));
+		} else if (const UiArt *plate = SpellIconArtFor(name.substr(0, plus)); plate != nullptr) {
+			// (UiArts' entries stay where they are when another is added, so `art` is still good.)
+			SDL_Surface *layer = LoadUiPicture(name.substr(plus + 1));
+			if (layer != nullptr && layer->w == plate->picture->w && layer->h == plate->picture->h) {
+				art.picture = SDL_DuplicateSurface(plate->picture);
+				if (art.picture != nullptr) {
+					LayPictureOver(static_cast<uint8_t *>(art.picture->pixels), art.picture->pitch,
+					    static_cast<const uint8_t *>(layer->pixels), layer->pitch, layer->w, layer->h);
+				}
+			}
+			if (layer != nullptr)
+				SDL_FreeSurface(layer);
+		}
+	}
+	return art.picture != nullptr ? &art : nullptr;
+}
+
+/** @brief A spell icon about to be drawn: where, and the UI's pixels there before it. */
+struct PendingSpellIcon {
+	const UiSpriteName *name = nullptr;
+	SDL_Rect rect {};
+	std::vector<uint8_t> under;
+};
+PendingSpellIcon PendingUiSpellIcon;
+
+void RecordUiSpellIconImpl(const Surface &out, Rectangle box, uint8_t frame, bool large, uint8_t tint, bool drawn)
+{
+	PendingSpellIcon &pending = PendingUiSpellIcon;
+	const UiSpriteName *before = pending.name;
+	pending.name = nullptr;
+	if (out.surface == nullptr || out.surface != PalSurface)
+		return;
+	const int w = box.size.width;
+	const int h = box.size.height;
+	if (w <= 0 || h <= 0 || w > UINT16_MAX || h > UINT16_MAX)
+		return;
+	const SDL_Rect rect { out.region.x + box.position.x, out.region.y + box.position.y, w, h };
+	const SDL_Surface *ui = PalSurface;
+	// The part of the box inside the surface it is drawn on: the rest is clipped, and lays nothing down.
+	const int left = std::max({ rect.x, static_cast<int>(out.region.x), 0 });
+	const int top = std::max({ rect.y, static_cast<int>(out.region.y), 0 });
+	const int right = std::min({ rect.x + w, static_cast<int>(out.region.x + out.region.w), ui->w });
+	const int bottom = std::min({ rect.y + h, static_cast<int>(out.region.y + out.region.h), ui->h });
+	if (right <= left || bottom <= top)
+		return;
+	const auto *pixels = static_cast<const uint8_t *>(ui->pixels);
+	if (!drawn) {
+		if (!Enabled())
+			return;
+		const UiSpriteName *name = SpellIconNameOf(frame, large, tint, w, h);
+		if (name == nullptr || SpellIconArtFor(name->name) == nullptr)
+			return;
+		pending.name = name;
+		pending.rect = rect;
+		pending.under.assign(static_cast<size_t>(w) * h, 0);
+		for (int uy = top; uy < bottom; uy++) {
+			const uint8_t *line = pixels + static_cast<ptrdiff_t>(uy) * ui->pitch;
+			std::copy(line + left, line + right, pending.under.begin() + static_cast<ptrdiff_t>(uy - rect.y) * w + (left - rect.x));
+		}
+		return;
+	}
+	if (before == nullptr || pending.rect.x != rect.x || pending.rect.y != rect.y || pending.rect.w != w || pending.rect.h != h)
+		return;
+	if (UiDraws.size() >= 512)
+		UiDraws.clear();
+	UiDraw &draw = UiDraws.emplace_back();
+	draw.order = UiOrder++;
+	draw.name = before;
+	draw.rect = rect;
+	draw.under = std::move(pending.under);
+	pending.under.clear();
+	// An icon fills its box: every pixel of it inside the surface is the icon's, as it is now.
+	auto pattern = std::make_shared<UiPattern>();
+	pattern->width = static_cast<uint16_t>(w);
+	pattern->height = static_cast<uint16_t>(h);
+	pattern->pixels.assign(static_cast<size_t>(w) * h, -1);
+	draw.shows.assign(static_cast<size_t>(w) * h, 0);
+	for (int uy = top; uy < bottom; uy++) {
+		const uint8_t *line = pixels + static_cast<ptrdiff_t>(uy) * ui->pitch;
+		for (int ux = left; ux < right; ux++) {
+			const size_t i = static_cast<size_t>(uy - rect.y) * w + (ux - rect.x);
+			pattern->pixels[i] = line[ux];
+			draw.shows[i] = 1; // inside the surface: may show
+		}
+	}
+	draw.pattern = pattern.get();
+	draw.ownPattern = std::move(pattern);
+}
+
+/**
+ * @brief The border the game drew just inside a box: the spell icons drawn there this frame don't show under it, even
+ * where it happens to have the colour the icon had.
+ */
+void CoverUiSpellIconImpl(const Surface &out, Rectangle box)
+{
+	if (out.surface == nullptr || out.surface != PalSurface)
+		return;
+	const SDL_Rect rect { out.region.x + box.position.x, out.region.y + box.position.y, box.size.width, box.size.height };
+	for (auto it = UiDraws.rbegin(); it != UiDraws.rend(); ++it) {
+		UiDraw &draw = *it;
+		if (!draw.name->spellIcon)
+			continue;
+		const int left = std::max(rect.x, draw.rect.x);
+		const int top = std::max(rect.y, draw.rect.y);
+		const int right = std::min(rect.x + rect.w, draw.rect.x + draw.rect.w);
+		const int bottom = std::min(rect.y + rect.h, draw.rect.y + draw.rect.h);
+		for (int uy = top; uy < bottom; uy++) {
+			const bool edgeRow = uy < rect.y + 2 || uy >= rect.y + rect.h - 2;
+			for (int ux = left; ux < right; ux++) {
+				if (edgeRow || ux < rect.x + 2 || ux >= rect.x + rect.w - 2)
+					draw.shows[static_cast<size_t>(uy - draw.rect.y) * draw.rect.w + (ux - draw.rect.x)] = 0;
+			}
+		}
+	}
+}
+
+[[maybe_unused]] const bool RecordUiSpellIconHookSet = (RecordUiSpellIconHook = RecordUiSpellIconImpl, true);
+[[maybe_unused]] const bool CoverUiSpellIconHookSet = (CoverUiSpellIconHook = CoverUiSpellIconImpl, true);
+
+/** @brief A spell icon's picture shrunk to a size on screen, made the first time it is shown at that size. */
+UiFittedArt *FittedArtOf(UiArt &art, int width, int height)
+{
+	if (width <= 0 || height <= 0 || width > UINT16_MAX || height > UINT16_MAX)
+		return nullptr;
+	const uint32_t size = static_cast<uint32_t>(width) | (static_cast<uint32_t>(height) << 16);
+	auto it = art.fitted.find(size);
+	if (it == art.fitted.end()) {
+		// A new size: the UI's scale or the window changed. The sizes before it are no longer shown (an icon takes one
+		// of two widths and heights at a scale, by where it is).
+		if (art.fitted.size() >= 8) {
+			for (auto &[key, old] : art.fitted) {
+				if (old.texture != nullptr)
+					SDL_DestroyTexture(old.texture);
+				if (old.picture != nullptr)
+					SDL_FreeSurface(old.picture);
+			}
+			art.fitted.clear();
+			// Copies of them with parts left out may be among these.
+			for (auto &[key, texture] : MaskedTextures)
+				SDL_DestroyTexture(texture);
+			MaskedTextures.clear();
+		}
+		it = art.fitted.try_emplace(size).first;
+		const SDL_Surface *picture = art.picture;
+		SDL_Surface *fitted = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+		if (fitted != nullptr) {
+			ShrinkPicture(static_cast<const uint8_t *>(picture->pixels), picture->w, picture->h, picture->pitch,
+			    static_cast<uint8_t *>(fitted->pixels), width, height, fitted->pitch);
+		}
+		it->second.picture = fitted;
+	}
+	return it->second.picture != nullptr ? &it->second : nullptr;
+}
+
+/**
+ * @brief Draws a spell icon's HD art over the UI: its picture at the very size the icon's box has on screen, on the
+ * screen pixels the game's own icon covers, where the icon's own pixels still show.
+ */
+void DrawFittedUiArt(SDL_Renderer *renderer, const UiDraw &draw)
+{
+	// How much bigger the UI is on screen (it is drawn in UI pixels).
+	float scaleX = 1.F;
+	float scaleY = 1.F;
+	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+	if (!(scaleX > 0.F) || !(scaleY > 0.F))
+		return;
+	const int x0 = FirstScreenPixelOf(draw.rect.x, scaleX);
+	const int y0 = FirstScreenPixelOf(draw.rect.y, scaleY);
+	const int width = FirstScreenPixelOf(draw.rect.x + draw.rect.w, scaleX) - x0;
+	const int height = FirstScreenPixelOf(draw.rect.y + draw.rect.h, scaleY) - y0;
+	UiFittedArt *fitted = FittedArtOf(*draw.art, width, height);
+	if (fitted == nullptr)
+		return;
+	SDL_Texture *texture = nullptr;
+	// (An icon partly outside the surface it was drawn on has all the pixels it laid down showing, but not all of itself.)
+	if (draw.whole && draw.shown == draw.rect.w * draw.rect.h) {
+		if (fitted->texture == nullptr)
+			fitted->texture = MakeTexture(renderer, fitted->picture);
+		texture = fitted->texture;
+	} else {
+		// Partly covered (a border, a key's letter, a tooltip): a copy with the screen pixels of covered UI pixels left out.
+		uint64_t key = std::hash<std::string> {}(draw.name->name) ^ 0xD6E8FEB86659FD93ULL;
+		for (const int part : { width, height, x0 - static_cast<int>(std::floor(static_cast<float>(draw.rect.x) * scaleX)), y0 - static_cast<int>(std::floor(static_cast<float>(draw.rect.y) * scaleY)), draw.rect.w, draw.rect.h })
+			key = key * 1099511628211ULL ^ static_cast<uint64_t>(static_cast<uint32_t>(part));
+		for (const uint8_t bit : draw.shows)
+			key = key * 1099511628211ULL ^ bit;
+		auto [it, inserted] = MaskedTextures.try_emplace(key, nullptr);
+		if (inserted) {
+			SDL_Surface *copy = SDL_DuplicateSurface(fitted->picture);
+			if (copy != nullptr) {
+				for (int y = 0; y < copy->h; y++) {
+					auto *row = static_cast<uint8_t *>(copy->pixels) + static_cast<ptrdiff_t>(y) * copy->pitch;
+					const int uy = static_cast<int>(std::floor((static_cast<float>(y0 + y) + 0.5F) / scaleY)) - draw.rect.y;
+					for (int x = 0; x < copy->w; x++) {
+						const int ux = static_cast<int>(std::floor((static_cast<float>(x0 + x) + 0.5F) / scaleX)) - draw.rect.x;
+						const bool shows = ux >= 0 && uy >= 0 && ux < draw.rect.w && uy < draw.rect.h && draw.shows[static_cast<size_t>(uy) * draw.rect.w + ux] != 0;
+						if (!shows)
+							row[static_cast<ptrdiff_t>(x) * 4 + 3] = 0;
+					}
+				}
+				it->second = MakeTexture(renderer, copy);
+				SDL_FreeSurface(copy);
+			}
+		}
+		texture = it->second;
+	}
+	if (texture == nullptr)
+		return;
+	const SDL_FRect dest { static_cast<float>(x0) / scaleX, static_cast<float>(y0) / scaleY, static_cast<float>(width) / scaleX, static_cast<float>(height) / scaleY };
+	SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+}
+
+
+/** @brief The menu logos' fire, made from its maps the first time; null without them (or with POE2_LOGO_FIRE=0). */
+fire::FireLayer *MenuFireLayer()
+{
+	if (MenuFire != nullptr)
+		return MenuFire.get();
+	if (MenuFireTried)
+		return nullptr;
+	MenuFireTried = true;
+	static const bool allowed = [] {
+		const char *env = std::getenv("POE2_LOGO_FIRE");
+		return env == nullptr || env[0] != '0';
+	}();
+	if (!allowed)
+		return nullptr;
+	const UiArt *maps = ArtFor(FireMapsArt);
+	if (maps == nullptr)
+		return nullptr;
+	fire::FireSource source;
+	const SDL_Surface *picture = maps->picture;
+	const float across = static_cast<float>(picture->w) / static_cast<float>(fire::LogoGridWidth);
+	const int pad = static_cast<int>(std::lround(static_cast<float>(FireMapsPad) * across));
+	const bool read = fire::SourceFromMaps(static_cast<const uint8_t *>(picture->pixels), picture->w, picture->h, picture->pitch, source, pad);
+	// The maps' picture isn't wanted again (it is read anew if the fire is made again).
+	if (UiArts.count(FireMapsArt) != 0) {
+		SDL_FreeSurface(UiArts[FireMapsArt].picture);
+		UiArts.erase(FireMapsArt);
+	}
+	if (!read)
+		return nullptr;
+	// The logo's letters breathe and flare up each on its own; maps of another size have them where they would be (and
+	// the grid's x is the maps' plus the padding).
+	source.zones = fire::LogoZones();
+	for (fire::FireZone &zone : source.zones) {
+		zone.centre = zone.centre * across + static_cast<float>(source.pad);
+		zone.halfWidth *= across;
+		zone.sparkHalfWidth *= across;
+	}
+	// The approved settings (11-23): all as they are, colour half way to hell-red, the mouse's wind at a quarter.
+	MenuFire = std::make_unique<fire::FireLayer>(std::move(source), fire::FireSettings {});
+	return MenuFire.get();
+}
+
+/** @brief Lets the menu logos' fire go (its memory and threads) once none has shown for a few seconds. */
+void ReleaseIdleMenuFire()
+{
+	if (MenuFire == nullptr || SDL_GetTicks() - MenuFireTicks < 3000)
+		return;
+	ForgetMenuFire();
+	MenuFireCover.shrink_to_fit();
+}
+
+/**
+ * @brief Where a logo's fire (its grid at `rect`) shows: not over what covers the logo's own pixels when it is partly
+ * covered, and fading out over 16 grid columns before the screen's left and right edges, which its padding may reach
+ * past. Null when it all shows.
+ */
+const uint8_t *MenuFireCoverOf(const UiDraw &draw, const SDL_FRect &rect, int width, int height, float screenLeft, float screenRight)
+{
+	if (!(rect.w > 0))
+		return nullptr;
+	const float gridPerUi = static_cast<float>(width) / rect.w;
+	std::vector<uint8_t> edge(width, 255);
+	bool edged = false;
+	for (int x = 0; x < width; x++) {
+		const float ux = rect.x + (static_cast<float>(x) + 0.5F) / gridPerUi;
+		const float f = std::clamp(std::min(ux - screenLeft, screenRight - ux) * gridPerUi / 16.F, 0.F, 1.F);
+		if (f < 1.F) {
+			edge[x] = static_cast<uint8_t>(std::lround(f * f * (3.F - 2.F * f) * 255.F));
+			edged = true;
+		}
+	}
+	if (draw.whole && !edged)
+		return nullptr;
+	MenuFireCover.resize(static_cast<size_t>(width) * height);
+	for (int y = 0; y < height; y++)
+		std::copy(edge.begin(), edge.end(), MenuFireCover.begin() + static_cast<ptrdiff_t>(y) * width);
+	if (draw.whole)
+		return MenuFireCover.data();
+	std::vector<int> columns(width);
+	for (int x = 0; x < width; x++)
+		columns[x] = static_cast<int>(std::floor(rect.x + (static_cast<float>(x) + 0.5F) / static_cast<float>(width) * rect.w)) - draw.rect.x;
+	for (int y = 0; y < height; y++) {
+		const int uy = static_cast<int>(std::floor(rect.y + (static_cast<float>(y) + 0.5F) / static_cast<float>(height) * rect.h)) - draw.rect.y;
+		if (uy < 0 || uy >= draw.rect.h)
+			continue;
+		uint8_t *line = MenuFireCover.data() + static_cast<size_t>(y) * width;
+		for (int x = 0; x < width; x++) {
+			const int ux = columns[x];
+			if (ux < 0 || ux >= draw.rect.w)
+				continue;
+			const size_t i = static_cast<size_t>(uy) * draw.rect.w + ux;
+			if (draw.pattern->pixels[i] >= 0 && draw.shows[i] == 0)
+				line[x] = 0;
+		}
+	}
+	return MenuFireCover.data();
+}
+
+/**
+ * @brief Draws a menu logo's live fire at its place behind `dest`, then the logo's art (`texture`) over it lit by
+ * it. False when there is no fire (no maps, or the renderer can't): the caller draws the art as it is.
+ */
+bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &dest, SDL_Texture *texture)
+{
+	fire::FireLayer *layer = MenuFireLayer();
+	if (layer == nullptr)
+		return false;
+	const SDL_FRect &spot = draw.name->fire->rect;
+	const SDL_FRect picture { dest.x + spot.x * dest.w, dest.y + spot.y * dest.h, spot.w * dest.w, spot.h * dest.h };
+	// The main menu's logo: while the intro plays it draws it itself, as it flies in and lands here.
+	const bool mainMenu = draw.name->fire == &FireSpots[1];
+	// The main menu's and the Esc menu's have the intro's subtitle and lines under them.
+	const bool subtitled = mainMenu || draw.name->fire == &FireSpots[2];
+	if (mainMenu && intro_sdl::HoldsMenuLogo(picture)) {
+		// (It is still shown: not let go as idle.)
+		MenuFireTicks = SDL_GetTicks();
+		MenuFireCounter = 0;
+		return true;
+	}
+	// The maps' picture goes over the logo at `spot`; the grid's padding reaches past it on each side (past the logo's
+	// own rect too: what is under that is the menu's background, the fire only added over it).
+	const SDL_FRect rect = layer->GridRect(picture);
+	// Real time, so it burns at the same pace whatever the frame rate; after a while unseen it goes on from where it was.
+	const uint64_t now = SDL_GetPerformanceCounter();
+	float seconds = 1.F / 60.F;
+	if (MenuFireCounter != 0) {
+		const float since = static_cast<float>(static_cast<double>(now - MenuFireCounter) / static_cast<double>(SDL_GetPerformanceFrequency()));
+		if (since > 0 && since < 0.25F)
+			seconds = since;
+	}
+	MenuFireCounter = now;
+	MenuFireTicks = SDL_GetTicks();
+	layer->Pointer(static_cast<float>(MousePosition.x) + 0.5F, static_cast<float>(MousePosition.y) + 0.5F, rect, seconds);
+	// Sanctuary Reforged: the main menu's logo holds a step of the hidden trail (its letters lit from the outside in).
+	if (mainMenu)
+		menu_secret::Update(*layer, rect, static_cast<float>(MousePosition.x) + 0.5F, static_cast<float>(MousePosition.y) + 0.5F, seconds);
+	else
+		menu_secret::Leave();
+	SDL_Rect screen {};
+	SDL_RenderGetViewport(renderer, &screen);
+	const float screenRight = screen.w > 0 ? static_cast<float>(screen.w) : rect.x + rect.w;
+	const uint8_t *cover = MenuFireCoverOf(draw, rect, layer->GridWidth(), layer->GridHeight(), 0.F, screenRight);
+	// Worked out off the game's thread: it costs the menus (the Esc menu over the game most) only sending it up.
+	if (!layer->DrawAsync(renderer, rect, seconds, cover))
+		return false;
+	// After the intro: its burning lines round the subtitle, behind the letters, and the subtitle over them.
+	if (subtitled)
+		intro_sdl::DrawLines(renderer, picture, seconds);
+	if (!layer->DrawLit(renderer, texture, dest, spot))
+		SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+	if (subtitled)
+		intro_sdl::DrawSubtitle(renderer, picture);
+	return true;
+}
+
 } // namespace
+
+fire::FireLayer *MenuLogoFire()
+{
+	return MenuFireLayer();
+}
+
+SDL_Texture *MenuLogoArt(SDL_Renderer *renderer)
+{
+	if (renderer == nullptr)
+		return nullptr;
+	UseRenderer(renderer);
+	UiArt *art = ArtFor("ui_art/logo/d0_f00");
+	if (art == nullptr)
+		return nullptr;
+	SDL_Texture *texture = TextureOf(renderer, *art);
+	if (texture != nullptr)
+		SDL_SetTextureColorMod(texture, 255, 255, 255);
+	return texture;
+}
+
+namespace {
+
+/** @brief The main menu's background art (hd\\ui_art\\mainmenu_wide.png), and whether the screen shown uses it. */
+constexpr const char *MenuBackgroundArt = "ui_art/mainmenu_wide";
+bool MenuBackgroundShown = false;
+
+/** @brief What is under it, less it: black takes none of what is under it, bright colours most of it. */
+SDL_BlendMode OverBackgroundBlend()
+{
+	return SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_COLOR, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
+}
+
+} // namespace
+
+bool HasMenuBackground()
+{
+	return Enabled() && HasArt(MenuBackgroundArt);
+}
+
+void ShowMenuBackground(bool shown)
+{
+	MenuBackgroundShown = shown && HasMenuBackground();
+}
+
+bool MenuBackgroundIsShown()
+{
+	return MenuBackgroundShown;
+}
+
+bool DrawMenuBackground(SDL_Renderer *renderer, SDL_Texture *ui)
+{
+	if (!MenuBackgroundShown || renderer == nullptr || ui == nullptr)
+		return false;
+	UseRenderer(renderer);
+	UiArt *art = ArtFor(MenuBackgroundArt);
+	if (art == nullptr)
+		return false;
+	SDL_Texture *texture = TextureOf(renderer, *art);
+	if (texture == nullptr || SDL_SetTextureBlendMode(ui, OverBackgroundBlend()) != 0)
+		return false;
+	// The whole of the part of the window the game draws to, whatever the UI's scale: as tall as it (as wide, on a
+	// screen wider than the art) and cut at the sides (top and bottom), centred.
+	SDL_Rect view { 0, 0, 0, 0 };
+	SDL_RenderGetViewport(renderer, &view);
+	const float w = static_cast<float>(view.w);
+	const float h = static_cast<float>(view.h);
+	const float scale = std::max(w / static_cast<float>(art->picture->w), h / static_cast<float>(art->picture->h));
+	const float aw = static_cast<float>(art->picture->w) * scale;
+	const float ah = static_cast<float>(art->picture->h) * scale;
+	const SDL_FRect dest { (w - aw) / 2, (h - ah) / 2, aw, ah };
+	SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_NONE);
+	SDL_SetTextureColorMod(texture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(texture, 255);
+	SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+	SDL_SetTextureBlendMode(texture, SDL_BLENDMODE_BLEND);
+	return true;
+}
 
 void RegisterUiSprite(const uint8_t *pixels, const std::string &name, uint16_t width, uint16_t height)
 {
+	ForgetShownUiDraws();
 	UiSpriteNames[pixels] = UiSpriteName { name, width, height };
 	// A picture loaded where another was has its own pattern.
 	for (auto &patterns : UiPatterns)
@@ -569,6 +1696,7 @@ void RegisterFittedUiSprite(ClxSprite small, ClxSprite full)
 	const auto it = UiSpriteNames.find(full.pixelData());
 	if (it == UiSpriteNames.end() || it->second.fullWidth != 0)
 		return;
+	ForgetShownUiDraws();
 	const UiSpriteName fitted { it->second.name, small.width(), small.height(), full.width(), full.height() };
 	UiSpriteNames[small.pixelData()] = fitted;
 	for (auto &patterns : UiPatterns)
@@ -580,10 +1708,41 @@ void PrepareUiSprites()
 {
 	Swapped.clear();
 	SDL_Surface *ui = PalSurface;
-	if (ui == nullptr || UiDraws.empty())
+	UiFadeNow = UiFade();
+	// With HD art switched off nothing is drawn over the UI, not even what the last frame showed.
+	if (!Enabled())
+		ForgetShownUiDraws();
+	// Nothing drawn since the last present: the same frame is shown again.
+	if (UiDraws.empty() && UiBlits.empty()) {
+		UiDraws = std::move(ShownUiDraws);
+		UiBlits = std::move(ShownUiBlits);
+		ShownUiDraws.clear();
+		ShownUiBlits.clear();
+		ShowingShownUiDraws = !UiDraws.empty() || !UiBlits.empty();
+	}
+	if (UiHiddenAny)
+		std::fill(UiHidden.begin(), UiHidden.end(), 0);
+	UiHiddenAny = false;
+	if (ui == nullptr || (UiDraws.empty() && UiBlits.empty()))
 		return;
+	if (UiHiddenWidth != ui->w || UiHiddenHeight != ui->h) {
+		UiHiddenWidth = ui->w;
+		UiHiddenHeight = ui->h;
+		UiHidden.assign(static_cast<size_t>(ui->w) * ui->h, 0);
+	}
 	for (UiDraw &draw : UiDraws) {
-		draw.art = ArtFor(draw.name->name);
+		draw.art = nullptr;
+		if (draw.name->spinFrameMs != 0) {
+			// Turning smoothly: a quarter of the game's frame each (its frame k is the turn's 4k, so they agree).
+			const uint32_t frame = SDL_GetTicks() * 4 / draw.name->spinFrameMs % SpinFrames;
+			char number[8];
+			std::snprintf(number, sizeof(number), "%02u", static_cast<unsigned>(frame));
+			draw.art = ArtFor(draw.name->spinArt + number);
+		}
+		if (draw.art == nullptr)
+			draw.art = draw.name->spellIcon ? SpellIconArtFor(draw.name->name) : ArtFor(draw.name->name);
+		if (draw.art == nullptr && !draw.name->stillArt.empty())
+			draw.art = ArtFor(draw.name->stillArt);
 		draw.outline.smooth = false;
 	}
 	for (size_t i = 0; i < UiDraws.size(); i++) {
@@ -593,7 +1752,7 @@ void PrepareUiSprites()
 	for (UiDraw &draw : UiDraws) {
 		draw.shown = 0;
 		draw.whole = false;
-		if (draw.art == nullptr)
+		if (draw.art == nullptr || draw.name->panel)
 			continue;
 		const int w = draw.rect.w;
 		int laid = 0;
@@ -638,6 +1797,108 @@ void PrepareUiSprites()
 		if (draw.shown != 0 && draw.art != nullptr && draw.outline.pixels != nullptr)
 			HideGameOutline(draw);
 	}
+	// After the item pictures are taken out, so a panel shows its art under theirs.
+	for (UiDraw &draw : UiDraws) {
+		if (draw.art != nullptr && draw.name->panel)
+			PrepareUiPanel(draw, ui);
+	}
+	for (UiBlit &blit : UiBlits)
+		PrepareUiBlit(blit, ui);
+}
+
+const uint8_t *UiHiddenPixels(int width, int height)
+{
+	if (!UiHiddenAny || width != UiHiddenWidth || height != UiHiddenHeight)
+		return nullptr;
+	return UiHidden.data();
+}
+
+void RenderUiPanels(SDL_Renderer *renderer)
+{
+	if (renderer == nullptr)
+		return;
+	UseRenderer(renderer);
+	const auto drawPanel = [&](const UiDraw &draw) {
+		if (draw.shown == 0 || draw.art == nullptr || !draw.name->panel)
+			return;
+		const SDL_FRect dest = DestOf(draw);
+		if (SDL_Texture *texture = TextureOf(renderer, *draw.art); texture != nullptr) {
+			FadeUiTexture(texture);
+			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+		}
+	};
+	// In the order the game drew them: a button drawn over the bottom panel goes over its art.
+	size_t nextDraw = 0;
+	for (const UiBlit &blit : UiBlits) {
+		while (nextDraw < UiDraws.size() && UiDraws[nextDraw].order < blit.order)
+			drawPanel(UiDraws[nextDraw++]);
+		if (blit.shown == 0 || blit.art == nullptr)
+			continue;
+		SDL_Texture *texture = TextureOf(renderer, *blit.art);
+		if (texture == nullptr)
+			continue;
+		// The art is of the whole surface, at its own size (twice the game's).
+		const float scale = static_cast<float>(blit.art->picture->w) / static_cast<float>(blit.sourceWidth);
+		const SDL_Rect src {
+			static_cast<int>(std::lround(blit.src.x * scale)),
+			static_cast<int>(std::lround(blit.src.y * scale)),
+			static_cast<int>(std::lround(blit.src.w * scale)),
+			static_cast<int>(std::lround(blit.src.h * scale)),
+		};
+		if (src.x + src.w > blit.art->picture->w || src.y + src.h > blit.art->picture->h)
+			continue;
+		const SDL_FRect dest { static_cast<float>(blit.dest.x), static_cast<float>(blit.dest.y), static_cast<float>(blit.dest.w), static_cast<float>(blit.dest.h) };
+		FadeUiTexture(texture);
+		SDL_RenderCopyF(renderer, texture, &src, &dest);
+	}
+	while (nextDraw < UiDraws.size())
+		drawPanel(UiDraws[nextDraw++]);
+	// The copies stay with the draws until RenderUiSprites keeps both for a frame shown again.
+}
+
+void BeginUiExport(const std::string &dir)
+{
+	UiExportDir = dir;
+	UiExported.clear();
+}
+
+void ExportUiSurface(std::string_view name, const Surface &surface)
+{
+	if (UiExportDir.empty() || surface.surface == nullptr)
+		return;
+	WriteUiFrame(UiPictureName(name), 0, surface.w(), surface.h(), [&](int x, int y) {
+		const uint8_t colour = *surface.at(x, y);
+		return colour == 0 ? -1 : static_cast<int>(colour);
+	});
+}
+
+void EndUiExport()
+{
+	if (UiExportDir.empty())
+		return;
+	std::string json = "{\"pictures\":[";
+	bool first = true;
+	for (const auto &[name, sizes] : UiExported) {
+		json += first ? "\n" : ",\n";
+		first = false;
+		json += "{\"name\":\"" + name + "\",\"frames\":" + std::to_string(sizes.size()) + ",\"sizes\":[";
+		for (size_t i = 0; i < sizes.size(); i++) {
+			if (i != 0)
+				json += ",";
+			json += "[" + std::to_string(sizes[i].first) + "," + std::to_string(sizes[i].second) + "]";
+		}
+		json += "]}";
+	}
+	json += "\n]}\n";
+	const std::string dir = UiExportDir + "/ui";
+	RecursivelyCreateDir(dir.c_str());
+	if (FILE *f = std::fopen((dir + "/list.json").c_str(), "wb"); f != nullptr) {
+		std::fwrite(json.data(), 1, json.size(), f);
+		std::fclose(f);
+	}
+	LogInfo("HD export: wrote {} UI pictures", UiExported.size());
+	UiExportDir.clear();
+	UiExported.clear();
 }
 
 void RestoreUiSprites()
@@ -653,19 +1914,21 @@ void RestoreUiSprites()
 
 void RenderUiSprites(SDL_Renderer *renderer)
 {
-	if (renderer != UiArtRenderer) {
-		// The old renderer took its textures with it.
-		ForgetTextures();
-		UiArtRenderer = renderer;
-	}
-	if (MaskedTextures.size() > 256) {
+	UseRenderer(renderer);
+	if (MaskedTextures.size() > 256 || MaskedTexturePixels > MaskedTexturePixelBudget) {
 		for (auto &[key, texture] : MaskedTextures)
 			SDL_DestroyTexture(texture);
 		MaskedTextures.clear();
+		MaskedTexturePixels = 0;
 	}
 	for (UiDraw &draw : UiDraws) {
-		if (draw.shown == 0 || draw.art == nullptr || renderer == nullptr)
+		// Panels went under the UI (RenderUiPanels).
+		if (draw.shown == 0 || draw.art == nullptr || renderer == nullptr || draw.name->panel)
 			continue;
+		if (draw.name->spellIcon) {
+			DrawFittedUiArt(renderer, draw);
+			continue;
+		}
 		UiArt &art = *draw.art;
 		const SDL_FRect dest = DestOf(draw);
 		SDL_Texture *texture = nullptr;
@@ -704,20 +1967,67 @@ void RenderUiSprites(SDL_Renderer *renderer)
 							row[static_cast<ptrdiff_t>(x) * 4 + 3] = 0;
 					}
 				}
-				it->second = MakeTexture(renderer, copy);
+				KeepMaskedTexture(it->second, MakeTexture(renderer, copy), copy->w, copy->h);
 				SDL_FreeSurface(copy);
 			}
 			texture = it->second;
 		}
-		if (texture != nullptr)
+		// A menu logo's live fire goes behind it, and lights it: the UI under it already shows no old fire.
+		const bool drawn = texture != nullptr && draw.name->fire != nullptr && DrawMenuFire(renderer, draw, dest, texture);
+		if (texture != nullptr && !drawn) {
+			FadeUiTexture(texture);
 			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+		}
 		// Over the picture, as the world's outlines go over their sprites: it leaves out what the picture covers.
 		if (draw.outline.smooth)
 			DrawUiOutline(renderer, draw, dest);
 	}
+	// Kept, should the same frame be shown again with nothing drawn since (PrepareUiSprites).
+	ShownUiDraws = std::move(UiDraws);
+	ShownUiBlits = std::move(UiBlits);
 	UiDraws.clear();
+	UiBlits.clear();
+	UiOrder = 0;
+	ShowingShownUiDraws = false;
 	PendingUiOutline = {};
 	UiOutlines.Prune(SDL_GetTicks());
+	ReleaseIdleMenuFire();
+}
+
+void DropUiDraws()
+{
+	UiDraws.clear();
+	UiBlits.clear();
+	UiOrder = 0;
+	PendingUiOutline = {};
+	ReleaseIdleMenuFire();
+}
+
+void ForgetMenuFire()
+{
+	intro_sdl::ReleaseLines();
+	menu_secret::Forget();
+	if (MenuFire != nullptr)
+		MenuFire->ReleaseTextures();
+	MenuFire = nullptr;
+	MenuFireTried = false;
+	MenuFireCounter = 0;
+	MenuFireCover.clear();
+	if (const auto it = UiArts.find(FireMapsArt); it != UiArts.end()) {
+		if (it->second.picture != nullptr)
+			SDL_FreeSurface(it->second.picture);
+		UiArts.erase(it);
+	}
+}
+
+bool UiPictureFrameOf(const uint8_t *pixels, std::string &name, UiPictureLayer &layer)
+{
+	const auto it = UiSpriteNames.find(pixels);
+	if (it == UiSpriteNames.end() || !it->second.picture)
+		return false;
+	name = it->second.name;
+	layer = it->second.panel ? UiPictureLayer::Under : UiPictureLayer::Over;
+	return true;
 }
 
 #else
@@ -727,6 +2037,18 @@ void RegisterFittedUiSprite(ClxSprite, ClxSprite) { }
 void PrepareUiSprites() { }
 void RestoreUiSprites() { }
 void RenderUiSprites(SDL_Renderer *) { }
+const uint8_t *UiHiddenPixels(int, int) { return nullptr; }
+void RenderUiPanels(SDL_Renderer *) { }
+void DropUiDraws() { }
+void ForgetMenuFire() { }
+bool UiPictureFrameOf(const uint8_t *, std::string &, UiPictureLayer &) { return false; }
+bool HasMenuBackground() { return false; }
+void ShowMenuBackground(bool) { }
+bool MenuBackgroundIsShown() { return false; }
+bool DrawMenuBackground(SDL_Renderer *, SDL_Texture *) { return false; }
+void BeginUiExport(const std::string &) { }
+void ExportUiSurface(std::string_view, const Surface &) { }
+void EndUiExport() { }
 
 #endif
 

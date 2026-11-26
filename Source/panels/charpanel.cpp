@@ -19,6 +19,7 @@
 #include "player.h"
 #include "poe2/defenses.hpp"
 #include "poe2/effect_primitives.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/jewels.hpp"
 #include "poe2/passive_tree.hpp"
 #include "poe2/regen.hpp"
@@ -365,12 +366,18 @@ std::expected<void, std::string> LoadCharPanel()
 		}
 	}
 
+	hd::ForgetUiPicture(Panel);
 	Panel = SurfaceToClx(out);
+	// POE2 Mashup: the sheet, as put together here (boxes and labels), shows the HD pack's art of it.
+	// The HD art has the labels painted in, so POE2 rules (Armour / Evasion, Resist cold) use their own picture
+	// and Sanctuary Reforged keeps the vanilla words (Armor class, Resist magic).
+	hd::RegisterUiPicture(gbIsPoe2 ? "ui/char_panel_poe2" : "ui/char_panel", *Panel);
 	return {};
 }
 
 void FreeCharPanel()
 {
+	hd::ForgetUiPicture(Panel);
 	Panel = std::nullopt;
 }
 
@@ -408,6 +415,8 @@ void DrawChr(const Surface &out)
 {
 	const Point pos = GetPanelPosition(UiPanels::Character, { 0, 0 });
 	RenderClxSprite(out, (*Panel)[0], pos);
+	// POE2 Mashup: the numbers, name and class show the HD panel letters where the HD pack has them.
+	const PanelLettersScope panelLetters;
 	for (auto &entry : panelEntries) {
 		if (entry.statDisplayFunc) {
 			const StyledText tmp = (*entry.statDisplayFunc)();

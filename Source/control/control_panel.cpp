@@ -26,6 +26,7 @@
 #include "panels/spell_list.hpp"
 #include "pfile.h"
 #include "poe2/hardcore.hpp"
+#include "poe2/hd.hpp"
 #include "poe2/passive_tree.hpp"
 #include "qol/stash.h"
 #include "qol/visual_store.h"
@@ -382,6 +383,8 @@ Point GetPanelPosition(UiPanels panel, Point offset)
 
 void DrawPanelBox(const Surface &out, SDL_Rect srcRect, Point targetPosition)
 {
+	// POE2 Mashup: the bottom panel shows the HD pack's art of it (all of BottomBuffer as one picture) under the UI.
+	hd::RecordUiBlit(out, *BottomBuffer, Rectangle { { srcRect.x, srcRect.y }, { srcRect.w, srcRect.h } }, targetPosition, "ui/bottom_panel");
 	out.BlitFrom(*BottomBuffer, srcRect, targetPosition);
 }
 
@@ -416,6 +419,9 @@ std::expected<void, std::string> InitMainPanel()
 			}
 			multiButtons = LoadCel("ctrlpan\\p8but2", 33);
 			talkButtons = LoadCel("ctrlpan\\talkbutt", 61);
+			// POE2 Mashup: the chat buttons show the HD pack's art of them.
+			hd::RegisterUiPicture("ctrlpan\\p8but2", *multiButtons);
+			hd::RegisterUiPicture("ctrlpan\\talkbutt", *talkButtons);
 		}
 		sgbPlrTalkTbl = 0;
 		TalkMessage[0] = '\0';
@@ -432,6 +438,9 @@ std::expected<void, std::string> InitMainPanel()
 
 		static const uint16_t CharButtonsFrameWidths[9] { 95, 41, 41, 41, 41, 41, 41, 41, 41 };
 		ASSIGN_OR_RETURN(pChrButtons, LoadCelWithStatus("data\\charbut", CharButtonsFrameWidths));
+		// POE2 Mashup: the pressed panel buttons and the character sheet's buttons show the HD pack's art of them.
+		hd::RegisterUiPicture("ctrlpan\\panel8bu", *pMainPanelButtons);
+		hd::RegisterUiPicture("data\\charbut", *pChrButtons);
 	}
 	ResetMainPanelButtons();
 	if (!HeadlessMode)
@@ -452,6 +461,9 @@ std::expected<void, std::string> InitMainPanel()
 		RETURN_IF_ERROR(InitSpellBook());
 		ASSIGN_OR_RETURN(pQLogCel, LoadCelWithStatus("data\\quest", static_cast<uint16_t>(SidePanelSize.width)));
 		ASSIGN_OR_RETURN(GoldBoxBuffer, LoadCelWithStatus("ctrlpan\\golddrop", 261));
+		// POE2 Mashup: the quest log and the gold box show the HD pack's art of them.
+		hd::RegisterUiPicture("data\\quest", *pQLogCel);
+		hd::RegisterUiPicture("ctrlpan\\golddrop", *GoldBoxBuffer);
 	}
 	CloseGoldDrop();
 	CalculatePanelAreas();
@@ -667,6 +679,8 @@ void FreeControlPan()
 	pLifeBuff = std::nullopt;
 	FreeLargeSpellIcons();
 	FreeSpellBook();
+	for (const OptionalOwnedClxSpriteList *art : { &pMainPanelButtons, &multiButtons, &talkButtons, &pChrButtons, &pQLogCel, &GoldBoxBuffer })
+		hd::ForgetUiPicture(*art);
 	pMainPanelButtons = std::nullopt;
 	multiButtons = std::nullopt;
 	talkButtons = std::nullopt;
@@ -856,7 +870,10 @@ void DrawDeathText(const Surface &out)
 	}
 
 	if (HardcoreHeroFell()) {
-		text = FormatRuntime(_("Your hardcore hero has fallen. Press {} to continue in Softcore."), buttonText);
+		if (gbIsReforged)
+			text = FormatRuntime(_("Your hardcore hero has fallen. Press {} to continue as a Normal hero."), buttonText);
+		else
+			text = FormatRuntime(_("Your hardcore hero has fallen. Press {} to continue in Softcore."), buttonText);
 	} else if (!gbIsMultiplayer) {
 		if (gbValidSaveFile)
 			text = FormatRuntime(_("Press {} to load last save."), buttonText);

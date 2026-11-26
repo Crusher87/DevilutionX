@@ -59,6 +59,12 @@ struct VisualStoreState {
 /** @brief Whether stores use the grid UI: always in POE2 mode, otherwise when the option picks it. */
 bool UseVisualStoreUi();
 
+/**
+ * @brief Whether the shop has POE2 Mashup's look and comfort: a tab per kind of item, buyback, search, and a ware picked
+ * up and put in the bag to buy it. POE2 Mashup, and Sanctuary Reforged with Diablo's and Hellfire's own stock and prices.
+ */
+bool UsesShopTabs();
+
 /** @brief POE2 Mashup: the vendor's tabs, like POE2's vendor screen: one per kind of item, and buyback. */
 enum class Poe2ShopTab : uint8_t {
 	Weapons,

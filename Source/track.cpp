@@ -171,8 +171,8 @@ void RepeatPlayerAction()
 	switch (LastPlayerAction) {
 	case PlayerActionType::Attack:
 		if (InDungeonBounds(cursPosition)) {
-			// POE2 Mashup: held, a bow keeps shooting exactly where the cursor points.
-			const Point target = gbIsPoe2 && rangedAttack ? AimAlongCursor(myPlayer, AimTiles) : cursPosition;
+			// POE2 Mashup, and Sanctuary Reforged with WASD movement: held, a bow keeps shooting exactly where the cursor points.
+			const Point target = HasEnhancements() && rangedAttack && (gbIsPoe2 || IsWasdMovementEnabled()) ? AimAlongCursor(myPlayer, AimTiles) : cursPosition;
 			NetSendCmdLoc(MyPlayerId, true, rangedAttack ? CMD_RATTACKXY : CMD_SATTACKXY, target);
 		}
 		break;
@@ -181,8 +181,9 @@ void RepeatPlayerAction()
 			if (!rangedAttack && IsMeleeAttackRedundant(myPlayer, Monsters[pcursmonst].position.future))
 				break;
 			NetSendCmdParam1(true, rangedAttack ? CMD_RATTACKID : CMD_ATTACKID, pcursmonst);
-		} else if (gbIsPoe2 && rangedAttack && IsWasdMovementEnabled() && InDungeonBounds(cursPosition)) {
-			// POE2 Mashup: once the target dies or slips out of sight, a held bow keeps shooting toward the cursor.
+		} else if (HasEnhancements() && rangedAttack && IsWasdMovementEnabled() && InDungeonBounds(cursPosition)) {
+			// POE2 Mashup and Sanctuary Reforged: once the target dies or slips out of sight, a held bow keeps shooting toward
+			// the cursor.
 			LastPlayerAction = PlayerActionType::Attack;
 			NetSendCmdLoc(MyPlayerId, true, CMD_RATTACKXY, AimAlongCursor(myPlayer, AimTiles));
 		}

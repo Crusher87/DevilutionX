@@ -40,8 +40,11 @@
 #include "levels/tileset_mix.hpp"
 #include "options.h"
 #include "poe2/atmosphere.hpp"
+#include "poe2/carved_bodies.hpp"
+#include "poe2/hd_batch.hpp"
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_outline.hpp"
+#include "poe2/hd_pack.hpp"
 #include "poe2/moments.hpp"
 #include "poe2/props.hpp"
 #include "poe2/telemetry.hpp"
@@ -62,6 +65,7 @@ namespace hd {
 float SubFrame = 0;
 bool SubFrameBackward = false;
 Caster CurrentCaster = Caster::None;
+bool CurrentCorpse = false;
 float CurrentGhost = 0;
 OutlineLook CurrentOutlineLook;
 Point CurrentTile;
@@ -69,6 +73,22 @@ Point CurrentTileOrigin;
 bool HaveTile = false;
 
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
+
+#ifdef POE2_HD_BATCH
+// The batching experiment (hd_batch.hpp, feel("batch", 1)): everything this file draws goes to SDL through it, so that
+// it can gather the tiles' draws into batches, send them on before anything else is drawn, and count the calls for the
+// play log. With the switch off each of these passes its call straight on to the SDL function of its name.
+#define SDL_RenderGeometry(...) batch::Geometry(__VA_ARGS__)
+#define SDL_RenderCopyF(...) batch::CopyF(__VA_ARGS__)
+#define SDL_RenderCopy(...) batch::Copy(__VA_ARGS__)
+#define SDL_RenderFillRect(...) batch::FillRect(__VA_ARGS__)
+#define SDL_RenderFillRectF(...) batch::FillRectF(__VA_ARGS__)
+#define SDL_RenderClear(...) batch::ClearTarget(__VA_ARGS__)
+#define SDL_SetRenderTarget(...) batch::SetTarget(__VA_ARGS__)
+#define SDL_RenderSetClipRect(...) batch::SetClipRect(__VA_ARGS__)
+#define SDL_DestroyTexture(...) batch::DestroyTexture(__VA_ARGS__)
+#define SDL_UpdateTexture(...) batch::UpdateTexture(__VA_ARGS__)
+#endif
 
 namespace {
 
@@ -131,6 +151,8 @@ struct Draw {
 	const std::string *recolour = nullptr;
 	/** @brief Something unseen (GhostScope): how much of it shows as a faint trace; 0 for a thing drawn as usual. */
 	float ghost = 0;
+	/** @brief A dead body lying on the floor (CorpseScope). */
+	bool corpse = false;
 };
 
 /** @brief The part of a shadow picture that isn't empty, in texture coordinates (0 to 1): across from u0 to u1, down from vTop. */
@@ -308,7 +330,58 @@ SDL_Rect OverClip {};
 SDL_FPoint OverHero {};
 float OverTilePixels = 0;
 
+/**
+ * POE2 Mashup: the HD world as last drawn, kept while the game stands still under the game menu (KeepWorldPicture), so
+ * the frames after it show it again instead of drawing it all again. A picture of the render target's own pixels, one
+ * for one, drawn at the target's scale as the rain's picture of the world is (vfx::BeginScene).
+ */
+struct KeptPicture {
+	SDL_Renderer *renderer = nullptr;
+	SDL_Texture *texture = nullptr;
+	/** @brief Its size in the render target's own pixels, and the scale from the UI's pixels to them. */
+	int width = 0;
+	int height = 0;
+	float scaleX = 1;
+	float scaleY = 1;
+	Size worldSize;
+	Size logicalSize;
+	/** @brief The palettes it was drawn with: the brightness setting, a fade and the lava's moving colours change it. */
+	std::array<SDL_Color, 256> logical {};
+	std::array<SDL_Color, 256> screen {};
+	/** @brief It holds a whole frame of the HD world, one where nothing was still waiting for its picture. */
+	bool valid = false;
+	/** @brief That frame worked the HD light out (the effects read it) and left the moments to draw over it. */
+	bool lightUpdated = false;
+	bool overPending = false;
+};
+KeptPicture KeptHd;
+/** @brief The world stands still and may be kept (KeepWorldPicture), and the recorded draws may be drawn again (ReplayWorld). */
+bool KeepWanted = false;
+bool WorldReplayable = false;
+/** @brief The HD world is being drawn into the kept picture right now. */
+bool Capturing = false;
+
+/** @brief For whoever draws into a texture of their own while the world goes into the kept picture and then goes back (vfx::ResumeScene). */
+void ResumeKept(SDL_Renderer *renderer, const SDL_Rect *clip)
+{
+	if (!Capturing)
+		return;
+	SDL_RenderSetScale(renderer, KeptHd.scaleX, KeptHd.scaleY);
+	SDL_RenderSetClipRect(renderer, clip);
+}
+
 SDL_Renderer *CacheRenderer = nullptr;
+
+/** @brief Lets the kept picture go; `destroy` when its renderer is still there to free it. */
+void DropKept(bool destroy)
+{
+	if (destroy && KeptHd.texture != nullptr && KeptHd.renderer != nullptr)
+		SDL_DestroyTexture(KeptHd.texture);
+	KeptHd.texture = nullptr;
+	KeptHd.renderer = nullptr;
+	KeptHd.valid = false;
+}
+
 const std::byte *CacheCels = nullptr;
 dungeon_type CacheLevelType = DTYPE_NONE;
 
@@ -462,7 +535,7 @@ uint32_t PaletteVersion = 1;
 std::array<SDL_Color, 256> LastPalette;
 
 int PackState = -1;
-/** @brief The HD pack is loose files on disk, not packed in an archive: its pictures can be read ahead by the reader. */
+/** @brief The HD pack is loose files on disk or HD pack files (hd\index.hdx), not packed in an archive: its pictures can be read ahead by the reader. */
 bool PackLoose = false;
 
 /** @brief The palette this level type's HD tiles were made in, and a count of its loads. */
@@ -532,9 +605,15 @@ int LightIndexOf(const uint8_t *tbl)
 
 void DropReadPictures();
 void KeepTilePictures();
+void FreeCarvedCards(bool destroy);
 
 void DestroyTextures()
 {
+	DropKept(CacheRenderer != nullptr && KeptHd.renderer == CacheRenderer);
+	WorldReplayable = false;
+#ifdef POE2_HD_BATCH
+	batch::Release(CacheRenderer != nullptr);
+#endif
 	if (CacheRenderer != nullptr) {
 		for (auto &[name, art] : Art) {
 			if (art.texture != nullptr)
@@ -553,6 +632,7 @@ void DestroyTextures()
 		for (auto &[key, raster] : Rasters)
 			FreeRasterTextures(raster);
 	}
+	FreeCarvedCards(CacheRenderer != nullptr);
 	Art.clear();
 	Rasters.clear();
 	ArtChoices.clear();
@@ -883,6 +963,11 @@ int SettledFrames = 0;
 constexpr int SettlingFrames = 3;
 /** @brief A picture was not in yet when it was asked for, since this was last cleared: what was chosen is not kept. */
 bool ArtLater = false;
+/**
+ * POE2 Mashup: something in this frame's HD world showed the game's own pixels for want of its picture or its outline,
+ * so the next frame may look different: the world isn't kept as it is under the game menu (KeepWorldPicture).
+ */
+bool FrameWaited = false;
 uint64_t PictureBudgetEnd = 0;
 bool PictureMadeThisFrame = false;
 /** @brief The dungeon pieces whose pictures were asked for ahead (ReadAheadTiles). */
@@ -899,30 +984,35 @@ bool IsTilePicture(std::string_view path)
 	return path.starts_with("hd\\tiles\\");
 }
 
-/** @brief Reads a loose picture from the first folder that has it. Safe on any thread. */
+/** @brief Reads a picture from the first folder that has it as a loose file, or else from the HD pack files. Safe on any thread. */
 SDL_Surface *ReadLoosePicture(const std::vector<std::string> &dirs, const std::string &path)
 {
 	std::string relative = path;
 #ifndef _WIN32
 	std::replace(relative.begin(), relative.end(), '\\', '/');
 #endif
+	SDL_RWops *file = nullptr;
 	for (const std::string &dir : dirs) {
-		SDL_RWops *file = SDL_RWFromFile((dir + relative).c_str(), "rb");
-		if (file == nullptr)
-			continue;
-		SDL_Surface *surface = IMG_LoadPNG_RW(file);
-		SDL_RWclose(file);
-		// A tile's picture is cut to the tile's shape in this format (MaskedArt): turned into it here, off the frame.
-		if (surface != nullptr && surface->format->format != SDL_PIXELFORMAT_RGBA32 && IsTilePicture(path)) {
-			SDL_Surface *rgba = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
-			if (rgba != nullptr) {
-				SDL_FreeSurface(surface);
-				surface = rgba;
-			}
-		}
-		return surface;
+		file = SDL_RWFromFile((dir + relative).c_str(), "rb");
+		if (file != nullptr)
+			break;
 	}
-	return nullptr;
+	// No loose file of that name: the HD pack files (hd\index.hdx) may have it.
+	if (file == nullptr)
+		file = hdpack::Open(path);
+	if (file == nullptr)
+		return nullptr;
+	SDL_Surface *surface = IMG_LoadPNG_RW(file);
+	SDL_RWclose(file);
+	// A tile's picture is cut to the tile's shape in this format (MaskedArt): turned into it here, off the frame.
+	if (surface != nullptr && surface->format->format != SDL_PIXELFORMAT_RGBA32 && IsTilePicture(path)) {
+		SDL_Surface *rgba = SDL_ConvertSurfaceFormat(surface, SDL_PIXELFORMAT_RGBA32, 0);
+		if (rgba != nullptr) {
+			SDL_FreeSurface(surface);
+			surface = rgba;
+		}
+	}
+	return surface;
 }
 
 #ifdef POE2_HD_READER
@@ -1001,6 +1091,8 @@ bool ReaderOn()
 void UpdateReadDirs()
 {
 	const std::string &assets = paths::AssetsPath();
+	// The pack files are looked for in the same folders (the reader's threads read from them without asking FindAsset).
+	hdpack::MountFromGameFolders(OverridePaths, assets);
 	if (ReadDirs.size() == OverridePaths.size() + 1 && ReadDirs.back() == assets && std::equal(OverridePaths.begin(), OverridePaths.end(), ReadDirs.begin()))
 		return;
 	ReadDirs = OverridePaths;
@@ -1389,13 +1481,33 @@ constexpr float ShapeLeastShare = 0.004F;
  * the screen, y left and down, z up) and shared out among the axes it leans to by the square of its lean, which adds up
  * to one: its colour goes into each axis's picture at that share of its alpha.
  */
-void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name, bool tile = false)
+void MakeShapeFrom(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, SDL_Surface *loaded, bool tile, bool deadBody);
+
+void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name, bool tile = false, bool deadBody = false)
 {
 	if (picture->format->format != SDL_PIXELFORMAT_RGBA32)
 		return;
 	SDL_Surface *loaded = TakePicture(PicturePath(name + "_n"), false);
+	// A monster in other colours (a type's, monsters/zombie/zombied@zombie/bluered/d3_f15, or a unique's,
+	// monsters/zombie/zombied+white/d3_f15) has the shape of the art it was recoloured from.
+	if (loaded == nullptr && !tile) {
+		const size_t cut = name.find_first_of("@+");
+		const size_t slash = name.rfind('/');
+		if (cut != std::string::npos && slash != std::string::npos && cut < slash)
+			loaded = TakePicture(PicturePath(name.substr(0, cut) + name.substr(slash) + "_n"), false);
+	}
 	if (loaded == nullptr)
 		return;
+	MakeShapeFrom(renderer, art, picture, loaded, tile, deadBody);
+}
+
+/** @brief MakeShape with its shape map given (`loaded`, freed here): the picture split by the way each part faces. */
+void MakeShapeFrom(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, SDL_Surface *loaded, bool tile, bool deadBody)
+{
+	if (picture->format->format != SDL_PIXELFORMAT_RGBA32) {
+		SDL_FreeSurface(loaded);
+		return;
+	}
 	SDL_Surface *map = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
 	SDL_FreeSurface(loaded);
 	if (map == nullptr)
@@ -1433,6 +1545,13 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 				right = 0;
 				up = 0;
 				toEye = 1;
+			}
+			// A dead body's own soft shadow painted under it (as WithoutPaintedShadow finds it) is floor, not body:
+			// it faces straight up, so the body's bumps never light it.
+			if (deadBody && pixel[3] < 160 && std::max({ pixel[0], pixel[1], pixel[2] }) < 24) {
+				right = 0;
+				up = ViewCos;
+				toEye = ViewSin;
 			}
 			float nx = (right - up * ViewSin + toEye * ViewCos) / Root2;
 			float ny = (-right - up * ViewSin + toEye * ViewCos) / Root2;
@@ -1479,6 +1598,9 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 		// Nearest, like the tile's own art (see MaskedArt).
 		SDL_SetTextureScaleMode(art.sheet, SDL_ScaleModeNearest);
 #endif
+#ifdef POE2_HD_BATCH
+		batch::Add(renderer, art.sheet, sheet.data(), cell * static_cast<int>(NumShapeAxes), height, cell * static_cast<int>(NumShapeAxes) * 4);
+#endif
 		art.sheetCell = width;
 		art.shaped = true;
 		return;
@@ -1500,6 +1622,8 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 	}
 }
 
+void MakeBodyShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name);
+
 /**
  * @brief A sprite's HD art, loaded the first time it is asked for (its texture is null when there is none). A sprite
  * drawn with an outline (`outlined`) gets its smooth outline made at the same time, from the picture just loaded.
@@ -1518,6 +1642,7 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 	art.waiting = mayComeLater && ReaderOn() && SettledFrames >= SettlingFrames && !PictureIsIn(PicturePath(name), false);
 	if (art.waiting) {
 		ArtLater = true;
+		FrameWaited = true;
 		ReadAheadSprite(name, withoutShadow);
 		return art;
 	}
@@ -1547,8 +1672,10 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 			art.outlines[static_cast<size_t>(OutlineCut::Glow)] = OutlineFromPicture(renderer, surface, *outlined, OutlineCut::Glow, !withoutShadow);
 	}
 	art.texture = SDL_CreateTextureFromSurface(renderer, surface);
-	if (art.texture != nullptr && object != nullptr && withoutShadow)
-		MakeShape(renderer, art, surface, name);
+	if (art.texture != nullptr && object != nullptr && (withoutShadow || object->corpse))
+		MakeShape(renderer, art, surface, name, false, object->corpse && !withoutShadow);
+	else if (art.texture != nullptr && object == nullptr && withoutShadow)
+		MakeBodyShape(renderer, art, surface, name);
 	SDL_FreeSurface(surface);
 	if (art.texture != nullptr) {
 		SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
@@ -1990,6 +2117,7 @@ HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &dr
 	art.waiting = ReaderOn() && SettledFrames >= SettlingFrames && !PictureIsIn(path, true);
 	if (art.waiting) {
 		ArtLater = true;
+		FrameWaited = true;
 		return nullptr;
 	}
 	const SlowWorkScope timed(SlowWork::HdArt);
@@ -2028,6 +2156,11 @@ HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &dr
 			// Nearest, like the game's own tiles: smoothing the cut edges of two tiles that meet lets the black
 			// under them show through as thin lines wherever the screen isn't drawn at exactly twice the world.
 			SDL_SetTextureScaleMode(art.texture, SDL_ScaleModeNearest);
+#endif
+#ifdef POE2_HD_BATCH
+			// (Not lava or water that flows: its picture is painted again as it does.)
+			if (art.flow == nullptr)
+				batch::Add(renderer, art.texture, surface->pixels, surface->w, surface->h, surface->pitch);
 #endif
 			// Made from the picture as cut here, so a wall cut away near the hero has its shape cut the same way.
 			if (TileMapsHere && art.flow == nullptr)
@@ -2078,7 +2211,8 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 	bool recoloured = false;
 	// With HD Lighting, heroes, monsters and solid objects cast shadows of their own in place of the one painted in.
 	const bool withoutShadow = FrameLit && draw.caster != Caster::None;
-	const Draw *object = IsObject(draw.caster) ? &draw : nullptr;
+	// A dead body takes its shape map too (DrawShapedCorpse); it keeps the shadow painted under it.
+	const Draw *object = IsObject(draw.caster) || draw.corpse ? &draw : nullptr;
 	// In-betweens 1 and 2 lead to the next frame (_m1, _m2); 3 and 4 back to the frame before (_b1, _b2).
 	if (draw.inBetween != 0 && !masked) {
 		const bool back = draw.inBetween > 2;
@@ -2204,8 +2338,10 @@ const Outline *SmoothOutline(SDL_Renderer *renderer, const Draw &sprite, Outline
 		if (choice.art != nullptr) {
 			Outline &outline = choice.art->outlines[index];
 			if (!outline.tried) {
-				if (!MayMakeOutline())
+				if (!MayMakeOutline()) {
+					FrameWaited = true;
 					return nullptr;
+				}
 				outline = MakeArtOutline(renderer, *choice.art, sprite, cut);
 				OutlineMadeThisFrame = true;
 			}
@@ -2215,8 +2351,10 @@ const Outline *SmoothOutline(SDL_Renderer *renderer, const Draw &sprite, Outline
 	Raster &raster = FallbackRaster(sprite, false);
 	Outline &outline = raster.outlines[index];
 	if (!outline.tried) {
-		if (!MayMakeOutline())
+		if (!MayMakeOutline()) {
+			FrameWaited = true;
 			return nullptr;
+		}
 		outline = MakeRasterOutline(renderer, sprite, cut);
 		OutlineMadeThisFrame = true;
 	}
@@ -3977,6 +4115,324 @@ void AddWallShade(SDL_Renderer *renderer, const WallHit &hit, const WallStrip &s
 	}
 }
 
+// Carved bodies (carved_bodies.hpp): a hero's or monster's shadow cast from its solid body as each light sees it from
+// its own side, instead of from the drawing that faces the viewer. Each light's view of a pose is made once and kept.
+
+/** @brief Each sprite folder's carved bodies (monsters/zombie/zombien), or null when it has none. */
+std::unordered_map<std::string, std::unique_ptr<carved::Sprite>> CarvedSprites;
+
+/** @brief A body as one light sees it: its sharp and soft shadow pictures, laid out as a sprite's (CastTextures). */
+struct CarvedCard {
+	SDL_Texture *sharp = nullptr;
+	SDL_Texture *soft = nullptr;
+	CastPart sharpPart;
+	CastPart softPart;
+	/** @brief Its picture's size and floor row, in game pixels, without CastPad. */
+	float width = 0;
+	float height = 0;
+	float floor = 0;
+	uint32_t used = 0;
+};
+struct CarvedKey {
+	const carved::Pose *pose;
+	int facing;
+	int bearing;
+	bool operator==(const CarvedKey &other) const = default;
+};
+struct CarvedKeyHash {
+	size_t operator()(const CarvedKey &key) const noexcept
+	{
+		return std::hash<const void *> {}(key.pose) ^ (static_cast<size_t>(key.facing) * 131U) ^ (static_cast<size_t>(key.bearing) * 1000003U);
+	}
+};
+std::unordered_map<CarvedKey, CarvedCard, CarvedKeyHash> CarvedCards;
+/** @brief The ways round a light can lie from a body that each get their own picture. */
+constexpr int CarvedBearings = 32;
+/** @brief How many pictures are kept, and how many new ones a frame may make (the rest show the nearest one kept). */
+constexpr size_t CarvedKept = 3000;
+constexpr int CarvedPerFrame = 24;
+uint32_t CarvedFrame = 0;
+uint32_t CarvedFrameOfBudget = 0;
+int CarvedMadeThisFrame = 0;
+
+void FreeCarvedCards(bool destroy)
+{
+	if (destroy) {
+		for (auto &[key, card] : CarvedCards) {
+			if (card.sharp != nullptr)
+				SDL_DestroyTexture(card.sharp);
+			if (card.soft != nullptr)
+				SDL_DestroyTexture(card.soft);
+		}
+	}
+	CarvedCards.clear();
+	CarvedSprites.clear();
+}
+
+/** @brief A sprite folder's carved bodies, read the first time they are asked for; null when it has none. */
+const carved::Sprite *CarvedSpriteOf(std::string_view folder)
+{
+	auto [it, inserted] = CarvedSprites.try_emplace(std::string(folder));
+	if (!inserted)
+		return it->second.get();
+	std::string path = "hd\\" + std::string(folder) + "\\carved.bin";
+	std::replace(path.begin(), path.end(), '/', '\\');
+	size_t size = 0;
+	auto data = LoadFileInMemWithStatus<uint8_t>(path.c_str(), &size);
+	if (!data.has_value())
+		return nullptr;
+	auto sprite = std::make_unique<carved::Sprite>();
+	if (!carved::Parse(std::span<const uint8_t>(data->get(), size), *sprite)) {
+		LogWarn("HD: {} isn't a carved body file", path);
+		return nullptr;
+	}
+	it->second = std::move(sprite);
+	return it->second.get();
+}
+
+/** @brief The carved body a draw shows, its facing, and where on the floor it stands. */
+struct CarvedLook {
+	const carved::Sprite *sprite = nullptr;
+	const carved::Pose *pose = nullptr;
+	int facing = 0;
+	/** @brief Its floor point in the world buffer and in the world (tiles). */
+	float bx = 0;
+	float by = 0;
+	float wx = 0;
+	float wy = 0;
+};
+
+/** @brief The carved body of a hero or monster draw, with feel("carved") on; false when it has none. */
+bool CarvedLookOf(const Draw &draw, CarvedLook &look)
+{
+	if (draw.kind != DrawKind::Sprite || IsObject(draw.caster) || draw.corpse || atmosphere::Setting(atmosphere::Knob::Carved) <= 0)
+		return false;
+	const std::string *artName = ArtName(draw);
+	if (artName == nullptr)
+		return false;
+	// A monster type in other colours (monsters/zombie/zombied@zombie/bluered/d3_f15) has its base art's body.
+	std::string_view name = *artName;
+	std::string base;
+	size_t slash = name.rfind('/');
+	if (slash == std::string_view::npos)
+		return false;
+	if (const size_t cut = name.find_first_of("@+"); cut != std::string_view::npos && cut < slash) {
+		base = std::string(name.substr(0, cut)).append(name.substr(slash));
+		name = base;
+		slash = name.rfind('/');
+	}
+	const int facing = carved::FacingOf(name);
+	if (facing < 0)
+		return false;
+	const carved::Sprite *sprite = CarvedSpriteOf(name.substr(0, slash));
+	if (sprite == nullptr)
+		return false;
+	const carved::Pose *pose = sprite->Find(carved::PoseOf(name, draw.inBetween));
+	if (pose == nullptr)
+		pose = sprite->Find(carved::PoseOf(name, 0));
+	if (pose == nullptr || pose->count == 0)
+		return false;
+	look.sprite = sprite;
+	look.pose = pose;
+	look.facing = facing;
+	float fx;
+	float fy;
+	sprite->FeetAt(facing, fx, fy);
+	look.bx = static_cast<float>(draw.x) + fx;
+	look.by = static_cast<float>(draw.y) + fy;
+	WorldOf(look.bx, look.by, look.wx, look.wy);
+	return true;
+}
+
+/** @brief Makes the shadow pictures of a body as a light shining along (dx, dy) sees it. */
+bool MakeCarvedCard(SDL_Renderer *renderer, const CarvedLook &look, float dx, float dy, CarvedCard &card)
+{
+	carved::Card shape;
+	carved::MakeCard(look.sprite->BallsOf(*look.pose), look.facing, ViewLean, dx, dy, TileAcross, static_cast<int>(HalfTileHeight), shape);
+	if (shape.width <= 0 || shape.height <= 0)
+		return false;
+	const int width = shape.width + CastPad * 2;
+	const int height = shape.height + CastPad * 2;
+	std::vector<float> mask(static_cast<size_t>(width) * height, 0.F);
+	for (int y = 0; y < shape.height; y++)
+		std::copy_n(shape.cover.begin() + static_cast<ptrdiff_t>(y) * shape.width, shape.width, mask.begin() + static_cast<ptrdiff_t>(y + CastPad) * width + CastPad);
+	int halfWidth;
+	int halfHeight;
+	const std::vector<float> sharp = Halved(Blur(mask, width, height, SharpBlur), width, height, halfWidth, halfHeight);
+	const std::vector<float> soft = Blur(Halved(mask, width, height, halfWidth, halfHeight), halfWidth, halfHeight, SoftBlur / 2);
+	card.sharp = ShapeTexture(renderer, sharp, halfWidth, halfHeight);
+	card.soft = ShapeTexture(renderer, soft, halfWidth, halfHeight);
+	card.sharpPart = PartOf(sharp, halfWidth, halfHeight);
+	card.softPart = PartOf(soft, halfWidth, halfHeight);
+	card.width = static_cast<float>(shape.width);
+	card.height = static_cast<float>(shape.height);
+	card.floor = static_cast<float>(shape.floorRow) + 0.5F;
+	return card.sharp != nullptr && card.soft != nullptr;
+}
+
+/** @brief Lets the pictures not used for longest go once more are kept than CarvedKept. */
+void TrimCarvedCards()
+{
+	if (CarvedCards.size() <= CarvedKept)
+		return;
+	std::vector<uint32_t> ages;
+	ages.reserve(CarvedCards.size());
+	for (const auto &[key, card] : CarvedCards)
+		ages.push_back(card.used);
+	const size_t drop = CarvedCards.size() - CarvedKept * 3 / 4;
+	std::nth_element(ages.begin(), ages.begin() + static_cast<ptrdiff_t>(drop), ages.end());
+	const uint32_t before = ages[drop];
+	for (auto it = CarvedCards.begin(); it != CarvedCards.end();) {
+		if (it->second.used < before) {
+			if (it->second.sharp != nullptr)
+				SDL_DestroyTexture(it->second.sharp);
+			if (it->second.soft != nullptr)
+				SDL_DestroyTexture(it->second.soft);
+			it = CarvedCards.erase(it);
+		} else {
+			++it;
+		}
+	}
+}
+
+/**
+ * @brief The shadow pictures of a body as a light shining along (dx, dy) sees it: made the first time, else kept. When
+ * this frame has made its share, the nearest way round already made stands in; null when there is none yet.
+ */
+const CarvedCard *CarvedCardFor(SDL_Renderer *renderer, const CarvedLook &look, float dx, float dy)
+{
+	if (CarvedFrameOfBudget != CarvedFrame) {
+		CarvedFrameOfBudget = CarvedFrame;
+		CarvedMadeThisFrame = 0;
+		TrimCarvedCards();
+	}
+	constexpr float Turn = 6.2831853F / CarvedBearings;
+	const int bearing = (static_cast<int>(std::floor(std::atan2(dy, dx) / Turn + 0.5F)) % CarvedBearings + CarvedBearings) % CarvedBearings;
+	const auto found = CarvedCards.find(CarvedKey { look.pose, look.facing, bearing });
+	if (found != CarvedCards.end()) {
+		found->second.used = CarvedFrame;
+		return found->second.sharp != nullptr ? &found->second : nullptr;
+	}
+	if (CarvedMadeThisFrame >= CarvedPerFrame) {
+		for (int step = 1; step <= CarvedBearings / 2; step++) {
+			for (const int side : { bearing + step, bearing - step }) {
+				const auto near = CarvedCards.find(CarvedKey { look.pose, look.facing, (side + CarvedBearings) % CarvedBearings });
+				if (near != CarvedCards.end() && near->second.sharp != nullptr)
+					return &near->second;
+			}
+		}
+		return nullptr;
+	}
+	CarvedMadeThisFrame++;
+	CarvedCard &card = CarvedCards[CarvedKey { look.pose, look.facing, bearing }];
+	card.used = CarvedFrame;
+	const float angle = static_cast<float>(bearing) * Turn;
+	if (!MakeCarvedCard(renderer, look, std::cos(angle), std::sin(angle), card)) {
+		if (card.sharp != nullptr)
+			SDL_DestroyTexture(card.sharp);
+		if (card.soft != nullptr)
+			SDL_DestroyTexture(card.soft);
+		card.sharp = nullptr;
+		card.soft = nullptr;
+		return nullptr;
+	}
+	return &card;
+}
+
+/** @brief How much a carved body's facings are smoothed, in the pixels of its half-size picture (lumps between balls). */
+constexpr float BodyFacingSmooth = 2.F;
+
+/**
+ * @brief A hero's or monster's picture split by the way each part of it faces (as MakeShape does from a shape map), the
+ * facings worked out from its carved body (carved::ViewFacings), at half size: the light over a body changes slowly
+ * across it, and its pictures are many. Nothing is made without a carved body or with feel("bodylight", 0).
+ */
+void MakeBodyShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name)
+{
+	if (atmosphere::Setting(atmosphere::Knob::BodyLight) <= 0 || atmosphere::Setting(atmosphere::Knob::Carved) <= 0)
+		return;
+	if (!name.starts_with("monsters/") && !name.starts_with("plrgfx/"))
+		return;
+	// A monster in other colours has its base art's body (see MakeShape).
+	std::string base = name;
+	const size_t slash = base.rfind('/');
+	if (slash == std::string::npos)
+		return;
+	if (const size_t cut = base.find_first_of("@+"); cut != std::string::npos && cut < slash)
+		base = base.substr(0, cut) + base.substr(slash);
+	const size_t baseSlash = base.rfind('/');
+	const int facing = carved::FacingOf(base);
+	if (facing < 0)
+		return;
+	const carved::Sprite *sprite = CarvedSpriteOf(std::string_view(base).substr(0, baseSlash));
+	if (sprite == nullptr)
+		return;
+	const carved::Pose *pose = sprite->Find(carved::PoseOf(base, 0));
+	if (pose == nullptr || pose->count == 0)
+		return;
+	if (picture->format->format != SDL_PIXELFORMAT_RGBA32 || picture->w < 2 || picture->h < 2)
+		return;
+	// The picture at half size (the original drawing's size: HD pictures are twice it), colours weighted by how much shows.
+	const int width = picture->w / 2;
+	const int height = picture->h / 2;
+	SDL_Surface *half = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+	if (half == nullptr)
+		return;
+	if (SDL_LockSurface(picture) != 0) {
+		SDL_FreeSurface(half);
+		return;
+	}
+	for (int y = 0; y < height; y++) {
+		auto *out = static_cast<uint8_t *>(half->pixels) + static_cast<ptrdiff_t>(y) * half->pitch;
+		for (int x = 0; x < width; x++) {
+			std::array<uint32_t, 4> sum {};
+			for (int dy = 0; dy < 2; dy++) {
+				const auto *row = static_cast<const uint8_t *>(picture->pixels) + static_cast<ptrdiff_t>(y * 2 + dy) * picture->pitch;
+				for (int dx = 0; dx < 2; dx++) {
+					const uint8_t *pixel = row + static_cast<ptrdiff_t>(x * 2 + dx) * 4;
+					for (size_t c = 0; c < 3; c++)
+						sum[c] += static_cast<uint32_t>(pixel[c]) * pixel[3];
+					sum[3] += pixel[3];
+				}
+			}
+			uint8_t *pixel = out + static_cast<ptrdiff_t>(x) * 4;
+			for (size_t c = 0; c < 3; c++)
+				pixel[c] = sum[3] > 0 ? static_cast<uint8_t>(sum[c] / sum[3]) : 0;
+			pixel[3] = static_cast<uint8_t>(sum[3] / 4);
+		}
+	}
+	SDL_UnlockSurface(picture);
+	std::vector<float> facings;
+	carved::ViewFacings(*sprite, sprite->BallsOf(*pose), facing, 2.F * static_cast<float>(width) / static_cast<float>(picture->w), width, height, BodyFacingSmooth, facings);
+	SDL_Surface *map = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+	if (map == nullptr) {
+		SDL_FreeSurface(half);
+		return;
+	}
+	for (int y = 0; y < height; y++) {
+		auto *row = static_cast<uint8_t *>(map->pixels) + static_cast<ptrdiff_t>(y) * map->pitch;
+		for (int x = 0; x < width; x++) {
+			const size_t at = (static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)) * 4;
+			// Where the body is unsure (its edge, a part the balls miss), it turns to face the eye.
+			const float sure = facings[at + 3];
+			float right = facings[at] * sure;
+			float up = facings[at + 1] * sure;
+			float toEye = facings[at + 2] * sure + (1 - sure);
+			const float length = std::max(std::sqrt(right * right + up * up + toEye * toEye), 1e-6F);
+			right /= length;
+			up /= length;
+			toEye /= length;
+			uint8_t *pixel = row + static_cast<ptrdiff_t>(x) * 4;
+			pixel[0] = static_cast<uint8_t>(std::clamp((right + 1) * 127.5F + 0.5F, 0.F, 255.F));
+			pixel[1] = static_cast<uint8_t>(std::clamp((up + 1) * 127.5F + 0.5F, 0.F, 255.F));
+			pixel[2] = static_cast<uint8_t>(std::clamp((toEye + 1) * 127.5F + 0.5F, 0.F, 255.F));
+			pixel[3] = 255;
+		}
+	}
+	MakeShapeFrom(renderer, art, half, map, false, false);
+	SDL_FreeSurface(half);
+}
+
 /** @brief Which of a body's shadows a call draws (DrawCasterShadows). */
 enum class CastWhat : uint8_t {
 	/** All of them, straight onto the floor. */
@@ -4049,6 +4505,15 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 	float wy;
 	if (!CastsShadows(draw, wx, wy))
 		return;
+	// A carved body stands where its drawing's feet are (CarvedLookOf), and each light casts it as it sees it.
+	CarvedLook carvedLook;
+	const bool carvedBody = CarvedLookOf(draw, carvedLook);
+	if (carvedBody) {
+		gx = carvedLook.bx;
+		gy = carvedLook.by;
+		wx = carvedLook.wx;
+		wy = carvedLook.wy;
+	}
 	const LightsOn &on = pass != nullptr && pass->on != nullptr ? *pass->on : LightsOnPoint(wx, wy);
 	const std::array<light::ShadowLight, 3> &lights = on.lights;
 	const light::ShadowLight &overhead = on.overhead;
@@ -4115,7 +4580,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		}
 		const float alpha = ShadowAlpha(here, removed);
 		if (alpha > 0.004F) {
-			const SDL_FPoint centre = OnScreenAt(gx, gy + ContactDrop, toLogical);
+			const SDL_FPoint centre = OnScreenAt(gx, gy + (carvedBody ? 0.F : ContactDrop), toLogical);
 			// A circle on the floor `across` tiles wide.
 			const float width = across * TileAcross * Scale * toLogical;
 			const SDL_FRect spot { centre.x - width / 2, centre.y - width / 4, width, width / 2 };
@@ -4124,12 +4589,6 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		}
 	}
 
-	const float texWidth = w + pad * 2;
-	const float texHeight = h + pad * 2;
-	// Only the part of the shadow pictures that holds the body and its soft edge is drawn: the rest of them is empty.
-	const CastPart &sharpPart = raster.sharpPart;
-	const CastPart &softPart = raster.softPart;
-	const float vTop = std::min(sharpPart.vTop, softPart.vTop);
 	constexpr int Rows = CastBands + 2;
 	for (int n = 0; n < count; n++) {
 		const light::ShadowLight &source = lights[n];
@@ -4204,6 +4663,31 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			}
 			continue;
 		}
+		// The pictures this light's shadow is drawn from: the sprite's own, or its carved body as this light sees it.
+		SDL_Texture *sharpTexture = raster.castTexture;
+		SDL_Texture *softTexture = raster.castSoft;
+		CastPart sharpPart = raster.sharpPart;
+		CastPart softPart = raster.softPart;
+		float picWidth = w;
+		float picHeight = h;
+		float picFeet = feet;
+		bool fromCarved = false;
+		if (carvedBody) {
+			if (const CarvedCard *card = CarvedCardFor(renderer, carvedLook, dx, dy); card != nullptr) {
+				sharpTexture = card->sharp;
+				softTexture = card->soft;
+				sharpPart = card->sharpPart;
+				softPart = card->softPart;
+				picWidth = card->width;
+				picHeight = card->height;
+				picFeet = card->floor;
+				fromCarved = true;
+			}
+		}
+		const float texWidth = picWidth + pad * 2;
+		const float texHeight = picHeight + pad * 2;
+		// Only the part of the shadow pictures that holds the body and its soft edge is drawn: the rest of them is empty.
+		const float vTop = std::min(sharpPart.vTop, softPart.vTop);
 		// Where the shadow starts: under the feet, or just inside a round object's edge away from the light.
 		const float behind = object ? (halfX + halfY) / 2 * ObjectTuck : 0.F;
 		const float distance = toMiddle + behind;
@@ -4224,8 +4708,8 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		const auto landsAt = [&](float z) { return z <= 0 ? z * underSlope : distance * z / (lightHeight - z); };
 		// The top of the body's part of the pictures and their bottom row, and the highest part of the body whose shadow
 		// still lands on the floor.
-		const float topZ = (feet + pad - vTop * texHeight) * HeightPerPixel;
-		const float bottomZ = (feet - h - pad) * HeightPerPixel;
+		const float topZ = (picFeet + pad - vTop * texHeight) * HeightPerPixel;
+		const float bottomZ = (picFeet - picHeight - pad) * HeightPerPixel;
 		// The shadow's far end lies square to it, but a wall's foot may cross it at a slant: then its floor part goes on
 		// until both its sides reach the wall, and is kept in front of the wall's line, so it neither stops short of the
 		// wall on one side nor runs on into the wall on the other.
@@ -4235,7 +4719,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		if (atWall && towardWall < -0.05F) {
 			const float endZ = lightHeight * limit / (distance + limit);
 			const float endSpread = endZ > 0 ? std::min(lightHeight / std::max(lightHeight - endZ, 0.05F), MaxSpread) : 1.F;
-			const float half = std::max(std::abs(softPart.u0 * texWidth - pad - w / 2), std::abs(softPart.u1 * texWidth - pad - w / 2)) / TileAcross * endSpread * acrossShare;
+			const float half = std::max(std::abs(softPart.u0 * texWidth - pad - picWidth / 2), std::abs(softPart.u1 * texWidth - pad - picWidth / 2)) / TileAcross * endSpread * acrossShare;
 			floorEnd = limit + std::min(half * std::abs(wall.facesX ? dy : dx) / -towardWall, WallMostSlant);
 		}
 		const float highZ = std::min(topZ, lightHeight * floorEnd / (distance + floorEnd));
@@ -4256,7 +4740,8 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		const float facing = -(dx + dy) * ViewAcross;
 		std::array<float, 2> turns { 1.F, -1.F };
 		std::array<float, 2> weights { 1.F, 0.F };
-		if (!object) {
+		// A carved body is seen from the light's side already, standing where its feet are drawn: one layout, unturned.
+		if (!object && !fromCarved) {
 			weights[0] = std::clamp(0.5F + facing / (2 * TurnBand), 0.F, 1.F);
 			weights[1] = 1 - weights[0];
 		}
@@ -4288,15 +4773,15 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 				const float softness = std::clamp(penumbra / (SoftWidth * spread), 0.F, MaxSoftness);
 				const Uint8 sharpAlpha = ColourByte(alpha * (1 - softness));
 				const Uint8 softAlpha = ColourByte(alpha * softness);
-				const float v = std::clamp((feet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
+				const float v = std::clamp((picFeet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
 				// Across the shadow, square to it on the floor, at a point u (0 to 1) across the pictures.
 				// How far this height has turned from the view's layout to the light's.
 				const float rise = std::clamp(z / FeetBlend, 0.F, 1.F);
-				const float turned = object ? 1.F : rise * rise * (3 - 2 * rise);
+				const float turned = object || fromCarved ? 1.F : rise * rise * (3 - 2 * rise);
 				// The picture below the feet lies on the floor towards the view, as it is drawn.
 				const float below = z < 0 ? -z / HeightPerPixel / static_cast<float>(TILE_HEIGHT) : 0.F;
 				const auto placed = [&](float u) {
-					const float fromMiddle = (u * texWidth - pad - w / 2) / TileAcross;
+					const float fromMiddle = (u * texWidth - pad - picWidth / 2) / TileAcross;
 					const float across = fromMiddle * spread * acrossShare * turn;
 					float x = fx - dy * across;
 					float y = fy + dx * across;
@@ -4343,14 +4828,14 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 					SDL_RenderGeometry(renderer, texture, vertices.data(), static_cast<int>(vertices.size()), indices.data(), used);
 			};
 			if (cover) {
-				SDL_SetTextureBlendMode(raster.castTexture, SDL_BLENDMODE_ADD);
-				SDL_SetTextureBlendMode(raster.castSoft, SDL_BLENDMODE_ADD);
+				SDL_SetTextureBlendMode(sharpTexture, SDL_BLENDMODE_ADD);
+				SDL_SetTextureBlendMode(softTexture, SDL_BLENDMODE_ADD);
 			}
-			drawBands(raster.castTexture, sharp);
-			drawBands(raster.castSoft, soft);
+			drawBands(sharpTexture, sharp);
+			drawBands(softTexture, soft);
 			if (cover) {
-				SDL_SetTextureBlendMode(raster.castTexture, SDL_BLENDMODE_BLEND);
-				SDL_SetTextureBlendMode(raster.castSoft, SDL_BLENDMODE_BLEND);
+				SDL_SetTextureBlendMode(sharpTexture, SDL_BLENDMODE_BLEND);
+				SDL_SetTextureBlendMode(softTexture, SDL_BLENDMODE_BLEND);
 			}
 			if (!upWall)
 				continue;
@@ -4358,8 +4843,8 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			// start, is thrown on to the wall's line: the part of it that would land past the wall's foot stands on the
 			// wall instead, as high as the light's ray over that height of the body meets it.
 			std::array<WallStrip, 2> strips;
-			strips[0].texture = raster.castTexture;
-			strips[1].texture = raster.castSoft;
+			strips[0].texture = sharpTexture;
+			strips[1].texture = softTexture;
 			// The wall's height where the middle of the shadow meets it.
 			const float toWall = wall.facesX ? wall.at - source.x : wall.at - source.y;
 			const float toStart = wall.facesX ? sx - source.x : sy - source.y;
@@ -4374,7 +4859,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			for (int side = 0; side < 2 && meets; side++) {
 				for (int strip = 0; strip < 2; strip++) {
 					const float u = strip == 0 ? (side == 0 ? sharpPart.u0 : sharpPart.u1) : (side == 0 ? softPart.u0 : softPart.u1);
-					const float across = (u * texWidth - pad - w / 2) / TileAcross * acrossShare * turn;
+					const float across = (u * texWidth - pad - picWidth / 2) / TileAcross * acrossShare * turn;
 					const float ex = sx - dy * across - source.x;
 					const float ey = sy + dx * across - source.y;
 					const float toSide = wall.facesX ? ex : ey;
@@ -4406,7 +4891,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 						const float z = lowZ + std::max(endZ - lowZ, 0.F) * static_cast<float>(r) / static_cast<float>(WallRows - 1);
 						const float up = std::clamp(lightHeight - (lightHeight - z) * times, 0.F, wallTall);
 						const float fade = std::clamp((wallTall - up) / WallFade, 0.F, 1.F);
-						const float v = std::clamp((feet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
+						const float v = std::clamp((picFeet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
 						const SDL_FPoint at { foot.x, foot.y - (r == 0 ? -WallFootDrop : up) / RisePerPixel * Scale * toLogical };
 						const Uint8 alpha = ColourByte(dark * fade * (strip == 0 ? 1 - softness : softness));
 						strips[static_cast<size_t>(strip)].at[static_cast<size_t>(r) * 2 + side] = SDL_Vertex { at, { 0, 0, 0, alpha }, { u, v } };
@@ -4462,6 +4947,80 @@ bool EnsureShade(SDL_Renderer *renderer, Size size)
 }
 
 /** @brief A body that casts shadows this frame, where it stands, and the lights on it. */
+/** @brief How many points across a dead body its light and the shadows over it are taken at (Shading has four stops). */
+constexpr size_t CorpseStops = 4;
+/** @brief How wide and how high a dead body lying on the floor is taken to be at each of those points, in tiles. */
+constexpr float CorpseWide = 0.3F;
+constexpr float CorpseTall = 0.3F;
+/** @brief How high a dead body's shape takes the light at, in tiles (an object's middle is ObjectMiddle). */
+constexpr float CorpseMiddle = 0.1F;
+
+/** @brief A dead body lying on the floor, lit as one with feel("corpses") on (not a fading trace of one). */
+bool IsCorpse(const Draw &draw)
+{
+	return draw.corpse && draw.kind == DrawKind::Sprite && draw.style == SpriteStyle::Normal && draw.ghost <= 0
+	    && atmosphere::Setting(atmosphere::Knob::Corpses) > 0;
+}
+
+/** @brief The points across a dead body, from its left edge to its right: where each is in its picture, and on the floor. */
+struct CorpseSpan {
+	std::array<float, 4> stops {};
+	std::array<float, 4> x {};
+	std::array<float, 4> y {};
+};
+
+/**
+ * @brief The points across a dead body where its light is taken: its body's left edge, a third and two thirds of the way,
+ * and its right edge, each on the floor under it (a body lies along the screen's row it is drawn on, as the floor does).
+ */
+CorpseSpan CorpseSpanOf(const Draw &draw)
+{
+	Raster &raster = FallbackRaster(draw, false);
+	BodyBounds(raster);
+	const float width = static_cast<float>(std::max(raster.width, 1));
+	float left = raster.boundLeft >= 0 ? static_cast<float>(raster.boundLeft) / width : 0.F;
+	float right = raster.boundLeft >= 0 ? static_cast<float>(raster.boundRight + 1) / width : 1.F;
+	if (right - left < 0.05F) {
+		left = 0;
+		right = 1;
+	}
+	float bx;
+	float by;
+	GroundOf(draw, bx, by);
+	CorpseSpan span;
+	for (size_t s = 0; s < CorpseStops; s++) {
+		const float at = left + (right - left) * static_cast<float>(s) / static_cast<float>(CorpseStops - 1);
+		span.stops[s] = at;
+		WorldOf(static_cast<float>(draw.x) + at * static_cast<float>(draw.width), by, span.x[s], span.y[s]);
+	}
+	return span;
+}
+
+/** @brief How much of the light is left at each point across a dead body (CorpseSpanOf) in the shadows over it this frame. */
+using CorpseShade = std::array<float, CorpseStops>;
+std::vector<CorpseShade> CorpseKept;
+
+/** @brief A dead body's light: the floor's own light under it, from its left edge to its right. */
+Shading CorpseLight(const Draw &draw)
+{
+	const CorpseSpan span = CorpseSpanOf(draw);
+	Shading shading;
+	shading.count = static_cast<int>(CorpseStops);
+	shading.stops = span.stops;
+	for (size_t s = 0; s < CorpseStops; s++)
+		shading.colours[s] = LightAt(span.x[s], span.y[s]);
+	return shading;
+}
+
+/** @brief A dead body's light darkened where shadows lie over it (CorpseKept). */
+void DimCorpse(Shading &shading, const CorpseShade &kept)
+{
+	for (size_t s = 0; s < CorpseStops; s++) {
+		for (size_t c = 0; c < 3; c++)
+			shading.colours[s][c] *= kept[s];
+	}
+}
+
 struct CastJob {
 	size_t draw;
 	float x;
@@ -4645,6 +5204,62 @@ void DrawShade(SDL_Renderer *renderer, const ShadeGroup &group, const SDL_FRect 
 }
 
 /**
+ * @brief How much of the light is left across each dead body in the shadows over it (CorpseKept): the bodies and objects
+ * standing between it and each light hide it from that light as they hide the floor, and it darkens as the floor does
+ * (CastAlpha). A body lies low, so a shadow that reaches it at all lies over it.
+ */
+void ShadeCorpses(const std::vector<CastJob> &jobs, const std::vector<Blocker> &objects, float toLogical)
+{
+	CorpseKept.assign(Draws.size(), CorpseShade { 1.F, 1.F, 1.F, 1.F });
+	if (atmosphere::Setting(atmosphere::Knob::Corpses) <= 0 || jobs.empty())
+		return;
+	static std::vector<Blocker> standing;
+	standing = objects;
+	for (const CastJob &job : jobs) {
+		if (!IsObject(Draws[job.draw].caster))
+			standing.push_back(Blocker { job.draw, job.x, job.y, BodyWidth / 2, BodyWidth / 2, BodyTall });
+	}
+	for (size_t i = FloorEnd; i < Draws.size(); i++) {
+		const Draw &draw = Draws[i];
+		if (!IsCorpse(draw) || !OnScreen(DestOf(draw, toLogical), 0))
+			continue;
+		const CorpseSpan span = CorpseSpanOf(draw);
+		for (size_t s = 0; s < CorpseStops; s++) {
+			const float px = span.x[s];
+			const float py = span.y[s];
+			const LightsOn on = LightsOnPoint(px, py);
+			const float total = light::LinearAt(px, py);
+			const float glows = light::GlowAt(px, py);
+			float kept = 1;
+			for (int n = 0; n < on.count; n++) {
+				const light::ShadowLight &source = on.lights[static_cast<size_t>(n)];
+				if (!Joins(source))
+					continue;
+				// Only what stands nearer the light than the body can hide it.
+				const float reach = std::sqrt((source.x - px) * (source.x - px) + (source.y - py) * (source.y - py)) + 1;
+				Hidden hidden;
+				const Blocker *behind = nullptr;
+				for (const Blocker &blocker : standing) {
+					if ((blocker.x - source.x) * (blocker.x - source.x) + (blocker.y - source.y) * (blocker.y - source.y) > reach * reach)
+						continue;
+					const Hidden by = HiddenBy(source, blocker, px, py, CorpseWide, CorpseTall);
+					if (by.across * by.up > hidden.across * hidden.up) {
+						hidden = by;
+						behind = &blocker;
+					}
+				}
+				if (behind == nullptr)
+					continue;
+				const float own = light::LinearOf(source, px, py);
+				const float atBody = std::max(own, light::LinearOf(source, behind->x, behind->y));
+				kept *= 1 - CastAlpha(total, glows, own, source.glow, source.fill, hidden.across * std::min(hidden.up * 2, 1.F), atBody);
+			}
+			CorpseKept[i][s] = kept;
+		}
+	}
+}
+
+/**
  * @brief Draws every body's shadows on the floor, the shadows of one light joined into one.
  *
  * A shadow is the floor a light can't reach. Two bodies in one light's way don't make the floor behind both darker
@@ -4752,6 +5367,7 @@ bool DrawJoinedShadows(SDL_Renderer *renderer, Size worldSize, float toLogical)
 		kept.top = std::max(kept.top, least);
 		ShadeKept[job.draw] = kept;
 	}
+	ShadeCorpses(jobs, blockers, toLogical);
 	// The shade at each body's feet, and the shadows that aren't joined.
 	for (const CastJob &job : jobs) {
 		CastPass pass;
@@ -4785,6 +5401,7 @@ bool DrawJoinedShadows(SDL_Renderer *renderer, Size worldSize, float toLogical)
 		SDL_SetRenderTarget(renderer, screen);
 		// (In a storm the world goes to a picture of its own, which doesn't take its scale and clip back by itself.)
 		vfx::ResumeScene(renderer, &ViewClip);
+		ResumeKept(renderer, &ViewClip);
 		// With room for the soft edges round the shapes drawn.
 		if (pass.x1 >= pass.x0) {
 			ShadeUsed = ShadeRect(pass.x0 - BlockMostSoft, pass.y0 - BlockMostSoft, pass.x1 + BlockMostSoft, pass.y1 + BlockMostSoft);
@@ -5181,6 +5798,130 @@ bool DrawShapedObject(SDL_Renderer *renderer, const Draw &draw, float toLogical,
 	return true;
 }
 
+Shading LightFor(const Draw &draw, const std::array<float, 3> &tint);
+
+/** @brief How high a living body takes its light at, in tiles, and how strongly its sides differ (1 as a real thing). */
+constexpr float BodyMiddle = 0.5F;
+constexpr float BodyGiven = 0.8F;
+
+/**
+ * @brief Draws a hero or monster lit by the shape of its carved body (MakeBodyShape): its light as usual (LightFor, less
+ * the shadows over it), the side turned to a light brighter and the side away darker, as DrawShapedObject does.
+ * @return False where it has no shape (no carved body, feel("bodylight") or feel("shapes") off): it is drawn as usual.
+ */
+bool DrawShapedBody(SDL_Renderer *renderer, const Draw &draw, float toLogical, const Kept &kept, const std::array<float, 3> &tint)
+{
+	if (draw.kind != DrawKind::Sprite || draw.style != SpriteStyle::Normal || draw.corpse || IsObject(draw.caster))
+		return false;
+	if (draw.caster != Caster::MyHero && draw.caster != Caster::Hero && draw.caster != Caster::Monster && draw.caster != Caster::MonsterRecoloured)
+		return false;
+	if (draw.light < 0 && draw.caster != Caster::MyHero && draw.caster != Caster::MonsterRecoloured)
+		return false;
+	if (atmosphere::Setting(atmosphere::Knob::BodyLight) <= 0 || atmosphere::Setting(atmosphere::Knob::Shapes) <= 0)
+		return false;
+	const ArtChoice art = CachedArt(renderer, draw);
+	if (art.art == nullptr || !art.art->shaped)
+		return false;
+	const SDL_FRect dest = DestOf(draw, toLogical);
+	if (!OnScreen(dest, 0))
+		return true;
+	float wx;
+	float wy;
+	StandsAt(draw, wx, wy);
+	Shading shading = LightFor(draw, tint);
+	if (kept.foot < 1 || kept.top < 1)
+		Dim(shading, kept);
+	std::array<float, NumShapeAxes> shade;
+	// feel("bodylight") 1 is the usual strength, 2 twice as strong, up to 3; it takes effect at once.
+	const float given = BodyGiven * std::clamp(atmosphere::Setting(atmosphere::Knob::BodyLight), 0.F, 3.F);
+	if (!FacingShades(wx, wy, ShapeAxes.data(), shade.size(), shade.data(), BodyMiddle, given))
+		shade.fill(1.F);
+	float least = std::numeric_limits<float>::max();
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		if (art.art->shape[k] != nullptr)
+			least = std::min(least, shade[k]);
+	}
+	if (least == std::numeric_limits<float>::max())
+		return false;
+	// The light it takes on average, for the parts turned to a light.
+	Colour3 flat {};
+	for (int s = 0; s < shading.count; s++) {
+		for (size_t c = 0; c < 3; c++)
+			flat[c] += (shading.colours[static_cast<size_t>(s)][c] + (shading.fades ? shading.top[static_cast<size_t>(s)][c] : shading.colours[static_cast<size_t>(s)][c])) / static_cast<float>(2 * shading.count);
+	}
+	for (int s = 0; s < shading.count; s++) {
+		for (size_t c = 0; c < 3; c++) {
+			shading.colours[static_cast<size_t>(s)][c] *= least;
+			shading.top[static_cast<size_t>(s)][c] *= least;
+		}
+	}
+	DrawShaded(renderer, draw, shading, toLogical, false);
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		SDL_Texture *texture = art.art->shape[k];
+		if (texture == nullptr)
+			continue;
+		Colour3 more { flat[0] * (shade[k] - least), flat[1] * (shade[k] - least), flat[2] * (shade[k] - least) };
+		for (int pass = 0; pass < 2 && std::max({ more[0], more[1], more[2] }) > 1.F / 255; pass++) {
+			SDL_SetTextureColorMod(texture, ColourByte(more[0]), ColourByte(more[1]), ColourByte(more[2]));
+			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+			more = AboveFull(more);
+		}
+	}
+	return true;
+}
+
+/**
+ * @brief Draws a dead body whose HD art has a shape map, lit by its shape (as DrawShapedObject does an object): its light
+ * across it from the floor (CorpseLight), less the shadows over it (`kept`), and each part turned to a light or away.
+ * @return False if it has no shape map or feel("shapes") is off: it is drawn in its light across it alone.
+ */
+bool DrawShapedCorpse(SDL_Renderer *renderer, const Draw &draw, float toLogical, const CorpseShade &kept)
+{
+	if (!IsCorpse(draw) || atmosphere::Setting(atmosphere::Knob::Shapes) <= 0)
+		return false;
+	const ArtChoice art = CachedArt(renderer, draw);
+	if (art.art == nullptr || !art.art->shaped)
+		return false;
+	const SDL_FRect dest = DestOf(draw, toLogical);
+	if (!OnScreen(dest, 0))
+		return true;
+	Shading shading = CorpseLight(draw);
+	DimCorpse(shading, kept);
+	Colour3 mean {};
+	for (size_t s = 0; s < CorpseStops; s++) {
+		for (size_t c = 0; c < 3; c++)
+			mean[c] += shading.colours[s][c] / static_cast<float>(CorpseStops);
+	}
+	float wx;
+	float wy;
+	StandsAt(draw, wx, wy);
+	std::array<float, NumShapeAxes> shade;
+	if (!FacingShades(wx, wy, ShapeAxes.data(), shade.size(), shade.data(), CorpseMiddle))
+		shade.fill(1.F);
+	float least = std::numeric_limits<float>::max();
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		if (art.art->shape[k] != nullptr)
+			least = std::min(least, shade[k]);
+	}
+	for (size_t s = 0; s < CorpseStops; s++) {
+		for (float &part : shading.colours[s])
+			part *= least;
+	}
+	DrawShaded(renderer, draw, shading, toLogical, false);
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		SDL_Texture *texture = art.art->shape[k];
+		if (texture == nullptr)
+			continue;
+		Colour3 more { mean[0] * (shade[k] - least), mean[1] * (shade[k] - least), mean[2] * (shade[k] - least) };
+		for (int pass = 0; pass < 2 && std::max({ more[0], more[1], more[2] }) > 1.F / 255; pass++) {
+			SDL_SetTextureColorMod(texture, ColourByte(more[0]), ColourByte(more[1]), ColourByte(more[2]));
+			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+			more = AboveFull(more);
+		}
+	}
+	return true;
+}
+
 /** @brief How high up a wall its light by shape is worked out, in tiles (its middle, about a hero's height). */
 constexpr float WallShapeMiddle = 0.5F;
 
@@ -5341,6 +6082,9 @@ Shading LavaEdge(const Colour3 &flat, float wx, float wy)
 /** @brief How a draw that stands on the floor is lit. */
 Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 {
+	// A dead body (a unique's in its own colours too) takes the floor's light across it, not one light for its tile.
+	if (IsCorpse(draw))
+		return CorpseLight(draw);
 	if (draw.kind == DrawKind::Tile) {
 		if (draw.light < 0)
 			return Uniform(ToColour(light::Full()));
@@ -5736,6 +6480,9 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 	{
 		// A bright doorway's shaft of light lies on the floor, under the shadows and whoever stands in it (idea 66).
 		const FramePartScope part(FramePart::Atmosphere);
+#ifdef POE2_HD_BATCH
+		batch::Flush(renderer);
+#endif
 		vfx::DrawFloorShafts(renderer, toLogical);
 	}
 	const bool joined = DrawJoinedShadows(renderer, worldSize, toLogical);
@@ -5756,7 +6503,12 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 		if (!joined && draw.style == SpriteStyle::Normal && draw.caster != Caster::None)
 			DrawCasterShadows(renderer, draw, toLogical);
 		const Kept kept = joined ? ShadeKept[i] : Kept {};
+		const CorpseShade corpseKept = joined && i < CorpseKept.size() ? CorpseKept[i] : CorpseShade { 1.F, 1.F, 1.F, 1.F };
+		if (DrawShapedCorpse(renderer, draw, toLogical, corpseKept))
+			continue;
 		if (DrawShapedObject(renderer, draw, toLogical, (kept.foot + kept.top) / 2))
+			continue;
+		if (DrawShapedBody(renderer, draw, toLogical, kept, tint))
 			continue;
 		if (draw.kind == DrawKind::Tile && draw.hasTile && draw.light >= 0 && !IsTileBase(draw) && IsDirt(draw.cell)) {
 			DrawGroundLit(renderer, draw, toLogical);
@@ -5765,6 +6517,8 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 		Shading shading = LightFor(draw, tint);
 		if (kept.foot < 1 || kept.top < 1)
 			Dim(shading, kept);
+		if (IsCorpse(draw))
+			DimCorpse(shading, corpseKept);
 		if (IsTileBase(draw)) {
 			DrawTileWall(renderer, draw, shading, toLogical);
 			continue;
@@ -5806,7 +6560,7 @@ const char *PackPalette(uint8_t levelType)
 
 bool Enabled()
 {
-	return gbIsPoe2 && !HeadlessMode && *GetOptions().Graphics.hdGraphics && HavePack();
+	return HasEnhancements() && !HeadlessMode && *GetOptions().Graphics.hdGraphics && HavePack();
 }
 
 bool Active()
@@ -5849,6 +6603,9 @@ void BeginWorld(const Surface &out, Rectangle viewport)
 	RecordSpriteHook = RecordSpriteImpl;
 	Recording = true;
 	WorldRecorded = true;
+	// POE2 Mashup: a world drawn anew is drawn in HD anew too, kept again once it has stood still (KeepWorldPicture).
+	WorldReplayable = true;
+	KeptHd.valid = false;
 }
 
 void EndWorld()
@@ -5986,6 +6743,7 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 	    .outlineLook = IsOutline(style) ? CurrentOutlineLook : (outlined ? PendingOutlineLook : OutlineLook {}),
 	    .recolour = IsOutline(style) ? nullptr : RecolourOf(trn),
 	    .ghost = IsOutline(style) ? 0.F : CurrentGhost,
+	    .corpse = CurrentCorpse && !IsOutline(style),
 	});
 }
 
@@ -6040,6 +6798,9 @@ void RegisterRecolour(const uint8_t *trn, std::string_view name)
 void ForgetSprites(ClxSpriteListOrSheet sprites)
 {
 	ArtChoices.clear();
+	// POE2 Mashup: the recorded draws may point at them, so they aren't drawn again (ReplayWorld).
+	WorldReplayable = false;
+	KeptHd.valid = false;
 	const auto forgetList = [](ClxSpriteList list) {
 		for (size_t frame = 0; frame < list.numSprites(); frame++)
 			SpriteNames.erase(list[frame].pixelData());
@@ -6064,15 +6825,18 @@ bool HasArt(std::string_view name)
 	return it->second;
 }
 
-bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame)
+bool DrawUiSprite(ClxSprite sprite, Rectangle dest, float subFrame, std::string_view recolour)
 {
 	// Only while the frames go up in layers with the HD world under the UI (PresentLayeredFrame calls RenderUi).
 	if (!Active() || UiRenderedTicks == 0 || SDL_GetTicks() - UiRenderedTicks > 1000)
 		return false;
 	const auto it = SpriteNames.find(sprite.pixelData());
-	if (it == SpriteNames.end() || !HasArt(it->second.name))
+	if (it == SpriteNames.end())
 		return false;
-	UiSprite = PendingUiSprite { it->second.name, dest, static_cast<uint8_t>(std::clamp(static_cast<int>(subFrame * 3), 0, 2)) };
+	std::string name = UniqueArtName(it->second.name, recolour);
+	if (name.empty() || !HasArt(name))
+		return false;
+	UiSprite = PendingUiSprite { std::move(name), dest, static_cast<uint8_t>(std::clamp(static_cast<int>(subFrame * 3), 0, 2)) };
 	return true;
 }
 
@@ -6356,12 +7120,53 @@ void ReadAhead(Size worldSize)
 #endif
 }
 
-void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
+#ifdef POE2_HD_BATCH
+namespace {
+
+/** @brief Whether the tiles' draws are batched: feel("batch", 1), or POE2_HD_BATCH=1 for a whole run. An experiment, off unless asked for. */
+bool BatchWanted()
 {
-	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
-		return;
+	static const bool always = [] {
+		const char *env = std::getenv("POE2_HD_BATCH");
+		return env != nullptr && env[0] != '\0' && env[0] != '0';
+	}();
+	return always || atmosphere::Setting(atmosphere::Knob::Batch) > 0;
+}
+
+/** @brief A frame of the HD world for the batching experiment: what it gathered is drawn when the frame is over, and its calls go to the play log. */
+struct BatchFrame {
+	SDL_Renderer *renderer;
+
+	explicit BatchFrame(SDL_Renderer *renderer)
+	    : renderer(renderer)
+	{
+		if (batch::BeginFrame(renderer, BatchWanted())) {
+			// Just turned on: the tiles' art made so far is in no atlas, so all of it is made again.
+			DestroyTextures();
+			batch::BeginFrame(renderer, true);
+		}
+	}
+	~BatchFrame()
+	{
+		batch::EndFrame(renderer);
+		const batch::FrameStats &stats = batch::LastFrame();
+		TelemetryHdDraws(stats.draws, stats.textureSwitches, stats.merged);
+	}
+	BatchFrame(const BatchFrame &) = delete;
+	BatchFrame &operator=(const BatchFrame &) = delete;
+};
+
+} // namespace
+#endif
+
+namespace {
+
+/** @brief Draws the recorded world in full colour (Render, which may keep the picture under the game menu). */
+void RenderRecorded(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
+{
 	if (CacheRenderer != renderer) {
 		// The old renderer took its textures with it.
+		DropKept(false);
 		Art.clear();
 		Rasters.clear();
 		ArtChoices.clear();
@@ -6379,8 +7184,12 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		ShadeFailed = false;
 		CacheRenderer = renderer;
 	}
+#ifdef POE2_HD_BATCH
+	const BatchFrame batchFrame(renderer);
+#endif
 	CheckPalette();
 	ReadAhead(worldSize);
+	CarvedFrame++;
 	if (Rasters.size() > 20000) {
 		// Every picture on screen is made again in the next frame: a likely freeze, so the play log notes it.
 		TelemetryHdCacheDropped(Rasters.size());
@@ -6494,6 +7303,171 @@ void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	LiftDarkShades(renderer, clip, tint);
 	SDL_RenderSetClipRect(renderer, nullptr);
 	WorldRecorded = false;
+}
+
+/** @brief The size of the render target in its own pixels, and its scale from the UI's pixels to them (vfx::BeginScene). */
+void TargetPixels(SDL_Renderer *renderer, int &width, int &height, float &scaleX, float &scaleY)
+{
+	scaleX = 1;
+	scaleY = 1;
+	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+	SDL_Rect view { 0, 0, 0, 0 };
+	SDL_RenderSetScale(renderer, 1, 1);
+	SDL_RenderGetViewport(renderer, &view);
+	SDL_RenderSetScale(renderer, scaleX, scaleY);
+	width = view.w;
+	height = view.h;
+}
+
+/** @brief Lays the kept picture on the render target, its pixels on the target's one for one. */
+void ShowKept(SDL_Renderer *renderer)
+{
+	float scaleX = 1;
+	float scaleY = 1;
+	SDL_RenderGetScale(renderer, &scaleX, &scaleY);
+	SDL_RenderSetScale(renderer, 1, 1);
+	const SDL_Rect whole { 0, 0, KeptHd.width, KeptHd.height };
+	SDL_RenderCopy(renderer, KeptHd.texture, nullptr, &whole);
+	SDL_RenderSetScale(renderer, scaleX, scaleY);
+}
+
+/**
+ * @brief Makes the world's part of the kept picture opaque, as the window is where the world is drawn straight to it.
+ *
+ * POE2 Mashup: the joined shadows darken the floor with a blend that takes the alpha below away with its colour
+ * (DrawJoinedShadows' Darken). On the window that alpha is never looked at; in the kept picture it left the shadows'
+ * rectangles see-through, and laid on the frame those showed the game's world through the HD one, lighter, in blocks
+ * (seen while quitting: every step of the fade drew the picture again). Only the alpha is set; the colours stay.
+ * @return False where the renderer can't do that: the picture is then drawn again next frame instead of kept.
+ */
+bool SealKept(SDL_Renderer *renderer)
+{
+	static const SDL_BlendMode Seal = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ZERO, SDL_BLENDOPERATION_ADD);
+	SDL_BlendMode before = SDL_BLENDMODE_NONE;
+	SDL_GetRenderDrawBlendMode(renderer, &before);
+	if (SDL_SetRenderDrawBlendMode(renderer, Seal) != 0)
+		return false;
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+	const bool sealed = SDL_RenderFillRect(renderer, &ViewClip) == 0;
+	SDL_SetRenderDrawBlendMode(renderer, before);
+	return sealed;
+}
+
+/** @brief Makes the kept picture for the render target's size, or says it can't be made. */
+bool MakeKept(SDL_Renderer *renderer, int width, int height, float scaleX, float scaleY, Size worldSize, Size logicalSize)
+{
+	DropKept(KeptHd.renderer == renderer);
+	if (width <= 0 || height <= 0 || !SDL_RenderTargetSupported(renderer))
+		return false;
+	// The HD world is drawn opaque over black where it lies (Render's clip) and leaves the rest clear, so laid on as it
+	// was drawn (its colours already carry their alpha) it shows the game's world round it, as drawing it there did.
+	static const SDL_BlendMode Laid = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ONE, SDL_BLENDFACTOR_ONE_MINUS_SRC_ALPHA, SDL_BLENDOPERATION_ADD);
+	SDL_Texture *texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_TARGET, width, height);
+	if (texture == nullptr)
+		return false;
+	if (SDL_SetTextureBlendMode(texture, Laid) != 0) {
+		SDL_DestroyTexture(texture);
+		return false;
+	}
+	SDL_SetTextureScaleMode(texture, SDL_ScaleModeNearest);
+	KeptHd.renderer = renderer;
+	KeptHd.texture = texture;
+	KeptHd.width = width;
+	KeptHd.height = height;
+	KeptHd.scaleX = scaleX;
+	KeptHd.scaleY = scaleY;
+	KeptHd.worldSize = worldSize;
+	KeptHd.logicalSize = logicalSize;
+	KeptHd.valid = false;
+	return true;
+}
+
+} // namespace
+
+void Render(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
+{
+	if (renderer == nullptr || worldSize.width <= 0 || logicalSize.width <= 0)
+		return;
+	// POE2 Mashup: DrawView asks for the kept picture again in every frame it keeps the world. A frame shown without
+	// one (the palette fades of quitting or changing level draw no view) draws the world as it was recorded.
+	const bool keep = KeepWanted;
+	KeepWanted = false;
+	if (!keep || CacheRenderer != renderer) {
+		if (CacheRenderer == renderer)
+			DropKept(KeptHd.renderer == renderer);
+		RenderRecorded(renderer, worldSize, logicalSize);
+		return;
+	}
+	// POE2 Mashup: under the game menu the world stands still (KeepWorldPicture), so its HD picture is drawn once more
+	// into a picture of its own and then shown again, until the view, the palette or the target's size changes.
+	int width = 0;
+	int height = 0;
+	float scaleX = 1;
+	float scaleY = 1;
+	TargetPixels(renderer, width, height, scaleX, scaleY);
+	const bool fits = KeptHd.texture != nullptr && KeptHd.renderer == renderer && KeptHd.width == width && KeptHd.height == height
+	    && KeptHd.scaleX == scaleX && KeptHd.scaleY == scaleY && KeptHd.worldSize == worldSize && KeptHd.logicalSize == logicalSize;
+	if (fits && KeptHd.valid && std::memcmp(KeptHd.logical.data(), logical_palette.data(), sizeof(KeptHd.logical)) == 0
+	    && std::memcmp(KeptHd.screen.data(), system_palette.data(), sizeof(KeptHd.screen)) == 0) {
+		ShowKept(renderer);
+		// As drawing it did: the moments go over it, and the effects read the light it was drawn in.
+		OverPending = KeptHd.overPending;
+		if (KeptHd.lightUpdated)
+			light::Hold();
+		WorldRecorded = false;
+		return;
+	}
+	if (!fits && !MakeKept(renderer, width, height, scaleX, scaleY, worldSize, logicalSize)) {
+		RenderRecorded(renderer, worldSize, logicalSize);
+		return;
+	}
+	SDL_Texture *outer = SDL_GetRenderTarget(renderer);
+	SDL_SetRenderTarget(renderer, KeptHd.texture);
+	SDL_RenderSetScale(renderer, scaleX, scaleY);
+	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
+	SDL_RenderClear(renderer);
+	FrameWaited = false;
+	const uint32_t lightUpdates = light::UpdateCount();
+	Capturing = true;
+	RenderRecorded(renderer, worldSize, logicalSize);
+	Capturing = false;
+	const bool sealed = SealKept(renderer);
+	SDL_SetRenderTarget(renderer, outer);
+	// (The rain's picture of the world doesn't take its scale back by itself as the window does.)
+	if (outer != nullptr)
+		SDL_RenderSetScale(renderer, scaleX, scaleY);
+	ShowKept(renderer);
+	// Kept only once nothing in it was still waiting for its picture or its outline.
+	KeptHd.valid = sealed && !FrameWaited && !PictureMadeThisFrame && !OutlineMadeThisFrame && SettledFrames >= SettlingFrames;
+	KeptHd.lightUpdated = light::UpdateCount() != lightUpdates;
+	KeptHd.overPending = OverPending;
+	std::memcpy(KeptHd.logical.data(), logical_palette.data(), sizeof(KeptHd.logical));
+	std::memcpy(KeptHd.screen.data(), system_palette.data(), sizeof(KeptHd.screen));
+}
+
+void KeepWorldPicture(bool keep)
+{
+	KeepWanted = keep;
+}
+
+bool KeepWorldPictureAsked()
+{
+	return KeepWanted;
+}
+
+void ForgetWorldPicture()
+{
+	DropKept(CacheRenderer != nullptr && KeptHd.renderer == CacheRenderer);
+}
+
+bool ReplayWorld()
+{
+	if (!WorldReplayable)
+		return false;
+	WorldRecorded = true;
+	return true;
 }
 
 /** @brief How much of the dark's picture, from its middle out, is clear. */
@@ -6615,16 +7589,34 @@ void RegisterSprites(std::string_view, ClxSpriteListOrSheet) { }
 void RegisterRecolour(const uint8_t *, std::string_view) { }
 void ForgetSprites(ClxSpriteListOrSheet) { }
 bool HasArt(std::string_view) { return false; }
-bool DrawUiSprite(ClxSprite, Rectangle, float) { return false; }
+bool DrawUiSprite(ClxSprite, Rectangle, float, std::string_view) { return false; }
 void RenderUi(SDL_Renderer *) { }
 void RenderOver(SDL_Renderer *) { }
 void ClearCaches() { }
 void Render(SDL_Renderer *, Size, Size) { }
+void KeepWorldPicture(bool) { }
+bool KeepWorldPictureAsked() { return false; }
+bool ReplayWorld() { return false; }
+void ForgetWorldPicture() { }
 bool CoversView(Size) { return false; }
 bool ExportLevelTiles(const std::string &) { return false; }
 const char *PackPalette(uint8_t) { return nullptr; }
 
 #endif
+
+std::string UniqueArtName(std::string_view typeArtName, std::string_view recolour)
+{
+	if (recolour.empty())
+		return std::string(typeArtName);
+	const size_t slash = typeArtName.rfind('/');
+	if (slash == std::string_view::npos)
+		return {};
+	std::string name(typeArtName.substr(0, slash));
+	name += '+';
+	name += recolour;
+	name += typeArtName.substr(slash);
+	return name;
+}
 
 } // namespace hd
 

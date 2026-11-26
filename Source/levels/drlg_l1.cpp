@@ -1519,8 +1519,8 @@ void CreateL5Dungeon(uint32_t rseed, lvl_entry entry)
 	UberCol = 0;
 
 	SetCathedralFunnelFloor(false);
-	// POE2: the new Cathedral and Crypt floors, for a floor whose build was settled on them (single player for now).
-	const Poe2FloorBuild build = gbIsPoe2 && !gbIsMultiplayer && IsAnyOf(leveltype, DTYPE_CATHEDRAL, DTYPE_CRYPT) ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
+	// POE2 and Sanctuary Reforged: the new Cathedral and Crypt floors, for a floor whose build was settled on them (single player for now).
+	const Poe2FloorBuild build = UsesDesignedFloors() && IsAnyOf(leveltype, DTYPE_CATHEDRAL, DTYPE_CRYPT) ? Poe2FloorBuildFor(currlevel) : Poe2FloorBuild {};
 	if (build.cathedralFunnel)
 		GenerateCathedralFunnelLevel(entry, build.avoidRooms);
 	else

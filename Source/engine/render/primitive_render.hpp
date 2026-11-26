@@ -106,9 +106,11 @@ struct UiTint {
 
 /**
  * @brief POE2 Mashup: records where the UI is drawn on @p surface into @p cells, one per pixel; null stops it. With
- * @p tints, pixels can also be laid over the world with real alpha (TintUiPixel).
+ * @p tints, pixels can also be laid over the world with real alpha (TintUiPixel). With @p tintRows, one byte per row
+ * of @p surface, a row's byte is set whenever a tint is written on it, so whoever reads or clears the tints can skip
+ * the rows that have none.
  */
-void SetUiCoverTarget(SDL_Surface *surface, UiCover *cells, UiTint *tints = nullptr);
+void SetUiCoverTarget(SDL_Surface *surface, UiCover *cells, UiTint *tints = nullptr, uint8_t *tintRows = nullptr);
 
 /** @brief POE2 Mashup: whether pixels drawn on @p out can be laid over the world with real alpha (TintUiPixel). */
 bool CanTintUi(const Surface &out);

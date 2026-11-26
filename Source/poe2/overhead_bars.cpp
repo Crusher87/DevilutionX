@@ -40,6 +40,9 @@ struct QueuedBar {
 
 std::vector<QueuedBar> Queue;
 const Player *QueuedHero;
+/** POE2 Mashup: the bars the world last drawn noted, for a frame that shows that world again. */
+std::vector<QueuedBar> KeptQueue;
+const Player *KeptHero;
 
 void QueueBar(BarOwner owner, size_t index, Point anchor)
 {
@@ -299,7 +302,7 @@ void DrawHeroBar(const Surface &out, Point topLeft, const OverheadBarValues &val
 
 void QueueHeroOverheadBar(const Player &player, Point spritePosition, ClxSprite sprite)
 {
-	if (!gbIsPoe2 || player.hasNoLife())
+	if (!HasEnhancements() || player.hasNoLife())
 		return;
 	const bool bar = *GetOptions().Gameplay.heroMiniBar;
 	const bool shrine = NewestShrineBuff(player.poe2.shrines) != nullptr;
@@ -323,7 +326,7 @@ void QueueHeroOverheadBar(const Player &player, Point spritePosition, ClxSprite 
 
 void QueueMonsterOverheadBar(const Monster &monster, Point spritePosition, ClxSprite sprite)
 {
-	if (!gbIsPoe2 || !*GetOptions().Gameplay.hurtMonsterBars || !IsHurtEnemyForBar(monster))
+	if (!HasEnhancements() || !*GetOptions().Gameplay.hurtMonsterBars || !IsHurtEnemyForBar(monster))
 		return;
 	// Measured on the standing picture, so the bar doesn't bob as the monster swings.
 	int standHeight = sprite.height();
@@ -335,8 +338,16 @@ void QueueMonsterOverheadBar(const Monster &monster, Point spritePosition, ClxSp
 	QueueBar(BarOwner::Monster, monster.getId(), AnchorOver(spritePosition, sprite, standHeight, standTopRow));
 }
 
+void QueueKeptOverheadBars()
+{
+	Queue = KeptQueue;
+	QueuedHero = KeptHero;
+}
+
 void DrawOverheadBars(const Surface &out)
 {
+	KeptQueue = Queue;
+	KeptHero = QueuedHero;
 	if (Queue.empty())
 		return;
 	const Surface view = out.subregionY(0, gnViewportHeight);

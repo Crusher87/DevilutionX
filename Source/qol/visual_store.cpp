@@ -9,6 +9,8 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <utility>
+#include <vector>
 
 #include "control/control.hpp"
 #include "controls/control_mode.hpp"
@@ -61,7 +63,12 @@ Poe2ShopTab ActivePoe2ShopTab = Poe2ShopTab::Weapons;
 
 bool UseVisualStoreUi()
 {
-	return gbIsPoe2 || *GetOptions().Gameplay.storeUi == StoreUi::VisualGrid;
+	return HasEnhancements() || *GetOptions().Gameplay.storeUi == StoreUi::VisualGrid;
+}
+
+bool UsesShopTabs()
+{
+	return gbIsPoe2 || gbIsReforged;
 }
 
 namespace {
@@ -131,6 +138,12 @@ void RebuildShopView()
 {
 	ShopView.clear();
 	ShopOrigins.clear();
+	// Sanctuary Reforged: a tab goes once its last ware is bought, and the shop shows its first tab instead.
+	if (gbIsReforged) {
+		const std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
+		if (std::find(tabs.begin(), tabs.end(), ActivePoe2ShopTab) == tabs.end())
+			ActivePoe2ShopTab = tabs.front();
+	}
 	if (ActivePoe2ShopTab == Poe2ShopTab::Buyback) {
 		if (std::vector<BuybackEntry> *buyback = VendorBuyback(); buyback != nullptr) {
 			// Newest sale first.
@@ -176,7 +189,8 @@ std::string_view Poe2ShopTabName(Poe2ShopTab tab)
 	case Poe2ShopTab::Bows:
 		return _("Bows");
 	case Poe2ShopTab::BodyArmour:
-		return _("Armour");
+		// Diablo's own spelling outside POE2 Mashup.
+		return gbIsPoe2 ? _("Armour") : _("Armor");
 	case Poe2ShopTab::Helmets:
 		return _("Helmets");
 	case Poe2ShopTab::Shields:
@@ -230,7 +244,7 @@ Rectangle Poe2PageButtonCoord(int btnId)
 /** @brief The page buttons show when the open tab has more than one page of wares. */
 bool ShowsPoe2PageButtons()
 {
-	return gbIsPoe2 && VisualStore.pages.size() > 1;
+	return UsesShopTabs() && VisualStore.pages.size() > 1;
 }
 
 void DrawPoe2PageArrow(const Surface &out, int btnId, bool enabled)
@@ -289,7 +303,8 @@ std::string_view VendorLogName()
 void AddToBuyback(const Item &item, int price)
 {
 	std::vector<BuybackEntry> *buyback = VendorBuyback();
-	if (!gbIsPoe2 || buyback == nullptr)
+	// Buying back is POE2 Mashup's: Diablo's shops have none.
+	if (!gbIsPoe2 || !UsesShopTabs() || buyback == nullptr)
 		return;
 	if (buyback->size() >= MaxBuybackItems)
 		buyback->erase(buyback->begin());
@@ -379,7 +394,7 @@ int GetSellPrice(const Item &item)
 /** @brief Rebuild the grid layout for the current vendor/tab. */
 void RefreshVisualStoreLayout()
 {
-	if (gbIsPoe2)
+	if (UsesShopTabs())
 		RebuildShopView();
 	VisualStore.pages.clear();
 	std::span<Item> items = GetVisualStoreItems();
@@ -471,29 +486,78 @@ void InitVisualStore()
 	VisualStoreNavButtonArt = LoadClx("data\\tabBtnUp.clx");
 	VisualStoreRepairAllButtonArt = LoadClx("data\\repairAllBtn.clx");
 	VisualStoreRepairButtonArt = LoadClx("data\\repairSingleBtn.clx");
+	// POE2 Mashup: the store and its buttons show the HD pack's art of them.
+	hd::RegisterUiPicture("data\\store.clx", *VisualStorePanelArt);
+	hd::RegisterUiPicture("data\\tabBtnUp.clx", *VisualStoreNavButtonArt);
+	hd::RegisterUiPicture("data\\repairAllBtn.clx", *VisualStoreRepairAllButtonArt);
+	hd::RegisterUiPicture("data\\repairSingleBtn.clx", *VisualStoreRepairButtonArt);
 }
 
 void FreeVisualStoreGFX()
 {
+	hd::ForgetUiPicture(VisualStoreNavButtonArt);
+	hd::ForgetUiPicture(VisualStorePanelArt);
+	hd::ForgetUiPicture(VisualStoreRepairAllButtonArt);
+	hd::ForgetUiPicture(VisualStoreRepairButtonArt);
 	VisualStoreNavButtonArt = std::nullopt;
 	VisualStorePanelArt = std::nullopt;
 	VisualStoreRepairAllButtonArt = std::nullopt;
 	VisualStoreRepairButtonArt = std::nullopt;
 }
 
+namespace {
+
+/** @brief Sanctuary Reforged: whether the vendor has anything in stock for the tab. */
+bool VendorStocksTab(Poe2ShopTab tab)
+{
+	const auto any = [tab](std::span<const Item> items) {
+		return std::any_of(items.begin(), items.end(), [tab](const Item &item) { return !item.isEmpty() && ItemOnPoe2ShopTab(item, tab); });
+	};
+	switch (VisualStore.vendor) {
+	case VisualStoreVendor::Smith:
+		return any({ SmithItems.data(), SmithItems.size() }) || any({ PremiumItems.data(), PremiumItems.size() });
+	case VisualStoreVendor::Witch:
+		return any({ WitchItems.data(), WitchItems.size() });
+	default:
+		return true;
+	}
+}
+
+/**
+ * @brief Sanctuary Reforged: the vendor tabs that have some of Diablo's own stock, and no buyback (Diablo's shops have
+ * none). Griswold and Adria keep their Diablo and Hellfire stock, so a tab of a kind they have none of right now isn't
+ * shown. With nothing in stock at all, the first tab stays, so the shop always has one.
+ */
+std::vector<Poe2ShopTab> ReforgedShopTabs(std::vector<Poe2ShopTab> tabs)
+{
+	const Poe2ShopTab first = tabs.front();
+	std::erase_if(tabs, [](Poe2ShopTab tab) { return tab == Poe2ShopTab::Buyback || !VendorStocksTab(tab); });
+	if (tabs.empty())
+		tabs.push_back(first);
+	return tabs;
+}
+
+} // namespace
+
 std::vector<Poe2ShopTab> Poe2ShopTabs()
 {
+	std::vector<Poe2ShopTab> tabs;
 	switch (VisualStore.vendor) {
-	case VisualStoreVendor::Smith: {
+	case VisualStoreVendor::Smith:
 		// One tab for all weapons (Curtis 2026-10-16), sorted so the kinds stay together.
 		// His basic stock always has rings and amulets (Curtis 2026-10-17), so the Jewelry tab is always there.
-		return { Poe2ShopTab::Weapons, Poe2ShopTab::BodyArmour, Poe2ShopTab::Helmets, Poe2ShopTab::Shields, Poe2ShopTab::Jewelry, Poe2ShopTab::Buyback };
-	}
+		tabs = { Poe2ShopTab::Weapons, Poe2ShopTab::BodyArmour, Poe2ShopTab::Helmets, Poe2ShopTab::Shields, Poe2ShopTab::Jewelry, Poe2ShopTab::Buyback };
+		break;
 	case VisualStoreVendor::Witch:
-		return { Poe2ShopTab::Staves, Poe2ShopTab::Supplies, Poe2ShopTab::Buyback };
+		tabs = { Poe2ShopTab::Staves, Poe2ShopTab::Supplies, Poe2ShopTab::Buyback };
+		break;
 	default:
-		return { Poe2ShopTab::Items };
+		tabs = { Poe2ShopTab::Items };
+		break;
 	}
+	if (gbIsReforged)
+		return ReforgedShopTabs(std::move(tabs));
+	return tabs;
 }
 
 bool ItemOnPoe2ShopTab(const Item &item, Poe2ShopTab tab)
@@ -543,13 +607,18 @@ void SetPoe2ShopTab(Poe2ShopTab tab)
 
 int VisualStoreItemPrice(int index)
 {
-	if (gbIsPoe2 && index >= 0 && static_cast<size_t>(index) < ShopOrigins.size() && ShopOrigins[index].source == ShopSource::Buyback) {
+	if (UsesShopTabs() && index >= 0 && static_cast<size_t>(index) < ShopOrigins.size() && ShopOrigins[index].source == ShopSource::Buyback) {
 		const std::vector<BuybackEntry> *buyback = VendorBuyback();
 		if (buyback != nullptr && ShopOrigins[index].index < buyback->size())
 			return (*buyback)[ShopOrigins[index].index].price;
 	}
 	const std::span<Item> items = GetVisualStoreItems();
-	return index >= 0 && static_cast<size_t>(index) < items.size() ? items[index]._iIvalue : 0;
+	if (index < 0 || static_cast<size_t>(index) >= items.size())
+		return 0;
+	// Sanctuary Reforged: Wirt asks Diablo's and Hellfire's own price, as in his talk menu.
+	if (gbIsReforged && VisualStore.vendor == VisualStoreVendor::Boy)
+		return WirtPrice(items[index]);
+	return items[index]._iIvalue;
 }
 
 void OpenVisualStore(VisualStoreVendor vendor)
@@ -565,7 +634,7 @@ void OpenVisualStore(VisualStoreVendor vendor)
 	VisualStore.vendor = vendor;
 	VisualStore.activeTab = VisualStoreTab::Basic;
 	VisualStore.currentPage = 0;
-	if (gbIsPoe2) {
+	if (UsesShopTabs()) {
 		ActivePoe2ShopTab = Poe2ShopTabs().front();
 		RebuildShopView();
 	}
@@ -755,7 +824,7 @@ int GetVisualStoreItemCount()
 
 std::span<Item> GetVisualStoreItems()
 {
-	if (gbIsPoe2)
+	if (UsesShopTabs())
 		return { ShopView.data(), ShopView.size() };
 	return GetVendorItems(VisualStore.vendor, VisualStore.activeTab);
 }
@@ -778,7 +847,7 @@ Rectangle ShopSearchRect()
 
 bool ShopSearchHandleEvent(const SDL_Event &event)
 {
-	if (!gbIsPoe2 || !IsVisualStoreOpen) {
+	if (!UsesShopTabs() || !IsVisualStoreOpen) {
 		ShopSearch.unfocus();
 		return false;
 	}
@@ -794,7 +863,7 @@ void DrawVisualStore(const Surface &out)
 
 	const Point panelPos = GetPanelPosition(UiPanels::Stash);
 	// POE2 Mashup: the search box, in a strip under the shop (Curtis 2026-10-19).
-	if (gbIsPoe2) {
+	if (UsesShopTabs()) {
 		poe2ui::DrawPanel(out, { panelPos + Displacement { 0, 350 }, { 320, ShopSearchStripHeight } });
 		ShopSearch.draw(out, ShopSearchRect());
 	}
@@ -805,7 +874,7 @@ void DrawVisualStore(const Surface &out)
 	// Draw tab buttons
 	UiFlags basicStyle = VisualStore.activeTab == VisualStoreTab::Basic ? styleWhite : styleTabPushed;
 	UiFlags premiumStyle = VisualStore.activeTab == VisualStoreTab::Premium ? styleWhite : styleTabPushed;
-	if (gbIsPoe2) {
+	if (UsesShopTabs()) {
 		// POE2 Mashup: one tab per kind of item, plus buyback.
 		const std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
 		if (Poe2TabsInTwoRows(tabs.size())) {
@@ -886,7 +955,7 @@ void DrawVisualStore(const Surface &out)
 
 		DrawItem(item, out, position, sprite);
 		// POE2 Mashup: a search frames the wares that match and dims the rest.
-		if (gbIsPoe2 && ShopSearch.searching())
+		if (UsesShopTabs() && ShopSearch.searching())
 			DrawItemSearchMark(out, { { position.x, position.y - sprite.height() + 1 }, { sprite.width(), sprite.height() } }, ShopSearch.matches(item));
 	}
 
@@ -926,7 +995,8 @@ void PrintWareInfo(int itemIndex)
 		PrintItemDur(item);
 	}
 
-	if (gbIsPoe2) {
+	// POE2 Mashup and Sanctuary Reforged: Shift compares the ware with what the hero wears, and the price is a note.
+	if (HasEnhancements()) {
 		PrintItemComparison(item);
 		CurrentInfoLineStyle = InfoLineStyle::Note;
 		AddInfoBoxString(StrCat(FormatInteger(price), " Gold"), true);
@@ -941,7 +1011,7 @@ void PrintWareInfo(int itemIndex)
 int16_t CheckVisualStoreHLight(Point mousePosition)
 {
 	// Check buttons first
-	if (gbIsPoe2 && MyPlayer->HoldItem.isEmpty()) {
+	if (UsesShopTabs() && MyPlayer->HoldItem.isEmpty()) {
 		const std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
 		for (size_t i = 0; i < tabs.size(); i++) {
 			if (Poe2TabRect(i, tabs.size()).contains(mousePosition)) {
@@ -968,7 +1038,7 @@ int16_t CheckVisualStoreHLight(Point mousePosition)
 	if (MyPlayer->HoldItem.isEmpty()) {
 		for (int i = 0; i < 4; i++) {
 			// POE2 Mashup: the tabs above replace the basic, premium and misc tabs.
-			if (gbIsPoe2 && i < RepairAllBtn)
+			if (UsesShopTabs() && i < RepairAllBtn)
 				continue;
 			// Skip tab buttons if vendor doesn't have tabs
 			if (!VendorHasTabs() && i != TabButtonBasic)
@@ -1074,11 +1144,11 @@ std::optional<PendingWare> PendingPurchase;
 /** @brief Takes a bought ware off the vendor's lists. */
 void RemoveBoughtWare(int16_t itemIndex)
 {
-	if (gbIsPoe2 && static_cast<size_t>(itemIndex) < ShopOrigins.size() && ShopOrigins[itemIndex].source == ShopSource::Buyback)
+	if (UsesShopTabs() && static_cast<size_t>(itemIndex) < ShopOrigins.size() && ShopOrigins[itemIndex].source == ShopSource::Buyback)
 		TelemetryItemAction(*MyPlayer, "buy", GetVisualStoreItems()[itemIndex], StrCat(VendorLogName(), ", buyback"), VisualStoreItemPrice(itemIndex));
 	else
 		TelemetryItemAction(*MyPlayer, "buy", GetVisualStoreItems()[itemIndex], VendorLogName(), VisualStoreItemPrice(itemIndex));
-	if (gbIsPoe2) {
+	if (UsesShopTabs()) {
 		// POE2 Mashup: take the item from the list it came from.
 		const ShopOrigin origin = ShopOrigins[itemIndex];
 		switch (origin.source) {
@@ -1216,7 +1286,7 @@ void CheckVisualStoreItem(Point mousePosition, bool isCtrlHeld, bool isShiftHeld
 		return;
 	}
 
-	if (gbIsPoe2 && !isCtrlHeld) {
+	if (UsesShopTabs() && !isCtrlHeld) {
 		// POE2 Mashup: a click picks the ware up and it's bought once it's put in the inventory; Ctrl+click buys it at once.
 		Player &player = *MyPlayer;
 		player.HoldItem = item;
@@ -1266,6 +1336,9 @@ void CheckVisualStorePaste(Point mousePosition)
 
 	// Add gold to player
 	AddGoldToInventory(player, sellPrice);
+	// Sanctuary Reforged: the hero's gold counts the new pile at once, as after a sale in the talk menu.
+	if (gbIsReforged)
+		player._pGold = CalculateGold(player);
 	PlaySFX(SfxID::ItemGold);
 	TelemetryItemAction(player, "sell", player.HoldItem, VendorLogName(), sellPrice);
 	AddToBuyback(player.HoldItem, sellPrice);
@@ -1273,7 +1346,7 @@ void CheckVisualStorePaste(Point mousePosition)
 	// Clear the held item
 	player.HoldItem.clear();
 	NewCursor(CURSOR_HAND);
-	if (gbIsPoe2)
+	if (UsesShopTabs())
 		RefreshVisualStoreLayout();
 }
 
@@ -1327,13 +1400,16 @@ void SellItemToVisualStore(int invIndex)
 
 	// Add gold to player
 	AddGoldToInventory(player, sellPrice);
+	// Sanctuary Reforged: the hero's gold counts the new pile at once, as after a sale in the talk menu.
+	if (gbIsReforged)
+		player._pGold = CalculateGold(player);
 	PlaySFX(SfxID::ItemGold);
 	TelemetryItemAction(player, "sell", item, VendorLogName(), sellPrice);
 	AddToBuyback(item, sellPrice);
 
 	// Remove item from inventory
 	player.RemoveInvItem(invIndex);
-	if (gbIsPoe2)
+	if (UsesShopTabs())
 		RefreshVisualStoreLayout();
 }
 
@@ -1342,7 +1418,7 @@ void CheckVisualStoreButtonPress(Point mousePosition)
 	if (!MyPlayer->HoldItem.isEmpty())
 		return;
 
-	if (gbIsPoe2) {
+	if (UsesShopTabs()) {
 		const size_t tabCount = Poe2ShopTabs().size();
 		for (size_t i = 0; i < tabCount; i++) {
 			if (Poe2TabRect(i, tabCount).contains(mousePosition)) {
@@ -1361,7 +1437,7 @@ void CheckVisualStoreButtonPress(Point mousePosition)
 	}
 
 	for (int i = 0; i < 4; i++) {
-		if (gbIsPoe2 && i < RepairAllBtn)
+		if (UsesShopTabs() && i < RepairAllBtn)
 			continue;
 		// Skip tab buttons if vendor doesn't have tabs
 		if (!VendorHasTabs() && i != TabButtonBasic)

@@ -19,6 +19,8 @@ bool gbIsMultiplayer;
 bool gbIsSpawn;
 bool gbIsHellfire;
 bool gbIsPoe2;
+bool gbIsReforged;
+bool gbAdminSwitch;
 std::string Poe2ModVersion;
 bool gbVanilla;
 bool forceHellfire;

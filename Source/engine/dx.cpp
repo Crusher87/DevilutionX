@@ -31,6 +31,7 @@
 #include "engine/palette.h"
 #include "engine/render/primitive_render.hpp"
 #include "engine/ui_scale.hpp"
+#include "game_mode.hpp"
 #include "headless_mode.hpp"
 #include "init.hpp"
 #include "options.h"
@@ -71,7 +72,7 @@ SDL_Surface *PalSurface;
 
 namespace {
 
-/** POE2 Mashup: with the UI scaled, the full-size frame: the world, then the UI scaled up over it. */
+/** POE2 Mashup: with the UI scaled (or at 100 with HD or effects: WorldLayerUnscaled), the full-size frame: the world, then the UI scaled up over it. */
 SDLSurfaceUniquePtr WorldSurface;
 /** The UI frame as it was before the UI was drawn on it: what's left unchanged shows the full-size world. */
 std::vector<uint8_t> UiBase;
@@ -79,6 +80,12 @@ std::vector<uint8_t> UiBase;
 std::vector<UiCover> UiCovered;
 /** POE2 Mashup: UI pixels laid over the world with real alpha, such as the Tab map's floor (Curtis 2026-10-29). */
 std::vector<UiTint> UiTinted;
+/**
+ * One byte per row of UiTinted, set when a tint is written on the row (SetUiCoverTarget): a row whose byte is clear
+ * holds no tints, so it needn't be cleared again or looked through. UiTinted is six bytes a pixel, and clearing and
+ * reading all of it every frame cost more than the rest of the UI layer's bookkeeping together.
+ */
+std::vector<uint8_t> UiTintedRows;
 /** For each full-size column and row, the UI column and row it shows. */
 std::vector<uint16_t> UiColumnOf;
 std::vector<uint16_t> UiRowOf;
@@ -87,9 +94,21 @@ std::vector<uint16_t> WorldColumnOfUi;
 std::vector<uint16_t> WorldRowOfUi;
 Size WorldSampledFrom;
 bool HaveScaledWorld = false;
+/**
+ * POE2 Mashup: at UI Scale 100 the world has a frame of its own (the UI's size), for HD Graphics and Modern Effects
+ * (SyncWorldLayer). Kept across a new back buffer, which only SyncWorldLayer decides.
+ */
+bool WorldLayerUnscaled = false;
+/** POE2 Mashup: goes up each time the world's frame is made anew (WorldLayerGeneration). */
+uint32_t WorldSurfacesMade = 0;
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 /** POE2 Mashup: a frame waiting to be presented in layers: the world, the effects, then the UI over them. */
 bool LayeredFramePending = false;
+/**
+ * POE2 Mashup: a frame put together the usual way (not in layers) with the item pictures and menu letters that have HD
+ * art left out of it, which RenderPresent draws over it (the main menu's letters, before the game starts).
+ */
+bool UiSpritesLeftOut = false;
 /** The UI with the world left out (transparent), at the UI's size. */
 SDL_Texture *UiOverlay = nullptr;
 SDL_Renderer *UiOverlayRenderer = nullptr;
@@ -142,7 +161,9 @@ bool UpdateUiOverlay()
 	const SDL_Color *colors = Palette->colors;
 	const auto *ui = static_cast<const uint8_t *>(PalSurface->pixels);
 	const bool covers = UiCovered.size() == UiBase.size();
-	const bool tints = UiTinted.size() == UiBase.size();
+	const bool tints = UiTinted.size() == UiBase.size() && UiTintedRows.size() == static_cast<size_t>(gnScreenHeight);
+	// POE2 Mashup: a panel's pixels with its HD art under them (hd::RenderUiPanels) are left out.
+	const uint8_t *hidden = hd::UiHiddenPixels(gnScreenWidth, gnScreenHeight);
 	// The rows that changed go up in runs; a few unchanged rows between two changed ones go up with them.
 	constexpr int RunGap = 8;
 	int runStart = -1;
@@ -186,7 +207,7 @@ bool UpdateUiOverlay()
 			}
 		}
 		bool tinted = false;
-		if (tintLine != nullptr && std::memcmp(tintLine, UiOverlayZeros.data(), static_cast<size_t>(gnScreenWidth) * sizeof(UiTint)) != 0) {
+		if (tintLine != nullptr && UiTintedRows[y] != 0 && std::memcmp(tintLine, UiOverlayZeros.data(), static_cast<size_t>(gnScreenWidth) * sizeof(UiTint)) != 0) {
 			int from = 0;
 			while (from < gnScreenWidth && tintLine[from].alpha == 0)
 				from++;
@@ -212,7 +233,15 @@ bool UpdateUiOverlay()
 			std::memset(row, 0, static_cast<size_t>(first) * 4);
 			std::memset(row + static_cast<size_t>(last + 1) * 4, 0, static_cast<size_t>(gnScreenWidth - last - 1) * 4);
 			uint8_t *out = row + static_cast<size_t>(first) * 4;
+			const uint8_t *hiddenLine = hidden != nullptr ? hidden + static_cast<size_t>(y) * gnScreenWidth : nullptr;
 			for (int x = first; x <= last; x++, out += 4) {
+				if (hiddenLine != nullptr && hiddenLine[x] != 0) {
+					out[0] = 0;
+					out[1] = 0;
+					out[2] = 0;
+					out[3] = 0;
+					continue;
+				}
 				// POE2 Mashup: a tint nothing has been drawn over since lies over the HD world at its own alpha, the same
 				// whatever the 8-bit world under it, so it holds steady while the world scrolls (Curtis 2026-10-29).
 				if (tinted && tintLine[x].alpha != 0 && tintLine[x].color == uiLine[x] && (!covered || coverLine[x] != UiCover::Solid)) {
@@ -326,6 +355,8 @@ void PresentLayeredFrame(SDL_Surface *surface)
 		hd::PrepareUiSprites();
 		const bool overlay = UpdateUiOverlay();
 		hd::RestoreUiSprites();
+		// POE2 Mashup: UI panels with HD art show it under the UI, which leaves out their own pixels there.
+		hd::RenderUiPanels(renderer);
 		if (overlay)
 			SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
 		hd::RenderUiSprites(renderer);
@@ -344,10 +375,12 @@ void CreateWorldSurface()
 	UiBase.clear();
 	UiCovered.clear();
 	UiTinted.clear();
+	UiTintedRows.clear();
 	HaveScaledWorld = false;
-	if (!IsUiScaled())
+	if (!IsUiScaled() && !WorldLayerUnscaled)
 		return;
 	WorldSurface = SDLWrap::CreateRGBSurfaceWithFormat(0, gnRenderWidth, gnRenderHeight, 8, SDL_PIXELFORMAT_INDEX8);
+	WorldSurfacesMade++;
 #ifdef USE_SDL3
 	if (!SDL_SetSurfacePalette(WorldSurface.get(), Palette.get())) ErrSdl();
 #elif !defined(USE_SDL1)
@@ -357,6 +390,7 @@ void CreateWorldSurface()
 	UiBase.assign(static_cast<size_t>(gnScreenWidth) * gnScreenHeight, 0);
 	UiCovered.assign(UiBase.size(), UiCover::None);
 	UiTinted.assign(UiBase.size(), UiTint {});
+	UiTintedRows.assign(gnScreenHeight, 0);
 	UiColumnOf.resize(gnRenderWidth);
 	for (int x = 0; x < gnRenderWidth; x++)
 		UiColumnOf[x] = static_cast<uint16_t>(std::min(x * gnScreenWidth / gnRenderWidth, gnScreenWidth - 1));
@@ -377,12 +411,17 @@ void ComposeScaledFrame()
 		const uint8_t *uiLine = ui + static_cast<ptrdiff_t>(uiRow) * uiPitch;
 		uint8_t *frameLine = frame + static_cast<ptrdiff_t>(y) * framePitch;
 		if (!HaveScaledWorld) {
+			if (gnRenderWidth == gnScreenWidth) {
+				std::memcpy(frameLine, uiLine, gnRenderWidth);
+				continue;
+			}
 			for (int x = 0; x < gnRenderWidth; x++)
 				frameLine[x] = uiLine[UiColumnOf[x]];
 			continue;
 		}
 		const uint8_t *baseLine = UiBase.data() + static_cast<size_t>(uiRow) * gnScreenWidth;
-		const UiTint *tintLine = UiTinted.size() == UiBase.size() ? UiTinted.data() + static_cast<size_t>(uiRow) * gnScreenWidth : nullptr;
+		const bool tintsKept = UiTinted.size() == UiBase.size() && UiTintedRows.size() == static_cast<size_t>(gnScreenHeight) && UiTintedRows[uiRow] != 0;
+		const UiTint *tintLine = tintsKept ? UiTinted.data() + static_cast<size_t>(uiRow) * gnScreenWidth : nullptr;
 		const bool tinted = tintLine != nullptr && std::any_of(tintLine, tintLine + gnScreenWidth, [](UiTint tint) { return tint.alpha != 0; });
 		if (!tinted && std::memcmp(uiLine, baseLine, gnScreenWidth) == 0)
 			continue;
@@ -501,20 +540,74 @@ void PrepareScaledUi()
 	auto *ui = static_cast<uint8_t *>(PalSurface->pixels);
 	const int uiPitch = PalSurface->pitch;
 	const uint16_t *columns = WorldColumnOfUi.data();
+	// At UI Scale 100 the world's frame is the UI's size: a straight copy.
+	const bool sameSize = gnScreenWidth == gnRenderWidth;
 	for (int y = 0; y < gnScreenHeight; y++) {
 		const uint8_t *worldLine = world + static_cast<ptrdiff_t>(WorldRowOfUi[y]) * worldPitch;
 		uint8_t *uiLine = ui + static_cast<ptrdiff_t>(y) * uiPitch;
-		for (int x = 0; x < gnScreenWidth; x++)
-			uiLine[x] = worldLine[columns[x]];
+		if (sameSize) {
+			std::memcpy(uiLine, worldLine, gnScreenWidth);
+		} else {
+			for (int x = 0; x < gnScreenWidth; x++)
+				uiLine[x] = worldLine[columns[x]];
+		}
 		std::memcpy(UiBase.data() + static_cast<size_t>(y) * gnScreenWidth, uiLine, gnScreenWidth);
 	}
 	HaveScaledWorld = true;
 	// The UI drawn from here on notes where it covers the world.
 	std::fill(UiCovered.begin(), UiCovered.end(), UiCover::None);
-	std::fill(UiTinted.begin(), UiTinted.end(), UiTint {});
 	const bool fits = PalSurface->w == gnScreenWidth && PalSurface->h == gnScreenHeight && UiCovered.size() == UiBase.size();
-	const bool tintFits = fits && UiTinted.size() == UiBase.size();
-	SetUiCoverTarget(PalSurface, fits ? UiCovered.data() : nullptr, tintFits ? UiTinted.data() : nullptr);
+	const bool tintFits = fits && UiTinted.size() == UiBase.size() && UiTintedRows.size() == static_cast<size_t>(gnScreenHeight);
+	if (UiTinted.size() == UiBase.size() && UiTintedRows.size() == static_cast<size_t>(gnScreenHeight)) {
+		// Only the rows a tint was written on since they were last cleared hold any.
+		for (int y = 0; y < gnScreenHeight; y++) {
+			if (UiTintedRows[y] == 0)
+				continue;
+			std::fill_n(UiTinted.begin() + static_cast<ptrdiff_t>(y) * gnScreenWidth, gnScreenWidth, UiTint {});
+			UiTintedRows[y] = 0;
+		}
+	} else {
+		std::fill(UiTinted.begin(), UiTinted.end(), UiTint {});
+		std::fill(UiTintedRows.begin(), UiTintedRows.end(), uint8_t { 0 });
+	}
+	SetUiCoverTarget(PalSurface, fits ? UiCovered.data() : nullptr, tintFits ? UiTinted.data() : nullptr, tintFits ? UiTintedRows.data() : nullptr);
+}
+
+bool HasWorldLayer()
+{
+	return WorldSurface != nullptr;
+}
+
+bool WorldLayerKeepsWorld()
+{
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+	// Presented in layers (PresentLayeredFrame), the UI goes up over the world's frame without being drawn into it.
+	return WorldSurface != nullptr && renderer != nullptr && !HeadlessMode && !RenderDirectlyToOutputSurface && (vfx::Enabled() || hd::Active());
+#else
+	return false;
+#endif
+}
+
+uint32_t WorldLayerGeneration()
+{
+	return WorldSurfacesMade;
+}
+
+void SyncWorldLayer()
+{
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+	// Frames go up in layers (PresentLayeredFrame) only through an SDL2 renderer.
+	const bool layeredFrames = renderer != nullptr && !HeadlessMode && !RenderDirectlyToOutputSurface
+	    && gnRenderWidth == gnScreenWidth && gnRenderHeight == gnScreenHeight;
+#else
+	const bool layeredFrames = false;
+#endif
+	const bool scaled = IsUiScaled();
+	const bool wanted = WantsWorldLayer(scaled, layeredFrames, layeredFrames && !scaled && (hd::Enabled() || vfx::Enabled()));
+	WorldLayerUnscaled = wanted && !scaled;
+	const bool sizeKept = WorldSurface == nullptr || (WorldSurface->w == gnRenderWidth && WorldSurface->h == gnRenderHeight);
+	if (wanted != (WorldSurface != nullptr) || !sizeKept)
+		CreateWorldSurface();
 }
 
 void ClearScaledWorld()
@@ -586,10 +679,31 @@ void BltFast(SDL_Rect *srcRect, SDL_Rect *dstRect)
 #endif
 		// The UI is scaled up over the full-size world, always the whole frame.
 		const FramePartScope part(FramePart::WorldUpload);
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+		hd::PrepareUiSprites();
 		ComposeScaledFrame();
+		hd::RestoreUiSprites();
+		UiSpritesLeftOut = true;
+#else
+		ComposeScaledFrame();
+#endif
 		Blit(WorldSurface.get(), nullptr, nullptr);
 		return;
 	}
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+	// POE2 Mashup: in the menus (not in a game) an unscaled UI shows its HD art too, as a scaled one does: the logo with
+	// its live fire and the menu letters are left out of the frame here and drawn over it when it is presented. In a
+	// game an unscaled UI without a world layer (HD Graphics and Modern Effects off: SyncWorldLayer) goes up as it is,
+	// without HD art (the pictures noted for it would only pile up), so its frames cost what they did.
+	if (renderer != nullptr && !gbRunGame && !RenderDirectlyToOutputSurface) {
+		hd::PrepareUiSprites();
+		Blit(PalSurface, srcRect, dstRect);
+		hd::RestoreUiSprites();
+		UiSpritesLeftOut = true;
+		return;
+	}
+	hd::DropUiDraws();
+#endif
 	if (RenderDirectlyToOutputSurface) {
 #ifndef USE_SDL1
 		// A null rect means the caller changed the entire surface.
@@ -719,6 +833,9 @@ void RenderPresent()
 		if (!SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch)) ErrSdl();
 		if (!SDL_RenderTexture(renderer, texture.get(), nullptr, nullptr)) ErrSdl();
 #else
+		// POE2 Mashup: while the main menu's intro plays, the frame is drawn into a picture of its own, which the intro
+		// then shows with its effects.
+		const bool intro = hd::BeginMenuIntroFrame(renderer);
 		if (LayeredFramePending && WantsLayeredFrame()) {
 			PresentLayeredFrame(surface);
 		} else {
@@ -732,8 +849,20 @@ void RenderPresent()
 			if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
 			if (SDL_RenderClear(renderer) <= -1) ErrSdl();
 			if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
+			// POE2 Mashup: the main menu's HD background goes under the menu, whose black leaves it showing.
+			SDL_BlendMode blend = SDL_BLENDMODE_NONE;
+			SDL_GetTextureBlendMode(texture.get(), &blend);
+			const bool background = hd::DrawMenuBackground(renderer, texture.get());
 			if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+			if (background)
+				SDL_SetTextureBlendMode(texture.get(), blend);
+			// POE2 Mashup: the HD art of what was left out of the frame (BltFast) goes over it.
+			if (UiSpritesLeftOut)
+				hd::RenderUiSprites(renderer);
 		}
+		UiSpritesLeftOut = false;
+		if (intro)
+			hd::EndMenuIntroFrame(renderer);
 #endif
 
 		if (ControlMode == ControlTypes::VirtualGamepad) {

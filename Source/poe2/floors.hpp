@@ -68,6 +68,13 @@ void Poe2FloorsAfterLoadGame();
 /** @brief The hero's town portal closed; the timer on its floor starts now. */
 void Poe2PortalClosed(int level, bool isSetLevel);
 
+/**
+ * @brief Whether floors are built from the designed rooms when their area's New ... Floors setting is on: in POE2 Mashup
+ * and in Sanctuary Reforged (which takes the layouts only, with Diablo's own monsters, objects and items on them), single
+ * player only.
+ */
+bool UsesDesignedFloors();
+
 /** @brief How a floor's current build is made. */
 struct Poe2FloorBuild {
 	/** The new Cathedral builder (poe2/cathedral_floors.hpp) rather than Diablo's. */
@@ -89,5 +96,14 @@ void Poe2NoteFloorRooms(int level, uint64_t rooms);
 std::vector<uint8_t> Poe2PackFloors();
 /** @brief Unpacks the floor records from the save file. Returns false if the data is unreadable. */
 bool Poe2UnpackFloors(std::span<const uint8_t> data);
+
+/**
+ * @brief Sanctuary Reforged: the designed rooms the saved floors were built from, for the save file. Built again from
+ * these, a floor keeps its layout (and the monsters, objects and items saved on it) after a game update changed the
+ * rooms. Call after the floor records are read or settled.
+ */
+std::vector<uint8_t> PackKeptFloorRooms();
+/** @brief Reads what PackKeptFloorRooms wrote; anything unreadable is left out (those floors use today's rooms). */
+void UnpackKeptFloorRooms(std::span<const uint8_t> data);
 
 } // namespace devilution

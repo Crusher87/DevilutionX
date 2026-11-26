@@ -243,6 +243,11 @@ void ScanWorld(const Surface &world);
  * cracks, shockwaves, light pools) can hide behind the walls, objects, items and characters drawn over it.
  */
 bool WantsFloorCopy();
+/**
+ * @brief POE2 Mashup: this frame shows the world drawn for an earlier one again (it stands still under the game menu):
+ * the floor's copy and the front record made with it hold for this frame too.
+ */
+void KeepWorld();
 /** @brief Copies the world just after its floor is drawn, before anything stands on it. */
 void CopyFloor(const Surface &world);
 /** @brief The copy of the floor, to zoom it the same way as the world; empty when there's none. */

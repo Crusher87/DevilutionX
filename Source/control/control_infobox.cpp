@@ -45,8 +45,11 @@ void PrintInfo(const Surface &out)
 {
 	if (ChatFlag)
 		return;
-	// POE2 Mashup: a hovered item's name and details are in its tooltip instead.
-	if (gbIsPoe2 && !FloatingInfoString.empty())
+	// POE2 Mashup and Sanctuary Reforged: a hovered item's name and details are in its tooltip instead. Drawing the name
+	// here as well also had the screen reader told the name, then the tooltip, then the name again, every frame: each
+	// change is a Tolk_Output on Windows, which looks for a running screen reader every time, and that made hovering an
+	// item lag in Reforged (Curtis 2026-11-23).
+	if (HasEnhancements() && !FloatingInfoString.empty())
 		return;
 
 	const int space[] = { 18, 12, 6, 3, 0 };
@@ -659,8 +662,11 @@ void PrintPoe2ItemTooltip(const Surface &out)
 	// The equipped items it would replace, side by side like POE2's: away from the cursor, or past it if there's no room.
 	std::vector<TooltipLayout> equipped;
 	std::vector<const CompareTooltip *> sources;
+	// The layouts point into these texts, so they live until the boxes are drawn (reserved: no reallocation moves them).
+	std::vector<std::string> compareTexts;
+	compareTexts.reserve(CompareTooltips.size());
 	for (const CompareTooltip &compare : CompareTooltips) {
-		const std::string compareText { compare.text.str() };
+		const std::string &compareText = compareTexts.emplace_back(compare.text.str());
 		if (compareText.empty())
 			continue;
 		TooltipLayout layout = MeasureTooltip(out, compareText, compare.styles);
@@ -824,7 +830,7 @@ void DrawInfoBox(const Surface &out)
 	if (SpellSelectFlag || trigflag || pcurs == CURSOR_HOURGLASS) {
 		InfoColor = UiFlags::ColorWhite;
 	} else if (!myPlayer.HoldItem.isEmpty()) {
-		if (gbIsPoe2 && (pcursinvitem != -1 || pcursstashitem != StashStruct::EmptyCell || pcursstoreitem != -1)) {
+		if (HasEnhancements() && (pcursinvitem != -1 || pcursstashitem != StashStruct::EmptyCell || pcursstoreitem != -1)) {
 			// POE2 Mashup: an item under the held one keeps its own tooltip and colours (Curtis 2026-10-22).
 		} else if (myPlayer.HoldItem._itype == ItemType::Gold) {
 			const int nGold = myPlayer.HoldItem._ivalue;
@@ -838,8 +844,8 @@ void DrawInfoBox(const Surface &out)
 	} else {
 		if (pcursitem != -1) {
 			GetItemStr(Items[pcursitem]);
-			// POE2 Mashup: items on the ground get the full tooltip too.
-			if (gbIsPoe2 && Items[pcursitem]._itype != ItemType::Gold) {
+			// POE2 Mashup and Sanctuary Reforged: items on the ground get the full tooltip too.
+			if (HasEnhancements() && Items[pcursitem]._itype != ItemType::Gold) {
 				FloatingInfoString = Items[pcursitem].getName();
 				FloatingInfoStyles.clear();
 				CompareTooltips.clear(); // the info box can be drawn twice a frame
@@ -848,7 +854,7 @@ void DrawInfoBox(const Surface &out)
 				else
 					PrintItemDur(Items[pcursitem]);
 				PrintItemComparison(Items[pcursitem]);
-			} else if (gbIsPoe2) {
+			} else if (HasEnhancements()) {
 				FloatingInfoString = std::string(InfoString.str());
 				FloatingInfoStyles.clear();
 			}
@@ -918,7 +924,7 @@ void DrawInfoBox(const Surface &out)
 
 void DrawFloatingInfoBox(const Surface &out)
 {
-	const bool groundItem = gbIsPoe2 && pcursitem != -1 && MyPlayer->HoldItem.isEmpty();
+	const bool groundItem = HasEnhancements() && pcursitem != -1 && MyPlayer->HoldItem.isEmpty();
 	if (pcursinvitem == -1 && pcursstashitem == StashStruct::EmptyCell && pcursstoreitem == -1 && pcursstorebtn == -1 && !groundItem) {
 		FloatingInfoString = StringOrView {};
 		InfoColor = UiFlags::ColorWhite;
@@ -928,7 +934,8 @@ void DrawFloatingInfoBox(const Surface &out)
 
 	// POE2 Mashup: no tooltip over the stack split's slider.
 	if (!FloatingInfoString.empty() && !IsStackSplitOpen()) {
-		if (gbIsPoe2 && pcursstorebtn == -1)
+		// Sanctuary Reforged has the newer tooltip too, filled with Diablo's own item facts.
+		if (HasEnhancements() && pcursstorebtn == -1)
 			PrintPoe2ItemTooltip(out);
 		else
 			PrintFloatingInfo(out);

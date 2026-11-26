@@ -30,6 +30,7 @@
 #include "engine/surface.hpp"
 #include "engine/ticks.hpp"
 #include "game_mode.hpp"
+#include "poe2/hd.hpp"
 #include "utils/algorithm/container.hpp"
 #include "utils/format.hpp"
 #include "utils/is_of.hpp"
@@ -113,6 +114,25 @@ std::array<const char *, 20> ColorTranslations = {
 };
 
 std::array<std::optional<std::array<uint8_t, 256>>, 20> ColorTranslationsData;
+
+/**
+ * @brief POE2 Mashup: copies of the colour tables for the character panel's own text (PanelLettersScope). The same
+ * colours, but kept apart, so the HD letters made for the panel show there and the game's other small text keeps its own.
+ */
+std::array<std::optional<std::array<uint8_t, 256>>, 20> PanelTranslationsData;
+bool PanelLettersOn = false;
+
+/** @brief The character panel's copy of a colour's table, loaded the first time it is asked for; null for none. */
+const uint8_t *PanelTranslationOf(text_color color)
+{
+	if (ColorTranslations[color] == nullptr)
+		return nullptr;
+	if (!PanelTranslationsData[color]) {
+		PanelTranslationsData[color].emplace();
+		LoadFileInMem(ColorTranslations[color], *PanelTranslationsData[color]);
+	}
+	return PanelTranslationsData[color]->data();
+}
 
 /** The game's palette, for making green text; set by the palette code, which this library can't link to. */
 const std::array<SDL_Color, 256> *TextPalette = nullptr;
@@ -250,6 +270,45 @@ uint32_t GetFontId(GameFontTables size, uint16_t row)
 	return (size << 16) | row;
 }
 
+/** @brief A colour's translation table, loaded the first time it is asked for; null for a colour drawn as it is. */
+const uint8_t *TranslationOf(text_color color)
+{
+	if (ColorTranslations[color] == nullptr)
+		return nullptr;
+	if (!ColorTranslationsData[color]) {
+		ColorTranslationsData[color].emplace();
+		LoadFileInMem(ColorTranslations[color], *ColorTranslationsData[color]);
+	}
+	return ColorTranslationsData[color]->data();
+}
+
+/**
+ * @brief POE2 Mashup: the main menu's letters (size 42 in its gold) and the Esc menu's (size 46 in gold, and black for
+ * what can't be picked) and the other menu screens' (sizes 30 and 24 in gold and silver: character select, the hero
+ * and game screens, Settings) show the HD pack's art of them (hd\fonts\<size>-00 and its -black/-silver sets).
+ */
+void RegisterHdLetters(GameFontTables size, ClxSpriteList letters)
+{
+	if (size == GameFont42) {
+		hd::RegisterUiLetters(letters, TranslationOf(ColorUiGold), "fonts/42-00");
+	} else if (size == GameFont46) {
+		hd::RegisterUiLetters(letters, nullptr, "fonts/46-00");
+		hd::RegisterUiLetters(letters, TranslationOf(ColorBlack), "fonts/46-00-black");
+	} else if (size == GameFont30) {
+		hd::RegisterUiLetters(letters, TranslationOf(ColorUiGold), "fonts/30-00");
+		hd::RegisterUiLetters(letters, TranslationOf(ColorUiSilver), "fonts/30-00-silver");
+	} else if (size == GameFont24) {
+		hd::RegisterUiLetters(letters, TranslationOf(ColorUiGold), "fonts/24-00");
+		hd::RegisterUiLetters(letters, TranslationOf(ColorUiSilver), "fonts/24-00-silver");
+	} else if (size == GameFont12) {
+		// Only the character panel's numbers, name and class (PanelLettersScope); other small text stays the game's.
+		hd::RegisterUiLetters(letters, PanelTranslationOf(ColorWhite), "fonts/12-00-panel");
+		hd::RegisterUiLetters(letters, PanelTranslationOf(ColorWhitegold), "fonts/12-00-panel-gold");
+		hd::RegisterUiLetters(letters, PanelTranslationOf(ColorRed), "fonts/12-00-panel-red");
+		hd::RegisterUiLetters(letters, PanelTranslationOf(ColorBlue), "fonts/12-00-panel-blue");
+	}
+}
+
 FontStack LoadFont(GameFontTables size, text_color color, uint16_t row)
 {
 	if (color == ColorGreen)
@@ -295,6 +354,8 @@ FontStack LoadFont(GameFontTables size, text_color color, uint16_t row)
 
 	if (!font.baseFont.has_value()) {
 		LogError("Error loading font: {}", path);
+	} else if (row == 0 && !font.overrideFont.has_value()) {
+		RegisterHdLetters(size, *font.baseFont);
 	}
 
 	return FontStack(font);
@@ -338,7 +399,9 @@ void DrawFont(const Surface &out, Point position, ClxSprite glyph, text_color co
 	if (outline) {
 		ClxDrawOutlineSkipColorZero(out, 0, { position.x, position.y + glyph.height() - 1 }, glyph);
 	}
-	if (ColorTranslationsData[color]) {
+	if (PanelLettersOn && ColorTranslationsData[color] && PanelTranslationOf(color) != nullptr) {
+		RenderClxSpriteWithTRN(out, glyph, position, PanelTranslationsData[color]->data());
+	} else if (ColorTranslationsData[color]) {
 		RenderClxSpriteWithTRN(out, glyph, position, ColorTranslationsData[color]->data());
 	} else {
 		RenderClxSprite(out, glyph, position);
@@ -688,10 +751,15 @@ uint32_t DoDrawString(const Surface &out, std::string_view text, Rectangle rect,
 void LoadSmallSelectionSpinner()
 {
 	pSPentSpn2Cels = LoadCel("data\\pentspn2", 12);
+	// POE2 Mashup: the spinner shows the HD pack's art of it.
+	hd::RegisterUiPicture("data\\pentspn2", *pSPentSpn2Cels);
 }
 
 void UnloadFonts()
 {
+	// POE2 Mashup: the HD letters named for them are forgotten before their pixels go.
+	for (const auto &[id, font] : Fonts)
+		hd::ForgetUiPicture(font.baseFont);
 	Fonts.clear();
 }
 
@@ -1079,6 +1147,17 @@ uint8_t PentSpn2Spin()
 bool IsBreakableWhitespace(char32_t c)
 {
 	return IsAnyOf(c, U' ', U'　', ZWSP);
+}
+
+PanelLettersScope::PanelLettersScope()
+    : wasOn_(PanelLettersOn)
+{
+	PanelLettersOn = true;
+}
+
+PanelLettersScope::~PanelLettersScope()
+{
+	PanelLettersOn = wasOn_;
 }
 
 } // namespace devilution

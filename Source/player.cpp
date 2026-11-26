@@ -7,6 +7,8 @@
 #include <limits>
 #include <cmath>
 #include <cstdint>
+#include <string>
+#include <unordered_map>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_events.h>
@@ -23,6 +25,7 @@
 #ifdef _DEBUG
 #include "debug.h"
 #endif
+#include "engine/assets.hpp"
 #include "engine/backbuffer_state.hpp"
 #include "engine/load_cl2.hpp"
 #include "engine/load_file.hpp"
@@ -103,6 +106,15 @@ Player *MyPlayer;
 std::vector<Player> Players;
 Player *InspectPlayer;
 bool MyPlayerIsDead;
+
+bool IsRunInTownOn()
+{
+	// Sanctuary Reforged, single player: the in-game setting counts as soon as it is changed. In multiplayer (and in
+	// plain Diablo and Hellfire) the value the game was started with counts, so it can't differ between players.
+	if (gbIsReforged && !gbIsMultiplayer)
+		return *GetOptions().Gameplay.runInTown;
+	return sgGameInitInfo.bRunInTown != 0;
+}
 
 namespace {
 
@@ -189,7 +201,10 @@ void HandleWalkMode(Player &player, Direction dir)
 void StartWalkAnimation(Player &player, Direction dir, bool pmWillBeCalled)
 {
 	int8_t skippedFrames = -2;
-	if (leveltype == DTYPE_TOWN && sgGameInitInfo.bRunInTown != 0)
+	if (leveltype == DTYPE_TOWN && IsRunInTownOn())
+		skippedFrames = 2;
+	// Sanctuary Reforged: the town jog in the dungeon too, as a setting (single player only, so it can't differ between players).
+	if (gbIsReforged && !gbIsMultiplayer && leveltype != DTYPE_TOWN && *GetOptions().Gameplay.runInDungeon)
 		skippedFrames = 2;
 	// POE2 Mashup: always run, in the dungeon as well as in town, and dash while dodge rolling. Defiance Banner runs faster.
 	if (gbIsPoe2)
@@ -492,7 +507,7 @@ void InitLevelChange(Player &player)
 bool DoWalk(Player &player)
 {
 	// Play walking sound effect on certain animation frames
-	if (*GetOptions().Audio.walkingSound && (leveltype != DTYPE_TOWN || sgGameInitInfo.bRunInTown == 0)) {
+	if (*GetOptions().Audio.walkingSound && (leveltype != DTYPE_TOWN || !IsRunInTownOn())) {
 		if (player.AnimInfo.currentFrame == 0
 		    || player.AnimInfo.currentFrame == 4) {
 			PlaySfxLoc(SfxID::Walk, player.position.tile);
@@ -1945,7 +1960,37 @@ void GetPlayerGraphicsPath(std::string_view path, std::string_view prefix, std::
 	*BufCopy(out, "plrgfx\\", path, "\\", prefix, "\\", prefix, type) = '\0';
 }
 
+/**
+ * POE2 Mashup: whether the hero's files hold a death for the weapon they hold. The Monk's do, for every
+ * weapon and armour look; the other heroes only have the empty-handed one.
+ */
+bool HasDeathForWeapon(const Player &player)
+{
+	const auto weapon = static_cast<PlayerWeaponGraphic>(player._pgfxnum & 0xFU);
+	if (weapon == PlayerWeaponGraphic::Unarmed)
+		return true;
+	const PlayerSpriteData &spriteData = GetPlayerSpriteDataForClass(GetPlayerSpriteClass(player._pClass));
+	const char prefixBuf[3] = { spriteData.classChar, ArmourChar[player._pgfxnum >> 4], WepChar[static_cast<std::size_t>(weapon)] };
+	char pszName[256];
+	GetPlayerGraphicsPath(spriteData.classPath, std::string_view(prefixBuf, 3), "dt", pszName);
+	std::string path = pszName;
+	path += DEVILUTIONX_CL2_EXT;
+	static std::unordered_map<std::string, bool> Found;
+	const auto it = Found.find(path);
+	if (it != Found.end())
+		return it->second;
+	const bool found = FindAsset(path).ok();
+	Found.emplace(std::move(path), found);
+	return found;
+}
+
 } // namespace
+
+void UseDeathLook(Player &player)
+{
+	if (!HasDeathForWeapon(player))
+		player._pgfxnum &= ~0xFU;
+}
 
 bool FinishSkillCast(Player &player)
 {
@@ -2519,7 +2564,7 @@ ClxSprite GetPlayerPortraitSprite(Player &player)
 
 	player_graphic graphic = player_graphic::Stand;
 	if (player.hasNoLife()) {
-		if (animWeaponId == PlayerWeaponGraphic::Unarmed) {
+		if (animWeaponId == PlayerWeaponGraphic::Unarmed || HasDeathForWeapon(player)) {
 			szCel = "dt";
 			graphic = player_graphic::Death;
 		}
@@ -2605,8 +2650,9 @@ void LoadPlrGFX(Player &player, player_graphic graphic)
 		szCel = "qm";
 		break;
 	case player_graphic::Death:
-		// Only one Death animation exists, for unarmed characters
-		animWeaponId = PlayerWeaponGraphic::Unarmed;
+		// Most heroes only have an unarmed death; the Monk has one for every weapon (POE2 Mashup).
+		if (!HasDeathForWeapon(player))
+			animWeaponId = PlayerWeaponGraphic::Unarmed;
 		szCel = "dt";
 		break;
 	case player_graphic::Block:
@@ -2643,7 +2689,7 @@ void InitPlayerGFX(Player &player)
 	ResetPlayerGFX(player);
 
 	if (player.hasNoLife()) {
-		player._pgfxnum &= ~0xFU;
+		UseDeathLook(player);
 		LoadPlrGFX(player, player_graphic::Death);
 		return;
 	}
@@ -2906,7 +2952,7 @@ void NextPlrLevel(Player &player)
 	CalcPlrInv(player, true);
 	PlaySFX(SfxID::ItemArmor);
 	PlaySFX(SfxID::ItemSign);
-	if (gbIsPoe2)
+	if (HasEnhancements())
 		vfx::LevelUp(player.position.tile);
 	TelemetryLevelUp(player);
 }
@@ -2986,7 +3032,10 @@ void InitPlayer(Player &player, bool firstTime)
 		player._pRSpell = SpellID::Invalid;
 		if (&player == MyPlayer) {
 			LoadHotkeys();
-			LoadPoe2HeroData(player);
+			if (gbIsReforged)
+				LoadReforgedHero(player);
+			else
+				LoadPoe2HeroData(player);
 		}
 		player._pSBkSpell = SpellID::Invalid;
 		player.queuedSpell.spellId = player._pRSpell;
@@ -3009,7 +3058,7 @@ void InitPlayer(Player &player, bool firstTime)
 			player.AnimInfo.currentFrame = GenerateRnd(player._pNFrames - 1);
 			player.AnimInfo.tickCounterOfCurrentFrame = GenerateRnd(3);
 		} else {
-			player._pgfxnum &= ~0xFU;
+			UseDeathLook(player);
 			player._pmode = PM_DEATH;
 			NewPlrAnim(player, player_graphic::Death, Direction::South);
 			player.AnimInfo.currentFrame = player.AnimInfo.numberOfFrames - 2;
@@ -3231,8 +3280,8 @@ StartPlayerKill(Player &player, DeathReason deathReason)
 			// Ensure death animation show the player without weapon and armor, because they drop on death
 			player._pgfxnum = 0;
 		} else {
-			// Death animation aren't weapon specific, so always use the unarmed animations
-			player._pgfxnum &= ~0xFU;
+			// Most deaths aren't weapon specific; the Monk's are (POE2 Mashup)
+			UseDeathLook(player);
 		}
 		ResetPlayerGFX(player);
 		SetPlrAnims(player);

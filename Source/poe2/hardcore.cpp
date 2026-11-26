@@ -20,9 +20,14 @@ bool PendingSave;
 
 } // namespace
 
+bool HasHardcoreChoice()
+{
+	return gbIsPoe2 || gbIsReforged;
+}
+
 bool IsHardcoreHero(const Player &player)
 {
-	return gbIsPoe2 && !gbIsMultiplayer && player.poe2.hardcore;
+	return HasHardcoreChoice() && !gbIsMultiplayer && player.poe2.hardcore;
 }
 
 bool HardcoreHeroFell()
@@ -69,7 +74,11 @@ void FinishHardcoreFall()
 	gbIsHellfireSaveGame = isHellfireSaveGame;
 	TelemetryStashLoaded();
 	SaveGame();
-	EventPlrMsg(_("Your hero fell in Hardcore. They live on in Softcore with what they wore and carried."), UiFlags::ColorWhitegold);
+	// Sanctuary Reforged calls the other heroes Normal, not Softcore.
+	if (gbIsReforged)
+		EventPlrMsg(_("Your hero fell in Hardcore. They live on as a Normal hero with what they wore and carried."), UiFlags::ColorWhitegold);
+	else
+		EventPlrMsg(_("Your hero fell in Hardcore. They live on in Softcore with what they wore and carried."), UiFlags::ColorWhitegold);
 }
 
 } // namespace devilution

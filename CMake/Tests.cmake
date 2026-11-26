@@ -32,6 +32,7 @@ set(tests
   pack_test
   poe2_admin_tools_test
   poe2_area_levels_test
+  poe2_atmosphere_test
   poe2_attributes_test
   poe2_bare_fists_test
   poe2_breakables_test
@@ -53,6 +54,7 @@ set(tests
   poe2_cathedral_floors_test
   poe2_cathedral_objects_test
   poe2_floors_test
+  poe2_hd_pack_assets_test
   poe2_gemcutting_test
   poe2_item_bases_test
   poe2_item_spawner_test
@@ -72,7 +74,14 @@ set(tests
   poe2_modifiers_test
   poe2_crafting_test
   poe2_affix_glow_test
+  poe2_carved_bodies_test
   poe2_hd_outline_test
+  poe2_hd_batch_test
+  poe2_hd_spell_icons_test
+  poe2_hd_logo_test
+  poe2_hd_keep_test
+  poe2_live_fire_test
+  poe2_menu_intro_test
   poe2_rune_outline_test
   poe2_effect_primitives_test
   poe2_runes_test
@@ -100,6 +109,7 @@ set(tests
   poe2_shrines_test
   poe2_summon_commands_test
   poe2_weapon_swap_test
+  reforged_swap_hardcore_test
   poe2_rare_items_test
   poe2_save_fixture_test
   poe2_skill_effects_test
@@ -142,6 +152,11 @@ set(tests
   poe2_swing_speed_test
   player_test
   quests_test
+  reforged_floors_test
+  reforged_mode_test
+  reforged_telemetry_test
+  reforged_ui_comforts_test
+  reforged_clean_ui_test
   reencode_dun_cels_test
   scrollrt_test
   stores_test
@@ -155,6 +170,7 @@ set(tests
   store_transaction_test
   visual_store_test
   stash_test
+  reforged_stash_shops_test
   inventory_ui_test
   spell_ui_test
   char_panel_test
@@ -173,6 +189,7 @@ set(standalone_tests
   palette_blending_test
   parse_int_test
   path_test
+  poe2_hd_pack_test
   vision_test
   random_test
   rectangle_test
@@ -191,6 +208,7 @@ set(benchmarks
   light_render_benchmark
   palette_blending_benchmark
   path_benchmark
+  poe2_hd_light_benchmark
 )
 
 include(test/Fixtures.cmake)
@@ -274,6 +292,18 @@ target_link_dependencies(dun_render_benchmark
   unordered_dense::unordered_dense
 )
 target_link_dependencies(file_util_test PRIVATE libdevilutionx_file_util app_fatal_for_testing)
+
+# POE2 Mashup: the HD pack files. The reader is tested against packs a writer in the tests makes and, where there is
+# a Python to run it, against one made by the packer itself (tools/hd_pack.py), which has tests of its own as well.
+target_link_dependencies(poe2_hd_pack_test PRIVATE DevilutionX::SDL libdevilutionx_hd_pack libdevilutionx_file_util libdevilutionx_log app_fatal_for_testing)
+target_include_directories(poe2_hd_pack_test PRIVATE "${PROJECT_SOURCE_DIR}/test")
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  target_compile_definitions(poe2_hd_pack_test PRIVATE
+    "HD_PACK_PYTHON=\"${Python3_EXECUTABLE}\""
+    "HD_PACK_TOOL=\"${PROJECT_SOURCE_DIR}/tools/hd_pack.py\"")
+  add_test(NAME hd_pack_tool_test COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tools/hd_pack_test.py")
+endif()
 target_link_dependencies(format_int_test PRIVATE libdevilutionx_format_int language_for_testing)
 target_link_dependencies(ini_test PRIVATE libdevilutionx_ini app_fatal_for_testing)
 target_link_dependencies(mod_identity_test PRIVATE libdevilutionx_mod_identity app_fatal_for_testing)
@@ -291,6 +321,7 @@ target_link_dependencies(parse_int_test PRIVATE libdevilutionx_parse_int)
 target_link_dependencies(path_test PRIVATE libdevilutionx_pathfinding libdevilutionx_direction app_fatal_for_testing)
 target_link_dependencies(vision_test PRIVATE libdevilutionx_vision)
 target_link_dependencies(path_benchmark PRIVATE libdevilutionx_pathfinding app_fatal_for_testing)
+target_link_dependencies(poe2_hd_light_benchmark PRIVATE libdevilutionx_so)
 target_link_dependencies(random_test PRIVATE libdevilutionx_random)
 target_link_dependencies(static_vector_test PRIVATE libdevilutionx_random app_fatal_for_testing)
 target_link_dependencies(str_cat_test PRIVATE libdevilutionx_strings)

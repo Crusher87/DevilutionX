@@ -111,8 +111,26 @@ void DrawMouse();
 void UiLoadDefaultPalette();
 bool UiLoadBlackBackground();
 void LoadBackgroundArt(const char *pszFile, int frames = 1);
+/**
+ * @brief The main menu's background (ui_art\mainmenu and its wide sides; ui_art\swmmenu for `spawn`), or the HD
+ * pack's own in its place when it has it (hd::HasMenuBackground).
+ */
+void LoadMainMenuBackground(bool spawn = false);
 void UiAddBackground(std::vector<std::unique_ptr<UiItemBase>> *vecDialog);
 void UiAddLogo(std::vector<std::unique_ptr<UiItemBase>> *vecDialog, int y = GetUIRectangle().position.y);
+/**
+ * @brief POE2 Mashup: how far a screen with the menu logo moves its title and contents down, clear of the intro's
+ * subtitle and fire lines under the logo (hd::MenuSubtitleShown): 0 without them, and never more than the screen has
+ * under its 640 x 480 (so nothing runs off the bottom). Each item of a screen rendered (or clicked) while the logo shows
+ * is moved by it once, its background too (the screens' frames are drawn in it); the logo and dialogs over a screen stay
+ * put (UiItemBase::KeepPlace).
+ */
+int UiSubtitleDrop();
+/** @brief POE2 Mashup: moves the items not yet moved down by UiSubtitleDrop. */
+void UiMoveUnderSubtitle(const std::vector<UiItemBase *> &items);
+void UiMoveUnderSubtitle(const std::vector<std::unique_ptr<UiItemBase>> &items);
+/** @brief POE2 Mashup: these items stay where they are (the main menu's, which the subtitle was made to fit). */
+void UiKeepPlaces(const std::vector<std::unique_ptr<UiItemBase>> &items);
 void UiFocusNavigationSelect();
 void UiFocusNavigationEsc();
 void UiFocusNavigationYesNo();

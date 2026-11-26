@@ -5,12 +5,15 @@
 #include <bit>
 #include <cstdlib>
 #include <deque>
+#include <initializer_list>
 #include <tuple>
 #include <utility>
 
 #include "data/file.hpp"
+#include "data/mode_tables.hpp"
 #include "data/record_reader.hpp"
 #include "engine/random.hpp"
+#include "game_mode.hpp"
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
@@ -41,20 +44,38 @@ constexpr int FamilyMost = 2;
 constexpr size_t RecentNormal = 2;
 constexpr size_t RecentMemorable = 5;
 
-/** A room collection and the file it is read from. */
+/** A room collection and the file it is read from (under txtdata\poe2\ in POE2 Mashup, txtdata\reforged\ in Reforged). */
 struct RoomSet {
 	std::string_view filename;
 	std::string_view name;
 	std::vector<CathedralRoomDef> rooms;
 	bool loaded = false;
+	/** The rooms were read for Sanctuary Reforged, from its own folder; switching mode reads them again. */
+	bool forReforged = false;
+	/** The rooms were given by SetCathedralRooms and the like (tests), not read from the file. */
+	bool injected = false;
+	/** Sanctuary Reforged: the rooms a saved floor was built from, used in place of these (KeepRoomCollection). */
+	const std::vector<CathedralRoomDef> *kept = nullptr;
 };
 
-RoomSet CathedralSet { "txtdata\\poe2\\cathedral_rooms.tsv", "Cathedral", {}, false };
-RoomSet CatacombsSet { "txtdata\\poe2\\catacombs_rooms.tsv", "Catacombs", {}, false };
-RoomSet CavesSet { "txtdata\\poe2\\caves_rooms.tsv", "Caves", {}, false };
-RoomSet HellSet { "txtdata\\poe2\\hell_rooms.tsv", "Hell", {}, false };
-RoomSet HiveSet { "txtdata\\poe2\\hive_rooms.tsv", "Hive", {}, false };
-RoomSet CryptSet { "txtdata\\poe2\\crypt_rooms.tsv", "Crypt", {}, false };
+RoomSet CathedralSet { "cathedral_rooms.tsv", "Cathedral", {}, false };
+RoomSet CatacombsSet { "catacombs_rooms.tsv", "Catacombs", {}, false };
+RoomSet CavesSet { "caves_rooms.tsv", "Caves", {}, false };
+RoomSet HellSet { "hell_rooms.tsv", "Hell", {}, false };
+RoomSet HiveSet { "hive_rooms.tsv", "Hive", {}, false };
+RoomSet CryptSet { "crypt_rooms.tsv", "Crypt", {}, false };
+
+RoomSet &SetOf(RoomCollection collection)
+{
+	switch (collection) {
+	case RoomCollection::Catacombs: return CatacombsSet;
+	case RoomCollection::Caves: return CavesSet;
+	case RoomCollection::Hell: return HellSet;
+	case RoomCollection::Hive: return HiveSet;
+	case RoomCollection::Crypt: return CryptSet;
+	default: return CathedralSet;
+	}
+}
 
 bool FunnelFloor = false;
 CathedralPlan CurrentPlan;
@@ -102,33 +123,58 @@ uint8_t ParseRoles(std::string_view text)
 void LoadRooms(RoomSet &set)
 {
 	set.loaded = true;
+	set.forReforged = gbIsReforged;
 	set.rooms.clear();
-	const std::string_view Filename = set.filename;
+	const std::string filename = ModeTablePath(set.filename);
+	const std::string_view Filename = filename;
 	auto dataFile = DataFile::load(Filename);
 	if (!dataFile.has_value()) {
 		LogError("Couldn't load the {} rooms: {}", set.name, Filename);
 		return;
 	}
+	// The columns are found by name, so a table may leave out one it has no use for (Reforged's rooms have no rewards).
+	std::vector<std::string> columns;
+	{
+		RecordIterator header = dataFile->begin();
+		if (header != dataFile->end()) {
+			for (DataFileField field : *header)
+				columns.emplace_back(field.value());
+		}
+	}
 	dataFile->skipHeaderOrDie(Filename);
 	for (DataFileRecord record : *dataFile) {
-		RecordReader reader { record, Filename };
 		CathedralRoomDef room;
 		std::string roles;
 		std::string options;
 		std::string grid;
-		int memorable = 0;
-		int pillarsBehind = 0;
-		reader.readString("id", room.id);
-		reader.readString("family", room.family);
-		reader.readString("roles", roles);
-		reader.readInt("memorable", memorable);
-		reader.readInt("pillarsBehind", pillarsBehind);
-		reader.readString("reward", room.reward);
-		reader.readString("options", options);
-		reader.readString("grid", grid);
+		bool memorable = false;
+		bool pillarsBehind = false;
+		size_t column = 0;
+		for (DataFileField field : record) {
+			if (column >= columns.size())
+				break;
+			const std::string_view name = columns[column++];
+			const std::string_view value = field.value();
+			if (name == "id")
+				room.id = value;
+			else if (name == "family")
+				room.family = value;
+			else if (name == "roles")
+				roles = value;
+			else if (name == "memorable")
+				memorable = !value.empty() && value != "0";
+			else if (name == "pillarsBehind")
+				pillarsBehind = !value.empty() && value != "0";
+			else if (name == "reward")
+				room.reward = value;
+			else if (name == "options")
+				options = value;
+			else if (name == "grid")
+				grid = value;
+		}
 		room.roles = ParseRoles(roles);
-		room.memorable = memorable != 0;
-		room.pillarsBehind = pillarsBehind != 0;
+		room.memorable = memorable;
+		room.pillarsBehind = pillarsBehind;
 		for (size_t i = 0; i + 2 < options.size(); i += 4)
 			room.options.push_back({ options[i], options[i + 1], options[i + 2] });
 		if (!ParseCathedralRoomGrid(grid, room.grid)) {
@@ -1573,6 +1619,23 @@ bool PlaceShrine(Point block)
 	return false;
 }
 
+/**
+ * Sanctuary Reforged takes the designed rooms' layouts only. What stands in a room for loot, a blessing or a fight (reward
+ * chests and strongboxes, sarcophagi, book, armour and weapon stands, shrines, fountains, cauldrons, barrels, bodies to
+ * search) comes from Diablo's own placement there, so only the props that are just furniture stay: candles, braziers,
+ * bookshelves, crosses, chained and staked bodies, skulls, banners and wall torches. A shrine spot holds its candles.
+ */
+bool PropIsPlaced(char kind)
+{
+	return gbIsPoe2 || IsAnyOf(kind, 'A', 'c', 'L', 'K', 'X', 'x', 'T', 'Y', 'P', 's', 'b', 't');
+}
+
+/** On one floor in three the shrine spots hold a shrine; on the others, candles. Only POE2 Mashup rolls it. */
+bool RollShrineFloor()
+{
+	return gbIsPoe2 && GenerateRnd(3) == 0;
+}
+
 template <size_t N>
 _object_id PickOne(const std::array<_object_id, N> &ids)
 {
@@ -1678,12 +1741,14 @@ void AddWallTorch(Point block)
 /** The props of a new Catacombs floor's designed rooms. */
 void AddCatacombsRoomObjects()
 {
-	const bool shrineFloor = GenerateRnd(3) == 0;
+	const bool shrineFloor = RollShrineFloor();
 	std::vector<int> standsInArea(CurrentPlan.areas.size(), 0);
 	// Racks and stands give an item each: one of each still holds gear in a room, the rest are bare.
 	std::vector<bool> rackInArea(CurrentPlan.areas.size(), false);
 	std::vector<bool> standInArea(CurrentPlan.areas.size(), false);
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		if (prop.kind == 'C' || prop.kind == '~')
 			continue; // Drawn onto the floor itself.
 		if (prop.kind == 't') {
@@ -1752,12 +1817,14 @@ void AddCatacombsRoomObjects()
 /** The props of a new Hell floor's designed rooms. */
 void AddHellRoomObjects()
 {
-	const bool shrineFloor = GenerateRnd(3) == 0;
+	const bool shrineFloor = RollShrineFloor();
 	std::vector<int> standsInArea(CurrentPlan.areas.size(), 0);
 	// Racks and stands give an item each: one of each still holds gear in a room, the rest are bare.
 	std::vector<bool> rackInArea(CurrentPlan.areas.size(), false);
 	std::vector<bool> standInArea(CurrentPlan.areas.size(), false);
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
 			continue;
 		const bool wall = IsAnyOf(prop.kind, 'A', 'x', 'X', 'W', 'M', 'K');
@@ -1817,9 +1884,11 @@ void AddHellRoomObjects()
 /** The props of a new Caves floor's designed rooms. */
 void AddCavesRoomObjects()
 {
-	const bool shrineFloor = GenerateRnd(3) == 0;
+	const bool shrineFloor = RollShrineFloor();
 	std::vector<int> standsInArea(CurrentPlan.areas.size(), 0);
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
 			continue;
 		const std::optional<Point> spot = PropSpot(prop.block, IsAnyOf(prop.kind, 'A', 'x'), false);
@@ -1848,8 +1917,10 @@ void AddCavesRoomObjects()
 /** The props of a new Hive floor's designed rooms. The bodies on spikes and hanging bodies are only decoration. */
 void AddHiveRoomObjects()
 {
-	const bool shrineFloor = GenerateRnd(3) == 0;
+	const bool shrineFloor = RollShrineFloor();
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		if (prop.kind == 'A' && shrineFloor && PlaceShrine(prop.block))
 			continue;
 		const std::optional<Point> spot = PropSpot(prop.block, prop.kind == 'A', false);
@@ -1895,83 +1966,88 @@ bool ParseCathedralRoomGrid(std::string_view text, std::vector<std::string> &gri
 	return std::all_of(grid.begin(), grid.end(), [&grid](const std::string &row) { return row.size() == grid[0].size(); });
 }
 
+namespace {
+
+const std::vector<CathedralRoomDef> &ShippedRooms(RoomSet &set)
+{
+	if (!set.loaded || (!set.injected && set.forReforged != gbIsReforged))
+		LoadRooms(set);
+	return set.rooms;
+}
+
+const std::vector<CathedralRoomDef> &RoomsOf(RoomSet &set)
+{
+	return set.kept != nullptr ? *set.kept : ShippedRooms(set);
+}
+
+void SetRooms(RoomSet &set, std::vector<CathedralRoomDef> rooms)
+{
+	set.rooms = std::move(rooms);
+	// An empty list reads the file again on next use.
+	set.loaded = !set.rooms.empty();
+	set.injected = set.loaded;
+}
+
+} // namespace
+
 const std::vector<CathedralRoomDef> &GetCathedralRooms()
 {
-	if (!CathedralSet.loaded)
-		LoadRooms(CathedralSet);
-	return CathedralSet.rooms;
+	return RoomsOf(CathedralSet);
 }
 
 void SetCathedralRooms(std::vector<CathedralRoomDef> rooms)
 {
-	CathedralSet.rooms = std::move(rooms);
-	// An empty list reads the file again on next use.
-	CathedralSet.loaded = !CathedralSet.rooms.empty();
+	SetRooms(CathedralSet, std::move(rooms));
 }
 
 const std::vector<CathedralRoomDef> &GetCatacombsRooms()
 {
-	if (!CatacombsSet.loaded)
-		LoadRooms(CatacombsSet);
-	return CatacombsSet.rooms;
+	return RoomsOf(CatacombsSet);
 }
 
 void SetCatacombsRooms(std::vector<CathedralRoomDef> rooms)
 {
-	CatacombsSet.rooms = std::move(rooms);
-	CatacombsSet.loaded = !CatacombsSet.rooms.empty();
+	SetRooms(CatacombsSet, std::move(rooms));
 }
 
 const std::vector<CathedralRoomDef> &GetCavesRooms()
 {
-	if (!CavesSet.loaded)
-		LoadRooms(CavesSet);
-	return CavesSet.rooms;
+	return RoomsOf(CavesSet);
 }
 
 void SetCavesRooms(std::vector<CathedralRoomDef> rooms)
 {
-	CavesSet.rooms = std::move(rooms);
-	CavesSet.loaded = !CavesSet.rooms.empty();
+	SetRooms(CavesSet, std::move(rooms));
 }
 
 const std::vector<CathedralRoomDef> &GetHiveRooms()
 {
-	if (!HiveSet.loaded)
-		LoadRooms(HiveSet);
-	return HiveSet.rooms;
+	return RoomsOf(HiveSet);
 }
 
 void SetHiveRooms(std::vector<CathedralRoomDef> rooms)
 {
-	HiveSet.rooms = std::move(rooms);
-	HiveSet.loaded = !HiveSet.rooms.empty();
+	SetRooms(HiveSet, std::move(rooms));
 }
 
 const std::vector<CathedralRoomDef> &GetCryptRooms()
 {
-	if (!CryptSet.loaded)
-		LoadRooms(CryptSet);
-	return CryptSet.rooms;
+	return RoomsOf(CryptSet);
 }
 
 void SetCryptRooms(std::vector<CathedralRoomDef> rooms)
 {
-	CryptSet.rooms = std::move(rooms);
-	CryptSet.loaded = !CryptSet.rooms.empty();
+	SetRooms(CryptSet, std::move(rooms));
 }
 
 const std::vector<CathedralRoomDef> &GetHellRooms()
 {
-	if (!HellSet.loaded)
-		LoadRooms(HellSet);
-	return HellSet.rooms;
+	return RoomsOf(HellSet);
 }
 
 void SetHellRooms(std::vector<CathedralRoomDef> rooms)
 {
-	HellSet.rooms = std::move(rooms);
-	HellSet.loaded = !HellSet.rooms.empty();
+	SetRooms(HellSet, std::move(rooms));
 }
 
 const std::vector<CathedralRoomDef> &RoomsOfPlan(const CathedralPlan &plan)
@@ -2067,7 +2143,7 @@ std::string DescribeCathedralPlan(const CathedralPlan &plan)
 /** Bump when a change to the builder's code (not its rooms) would build a saved floor's seed differently. */
 constexpr uint32_t FloorBuilderVersion = 1;
 
-uint32_t CathedralRoomsStamp(bool catacombs, bool caves, bool hell, bool hive, bool crypt)
+uint32_t RoomCollectionStamp(const std::vector<CathedralRoomDef> &rooms)
 {
 	uint32_t hash = 2166136261U;
 	const auto add = [&hash](std::string_view text) {
@@ -2079,7 +2155,7 @@ uint32_t CathedralRoomsStamp(bool catacombs, bool caves, bool hell, bool hive, b
 		hash *= 16777619U;
 	};
 	add(StrCat(FloorBuilderVersion));
-	for (const CathedralRoomDef &room : RoomsFor(catacombs, caves, hell, hive, crypt)) {
+	for (const CathedralRoomDef &room : rooms) {
 		add(room.id);
 		add(room.family);
 		add(room.reward);
@@ -2091,6 +2167,135 @@ uint32_t CathedralRoomsStamp(bool catacombs, bool caves, bool hell, bool hive, b
 	}
 	// 0 stands for a floor saved before rooms were stamped.
 	return hash != 0 ? hash : 1;
+}
+
+uint32_t CathedralRoomsStamp(bool catacombs, bool caves, bool hell, bool hive, bool crypt)
+{
+	return RoomCollectionStamp(RoomsFor(catacombs, caves, hell, hive, crypt));
+}
+
+RoomCollection RoomCollectionOf(dungeon_type type)
+{
+	switch (type) {
+	case DTYPE_CATACOMBS: return RoomCollection::Catacombs;
+	case DTYPE_CAVES: return RoomCollection::Caves;
+	case DTYPE_HELL: return RoomCollection::Hell;
+	case DTYPE_NEST: return RoomCollection::Hive;
+	case DTYPE_CRYPT: return RoomCollection::Crypt;
+	default: return RoomCollection::Cathedral;
+	}
+}
+
+const std::vector<CathedralRoomDef> &ShippedRoomCollection(RoomCollection collection)
+{
+	return ShippedRooms(SetOf(collection));
+}
+
+void KeepRoomCollection(RoomCollection collection, const std::vector<CathedralRoomDef> *rooms)
+{
+	SetOf(collection).kept = rooms;
+}
+
+void ForgetKeptRoomCollections()
+{
+	for (RoomSet *set : { &CathedralSet, &CatacombsSet, &CavesSet, &HellSet, &HiveSet, &CryptSet })
+		set->kept = nullptr;
+}
+
+namespace {
+
+void PutText(std::vector<uint8_t> &out, std::string_view text)
+{
+	const size_t size = std::min<size_t>(text.size(), UINT16_MAX);
+	out.push_back(static_cast<uint8_t>(size));
+	out.push_back(static_cast<uint8_t>(size >> 8));
+	out.insert(out.end(), text.begin(), text.begin() + static_cast<std::ptrdiff_t>(size));
+}
+
+bool GetText(std::span<const uint8_t> data, size_t &pos, std::string &text)
+{
+	if (data.size() < pos + 2)
+		return false;
+	const size_t size = data[pos] | (data[pos + 1] << 8);
+	pos += 2;
+	if (data.size() < pos + size)
+		return false;
+	text.assign(reinterpret_cast<const char *>(data.data() + pos), size);
+	pos += size;
+	return true;
+}
+
+bool GetByte(std::span<const uint8_t> data, size_t &pos, uint8_t &value)
+{
+	if (data.size() < pos + 1)
+		return false;
+	value = data[pos++];
+	return true;
+}
+
+} // namespace
+
+void PackRoomCollection(std::vector<uint8_t> &out, const std::vector<CathedralRoomDef> &rooms)
+{
+	const size_t count = std::min<size_t>(rooms.size(), UINT8_MAX);
+	out.push_back(static_cast<uint8_t>(count));
+	for (size_t i = 0; i < count; i++) {
+		const CathedralRoomDef &room = rooms[i];
+		PutText(out, room.id);
+		PutText(out, room.family);
+		PutText(out, room.reward);
+		out.push_back(room.roles);
+		out.push_back(static_cast<uint8_t>((room.memorable ? 1 : 0) | (room.pillarsBehind ? 2 : 0)));
+		const size_t options = std::min<size_t>(room.options.size(), UINT8_MAX);
+		out.push_back(static_cast<uint8_t>(options));
+		for (size_t o = 0; o < options; o++)
+			out.insert(out.end(), room.options[o].begin(), room.options[o].end());
+		const size_t rows = std::min<size_t>(room.grid.size(), UINT8_MAX);
+		out.push_back(static_cast<uint8_t>(rows));
+		for (size_t r = 0; r < rows; r++)
+			PutText(out, room.grid[r]);
+	}
+}
+
+bool UnpackRoomCollection(std::span<const uint8_t> data, size_t &pos, std::vector<CathedralRoomDef> &rooms)
+{
+	rooms.clear();
+	uint8_t count = 0;
+	if (!GetByte(data, pos, count))
+		return false;
+	for (uint8_t i = 0; i < count; i++) {
+		CathedralRoomDef room;
+		uint8_t flags = 0;
+		uint8_t options = 0;
+		uint8_t rows = 0;
+		if (!GetText(data, pos, room.id) || !GetText(data, pos, room.family) || !GetText(data, pos, room.reward)
+		    || !GetByte(data, pos, room.roles) || !GetByte(data, pos, flags) || !GetByte(data, pos, options))
+			return false;
+		room.memorable = (flags & 1) != 0;
+		room.pillarsBehind = (flags & 2) != 0;
+		for (uint8_t o = 0; o < options; o++) {
+			std::array<char, 3> option;
+			for (char &c : option) {
+				uint8_t byte = 0;
+				if (!GetByte(data, pos, byte))
+					return false;
+				c = static_cast<char>(byte);
+			}
+			room.options.push_back(option);
+		}
+		if (!GetByte(data, pos, rows))
+			return false;
+		for (uint8_t r = 0; r < rows; r++) {
+			std::string row;
+			if (!GetText(data, pos, row))
+				return false;
+			room.grid.push_back(std::move(row));
+		}
+		if (room.grid.empty() || !std::all_of(room.grid.begin(), room.grid.end(), [&room](const std::string &row) { return !row.empty() && row.size() == room.grid[0].size(); }))
+			return false;
+		rooms.push_back(std::move(room));
+	}
+	return true;
 }
 
 uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs, bool caves, bool hell, bool hive, bool crypt)
@@ -2224,7 +2429,7 @@ std::vector<std::pair<int, int>> CathedralBigFights()
 
 int CathedralDesignedSarcophagi()
 {
-	if (!FunnelFloor)
+	if (!FunnelFloor || !PropIsPlaced('S'))
 		return 0;
 	return static_cast<int>(std::count_if(CurrentPlan.props.begin(), CurrentPlan.props.end(), [](const CathedralProp &prop) { return prop.kind == 'S'; }));
 }
@@ -2234,6 +2439,8 @@ void MarkCathedralObjectGraphics(uint16_t filesWidths[65])
 	if (!FunnelFloor)
 		return;
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		for (const _object_id id : ObjectsFor(prop.kind, CurrentPlan)) {
 			const ObjectData &data = AllObjects[id];
 			filesWidths[data.ofindex] = data.animWidth;
@@ -2262,12 +2469,13 @@ void AddCathedralRoomObjects()
 		AddHellRoomObjects();
 		return;
 	}
-	// On one floor in three the shrine spots hold a shrine; on the others, candles.
-	const bool shrineFloor = GenerateRnd(3) == 0;
+	const bool shrineFloor = RollShrineFloor();
 	std::vector<int> standsInArea(CurrentPlan.areas.size(), 0);
 	std::vector<bool> standInArea(CurrentPlan.areas.size(), false);
 	const bool crypt = CurrentPlan.crypt;
 	for (const CathedralProp &prop : CurrentPlan.props) {
+		if (!PropIsPlaced(prop.kind))
+			continue;
 		// The Crypt's carvings, blood and floor stars are its own tiles (crypt.cpp).
 		if (crypt && IsAnyOf(prop.kind, 'Q', 'B', '+'))
 			continue;
@@ -2342,7 +2550,8 @@ void AddCathedralRoomObjects()
 
 std::optional<Point> CathedralStoryBookSpot()
 {
-	if (!FunnelFloor || !CurrentPlan.crypt)
+	// Sanctuary Reforged's designed rooms have no reading stands (PropIsPlaced): the book goes where Hellfire puts it.
+	if (!FunnelFloor || !CurrentPlan.crypt || !PropIsPlaced('k'))
 		return std::nullopt;
 	for (const std::string_view room : { "lectern", "archive" }) {
 		for (const CathedralProp &prop : CurrentPlan.props) {

@@ -970,9 +970,16 @@ ClxSprite GetPlayerPortraitSprite(Player &player);
 bool IsPlayerUnarmed(Player &player);
 
 void LoadPlrGFX(Player &player, player_graphic graphic);
+/** Drops the weapon from the hero's look for a death, unless their files hold a death with that weapon (the Monk's do). */
+void UseDeathLook(Player &player);
 void InitPlayerGFX(Player &player);
 void ResetPlayerGFX(Player &player);
 
+/**
+ * @brief Whether heroes jog in town: the game's start value, except in Sanctuary Reforged single player where the
+ * Run in Town setting counts as soon as it is changed in the menu.
+ */
+bool IsRunInTownOn();
 /**
  * @brief Sets the new Player Animation with all relevant information for rendering
  * @param player The player to set the animation for

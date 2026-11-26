@@ -37,6 +37,7 @@
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/rune_fusing.hpp"
+#include "poe2/secrets.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/tears.hpp"
 #include "qol/stash.h"
@@ -1316,10 +1317,7 @@ void SStartBoyBuy()
 	BoyItem._iStatFlag = MyPlayer->CanUseItem(BoyItem);
 	const UiFlags itemColor = BoyItem.getTextColorWithStatCheck();
 	AddSText(20, 10, BoyItem.getName(), itemColor, true, BoyItem._iCurs, true);
-	if (gbIsHellfire)
-		AddSTextVal(10, BoyItem._iIvalue - (BoyItem._iIvalue / 4));
-	else
-		AddSTextVal(10, BoyItem._iIvalue + (BoyItem._iIvalue / 2));
+	AddSTextVal(10, WirtPrice(BoyItem));
 	PrintStoreItem(BoyItem, 11, itemColor, true);
 
 	{
@@ -2153,11 +2151,7 @@ void BoyBuyEnter()
 	OldActiveStore = TalkID::BoyBuy;
 	OldScrollPos = ScrollPos;
 	OldTextLine = 10;
-	int price = BoyItem._iIvalue;
-	if (gbIsHellfire)
-		price -= BoyItem._iIvalue / 4;
-	else
-		price += BoyItem._iIvalue / 2;
+	const int price = WirtPrice(BoyItem);
 
 	if (!PlayerCanAfford(price)) {
 		StartStore(TalkID::NoMoney);
@@ -2379,6 +2373,16 @@ void TalkEnter()
 	if (CurrentTextLine == sn - 2) {
 		Towner *target = GetTowner(TownerId);
 		assert(target != nullptr);
+		// Sanctuary Reforged: the first time Gillian gossips after a cow has been pestered, she tells the hidden trail's
+		// rumour (poe2/secrets.hpp). After that it is only one of her usual lines (towners.cpp) until the name is lit.
+		if (target->_ttype == TOWN_BMAID && secrets::Has(secrets::Found::PesteredCow) && !secrets::Has(secrets::Found::HeardRumour)
+		    && !secrets::Has(secrets::Found::LitName)) {
+			if (const auto rumour = ParseSpeechId("TEXT_SECRET_RUMOUR"); rumour.has_value()) {
+				secrets::Set(secrets::Found::HeardRumour);
+				InitQTextMsg(*rumour);
+				return;
+			}
+		}
 		InitQTextMsg(target->gossip);
 		return;
 	}
@@ -2426,10 +2430,10 @@ std::optional<Point> InteractionSpot;
 /** Where the hero stood when a towner's talk menu opened: any step from it closes the menu (POE2). */
 std::optional<Point> TalkSpot;
 
-/** @brief POE2: closes a towner's talk menu once the hero moves, by walking, clicking away or dodge rolling. */
+/** @brief POE2 and Sanctuary Reforged: closes a towner's talk menu once the hero moves, by walking, clicking away or dodge rolling. */
 void CloseTalkMenuWhenMoved()
 {
-	if (!gbIsPoe2 || !IsPlayerInStore() || MyPlayer == nullptr) {
+	if (!HasEnhancements() || !IsPlayerInStore() || MyPlayer == nullptr) {
 		TalkSpot = std::nullopt;
 		return;
 	}
@@ -3389,6 +3393,13 @@ bool IsPlayerInStore()
 bool PlayerCanAfford(int price)
 {
 	return TotalPlayerGold() >= static_cast<uint32_t>(price);
+}
+
+int WirtPrice(const Item &item)
+{
+	if (gbIsHellfire)
+		return item._iIvalue - (item._iIvalue / 4);
+	return item._iIvalue + (item._iIvalue / 2);
 }
 
 namespace {
