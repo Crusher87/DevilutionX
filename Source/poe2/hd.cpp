@@ -5832,7 +5832,9 @@ bool DrawShapedBody(SDL_Renderer *renderer, const Draw &draw, float toLogical, c
 	if (kept.foot < 1 || kept.top < 1)
 		Dim(shading, kept);
 	std::array<float, NumShapeAxes> shade;
-	if (!FacingShades(wx, wy, ShapeAxes.data(), shade.size(), shade.data(), BodyMiddle, BodyGiven))
+	// feel("bodylight") 1 is the usual strength, 2 twice as strong, up to 3; it takes effect at once.
+	const float given = BodyGiven * std::clamp(atmosphere::Setting(atmosphere::Knob::BodyLight), 0.F, 3.F);
+	if (!FacingShades(wx, wy, ShapeAxes.data(), shade.size(), shade.data(), BodyMiddle, given))
 		shade.fill(1.F);
 	float least = std::numeric_limits<float>::max();
 	for (size_t k = 0; k < NumShapeAxes; k++) {
