@@ -76,6 +76,17 @@ constexpr uint8_t DividerColor = PAL16_GRAY + 11;
 
 const std::array<item_quality, 4> Qualities = { ITEM_QUALITY_NORMAL, ITEM_QUALITY_MAGIC, ITEM_QUALITY_RARE, ITEM_QUALITY_UNIQUE };
 
+/** @brief Gems, orbs and rare items are POE2 Mashup's; other modes (Reforged with --admin) show Diablo's own. */
+bool CategoryShown(size_t category)
+{
+	return gbIsPoe2 || IsNoneOf(static_cast<SpawnerCategory>(category), SpawnerCategory::Gems, SpawnerCategory::Orbs);
+}
+
+bool QualityShown(size_t quality)
+{
+	return gbIsPoe2 || Qualities[quality] != ITEM_QUALITY_RARE;
+}
+
 bool IsOpen;
 /** @brief The Monsters tab is showing (kept while the spawner is closed). */
 bool ShowMonsters = false;
@@ -297,6 +308,8 @@ Layout ComputeLayout(const Surface &out)
 
 	int x = innerX;
 	for (size_t i = 0; i < layout.categories.size(); i++) {
+		if (!CategoryShown(i))
+			continue;
 		const int chipWidth = GetLineWidth(SpawnerCategoryName(static_cast<SpawnerCategory>(i))) + 16;
 		layout.categories[i] = { { x, y }, { chipWidth, ChipHeight } };
 		x += chipWidth + 4;
@@ -305,6 +318,8 @@ Layout ComputeLayout(const Surface &out)
 
 	x = innerX + GetLineWidth(_("Quality")) + 10;
 	for (size_t i = 0; i < Qualities.size(); i++) {
+		if (!QualityShown(i))
+			continue;
 		const int chipWidth = GetLineWidth(QualityName(Qualities[i])) + 16;
 		layout.qualities[i] = { { x, y }, { chipWidth, ChipHeight } };
 		x += chipWidth + 4;
@@ -375,7 +390,9 @@ void Scroll(int rows)
 void CycleCategory(int delta)
 {
 	const int count = static_cast<int>(SpawnerCategory::Count);
-	Category = static_cast<SpawnerCategory>((static_cast<int>(Category) + delta + count) % count);
+	do {
+		Category = static_cast<SpawnerCategory>((static_cast<int>(Category) + delta + count) % count);
+	} while (!CategoryShown(static_cast<size_t>(Category)));
 	RefreshResults();
 }
 
@@ -571,6 +588,8 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 			continue;
 
 		// Tablets, fragments and keys are listed one kind at a time too.
+		if (!gbIsPoe2 && IsAnyOf(data.iMiscId, IMISC_TABLET, IMISC_MAP_FRAGMENT, IMISC_MAP_KEY, IMISC_ESSENCE, IMISC_OMEN, IMISC_AUGMENT, IMISC_ORB_CATALYST))
+			continue;
 		if (IsAnyOf(data.iMiscId, IMISC_TABLET, IMISC_MAP_FRAGMENT, IMISC_MAP_KEY)) {
 			Item probe;
 			InitializeItem(probe, static_cast<_item_indexes>(i));
@@ -652,6 +671,8 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 		} else if (!IsSpawnableMisc(data)) {
 			continue;
 		}
+		if (!CategoryShown(static_cast<size_t>(entry.category)))
+			continue;
 		if (entry.rollsQuality)
 			entry.detail = JoinDetail(TypeLabel(data), Requirements(data));
 
@@ -663,6 +684,8 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 		const UniqueItem &unique = UniqueItems[uid];
 		// The bundle's uniques have a base of their own rather than a Diablo base type.
 		const Poe2Unique *poe2Unique = Poe2UniqueFor(static_cast<int>(uid));
+		if (poe2Unique != nullptr && !gbIsPoe2)
+			continue;
 		const std::optional<_item_indexes> base = poe2Unique != nullptr ? std::optional(static_cast<_item_indexes>(poe2Unique->baseItem)) : UniqueBase(unique);
 		if (unique.UIName.empty() || !base || AllItemsList[*base].iMiscId == IMISC_UNIQUE)
 			continue;
@@ -677,7 +700,8 @@ std::vector<SpawnerEntry> BuildItemSpawnerCatalog()
 		});
 	}
 
-	for (const BeltUnique &unique : BeltUniques()) {
+	static const std::vector<BeltUnique> NoBeltUniques;
+	for (const BeltUnique &unique : gbIsPoe2 ? BeltUniques() : NoBeltUniques) {
 		const std::optional<int> base = BeltUniqueBase(unique);
 		if (!base)
 			continue;
@@ -758,8 +782,10 @@ bool CreateSpawnerItem(const Player &player, const SpawnerEntry &entry, item_qua
 	if (entry.rollsQuality) {
 		// Like a drop from an area of this level: POE2 item level and modifiers from the itemization tables.
 		Item stamp {};
-		SetPoe2ItemLevel(stamp, Poe2ItemLevel(std::clamp(level, MinLevel, MaxLevel)));
-		SetLootRarity(stamp, quality);
+		if (gbIsPoe2) {
+			SetPoe2ItemLevel(stamp, Poe2ItemLevel(std::clamp(level, MinLevel, MaxLevel)));
+			SetLootRarity(stamp, quality);
+		}
 		return RollItemOfQuality(player, item, entry.baseIndex, quality, std::clamp(level, MinLevel, MaxLevel), seed, 0, {}, stamp.dwBuff);
 	}
 
@@ -816,6 +842,10 @@ void OpenItemSpawner()
 	if (gbIsMultiplayer || MyPlayer == nullptr || !AdminToolsOn())
 		return;
 	IsOpen = true;
+	if (!QualityShown(QualityIndex))
+		QualityIndex = 1; // Magic
+	if (!CategoryShown(static_cast<size_t>(Category)))
+		Category = SpawnerCategory::All;
 	Catalog = BuildItemSpawnerCatalog();
 	LastCategory = SpawnerCategory::Count; // Forces a refresh.
 	RefreshResults();
@@ -991,6 +1021,8 @@ void DrawItemSpawner(const Surface &out)
 	    { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite, .cursorPosition = static_cast<int>(QueryCursor.position) });
 
 	for (size_t i = 0; i < layout.categories.size(); i++) {
+		if (!CategoryShown(i))
+			continue;
 		const auto category = static_cast<SpawnerCategory>(i);
 		DrawChip(out, layout.categories[i], SpawnerCategoryName(category), category == Category, layout.categories[i].contains(MousePosition));
 	}
@@ -998,7 +1030,8 @@ void DrawItemSpawner(const Surface &out)
 	const Point qualityRow = layout.qualities[0].position;
 	DrawString(out, _("Quality"), { { layout.panel.position.x + Padding, qualityRow.y }, { 60, ChipHeight } }, { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite });
 	for (size_t i = 0; i < Qualities.size(); i++)
-		DrawChip(out, layout.qualities[i], QualityName(Qualities[i]), i == QualityIndex, layout.qualities[i].contains(MousePosition));
+		if (QualityShown(i))
+			DrawChip(out, layout.qualities[i], QualityName(Qualities[i]), i == QualityIndex, layout.qualities[i].contains(MousePosition));
 	const int levelLabelWidth = GetLineWidth(_("Level")) + 10;
 	DrawString(out, _("Level"), { { layout.levelMinus.position.x - levelLabelWidth, qualityRow.y }, { levelLabelWidth, ChipHeight } },
 	    { .flags = UiFlags::VerticalCenter | UiFlags::ColorWhite });
