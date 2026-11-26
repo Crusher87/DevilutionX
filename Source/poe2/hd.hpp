@@ -103,6 +103,16 @@ struct CasterScope {
 	CasterScope &operator=(const CasterScope &) = delete;
 };
 
+/** @brief Set while a dead body lying on the floor is drawn. */
+extern bool CurrentCorpse;
+
+struct CorpseScope {
+	CorpseScope() { CurrentCorpse = true; }
+	~CorpseScope() { CurrentCorpse = false; }
+	CorpseScope(const CorpseScope &) = delete;
+	CorpseScope &operator=(const CorpseScope &) = delete;
+};
+
 /**
  * @brief Set while something unseen is noted for the HD world (the Atmosphere option's idea 57, the Hidden's shimmer):
  * how much of it shows, 0 for a thing drawn as usual. It is drawn as a faint wavering trace of its own picture, casts

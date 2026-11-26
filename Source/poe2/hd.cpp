@@ -64,6 +64,7 @@ namespace hd {
 float SubFrame = 0;
 bool SubFrameBackward = false;
 Caster CurrentCaster = Caster::None;
+bool CurrentCorpse = false;
 float CurrentGhost = 0;
 OutlineLook CurrentOutlineLook;
 Point CurrentTile;
@@ -149,6 +150,8 @@ struct Draw {
 	const std::string *recolour = nullptr;
 	/** @brief Something unseen (GhostScope): how much of it shows as a faint trace; 0 for a thing drawn as usual. */
 	float ghost = 0;
+	/** @brief A dead body lying on the floor (CorpseScope). */
+	bool corpse = false;
 };
 
 /** @brief The part of a shadow picture that isn't empty, in texture coordinates (0 to 1): across from u0 to u1, down from vTop. */
@@ -1480,6 +1483,13 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 	if (picture->format->format != SDL_PIXELFORMAT_RGBA32)
 		return;
 	SDL_Surface *loaded = TakePicture(PicturePath(name + "_n"), false);
+	// A unique monster's own colours (monsters/zombie/zombied+white/d3_f15) have the shape of its type's art.
+	if (loaded == nullptr && !tile) {
+		const size_t plus = name.rfind('+');
+		const size_t slash = name.rfind('/');
+		if (plus != std::string::npos && slash != std::string::npos && plus < slash)
+			loaded = TakePicture(PicturePath(name.substr(0, plus) + name.substr(slash) + "_n"), false);
+	}
 	if (loaded == nullptr)
 		return;
 	SDL_Surface *map = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
@@ -1637,7 +1647,7 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 			art.outlines[static_cast<size_t>(OutlineCut::Glow)] = OutlineFromPicture(renderer, surface, *outlined, OutlineCut::Glow, !withoutShadow);
 	}
 	art.texture = SDL_CreateTextureFromSurface(renderer, surface);
-	if (art.texture != nullptr && object != nullptr && withoutShadow)
+	if (art.texture != nullptr && object != nullptr && (withoutShadow || object->corpse))
 		MakeShape(renderer, art, surface, name);
 	SDL_FreeSurface(surface);
 	if (art.texture != nullptr) {
@@ -2174,7 +2184,8 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 	bool recoloured = false;
 	// With HD Lighting, heroes, monsters and solid objects cast shadows of their own in place of the one painted in.
 	const bool withoutShadow = FrameLit && draw.caster != Caster::None;
-	const Draw *object = IsObject(draw.caster) ? &draw : nullptr;
+	// A dead body takes its shape map too (DrawShapedCorpse); it keeps the shadow painted under it.
+	const Draw *object = IsObject(draw.caster) || draw.corpse ? &draw : nullptr;
 	// In-betweens 1 and 2 lead to the next frame (_m1, _m2); 3 and 4 back to the frame before (_b1, _b2).
 	if (draw.inBetween != 0 && !masked) {
 		const bool back = draw.inBetween > 2;
@@ -4562,6 +4573,80 @@ bool EnsureShade(SDL_Renderer *renderer, Size size)
 }
 
 /** @brief A body that casts shadows this frame, where it stands, and the lights on it. */
+/** @brief How many points across a dead body its light and the shadows over it are taken at (Shading has four stops). */
+constexpr size_t CorpseStops = 4;
+/** @brief How wide and how high a dead body lying on the floor is taken to be at each of those points, in tiles. */
+constexpr float CorpseWide = 0.3F;
+constexpr float CorpseTall = 0.3F;
+/** @brief How high a dead body's shape takes the light at, in tiles (an object's middle is ObjectMiddle). */
+constexpr float CorpseMiddle = 0.1F;
+
+/** @brief A dead body lying on the floor, lit as one with feel("corpses") on (not a fading trace of one). */
+bool IsCorpse(const Draw &draw)
+{
+	return draw.corpse && draw.kind == DrawKind::Sprite && draw.style == SpriteStyle::Normal && draw.ghost <= 0
+	    && atmosphere::Setting(atmosphere::Knob::Corpses) > 0;
+}
+
+/** @brief The points across a dead body, from its left edge to its right: where each is in its picture, and on the floor. */
+struct CorpseSpan {
+	std::array<float, 4> stops {};
+	std::array<float, 4> x {};
+	std::array<float, 4> y {};
+};
+
+/**
+ * @brief The points across a dead body where its light is taken: its body's left edge, a third and two thirds of the way,
+ * and its right edge, each on the floor under it (a body lies along the screen's row it is drawn on, as the floor does).
+ */
+CorpseSpan CorpseSpanOf(const Draw &draw)
+{
+	Raster &raster = FallbackRaster(draw, false);
+	BodyBounds(raster);
+	const float width = static_cast<float>(std::max(raster.width, 1));
+	float left = raster.boundLeft >= 0 ? static_cast<float>(raster.boundLeft) / width : 0.F;
+	float right = raster.boundLeft >= 0 ? static_cast<float>(raster.boundRight + 1) / width : 1.F;
+	if (right - left < 0.05F) {
+		left = 0;
+		right = 1;
+	}
+	float bx;
+	float by;
+	GroundOf(draw, bx, by);
+	CorpseSpan span;
+	for (size_t s = 0; s < CorpseStops; s++) {
+		const float at = left + (right - left) * static_cast<float>(s) / static_cast<float>(CorpseStops - 1);
+		span.stops[s] = at;
+		WorldOf(static_cast<float>(draw.x) + at * static_cast<float>(draw.width), by, span.x[s], span.y[s]);
+	}
+	return span;
+}
+
+/** @brief How much of the light is left at each point across a dead body (CorpseSpanOf) in the shadows over it this frame. */
+using CorpseShade = std::array<float, CorpseStops>;
+std::vector<CorpseShade> CorpseKept;
+
+/** @brief A dead body's light: the floor's own light under it, from its left edge to its right. */
+Shading CorpseLight(const Draw &draw)
+{
+	const CorpseSpan span = CorpseSpanOf(draw);
+	Shading shading;
+	shading.count = static_cast<int>(CorpseStops);
+	shading.stops = span.stops;
+	for (size_t s = 0; s < CorpseStops; s++)
+		shading.colours[s] = LightAt(span.x[s], span.y[s]);
+	return shading;
+}
+
+/** @brief A dead body's light darkened where shadows lie over it (CorpseKept). */
+void DimCorpse(Shading &shading, const CorpseShade &kept)
+{
+	for (size_t s = 0; s < CorpseStops; s++) {
+		for (size_t c = 0; c < 3; c++)
+			shading.colours[s][c] *= kept[s];
+	}
+}
+
 struct CastJob {
 	size_t draw;
 	float x;
@@ -4745,6 +4830,62 @@ void DrawShade(SDL_Renderer *renderer, const ShadeGroup &group, const SDL_FRect 
 }
 
 /**
+ * @brief How much of the light is left across each dead body in the shadows over it (CorpseKept): the bodies and objects
+ * standing between it and each light hide it from that light as they hide the floor, and it darkens as the floor does
+ * (CastAlpha). A body lies low, so a shadow that reaches it at all lies over it.
+ */
+void ShadeCorpses(const std::vector<CastJob> &jobs, const std::vector<Blocker> &objects, float toLogical)
+{
+	CorpseKept.assign(Draws.size(), CorpseShade { 1.F, 1.F, 1.F, 1.F });
+	if (atmosphere::Setting(atmosphere::Knob::Corpses) <= 0 || jobs.empty())
+		return;
+	static std::vector<Blocker> standing;
+	standing = objects;
+	for (const CastJob &job : jobs) {
+		if (!IsObject(Draws[job.draw].caster))
+			standing.push_back(Blocker { job.draw, job.x, job.y, BodyWidth / 2, BodyWidth / 2, BodyTall });
+	}
+	for (size_t i = FloorEnd; i < Draws.size(); i++) {
+		const Draw &draw = Draws[i];
+		if (!IsCorpse(draw) || !OnScreen(DestOf(draw, toLogical), 0))
+			continue;
+		const CorpseSpan span = CorpseSpanOf(draw);
+		for (size_t s = 0; s < CorpseStops; s++) {
+			const float px = span.x[s];
+			const float py = span.y[s];
+			const LightsOn on = LightsOnPoint(px, py);
+			const float total = light::LinearAt(px, py);
+			const float glows = light::GlowAt(px, py);
+			float kept = 1;
+			for (int n = 0; n < on.count; n++) {
+				const light::ShadowLight &source = on.lights[static_cast<size_t>(n)];
+				if (!Joins(source))
+					continue;
+				// Only what stands nearer the light than the body can hide it.
+				const float reach = std::sqrt((source.x - px) * (source.x - px) + (source.y - py) * (source.y - py)) + 1;
+				Hidden hidden;
+				const Blocker *behind = nullptr;
+				for (const Blocker &blocker : standing) {
+					if ((blocker.x - source.x) * (blocker.x - source.x) + (blocker.y - source.y) * (blocker.y - source.y) > reach * reach)
+						continue;
+					const Hidden by = HiddenBy(source, blocker, px, py, CorpseWide, CorpseTall);
+					if (by.across * by.up > hidden.across * hidden.up) {
+						hidden = by;
+						behind = &blocker;
+					}
+				}
+				if (behind == nullptr)
+					continue;
+				const float own = light::LinearOf(source, px, py);
+				const float atBody = std::max(own, light::LinearOf(source, behind->x, behind->y));
+				kept *= 1 - CastAlpha(total, glows, own, source.glow, source.fill, hidden.across * std::min(hidden.up * 2, 1.F), atBody);
+			}
+			CorpseKept[i][s] = kept;
+		}
+	}
+}
+
+/**
  * @brief Draws every body's shadows on the floor, the shadows of one light joined into one.
  *
  * A shadow is the floor a light can't reach. Two bodies in one light's way don't make the floor behind both darker
@@ -4852,6 +4993,7 @@ bool DrawJoinedShadows(SDL_Renderer *renderer, Size worldSize, float toLogical)
 		kept.top = std::max(kept.top, least);
 		ShadeKept[job.draw] = kept;
 	}
+	ShadeCorpses(jobs, blockers, toLogical);
 	// The shade at each body's feet, and the shadows that aren't joined.
 	for (const CastJob &job : jobs) {
 		CastPass pass;
@@ -5282,6 +5424,58 @@ bool DrawShapedObject(SDL_Renderer *renderer, const Draw &draw, float toLogical,
 	return true;
 }
 
+/**
+ * @brief Draws a dead body whose HD art has a shape map, lit by its shape (as DrawShapedObject does an object): its light
+ * across it from the floor (CorpseLight), less the shadows over it (`kept`), and each part turned to a light or away.
+ * @return False if it has no shape map or feel("shapes") is off: it is drawn in its light across it alone.
+ */
+bool DrawShapedCorpse(SDL_Renderer *renderer, const Draw &draw, float toLogical, const CorpseShade &kept)
+{
+	if (!IsCorpse(draw) || atmosphere::Setting(atmosphere::Knob::Shapes) <= 0)
+		return false;
+	const ArtChoice art = CachedArt(renderer, draw);
+	if (art.art == nullptr || !art.art->shaped)
+		return false;
+	const SDL_FRect dest = DestOf(draw, toLogical);
+	if (!OnScreen(dest, 0))
+		return true;
+	Shading shading = CorpseLight(draw);
+	DimCorpse(shading, kept);
+	Colour3 mean {};
+	for (size_t s = 0; s < CorpseStops; s++) {
+		for (size_t c = 0; c < 3; c++)
+			mean[c] += shading.colours[s][c] / static_cast<float>(CorpseStops);
+	}
+	float wx;
+	float wy;
+	StandsAt(draw, wx, wy);
+	std::array<float, NumShapeAxes> shade;
+	if (!FacingShades(wx, wy, ShapeAxes.data(), shade.size(), shade.data(), CorpseMiddle))
+		shade.fill(1.F);
+	float least = std::numeric_limits<float>::max();
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		if (art.art->shape[k] != nullptr)
+			least = std::min(least, shade[k]);
+	}
+	for (size_t s = 0; s < CorpseStops; s++) {
+		for (float &part : shading.colours[s])
+			part *= least;
+	}
+	DrawShaded(renderer, draw, shading, toLogical, false);
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		SDL_Texture *texture = art.art->shape[k];
+		if (texture == nullptr)
+			continue;
+		Colour3 more { mean[0] * (shade[k] - least), mean[1] * (shade[k] - least), mean[2] * (shade[k] - least) };
+		for (int pass = 0; pass < 2 && std::max({ more[0], more[1], more[2] }) > 1.F / 255; pass++) {
+			SDL_SetTextureColorMod(texture, ColourByte(more[0]), ColourByte(more[1]), ColourByte(more[2]));
+			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+			more = AboveFull(more);
+		}
+	}
+	return true;
+}
+
 /** @brief How high up a wall its light by shape is worked out, in tiles (its middle, about a hero's height). */
 constexpr float WallShapeMiddle = 0.5F;
 
@@ -5442,6 +5636,9 @@ Shading LavaEdge(const Colour3 &flat, float wx, float wy)
 /** @brief How a draw that stands on the floor is lit. */
 Shading LightFor(const Draw &draw, const std::array<float, 3> &tint)
 {
+	// A dead body (a unique's in its own colours too) takes the floor's light across it, not one light for its tile.
+	if (IsCorpse(draw))
+		return CorpseLight(draw);
 	if (draw.kind == DrawKind::Tile) {
 		if (draw.light < 0)
 			return Uniform(ToColour(light::Full()));
@@ -5860,6 +6057,9 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 		if (!joined && draw.style == SpriteStyle::Normal && draw.caster != Caster::None)
 			DrawCasterShadows(renderer, draw, toLogical);
 		const Kept kept = joined ? ShadeKept[i] : Kept {};
+		const CorpseShade corpseKept = joined && i < CorpseKept.size() ? CorpseKept[i] : CorpseShade { 1.F, 1.F, 1.F, 1.F };
+		if (DrawShapedCorpse(renderer, draw, toLogical, corpseKept))
+			continue;
 		if (DrawShapedObject(renderer, draw, toLogical, (kept.foot + kept.top) / 2))
 			continue;
 		if (draw.kind == DrawKind::Tile && draw.hasTile && draw.light >= 0 && !IsTileBase(draw) && IsDirt(draw.cell)) {
@@ -5869,6 +6069,8 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 		Shading shading = LightFor(draw, tint);
 		if (kept.foot < 1 || kept.top < 1)
 			Dim(shading, kept);
+		if (IsCorpse(draw))
+			DimCorpse(shading, corpseKept);
 		if (IsTileBase(draw)) {
 			DrawTileWall(renderer, draw, shading, toLogical);
 			continue;
@@ -6093,6 +6295,7 @@ void RecordSpriteImpl(const Surface &out, Point position, ClxSprite clx, const u
 	    .outlineLook = IsOutline(style) ? CurrentOutlineLook : (outlined ? PendingOutlineLook : OutlineLook {}),
 	    .recolour = IsOutline(style) ? nullptr : RecolourOf(trn),
 	    .ghost = IsOutline(style) ? 0.F : CurrentGhost,
+	    .corpse = CurrentCorpse && !IsOutline(style),
 	});
 }
 
