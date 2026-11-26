@@ -74,6 +74,10 @@ extern bool TelemetryPaused;
 
 /** @brief Opens the event file and writes its header line. */
 bool OpenTelemetryEvents(const std::string &path, std::string_view header);
+/** @brief Writes what's waiting and closes the event file, so it can be moved (the mode became known after it opened). */
+void CloseTelemetryEvents();
+/** @brief Opens an event file again to add to it, its header already written. */
+bool ReopenTelemetryEvents(const std::string &path);
 bool TelemetryEventsOpen();
 /** @brief Writes the buffered events to the file (and the counts of any dropped by the rate limits). */
 void FlushTelemetryEvents();
@@ -127,6 +131,12 @@ public:
 	}
 	/** @brief Adds a field whose value is already JSON (an array or object). */
 	TelemetryEvent &addRaw(std::string_view key, std::string_view json);
+	/** @brief Adds the field only when it applies (some are POE2 Mashup's alone). */
+	template <typename T>
+	TelemetryEvent &addIf(bool when, std::string_view key, const T &value)
+	{
+		return when ? add(key, value) : *this;
+	}
 
 private:
 	TelemetryEvent &addInt(std::string_view key, int64_t value);

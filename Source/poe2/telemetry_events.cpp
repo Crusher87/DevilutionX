@@ -143,6 +143,21 @@ bool OpenTelemetryEvents(const std::string &path, std::string_view header)
 	return true;
 }
 
+void CloseTelemetryEvents()
+{
+	if (EventsFile == nullptr)
+		return;
+	FlushTelemetryEvents();
+	std::fclose(EventsFile);
+	EventsFile = nullptr;
+}
+
+bool ReopenTelemetryEvents(const std::string &path)
+{
+	EventsFile = OpenFile(path.c_str(), "ab");
+	return EventsFile != nullptr;
+}
+
 bool TelemetryEventsOpen()
 {
 	return EventsFile != nullptr;
