@@ -1483,12 +1483,13 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 	if (picture->format->format != SDL_PIXELFORMAT_RGBA32)
 		return;
 	SDL_Surface *loaded = TakePicture(PicturePath(name + "_n"), false);
-	// A unique monster's own colours (monsters/zombie/zombied+white/d3_f15) have the shape of its type's art.
+	// A monster in other colours (a type's, monsters/zombie/zombied@zombie/bluered/d3_f15, or a unique's,
+	// monsters/zombie/zombied+white/d3_f15) has the shape of the art it was recoloured from.
 	if (loaded == nullptr && !tile) {
-		const size_t plus = name.rfind('+');
+		const size_t cut = name.find_first_of("@+");
 		const size_t slash = name.rfind('/');
-		if (plus != std::string::npos && slash != std::string::npos && plus < slash)
-			loaded = TakePicture(PicturePath(name.substr(0, plus) + name.substr(slash) + "_n"), false);
+		if (cut != std::string::npos && slash != std::string::npos && cut < slash)
+			loaded = TakePicture(PicturePath(name.substr(0, cut) + name.substr(slash) + "_n"), false);
 	}
 	if (loaded == nullptr)
 		return;
