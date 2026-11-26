@@ -6,7 +6,10 @@
  * These tests hold the two promises the mod makes: its switch (gbIsReforged, HasEnhancements) follows the mods, and
  * with it on the game's rules are Hellfire's own: items, levels, monsters and experience come out the same as without it.
  */
+#include <algorithm>
+#include <cstddef>
 #include <cstdint>
+#include <initializer_list>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -253,16 +256,101 @@ TEST_F(ReforgedModeTest, TheManifestKeepsItsSavesToItself)
 	EXPECT_EQ(reforged.requiredMods, (std::vector<std::string> { "hf" }));
 }
 
-TEST_F(ReforgedModeTest, TheModsTablesAreTheSameAsPoe2s)
+/** @brief The table's lines with one column taken out (each line keeps its ending). */
+std::string WithoutColumn(const std::string &text, std::string_view column)
 {
-	// The look and comfort tables, and the designed rooms the floor layouts are built from, are copies: a change to one
+	std::vector<std::string> lines;
+	size_t start = 0;
+	while (start < text.size()) {
+		const size_t end = text.find('\n', start);
+		lines.push_back(text.substr(start, end == std::string::npos ? std::string::npos : end + 1 - start));
+		if (end == std::string::npos)
+			break;
+		start = end + 1;
+	}
+	if (lines.empty())
+		return text;
+	const auto split = [](const std::string &line) {
+		std::vector<std::string> cells;
+		size_t from = 0;
+		while (true) {
+			const size_t tab = line.find('\t', from);
+			cells.push_back(line.substr(from, tab == std::string::npos ? std::string::npos : tab - from));
+			if (tab == std::string::npos)
+				break;
+			from = tab + 1;
+		}
+		return cells;
+	};
+	std::string first = lines[0];
+	while (!first.empty() && (first.back() == '\n' || first.back() == '\r'))
+		first.pop_back();
+	const std::vector<std::string> header = split(first);
+	size_t index = header.size();
+	for (size_t i = 0; i < header.size(); i++) {
+		if (header[i] == column)
+			index = i;
+	}
+	std::string out;
+	for (std::string line : lines) {
+		std::string ending;
+		while (!line.empty() && (line.back() == '\n' || line.back() == '\r')) {
+			ending.insert(ending.begin(), line.back());
+			line.pop_back();
+		}
+		std::vector<std::string> cells = split(line);
+		if (index < cells.size() && cells.size() > 1)
+			cells.erase(cells.begin() + static_cast<std::ptrdiff_t>(index));
+		for (size_t i = 0; i < cells.size(); i++)
+			out += (i == 0 ? "" : "\t") + cells[i];
+		out += ending;
+	}
+	return out;
+}
+
+/** @brief The table without the rows whose first cell is one of these keys. */
+std::string WithoutRows(const std::string &text, std::initializer_list<std::string_view> keys)
+{
+	std::string out;
+	size_t start = 0;
+	while (start < text.size()) {
+		size_t end = text.find('\n', start);
+		end = end == std::string::npos ? text.size() : end + 1;
+		const std::string_view line(text.data() + start, end - start);
+		const std::string_view key = line.substr(0, line.find('\t'));
+		if (std::find(keys.begin(), keys.end(), key) == keys.end())
+			out += line;
+		start = end;
+	}
+	return out;
+}
+
+TEST_F(ReforgedModeTest, TheModsTablesAreCopiesOfPoe2sWithoutItsRewards)
+{
+	// Reforged's tables live in its own folder; the look and comfort tables are copies of POE2 Mashup's, so a change to one
 	// mod's is a change to the other's.
+	const std::string reforgedFolder = StrCat(paths::BasePath(), "mods/reforged/txtdata/reforged/");
+	const std::string poe2Folder = StrCat(paths::BasePath(), "mods/poe2/txtdata/poe2/");
+	for (const std::string_view file : { "atmosphere.tsv", "quest_tracker.tsv", "skill_looks.tsv" }) {
+		const std::string reforged = ReadWholeFile(StrCat(reforgedFolder, file));
+		ASSERT_FALSE(reforged.empty()) << file;
+		EXPECT_EQ(reforged, ReadWholeFile(StrCat(poe2Folder, file))) << file;
+	}
+	// The map has no strongbox or rare monster markers: Reforged has neither.
+	const std::string icons = ReadWholeFile(StrCat(reforgedFolder, "map_icons.tsv"));
+	ASSERT_FALSE(icons.empty());
+	EXPECT_EQ(icons, WithoutRows(ReadWholeFile(StrCat(poe2Folder, "map_icons.tsv")), { "strongbox", "rare_monster" }));
+	// The designed rooms are the same rooms, without the column saying what POE2 Mashup puts on their reward spots.
+	for (const std::string_view file : { "cathedral_rooms.tsv", "catacombs_rooms.tsv", "caves_rooms.tsv", "hell_rooms.tsv", "hive_rooms.tsv", "crypt_rooms.tsv" }) {
+		const std::string reforged = ReadWholeFile(StrCat(reforgedFolder, file));
+		ASSERT_FALSE(reforged.empty()) << file;
+		EXPECT_EQ(reforged, WithoutColumn(ReadWholeFile(StrCat(poe2Folder, file)), "reward")) << file;
+	}
 	for (const std::string_view file : { "atmosphere.tsv", "map_icons.tsv", "quest_tracker.tsv", "skill_looks.tsv", "cathedral_rooms.tsv",
 	         "catacombs_rooms.tsv", "caves_rooms.tsv", "hell_rooms.tsv", "hive_rooms.tsv", "crypt_rooms.tsv" }) {
-		const std::string reforged = ReadWholeFile(StrCat(paths::BasePath(), "mods/reforged/txtdata/poe2/", file));
-		const std::string poe2 = ReadWholeFile(StrCat(paths::BasePath(), "mods/poe2/txtdata/poe2/", file));
-		ASSERT_FALSE(reforged.empty()) << file;
-		EXPECT_EQ(reforged, poe2) << file;
+		const std::string reforged = ReadWholeFile(StrCat(reforgedFolder, file));
+		for (const std::string_view word : { "strongbox", "raremonster", "rare_monster" })
+			EXPECT_EQ(reforged.find(word), std::string::npos) << file << " says " << word;
 	}
 }
 

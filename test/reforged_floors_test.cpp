@@ -43,6 +43,7 @@ namespace devilution {
 namespace {
 
 constexpr std::string_view ReforgedMods[] = { "hf", "reforged" };
+constexpr std::string_view Poe2Mods[] = { "hf", "poe2" };
 
 OptionEntryBoolean &FloorsSetting(dungeon_type type)
 {
@@ -146,16 +147,52 @@ protected:
 		return tiles;
 	}
 
-	/** The same floor in POE2 Mashup with the same rooms (Reforged's tables are copies of POE2's). */
+	/**
+	 * The same floor in POE2 Mashup, from POE2's own rooms (Reforged's are copies of them without the reward column, which
+	 * no layout reads).
+	 */
 	static Tiles BuildPoe2(int level, uint32_t seed)
 	{
 		gbIsReforged = false;
 		gbIsPoe2 = true;
+		UnloadModArchives();
+		LoadModArchives(Poe2Mods);
 		const Tiles tiles = BuildFresh(level, seed);
 		EXPECT_TRUE(IsCathedralFunnelFloor());
 		gbIsPoe2 = false;
 		gbIsReforged = true;
+		UnloadModArchives();
+		LoadModArchives(ReforgedMods);
 		return tiles;
+	}
+
+	/** POE2 Mashup's rooms of a dungeon, as a Reforged build from before Reforged had its own copies read them. */
+	static std::vector<CathedralRoomDef> Poe2Rooms(RoomCollection collection)
+	{
+		gbIsReforged = false;
+		gbIsPoe2 = true;
+		UnloadModArchives();
+		LoadModArchives(Poe2Mods);
+		ForgetRoomTables();
+		std::vector<CathedralRoomDef> rooms = ShippedRoomCollection(collection);
+		ForgetRoomTables();
+		gbIsPoe2 = false;
+		gbIsReforged = true;
+		UnloadModArchives();
+		LoadModArchives(ReforgedMods);
+		return rooms;
+	}
+
+	static void SetRoomCollection(RoomCollection collection, std::vector<CathedralRoomDef> rooms)
+	{
+		switch (collection) {
+		case RoomCollection::Catacombs: SetCatacombsRooms(std::move(rooms)); break;
+		case RoomCollection::Caves: SetCavesRooms(std::move(rooms)); break;
+		case RoomCollection::Hell: SetHellRooms(std::move(rooms)); break;
+		case RoomCollection::Hive: SetHiveRooms(std::move(rooms)); break;
+		case RoomCollection::Crypt: SetCryptRooms(std::move(rooms)); break;
+		default: SetCathedralRooms(std::move(rooms)); break;
+		}
 	}
 };
 
@@ -275,22 +312,103 @@ TEST_F(ReforgedFloorsTest, FloorsAreNotBuiltFreshOnLaterVisits)
 	EXPECT_EQ(DungeonSeeds[2], seed);
 }
 
-TEST_F(ReforgedFloorsTest, AFloorBuiltFromRoomsAnUpdateChangedIsBuiltAgain)
+/** An update that changes the rooms: one room fewer, and another room's grid turned round. */
+std::vector<CathedralRoomDef> UpdatedRooms(std::vector<CathedralRoomDef> rooms)
+{
+	rooms.pop_back();
+	rooms.front().grid = TurnCathedralGrid(rooms.front().grid, 2);
+	return rooms;
+}
+
+TEST_F(ReforgedFloorsTest, AFloorKeepsItsLayoutWhenAnUpdateChangesItsRooms)
+{
+	const Tiles saved = BuildFresh(2, 555);
+	ASSERT_TRUE(IsCathedralFunnelFloor());
+	const size_t roomCount = GetCathedralRooms().size();
+	MyPlayer->_pLvlVisited[2] = true;
+	Poe2FloorSaved(2, false);
+	// What the save keeps beside the floor records.
+	const std::vector<uint8_t> floors = Poe2PackFloors();
+	const std::vector<uint8_t> rooms = PackKeptFloorRooms();
+	const uint32_t seed = DungeonSeeds[2];
+
+	// The game is updated and the save loaded again.
+	SetCathedralRooms(UpdatedRooms(GetCathedralRooms()));
+	ASSERT_TRUE(Poe2UnpackFloors(floors));
+	UnpackKeptFloorRooms(rooms);
+	Poe2FloorsAfterLoadGame();
+	Poe2FloorsTick();
+	EXPECT_FALSE(Poe2ForceFreshFloor) << "the floor the hero stands on isn't built anew";
+	Poe2BeginFloorVisit(false, ENTRY_MAIN);
+	EXPECT_FALSE(Poe2FloorFresh) << "nor when the hero comes back to it";
+	EXPECT_EQ(DungeonSeeds[2], seed);
+	EXPECT_EQ(Build(2, seed), saved) << "built from the rooms it was saved with";
+	EXPECT_TRUE(IsCathedralFunnelFloor());
+	EXPECT_EQ(GetCathedralRooms().size(), roomCount) << "while the floor is played";
+
+	// Saved again, it still has its rooms; a new floor is built from today's.
+	const std::vector<uint8_t> again = PackKeptFloorRooms();
+	EXPECT_EQ(again, rooms);
+	MyPlayer->_pLvlVisited[3] = false;
+	currlevel = 3;
+	leveltype = DTYPE_CATHEDRAL;
+	Poe2ApplyFreshFloor(3, false, 777, 1);
+	Poe2FloorBuildFor(3);
+	EXPECT_EQ(GetCathedralRooms().size(), roomCount - 1);
+}
+
+TEST_F(ReforgedFloorsTest, AFloorWhoseRoomsTheSaveLacksIsStillNotBuiltAnew)
 {
 	BuildFresh(2, 555);
 	ASSERT_TRUE(IsCathedralFunnelFloor());
 	MyPlayer->_pLvlVisited[2] = true;
 	Poe2FloorSaved(2, false);
-	// The update drops a room from the collection: the saved monsters and objects would no longer fit the layout.
-	std::vector<CathedralRoomDef> rooms = GetCathedralRooms();
-	ASSERT_FALSE(rooms.empty());
-	rooms.pop_back();
-	SetCathedralRooms(rooms);
+	const std::vector<uint8_t> floors = Poe2PackFloors();
+	const uint32_t seed = DungeonSeeds[2];
+
+	SetCathedralRooms(UpdatedRooms(GetCathedralRooms()));
+	ASSERT_TRUE(Poe2UnpackFloors(floors));
+	UnpackKeptFloorRooms({});
+	Poe2FloorsAfterLoadGame();
+	Poe2FloorsTick();
+	EXPECT_FALSE(Poe2ForceFreshFloor);
 	Poe2BeginFloorVisit(false, ENTRY_MAIN);
-	EXPECT_TRUE(Poe2FloorFresh);
-	// It is built fresh on the designed rooms again.
-	Build(2, DungeonSeeds[2]);
-	EXPECT_TRUE(IsCathedralFunnelFloor());
+	EXPECT_FALSE(Poe2FloorFresh) << "its monsters, objects and items are loaded as saved, as Diablo loads a visited floor";
+	EXPECT_EQ(DungeonSeeds[2], seed);
+	Build(2, seed);
+	EXPECT_TRUE(IsCathedralFunnelFloor()) << "on today's rooms";
+	EXPECT_FALSE(PackKeptFloorRooms().size() <= 2) << "which the save now keeps for it";
+}
+
+TEST_F(ReforgedFloorsTest, FloorsSavedWithPoe2sRoomsKeepTheirLayouts)
+{
+	// Reforged heroes saved before Reforged had its own rooms have floors built from POE2 Mashup's copy, with its reward
+	// column. Without the column, the same seed builds the same floor.
+	for (const Area &area : Areas) {
+		const RoomCollection collection = RoomCollectionOf(GetLevelType(area.first));
+		const std::vector<CathedralRoomDef> poe2Rooms = Poe2Rooms(collection);
+		ASSERT_FALSE(poe2Rooms.empty()) << area.name;
+		for (int level = area.first; level <= area.last; level++) {
+			for (uint32_t n = 1; n <= 6; n++) {
+				const uint32_t seed = (n * 104723U) + static_cast<uint32_t>(level);
+				const std::string where = StrCat(area.name, " level ", level, " seed ", seed);
+				SetRoomCollection(collection, poe2Rooms);
+				const Tiles before = BuildFresh(level, seed);
+				ASSERT_TRUE(IsCathedralFunnelFloor()) << where;
+				MyPlayer->_pLvlVisited[level] = true;
+				Poe2FloorSaved(level, false);
+				const std::vector<uint8_t> floors = Poe2PackFloors();
+
+				// This build, which reads Reforged's own rooms; the old save has no rooms entry.
+				ForgetRoomTables();
+				ASSERT_TRUE(Poe2UnpackFloors(floors));
+				UnpackKeptFloorRooms({});
+				EXPECT_EQ(Build(level, seed), before) << where;
+				EXPECT_TRUE(IsCathedralFunnelFloor()) << where;
+				MyPlayer->_pLvlVisited[level] = false;
+			}
+		}
+	}
 }
 
 /** Real Cathedral floors filled the way a first visit fills them (needs the game's data for the walls and monsters). */

@@ -90,6 +90,16 @@ enum CathedralRoomRole : uint8_t {
  * b banner, r barrels, and lines inside the room: '#' wall, 'a' arches, '=' fence, 'd' a door in a wall or fence line,
  * 'R' broken wall.
  */
+/** @brief The designed room collections, one for each dungeon with designed floors. */
+enum class RoomCollection : uint8_t {
+	Cathedral,
+	Catacombs,
+	Caves,
+	Hell,
+	Hive,
+	Crypt,
+};
+
 struct CathedralRoomDef {
 	std::string id;
 	std::string family;
@@ -97,7 +107,7 @@ struct CathedralRoomDef {
 	bool memorable = false;
 	/** The room only turns ways that keep its pillars behind the middle, so they never hide the fight. */
 	bool pillarsBehind = false;
-	/** What its reward spot holds on its first version: "", "strongbox" or "raremonster". */
+	/** POE2 Mashup: what its reward spot holds on its first version: "", "strongbox" or "raremonster". Empty in Reforged. */
 	std::string reward;
 	/** Optional parts: a digit in the grid, the square when it is used and when it isn't. */
 	std::vector<std::array<char, 3>> options;
@@ -311,6 +321,28 @@ uint64_t CathedralRoomsToAvoid(std::span<const uint64_t> recent, bool catacombs 
  * under its saved chests and fires. Bump FloorBuilderVersion in the .cpp when a builder change moves things.
  */
 uint32_t CathedralRoomsStamp(bool catacombs = false, bool caves = false, bool hell = false, bool hive = false, bool crypt = false);
+
+/** @brief The stamp of a room collection (CathedralRoomsStamp is the stamp of the one in use). */
+uint32_t RoomCollectionStamp(const std::vector<CathedralRoomDef> &rooms);
+
+/** @brief The room collection a floor of the dungeon type is built from. */
+RoomCollection RoomCollectionOf(dungeon_type type);
+
+/** @brief The collection as the game ships it (read from the mod's table), whatever floor is being built. */
+const std::vector<CathedralRoomDef> &ShippedRoomCollection(RoomCollection collection);
+
+/**
+ * @brief Sanctuary Reforged: builds the floors of the collection from these rooms instead of the shipped ones, so a saved
+ * floor keeps the layout it was built with after a game update changed the rooms. nullptr goes back to the shipped rooms.
+ * The rooms must outlive their use.
+ */
+void KeepRoomCollection(RoomCollection collection, const std::vector<CathedralRoomDef> *rooms);
+void ForgetKeptRoomCollections();
+
+/** @brief Appends the rooms of a collection to a save entry, everything the builder reads from them. */
+void PackRoomCollection(std::vector<uint8_t> &out, const std::vector<CathedralRoomDef> &rooms);
+/** @brief Reads rooms written by PackRoomCollection from pos on; false (and pos anywhere) when the bytes are damaged. */
+bool UnpackRoomCollection(std::span<const uint8_t> data, size_t &pos, std::vector<CathedralRoomDef> &rooms);
 
 /** @brief Whether the floor being played was made by this builder. */
 bool IsCathedralFunnelFloor();
