@@ -852,13 +852,40 @@ void PrepareUiPanel(UiDraw &draw, const SDL_Surface *ui)
 	}
 }
 
-/** @brief As PrepareUiPanel, for a copy of part of a panel's surface. Its colour 0 stays: the art has none there. */
+/**
+ * @brief Whether a panel's art is solid over the whole of one game pixel of its surface (its picture is the whole
+ * surface at `scale` times its size).
+ */
+bool ArtSolidAt(const SDL_Surface *picture, float scale, int sx, int sy)
+{
+	const int x0 = static_cast<int>(std::lround(sx * scale));
+	const int y0 = static_cast<int>(std::lround(sy * scale));
+	const int x1 = std::min(static_cast<int>(std::lround((sx + 1) * scale)), picture->w);
+	const int y1 = std::min(static_cast<int>(std::lround((sy + 1) * scale)), picture->h);
+	if (x0 < 0 || y0 < 0 || x0 >= x1 || y0 >= y1)
+		return false;
+	for (int y = y0; y < y1; y++) {
+		const auto *row = static_cast<const uint8_t *>(picture->pixels) + static_cast<ptrdiff_t>(y) * picture->pitch;
+		for (int x = x0; x < x1; x++) {
+			if (row[x * 4 + 3] < 250)
+				return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * @brief As PrepareUiPanel, for a copy of part of a panel's surface. Its colour 0 stays where the art has none there;
+ * where the art is solid it goes too (a panel whose art was repainted there, as the bottom bar's buttons' words).
+ */
 void PrepareUiBlit(UiBlit &blit, const SDL_Surface *ui)
 {
 	blit.shown = 0;
 	blit.art = ArtFor(blit.name);
 	if (blit.art == nullptr || blit.sourceWidth <= 0)
 		return;
+	const SDL_Surface *picture = blit.art->picture;
+	const float scale = picture != nullptr ? static_cast<float>(picture->w) / static_cast<float>(blit.sourceWidth) : 0.F;
 	int laid = 0;
 	for (int y = 0; y < blit.dest.h; y++) {
 		const int uy = blit.dest.y + y;
@@ -868,7 +895,9 @@ void PrepareUiBlit(UiBlit &blit, const SDL_Surface *ui)
 		for (int x = 0; x < blit.dest.w; x++) {
 			const int ux = blit.dest.x + x;
 			const uint8_t own = blit.pixels[static_cast<size_t>(y) * blit.dest.w + x];
-			if (ux < 0 || ux >= ui->w || own == 0)
+			if (ux < 0 || ux >= ui->w)
+				continue;
+			if (own == 0 && (picture == nullptr || !ArtSolidAt(picture, scale, blit.src.x + x, blit.src.y + y)))
 				continue;
 			laid++;
 			if (line[ux] != own)
