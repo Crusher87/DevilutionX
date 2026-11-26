@@ -193,6 +193,15 @@ public:
 	void Flare(size_t zone);
 	/** @brief Makes a zone flare up as if it had `ago` seconds ago (past its dip), its sparks starting `sparkDelay` on. */
 	void FlareAgo(size_t zone, float ago, float sparkDelay);
+	/**
+	 * @brief Sets how strongly a zone burns, on top of its breathing: 1 as it is, more burns higher, 0 lets it go out.
+	 * It eases there at `perSecond` (0: at once).
+	 */
+	void SetZoneBoost(size_t zone, float boost, float perSecond = 0.F);
+	/** @brief A zone's boost now (1 without one). */
+	/** @brief Its zones (fixed once it is made). */
+	const std::vector<FireZone> &Zones() const { return source_.zones; }
+	float ZoneBoost(size_t zone) const { return zone < zoneBoost_.size() ? zoneBoost_[zone] : 1.F; }
 
 	/** @brief Puts out the fire: no heat, no wind, no sparks (its time goes on). */
 	void Clear();
@@ -289,6 +298,10 @@ private:
 	/** @brief Each column's feed gain this step (the zones' breathing). */
 	std::vector<float> columnGain_;
 	std::vector<double> flareAt_;
+	/** @brief Each zone's boost (SetZoneBoost), where it is going and how fast. */
+	std::vector<float> zoneBoost_;
+	std::vector<float> zoneBoostTarget_;
+	std::vector<float> zoneBoostRate_;
 	/** @brief The heat's mip levels 1.. (each half the last), as the graphics card's: for the glow and the light. */
 	std::vector<std::vector<float>> mips_;
 	std::vector<int> mipWidth_;

@@ -153,7 +153,9 @@ set(tests
   quests_test
   reforged_floors_test
   reforged_mode_test
+  reforged_telemetry_test
   reforged_ui_comforts_test
+  reforged_clean_ui_test
   reencode_dun_cels_test
   scrollrt_test
   stores_test

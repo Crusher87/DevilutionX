@@ -37,6 +37,7 @@
 #include "poe2/loot.hpp"
 #include "poe2/modifiers.hpp"
 #include "poe2/rune_fusing.hpp"
+#include "poe2/secrets.hpp"
 #include "poe2/telemetry.hpp"
 #include "poe2/tears.hpp"
 #include "qol/stash.h"
@@ -2372,6 +2373,16 @@ void TalkEnter()
 	if (CurrentTextLine == sn - 2) {
 		Towner *target = GetTowner(TownerId);
 		assert(target != nullptr);
+		// Sanctuary Reforged: the first time Gillian gossips after a cow has been pestered, she tells the hidden trail's
+		// rumour (poe2/secrets.hpp). After that it is only one of her usual lines (towners.cpp) until the name is lit.
+		if (target->_ttype == TOWN_BMAID && secrets::Has(secrets::Found::PesteredCow) && !secrets::Has(secrets::Found::HeardRumour)
+		    && !secrets::Has(secrets::Found::LitName)) {
+			if (const auto rumour = ParseSpeechId("TEXT_SECRET_RUMOUR"); rumour.has_value()) {
+				secrets::Set(secrets::Found::HeardRumour);
+				InitQTextMsg(*rumour);
+				return;
+			}
+		}
 		InitQTextMsg(target->gossip);
 		return;
 	}

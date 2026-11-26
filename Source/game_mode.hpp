@@ -66,4 +66,16 @@ inline bool HasEnhancements()
 	return gbIsPoe2 || gbIsReforged;
 }
 
+/** @brief The game was started with --admin: the admin tools are there in every mode. */
+extern DVL_API_FOR_TEST bool gbAdminSwitch;
+
+/**
+ * @brief Whether the admin tools (the game menu's Admin Tools, the item and monster spawner on Insert) are there:
+ * always in POE2 Mashup, and in the other modes only when the game was started with --admin.
+ */
+inline bool AdminToolsOn()
+{
+	return gbIsPoe2 || gbAdminSwitch;
+}
+
 } // namespace devilution

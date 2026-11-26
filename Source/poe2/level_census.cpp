@@ -659,6 +659,17 @@ std::string FloorName()
 std::string HeadlineText(const Headline &headline)
 {
 	const std::array<int, 5> &sizes = headline.groupsBySize;
+	if (TelemetryIsReforged()) {
+		// Diablo's monsters are normal or unique: no magic or rare packs.
+		return std::format("{:d} rooms ({:d} empty, {:d} with only barrels or props, {:d} with one monster), {:d} dead ends ({:d} with nothing in them), biggest room {:d}% of the floor; "
+		                   "{:d} monsters of {:d} kinds in {:d} groups ({:d} alone, {:d} of 2-3, {:d} of 4-6, {:d} of 7-11, {:d} of 12 or more), {:d} unique, {:d} ranged; "
+		                   "{:d} chests, {:d} barrels, {:d} shrines, {:d} sarcophagi, {:d} items, {:d} theme rooms; "
+		                   "{:d}% of the floor more than {:d} steps from any monster; stairs to stairs {:d} tiles through {:d} rooms, {:d}% of the way with no monster that close, longest empty stretch {:d} tiles",
+		    headline.rooms, headline.emptyRooms, headline.propsOnly, headline.singleMonster, headline.deadEnds, headline.emptyDeadEnds, headline.biggestRoomShare,
+		    headline.monsters, headline.monsterTypes, headline.groups, sizes[0], sizes[1], sizes[2], sizes[3], sizes[4], headline.rarity[3], headline.ranged,
+		    headline.chests, headline.barrels, headline.shrines, headline.sarcophagi, headline.items, headline.themeRooms,
+		    headline.quietFloorShare, QuietSteps, headline.routeLength, headline.routeRooms, headline.routeEmptyShare, headline.longestEmptyWalk);
+	}
 	return std::format("{:d} rooms ({:d} empty, {:d} with only barrels or props, {:d} with one monster), {:d} dead ends ({:d} with nothing in them), biggest room {:d}% of the floor; "
 	                   "{:d} monsters of {:d} kinds in {:d} groups ({:d} alone, {:d} of 2-3, {:d} of 4-6, {:d} of 7-11, {:d} of 12 or more), {:d} magic, {:d} rare, {:d} unique, {:d} ranged; "
 	                   "{:d} chests, {:d} barrels, {:d} shrines, {:d} sarcophagi, {:d} items, {:d} theme rooms; "
@@ -685,15 +696,15 @@ void AddHeadline(TelemetryEvent &event, const Headline &headline)
 	    .add("monsters", headline.monsters)
 	    .add("monsterTypes", headline.monsterTypes)
 	    .add("ranged", headline.ranged)
-	    .add("magic", headline.rarity[1])
-	    .add("rare", headline.rarity[2])
+	    .addIf(!TelemetryIsReforged(), "magic", headline.rarity[1])
+	    .addIf(!TelemetryIsReforged(), "rare", headline.rarity[2])
 	    .add("unique", headline.rarity[3])
 	    .add("groups", headline.groups)
 	    .addRaw("groupsBySize", groups.str())
 	    .add("chests", headline.chests)
-	    .add("magicChests", headline.chestKinds[1])
-	    .add("rareChests", headline.chestKinds[2])
-	    .add("strongboxes", headline.chestKinds[3])
+	    .addIf(!TelemetryIsReforged(), "magicChests", headline.chestKinds[1])
+	    .addIf(!TelemetryIsReforged(), "rareChests", headline.chestKinds[2])
+	    .addIf(!TelemetryIsReforged(), "strongboxes", headline.chestKinds[3])
 	    .add("barrels", headline.barrels)
 	    .add("shrines", headline.shrines)
 	    .add("sarcophagi", headline.sarcophagi)
@@ -725,7 +736,7 @@ void WriteCensus(const Census &census)
 	    .add("dungeonLevel", static_cast<int>(currlevel))
 	    .add("setLevel", setlevel ? static_cast<int>(setlvlnum) : -1)
 	    .add("levelType", static_cast<int>(leveltype))
-	    .add("mapTier", ActiveMapTier())
+	    .addIf(!TelemetryIsReforged(), "mapTier", ActiveMapTier())
 	    .add("seed", seed)
 	    .add("visit", visit)
 	    .add("built", CurrentBuilt)
@@ -743,8 +754,11 @@ void WriteCensus(const Census &census)
 		if (room.tiles == 0)
 			continue;
 		listIndex[id] = listed++;
-		std::string json = std::format(R"({{"id":{:d},"tiles":{:d},"doors":{:d},"dist":{:d},"route":{:s},"mon":{:d},"ranged":{:d},"magic":{:d},"rare":{:d},"unique":{:d},"groups":{:d},"bigGroup":{:d},"barrels":{:d},"chests":{:d},"shrines":{:d},"sarc":{:d},"other":{:d},"items":{:d},"gold":{:d},"theme":)",
-		    id, room.tiles, room.doors(), room.distance, room.onRoute ? "true" : "false", room.monsters, room.ranged, room.rarity[1], room.rarity[2], room.rarity[3],
+		// Sanctuary Reforged's rooms have no magic or rare monsters.
+		const std::string rarities = TelemetryIsReforged() ? std::format(R"("unique":{:d})", room.rarity[3])
+		                                                   : std::format(R"("magic":{:d},"rare":{:d},"unique":{:d})", room.rarity[1], room.rarity[2], room.rarity[3]);
+		std::string json = std::format(R"({{"id":{:d},"tiles":{:d},"doors":{:d},"dist":{:d},"route":{:s},"mon":{:d},"ranged":{:d},{:s},"groups":{:d},"bigGroup":{:d},"barrels":{:d},"chests":{:d},"shrines":{:d},"sarc":{:d},"other":{:d},"items":{:d},"gold":{:d},"theme":)",
+		    id, room.tiles, room.doors(), room.distance, room.onRoute ? "true" : "false", room.monsters, room.ranged, rarities,
 		    room.groups, room.biggestGroup, room.barrels, room.chests, room.shrines, room.sarcophagi, room.otherObjects, room.items, room.gold);
 		AppendJsonString(json, room.theme);
 		json += '}';

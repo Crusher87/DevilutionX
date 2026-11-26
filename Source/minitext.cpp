@@ -3,6 +3,7 @@
  *
  * Implementation of scrolling dialog text.
  */
+#include <algorithm>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -68,7 +69,8 @@ uint32_t CalculateTextSpeed(SfxID nSFX)
 	const auto numLines = static_cast<uint32_t>(TextLines.size());
 
 #ifndef NOSOUND
-	uint32_t sfxFrames = GetSFXLength(nSFX);
+	// Sanctuary Reforged: a text with no voice (sfx None) scrolls at a reading pace.
+	uint32_t sfxFrames = nSFX == SfxID::None ? std::max<uint32_t>(numLines * 2600, 6000) : GetSFXLength(nSFX);
 #else
 	// Sound is disabled -- estimate length from the number of lines.
 	uint32_t sfxFrames = numLines * 3000;
@@ -173,7 +175,8 @@ void InitQTextMsg(_speech_id m)
 		qtextSpd = CalculateTextSpeed(sfxnr);
 		ScrollStart = GetMillisecondsSinceStartup();
 	}
-	PlaySFX(sfxnr);
+	if (sfxnr != SfxID::None)
+		PlaySFX(sfxnr);
 }
 
 void DrawQTextBack(const Surface &out)

@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "data/file.hpp"
+#include "data/mode_tables.hpp"
 #include "data/record_reader.hpp"
 #include "game_mode.hpp"
 #include "levels/gendung.h"
@@ -25,7 +26,7 @@ namespace devilution::atmosphere {
 
 namespace {
 
-constexpr std::string_view Filename = "txtdata\\poe2\\atmosphere.tsv";
+constexpr std::string_view TableFile = "atmosphere.tsv";
 
 /** @brief A number (or a colour) for one area: at its first floor and at its last. */
 struct Row {
@@ -158,6 +159,8 @@ void Load()
 		area.clear();
 	if (!HasEnhancements())
 		return;
+	const std::string filename = ModeTablePath(TableFile);
+	const std::string_view Filename = filename;
 	auto dataFile = DataFile::load(Filename);
 	if (!dataFile.has_value()) {
 		// The areas keep the look they had before the table.
@@ -370,7 +373,7 @@ std::string Feel(const std::optional<std::string> &name, const std::optional<dou
 	}
 	if (*name == "reload") {
 		Load();
-		return StrCat("Read the table again (", Filename, ").\n", Listing());
+		return StrCat("Read the table again (", ModeTablePath(TableFile), ").\n", Listing());
 	}
 	for (size_t i = 0; i < NumKnobs; i++) {
 		if (Knobs[i].name != *name)

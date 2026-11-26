@@ -6,6 +6,7 @@
 
 #include "automap.h"
 #include "data/file.hpp"
+#include "data/mode_tables.hpp"
 #include "data/record_reader.hpp"
 #include "engine/palette.h"
 #include "engine/render/automap_render.hpp"
@@ -28,7 +29,6 @@ namespace devilution {
 
 namespace {
 
-constexpr std::string_view MapIconsFile = "txtdata\\poe2\\map_icons.tsv";
 constexpr size_t IconCount = static_cast<size_t>(MapIcon::Count);
 
 /** @brief The keys the table's rows go by, in MapIcon order. */
@@ -269,6 +269,8 @@ void LoadMapIcons()
 {
 	Styles = DefaultStyles();
 	StylesLoaded = true;
+	const std::string filename = ModeTablePath("map_icons.tsv");
+	const std::string_view MapIconsFile = filename;
 	auto dataFile = DataFile::load(MapIconsFile);
 	if (!dataFile.has_value()) {
 		LogError("Couldn't load the map icons: {}", MapIconsFile);

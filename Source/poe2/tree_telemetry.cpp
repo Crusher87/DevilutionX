@@ -123,7 +123,8 @@ void WriteNodeEvent(const Player &player, std::string_view kind, std::string_vie
 {
 	const bool taken = kind == "tree_take";
 	const PassiveNode *node = NodeOf(id);
-	if (node == nullptr || &player != MyPlayer || !TelemetryEnabled())
+	// Sanctuary Reforged has no passive tree: nothing of it goes in its log.
+	if (node == nullptr || &player != MyPlayer || !TelemetryEnabled() || TelemetryIsReforged())
 		return;
 	const int spent = PassivePointsSpent(player);
 	const int total = PassivePointsTotal(player);
@@ -302,7 +303,7 @@ void TelemetryPassiveRefunded(const Player &player, PassiveNodeId node, PassiveP
 
 void TelemetryPassivesCleared(const Player &player, std::string_view reason, int nodes)
 {
-	if (&player != MyPlayer || !TelemetryEnabled() || nodes <= 0)
+	if (&player != MyPlayer || !TelemetryEnabled() || TelemetryIsReforged() || nodes <= 0)
 		return;
 	TelemetryText("tree", std::format("cleared {:d} nodes: {:s}", nodes, reason));
 	TelemetryEventNow(LogChannel::Tree, LogLevel::Always, "tree_clear")
@@ -315,7 +316,7 @@ void TelemetryPassivesCleared(const Player &player, std::string_view reason, int
 
 void TelemetryTreeSnapshot(const Player &player, std::string_view when)
 {
-	if (&player != MyPlayer || !TelemetryEnabled() || PassiveTree().empty())
+	if (&player != MyPlayer || !TelemetryEnabled() || TelemetryIsReforged() || PassiveTree().empty())
 		return;
 	const std::vector<PassiveNodeId> main = HeldIn(player, PassivePool::Main);
 	const std::vector<PassiveNodeId> setI = HeldIn(player, PassivePool::SetI);
@@ -404,7 +405,7 @@ void TelemetryTreeOpened(const Player &player)
 
 void TelemetryTreeClosed(const Player &player)
 {
-	if (OpenedMs == 0 || &player != MyPlayer || !TelemetryEnabled()) {
+	if (OpenedMs == 0 || &player != MyPlayer || !TelemetryEnabled() || TelemetryIsReforged()) {
 		OpenedMs = 0;
 		return;
 	}

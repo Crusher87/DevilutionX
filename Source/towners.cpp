@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
+#include <optional>
 #include <unordered_map>
 
 #include "cursor.h"
@@ -19,6 +20,7 @@
 #include "panels/anvil_panel.hpp"
 #include "panels/quest_reward_panel.hpp"
 #include "player.h"
+#include "poe2/secrets.hpp"
 #include "qol/visual_store.h"
 #include "stores.h"
 #include "tables/textdat.h"
@@ -142,8 +144,16 @@ void InitTownerFromData(Towner &towner, const TownerDataEntry &entry)
 
 	// Set gossip from TSV data
 	if (!entry.gossipTexts.empty()) {
-		const auto index = std::max<int32_t>(GenerateRnd(static_cast<int32_t>(entry.gossipTexts.size())), 0);
-		towner.gossip = entry.gossipTexts[index];
+		// Sanctuary Reforged: once heard, and until the name is lit, Gillian's cow rumour is one more of her lines to
+		// pick from (still one roll, so the game's random sequence is unchanged).
+		std::optional<_speech_id> rumour;
+		if (towner._ttype == TOWN_BMAID && secrets::Has(secrets::Found::HeardRumour) && !secrets::Has(secrets::Found::LitName)) {
+			if (const auto id = ParseSpeechId("TEXT_SECRET_RUMOUR"); id.has_value())
+				rumour = *id;
+		}
+		const auto count = static_cast<int32_t>(entry.gossipTexts.size()) + (rumour.has_value() ? 1 : 0);
+		const auto index = std::max<int32_t>(GenerateRnd(count), 0);
+		towner.gossip = static_cast<size_t>(index) < entry.gossipTexts.size() ? entry.gossipTexts[index] : *rumour;
 	}
 }
 
@@ -569,6 +579,9 @@ void TalkToCow(Player &player, Towner &cow)
 			HeroSpeech::ImNoMilkmaid,
 		};
 		player.SaySpecific(SnSfx[CowMsg]);
+		// Sanctuary Reforged: the first step of the hidden trail (poe2/secrets.hpp); Gillian has heard about it.
+		if (&player == MyPlayer)
+			secrets::Set(secrets::Found::PesteredCow);
 		CowMsg++;
 		if (CowMsg >= 3)
 			CowMsg = 0;

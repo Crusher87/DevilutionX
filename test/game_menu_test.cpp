@@ -18,7 +18,10 @@
 
 #include "ui_test.hpp"
 
+#include <string_view>
+
 #include "diablo.h"
+#include "game_mode.hpp"
 #include "gamemenu.h"
 #include "gmenu.h"
 
@@ -138,6 +141,37 @@ TEST_F(GameMenuTest, DoubleOpen_StillOpen)
 
 	EXPECT_TRUE(isGameMenuOpen);
 	EXPECT_TRUE(gmenu_is_active());
+}
+
+TEST_F(GameMenuTest, AdminToolsOnlyInPoe2OrWithTheAdminSwitch)
+{
+	const auto hasAdminTools = [] {
+		for (const TMenuItem *item = sgpCurrentMenu; item != nullptr && item->fnMenu != nullptr; ++item) {
+			if (item->pszStr != nullptr && std::string_view(item->pszStr) == "Admin Tools")
+				return true;
+		}
+		return false;
+	};
+	gbIsMultiplayer = false;
+	gbIsPoe2 = false;
+	gbIsReforged = true;
+	gbAdminSwitch = false;
+	gamemenu_on();
+	EXPECT_FALSE(hasAdminTools()) << "Sanctuary Reforged without --admin";
+	ForceCloseMenu();
+
+	gbAdminSwitch = true;
+	gamemenu_on();
+	EXPECT_TRUE(hasAdminTools()) << "Sanctuary Reforged with --admin";
+	ForceCloseMenu();
+
+	gbAdminSwitch = false;
+	gbIsReforged = false;
+	gbIsPoe2 = true;
+	gamemenu_on();
+	EXPECT_TRUE(hasAdminTools()) << "POE2 Mashup always has them";
+	ForceCloseMenu();
+	gbIsPoe2 = false;
 }
 
 TEST_F(GameMenuTest, MenuStateConsistency)

@@ -266,6 +266,9 @@ void LuaReloadActiveMods()
 	if (gbIsPoe2)
 		gbIsReforged = false;
 
+	// The keys follow the mode: another mode's actions let go of theirs, and default keys can differ.
+	GetOptions().Keymapper.BindForThisMode();
+
 	for (const tl::function_ref<void()> handler : IsModChangeHandlers) {
 		handler();
 	}

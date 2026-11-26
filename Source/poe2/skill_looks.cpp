@@ -9,7 +9,9 @@
 #include <magic_enum/magic_enum.hpp>
 
 #include "data/file.hpp"
+#include "data/mode_tables.hpp"
 #include "effects.h"
+#include "game_mode.hpp"
 #include "poe2/telemetry.hpp"
 #include "tables/spelldat.h"
 #include "utils/file_util.h"
@@ -33,7 +35,6 @@ namespace devilution {
 
 namespace {
 
-constexpr std::string_view ShippedFile = "txtdata\\poe2\\skill_looks.tsv";
 constexpr std::string_view EditsFileName = "skill_looks_mine.tsv";
 constexpr std::string_view Header = "key\tname\tsize\tamount\tlength\tbrightness\tspeed\tshake\ttint\tcolour\tsound\n";
 
@@ -81,6 +82,8 @@ struct Edit {
 std::map<std::string, Edit, std::less<>> Edits;
 bool EditsOn = true;
 bool Loaded;
+/** @brief Whether the looks were read for Sanctuary Reforged, which plays the shipped looks only. */
+bool LoadedForReforged;
 
 const SkillLook *Current;
 
@@ -156,7 +159,7 @@ std::vector<std::string_view> SplitTabs(std::string_view line)
 void LoadShipped()
 {
 	Shipped.clear();
-	auto dataFile = DataFile::load(ShippedFile);
+	auto dataFile = DataFile::load(ModeTablePath("skill_looks.tsv"));
 	if (!dataFile.has_value())
 		return;
 	// Just the header is an empty table, not a broken file.
@@ -175,13 +178,16 @@ std::string EditsPath()
 {
 	std::string folder = TelemetryFolder();
 	if (folder.empty())
-		folder = StrCat(paths::PrefPath(), "poe2_logs", DIRECTORY_SEPARATOR_STR);
+		folder = StrCat(paths::PrefPath(), TelemetryFolderName(gbIsReforged), DIRECTORY_SEPARATOR_STR);
 	return StrCat(folder, EditsFileName);
 }
 
 void LoadEdits()
 {
 	Edits.clear();
+	// The Skill Lab's edits are POE2 Mashup's tuning: Sanctuary Reforged doesn't read them.
+	if (gbIsReforged)
+		return;
 	FILE *file = OpenFile(EditsPath().c_str(), "rb");
 	if (file == nullptr)
 		return;
@@ -205,7 +211,8 @@ void LoadEdits()
 
 void EnsureLoaded()
 {
-	if (!Loaded)
+	// The mode changes when the mods do: Sanctuary Reforged drops the edits, POE2 Mashup reads them again.
+	if (!Loaded || LoadedForReforged != gbIsReforged)
 		LoadSkillLooks();
 }
 
@@ -271,6 +278,7 @@ SkillSlot SkillSlotFromEnumName(std::string_view name)
 void LoadSkillLooks()
 {
 	Loaded = true;
+	LoadedForReforged = gbIsReforged;
 	LoadShipped();
 	LoadEdits();
 }

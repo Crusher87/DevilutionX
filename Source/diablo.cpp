@@ -1271,6 +1271,7 @@ extern "C" void SdlLogToFile(void *userdata, int /*category*/, SDL_LogPriority p
 	PrintHelpOption("-n", _(/* TRANSLATORS: Commandline Option */ "Skip startup videos"));
 	PrintHelpOption("-f", _(/* TRANSLATORS: Commandline Option */ "Display frames per second"));
 	PrintHelpOption("--verbose", _(/* TRANSLATORS: Commandline Option */ "Enable verbose logging"));
+	PrintHelpOption("--admin", _(/* TRANSLATORS: Commandline Option */ "Enable the admin tools for testing"));
 #if SDL_VERSION_ATLEAST(2, 0, 0)
 	PrintHelpOption("--log-to-file <path>", _(/* TRANSLATORS: Commandline Option */ "Log to a file instead of stderr"));
 #endif
@@ -1410,6 +1411,8 @@ void DiabloParseFlags(int argc, char **argv)
 			forceHellfire = true;
 		} else if (arg == "--vanilla") {
 			gbVanilla = true;
+		} else if (arg == "--admin") {
+			gbAdminSwitch = true;
 		} else if (arg == "--verbose") {
 			SDL_SetLogPriorities(SDL_LOG_PRIORITY_VERBOSE);
 #if SDL_VERSION_ATLEAST(2, 0, 0)
@@ -2365,11 +2368,12 @@ void InitKeymapActions()
 	    "QuestLog",
 	    N_("Quest log"),
 	    N_("Open Quest log."),
-	    // POE2 Mashup: Q is the first skill tray key.
-	    'L',
+	    'Q',
 	    QuestLogKeyPressed,
 	    nullptr,
 	    CanPlayerTakeAction);
+	// POE2 Mashup: Q is the first skill tray key.
+	options.Keymapper.LastAction().SetPoe2DefaultKey('L').RestoreDefaultOutsidePoe2();
 	options.Keymapper.AddAction(
 	    "SpellBook",
 	    N_("Spellbook"),
@@ -2456,6 +2460,8 @@ void InitKeymapActions()
 	    N_("Pauses the game."),
 	    'P',
 	    diablo_pause_game);
+	// POE2 Mashup's Passive Tree takes P there.
+	options.Keymapper.LastAction().RestoreDefaultOutsidePoe2();
 	options.Keymapper.AddAction(
 	    "PauseGameAlternate",
 	    N_("Pause Game (Alternate)"),
@@ -2542,15 +2548,16 @@ void InitKeymapActions()
 	options.Keymapper.AddAction(
 	    "ItemSpawner",
 	    N_("Item Spawner"),
-	    N_("Opens the searchable item spawner for testing (POE2 Mashup, single player)."),
+	    N_("Opens the searchable item spawner for testing (single player)."),
 	    SDLK_INSERT,
 	    ToggleItemSpawner,
 	    nullptr,
-	    [] { return !gbIsMultiplayer && !gmenu_is_active(); });
+	    [] { return AdminToolsOn() && !gbIsMultiplayer && !gmenu_is_active(); });
+	options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::AdminTool);
 	options.Keymapper.AddAction(
 	    "SkillsPanel",
 	    N_("Skills"),
-	    N_("Opens the skills panel: your skill gems and their support sockets (POE2 Mashup)."),
+	    N_("Opens the skills panel: your skill gems and their support sockets."),
 	    'K',
 	    [] {
 		    if (!gbIsPoe2 || IsPlayerInStore())
@@ -2559,10 +2566,11 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    [] { return gbIsPoe2 && !gmenu_is_active(); });
+	options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::OnlyPoe2);
 	options.Keymapper.AddAction(
 	    "AtlasPassives",
 	    N_("Atlas"),
-	    N_("Opens the Atlas passives, where completed maps give points (POE2 Mashup)."),
+	    N_("Opens the Atlas passives, where completed maps give points."),
 	    'U',
 	    [] {
 		    if (!gbIsPoe2 || IsPlayerInStore())
@@ -2571,11 +2579,12 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    [] { return gbIsPoe2 && !gmenu_is_active(); });
-	// POE2 opens the passive tree with P. Outside the mod (or in multiplayer) P still pauses.
+	options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::OnlyPoe2);
+	// POE2 opens the passive tree with P (in multiplayer P still pauses). The other modes have only Pause Game on P.
 	options.Keymapper.AddAction(
 	    "PassiveTree",
 	    N_("Passive Tree"),
-	    N_("Opens the passive skill tree (POE2 Mashup, single player). Pauses the game otherwise."),
+	    N_("Opens the passive skill tree (single player). Pauses the game otherwise."),
 	    'P',
 	    [] {
 		    if (gbIsPoe2 && !gbIsMultiplayer)
@@ -2585,31 +2594,34 @@ void InitKeymapActions()
 	    },
 	    nullptr,
 	    [] { return !gmenu_is_active(); });
+	options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::OnlyPoe2);
 	// POE2 Mashup skill tray. Added last so its keys win over older saved bindings.
 	constexpr std::array<uint32_t, NumTrayKeys> TrayKeys { 'Q', 'E', 'R', 'T', 'F', 'G' };
 	for (uint32_t i = 0; i < NumTrayKeys; ++i) {
 		options.Keymapper.AddAction(
 		    "TraySlot{}",
 		    N_("Skill tray key {}"),
-		    N_("Use the skill on this skill tray slot (POE2 Mashup)."),
+		    N_("Use the skill on this skill tray slot."),
 		    TrayKeys[i],
 		    [i] { PressTraySlot(TrayKeySlot(i)); },
 		    [i] { ReleaseTraySlot(TrayKeySlot(i)); },
-		    CanPlayerTakeAction,
+		    [] { return gbIsPoe2 && CanPlayerTakeAction(); },
 		    i + 1);
+		options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::OnlyPoe2);
 	}
 	options.Keymapper.AddAction(
 	    "TraySlotMiddle",
 	    N_("Skill tray middle button"),
-	    N_("Use the skill on the middle mouse button's skill tray slot (POE2 Mashup)."),
+	    N_("Use the skill on the middle mouse button's skill tray slot."),
 	    SDL_BUTTON_MIDDLE | KeymapperMouseButtonMask,
 	    [] { PressTraySlot(TraySlot::MiddleMouse); },
 	    [] { ReleaseTraySlot(TraySlot::MiddleMouse); },
-	    CanPlayerTakeAction);
+	    [] { return gbIsPoe2 && CanPlayerTakeAction(); });
+	options.Keymapper.LastAction().SetModeFlags(OptionEntryFlags::OnlyPoe2);
 	options.Keymapper.AddAction(
 	    "SwapWeapons",
 	    N_("Swap weapons"),
-	    N_("Swaps between weapon sets I and II (POE2 Mashup and Sanctuary Reforged)."),
+	    N_("Swaps between weapon sets I and II."),
 	    'X',
 	    [] { SwapWeapons(*MyPlayer); },
 	    nullptr,
