@@ -126,8 +126,13 @@ enum class Knob : uint8_t {
 	Lens,
 	/** An experiment, off unless asked for: the HD world's tiles drawn from a few big pictures in few draws (hd_batch.hpp). */
 	Batch,
+	/**
+	 * Dead bodies on the floor take its light smoothly across them, the shadows of whoever and whatever stands between
+	 * them and a light fall over them, and a body with a shape map is lit by its shape; at 0, one flat light each as before.
+	 */
+	Corpses,
 };
-inline constexpr size_t NumKnobs = 44;
+inline constexpr size_t NumKnobs = 45;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

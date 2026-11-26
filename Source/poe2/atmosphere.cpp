@@ -92,6 +92,7 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "tileshapes", 1.F, "walls and floors that have a shape map are lit by their shape, so stone edges and pillars catch the light; 0 lights them flat (works with Atmosphere off)" },
 	{ "lens", 1.F, "in a Tristram storm rain gathers on the screen as on a window: droplets, pools where it lands close together, and now and then a run down the glass; 2 twice as much" },
 	{ "batch", 0.F, "an experiment for the frame rate: the HD world's tiles are drawn from a few big pictures in few draws; the picture should not change (works with Atmosphere off)" },
+	{ "corpses", 1.F, "dead bodies take the floor's light smoothly across them, shadows fall over them, and those with a shape map are lit by their shape; 0 gives each one flat light as before (works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
