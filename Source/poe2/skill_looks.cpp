@@ -10,6 +10,7 @@
 
 #include "data/file.hpp"
 #include "effects.h"
+#include "game_mode.hpp"
 #include "poe2/telemetry.hpp"
 #include "tables/spelldat.h"
 #include "utils/file_util.h"
@@ -81,6 +82,8 @@ struct Edit {
 std::map<std::string, Edit, std::less<>> Edits;
 bool EditsOn = true;
 bool Loaded;
+/** @brief Whether the looks were read for Sanctuary Reforged, which plays the shipped looks only. */
+bool LoadedForReforged;
 
 const SkillLook *Current;
 
@@ -175,13 +178,16 @@ std::string EditsPath()
 {
 	std::string folder = TelemetryFolder();
 	if (folder.empty())
-		folder = StrCat(paths::PrefPath(), "poe2_logs", DIRECTORY_SEPARATOR_STR);
+		folder = StrCat(paths::PrefPath(), TelemetryFolderName(gbIsReforged), DIRECTORY_SEPARATOR_STR);
 	return StrCat(folder, EditsFileName);
 }
 
 void LoadEdits()
 {
 	Edits.clear();
+	// The Skill Lab's edits are POE2 Mashup's tuning: Sanctuary Reforged doesn't read them.
+	if (gbIsReforged)
+		return;
 	FILE *file = OpenFile(EditsPath().c_str(), "rb");
 	if (file == nullptr)
 		return;
@@ -205,7 +211,8 @@ void LoadEdits()
 
 void EnsureLoaded()
 {
-	if (!Loaded)
+	// The mode changes when the mods do: Sanctuary Reforged drops the edits, POE2 Mashup reads them again.
+	if (!Loaded || LoadedForReforged != gbIsReforged)
 		LoadSkillLooks();
 }
 
@@ -271,6 +278,7 @@ SkillSlot SkillSlotFromEnumName(std::string_view name)
 void LoadSkillLooks()
 {
 	Loaded = true;
+	LoadedForReforged = gbIsReforged;
 	LoadShipped();
 	LoadEdits();
 }
