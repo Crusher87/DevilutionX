@@ -115,6 +115,25 @@ std::array<const char *, 20> ColorTranslations = {
 
 std::array<std::optional<std::array<uint8_t, 256>>, 20> ColorTranslationsData;
 
+/**
+ * @brief POE2 Mashup: copies of the colour tables for the character panel's own text (PanelLettersScope). The same
+ * colours, but kept apart, so the HD letters made for the panel show there and the game's other small text keeps its own.
+ */
+std::array<std::optional<std::array<uint8_t, 256>>, 20> PanelTranslationsData;
+bool PanelLettersOn = false;
+
+/** @brief The character panel's copy of a colour's table, loaded the first time it is asked for; null for none. */
+const uint8_t *PanelTranslationOf(text_color color)
+{
+	if (ColorTranslations[color] == nullptr)
+		return nullptr;
+	if (!PanelTranslationsData[color]) {
+		PanelTranslationsData[color].emplace();
+		LoadFileInMem(ColorTranslations[color], *PanelTranslationsData[color]);
+	}
+	return PanelTranslationsData[color]->data();
+}
+
 /** The game's palette, for making green text; set by the palette code, which this library can't link to. */
 const std::array<SDL_Color, 256> *TextPalette = nullptr;
 
@@ -281,6 +300,12 @@ void RegisterHdLetters(GameFontTables size, ClxSpriteList letters)
 	} else if (size == GameFont24) {
 		hd::RegisterUiLetters(letters, TranslationOf(ColorUiGold), "fonts/24-00");
 		hd::RegisterUiLetters(letters, TranslationOf(ColorUiSilver), "fonts/24-00-silver");
+	} else if (size == GameFont12) {
+		// Only the character panel's numbers, name and class (PanelLettersScope); other small text stays the game's.
+		hd::RegisterUiLetters(letters, PanelTranslationOf(ColorWhite), "fonts/12-00-panel");
+		hd::RegisterUiLetters(letters, PanelTranslationOf(ColorWhitegold), "fonts/12-00-panel-gold");
+		hd::RegisterUiLetters(letters, PanelTranslationOf(ColorRed), "fonts/12-00-panel-red");
+		hd::RegisterUiLetters(letters, PanelTranslationOf(ColorBlue), "fonts/12-00-panel-blue");
 	}
 }
 
@@ -374,7 +399,9 @@ void DrawFont(const Surface &out, Point position, ClxSprite glyph, text_color co
 	if (outline) {
 		ClxDrawOutlineSkipColorZero(out, 0, { position.x, position.y + glyph.height() - 1 }, glyph);
 	}
-	if (ColorTranslationsData[color]) {
+	if (PanelLettersOn && ColorTranslationsData[color] && PanelTranslationOf(color) != nullptr) {
+		RenderClxSpriteWithTRN(out, glyph, position, PanelTranslationsData[color]->data());
+	} else if (ColorTranslationsData[color]) {
 		RenderClxSpriteWithTRN(out, glyph, position, ColorTranslationsData[color]->data());
 	} else {
 		RenderClxSprite(out, glyph, position);
@@ -1120,6 +1147,17 @@ uint8_t PentSpn2Spin()
 bool IsBreakableWhitespace(char32_t c)
 {
 	return IsAnyOf(c, U' ', U'　', ZWSP);
+}
+
+PanelLettersScope::PanelLettersScope()
+    : wasOn_(PanelLettersOn)
+{
+	PanelLettersOn = true;
+}
+
+PanelLettersScope::~PanelLettersScope()
+{
+	PanelLettersOn = wasOn_;
 }
 
 } // namespace devilution
