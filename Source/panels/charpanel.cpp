@@ -415,6 +415,8 @@ void DrawChr(const Surface &out)
 {
 	const Point pos = GetPanelPosition(UiPanels::Character, { 0, 0 });
 	RenderClxSprite(out, (*Panel)[0], pos);
+	// POE2 Mashup: the numbers, name and class show the HD panel letters where the HD pack has them.
+	const PanelLettersScope panelLetters;
 	for (auto &entry : panelEntries) {
 		if (entry.statDisplayFunc) {
 			const StyledText tmp = (*entry.statDisplayFunc)();
