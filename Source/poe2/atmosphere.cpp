@@ -93,6 +93,8 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "lens", 1.F, "in a Tristram storm rain gathers on the screen as on a window: droplets, pools where it lands close together, and now and then a run down the glass; 2 twice as much" },
 	{ "batch", 0.F, "an experiment for the frame rate: the HD world's tiles are drawn from a few big pictures in few draws; the picture should not change (works with Atmosphere off)" },
 	{ "corpses", 1.F, "dead bodies take the floor's light smoothly across them, shadows fall over them, and those with a shape map are lit by their shape; 0 gives each one flat light as before (works with Atmosphere off)" },
+	{ "carved", 1.F, "heroes' and monsters' shadows are cast from their carved bodies, each light seeing the body from its own side, where the bodies have been made; 0 casts the drawing facing you as before (works with Atmosphere off)" },
+	{ "bodylight", 1.F, "heroes and monsters with a carved body are lit by its shape: the side turned to a light brighter, the far side darker; 0 lights each one flat as before (pictures already shown keep their shape until the level changes; works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

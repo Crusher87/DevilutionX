@@ -74,6 +74,7 @@ set(tests
   poe2_modifiers_test
   poe2_crafting_test
   poe2_affix_glow_test
+  poe2_carved_bodies_test
   poe2_hd_outline_test
   poe2_hd_batch_test
   poe2_hd_spell_icons_test

@@ -40,6 +40,7 @@
 #include "levels/tileset_mix.hpp"
 #include "options.h"
 #include "poe2/atmosphere.hpp"
+#include "poe2/carved_bodies.hpp"
 #include "poe2/hd_batch.hpp"
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_outline.hpp"
@@ -604,6 +605,7 @@ int LightIndexOf(const uint8_t *tbl)
 
 void DropReadPictures();
 void KeepTilePictures();
+void FreeCarvedCards(bool destroy);
 
 void DestroyTextures()
 {
@@ -630,6 +632,7 @@ void DestroyTextures()
 		for (auto &[key, raster] : Rasters)
 			FreeRasterTextures(raster);
 	}
+	FreeCarvedCards(CacheRenderer != nullptr);
 	Art.clear();
 	Rasters.clear();
 	ArtChoices.clear();
@@ -1478,6 +1481,8 @@ constexpr float ShapeLeastShare = 0.004F;
  * the screen, y left and down, z up) and shared out among the axes it leans to by the square of its lean, which adds up
  * to one: its colour goes into each axis's picture at that share of its alpha.
  */
+void MakeShapeFrom(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, SDL_Surface *loaded, bool tile, bool deadBody);
+
 void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name, bool tile = false, bool deadBody = false)
 {
 	if (picture->format->format != SDL_PIXELFORMAT_RGBA32)
@@ -1493,6 +1498,16 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 	}
 	if (loaded == nullptr)
 		return;
+	MakeShapeFrom(renderer, art, picture, loaded, tile, deadBody);
+}
+
+/** @brief MakeShape with its shape map given (`loaded`, freed here): the picture split by the way each part faces. */
+void MakeShapeFrom(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, SDL_Surface *loaded, bool tile, bool deadBody)
+{
+	if (picture->format->format != SDL_PIXELFORMAT_RGBA32) {
+		SDL_FreeSurface(loaded);
+		return;
+	}
 	SDL_Surface *map = SDL_ConvertSurfaceFormat(loaded, SDL_PIXELFORMAT_RGBA32, 0);
 	SDL_FreeSurface(loaded);
 	if (map == nullptr)
@@ -1607,6 +1622,8 @@ void MakeShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const s
 	}
 }
 
+void MakeBodyShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name);
+
 /**
  * @brief A sprite's HD art, loaded the first time it is asked for (its texture is null when there is none). A sprite
  * drawn with an outline (`outlined`) gets its smooth outline made at the same time, from the picture just loaded.
@@ -1657,6 +1674,8 @@ HdArt &LoadArt(SDL_Renderer *renderer, const std::string &name, bool withoutShad
 	art.texture = SDL_CreateTextureFromSurface(renderer, surface);
 	if (art.texture != nullptr && object != nullptr && (withoutShadow || object->corpse))
 		MakeShape(renderer, art, surface, name, false, object->corpse && !withoutShadow);
+	else if (art.texture != nullptr && object == nullptr && withoutShadow)
+		MakeBodyShape(renderer, art, surface, name);
 	SDL_FreeSurface(surface);
 	if (art.texture != nullptr) {
 		SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
@@ -4096,6 +4115,324 @@ void AddWallShade(SDL_Renderer *renderer, const WallHit &hit, const WallStrip &s
 	}
 }
 
+// Carved bodies (carved_bodies.hpp): a hero's or monster's shadow cast from its solid body as each light sees it from
+// its own side, instead of from the drawing that faces the viewer. Each light's view of a pose is made once and kept.
+
+/** @brief Each sprite folder's carved bodies (monsters/zombie/zombien), or null when it has none. */
+std::unordered_map<std::string, std::unique_ptr<carved::Sprite>> CarvedSprites;
+
+/** @brief A body as one light sees it: its sharp and soft shadow pictures, laid out as a sprite's (CastTextures). */
+struct CarvedCard {
+	SDL_Texture *sharp = nullptr;
+	SDL_Texture *soft = nullptr;
+	CastPart sharpPart;
+	CastPart softPart;
+	/** @brief Its picture's size and floor row, in game pixels, without CastPad. */
+	float width = 0;
+	float height = 0;
+	float floor = 0;
+	uint32_t used = 0;
+};
+struct CarvedKey {
+	const carved::Pose *pose;
+	int facing;
+	int bearing;
+	bool operator==(const CarvedKey &other) const = default;
+};
+struct CarvedKeyHash {
+	size_t operator()(const CarvedKey &key) const noexcept
+	{
+		return std::hash<const void *> {}(key.pose) ^ (static_cast<size_t>(key.facing) * 131U) ^ (static_cast<size_t>(key.bearing) * 1000003U);
+	}
+};
+std::unordered_map<CarvedKey, CarvedCard, CarvedKeyHash> CarvedCards;
+/** @brief The ways round a light can lie from a body that each get their own picture. */
+constexpr int CarvedBearings = 32;
+/** @brief How many pictures are kept, and how many new ones a frame may make (the rest show the nearest one kept). */
+constexpr size_t CarvedKept = 3000;
+constexpr int CarvedPerFrame = 24;
+uint32_t CarvedFrame = 0;
+uint32_t CarvedFrameOfBudget = 0;
+int CarvedMadeThisFrame = 0;
+
+void FreeCarvedCards(bool destroy)
+{
+	if (destroy) {
+		for (auto &[key, card] : CarvedCards) {
+			if (card.sharp != nullptr)
+				SDL_DestroyTexture(card.sharp);
+			if (card.soft != nullptr)
+				SDL_DestroyTexture(card.soft);
+		}
+	}
+	CarvedCards.clear();
+	CarvedSprites.clear();
+}
+
+/** @brief A sprite folder's carved bodies, read the first time they are asked for; null when it has none. */
+const carved::Sprite *CarvedSpriteOf(std::string_view folder)
+{
+	auto [it, inserted] = CarvedSprites.try_emplace(std::string(folder));
+	if (!inserted)
+		return it->second.get();
+	std::string path = "hd\\" + std::string(folder) + "\\carved.bin";
+	std::replace(path.begin(), path.end(), '/', '\\');
+	size_t size = 0;
+	auto data = LoadFileInMemWithStatus<uint8_t>(path.c_str(), &size);
+	if (!data.has_value())
+		return nullptr;
+	auto sprite = std::make_unique<carved::Sprite>();
+	if (!carved::Parse(std::span<const uint8_t>(data->get(), size), *sprite)) {
+		LogWarn("HD: {} isn't a carved body file", path);
+		return nullptr;
+	}
+	it->second = std::move(sprite);
+	return it->second.get();
+}
+
+/** @brief The carved body a draw shows, its facing, and where on the floor it stands. */
+struct CarvedLook {
+	const carved::Sprite *sprite = nullptr;
+	const carved::Pose *pose = nullptr;
+	int facing = 0;
+	/** @brief Its floor point in the world buffer and in the world (tiles). */
+	float bx = 0;
+	float by = 0;
+	float wx = 0;
+	float wy = 0;
+};
+
+/** @brief The carved body of a hero or monster draw, with feel("carved") on; false when it has none. */
+bool CarvedLookOf(const Draw &draw, CarvedLook &look)
+{
+	if (draw.kind != DrawKind::Sprite || IsObject(draw.caster) || draw.corpse || atmosphere::Setting(atmosphere::Knob::Carved) <= 0)
+		return false;
+	const std::string *artName = ArtName(draw);
+	if (artName == nullptr)
+		return false;
+	// A monster type in other colours (monsters/zombie/zombied@zombie/bluered/d3_f15) has its base art's body.
+	std::string_view name = *artName;
+	std::string base;
+	size_t slash = name.rfind('/');
+	if (slash == std::string_view::npos)
+		return false;
+	if (const size_t cut = name.find_first_of("@+"); cut != std::string_view::npos && cut < slash) {
+		base = std::string(name.substr(0, cut)).append(name.substr(slash));
+		name = base;
+		slash = name.rfind('/');
+	}
+	const int facing = carved::FacingOf(name);
+	if (facing < 0)
+		return false;
+	const carved::Sprite *sprite = CarvedSpriteOf(name.substr(0, slash));
+	if (sprite == nullptr)
+		return false;
+	const carved::Pose *pose = sprite->Find(carved::PoseOf(name, draw.inBetween));
+	if (pose == nullptr)
+		pose = sprite->Find(carved::PoseOf(name, 0));
+	if (pose == nullptr || pose->count == 0)
+		return false;
+	look.sprite = sprite;
+	look.pose = pose;
+	look.facing = facing;
+	float fx;
+	float fy;
+	sprite->FeetAt(facing, fx, fy);
+	look.bx = static_cast<float>(draw.x) + fx;
+	look.by = static_cast<float>(draw.y) + fy;
+	WorldOf(look.bx, look.by, look.wx, look.wy);
+	return true;
+}
+
+/** @brief Makes the shadow pictures of a body as a light shining along (dx, dy) sees it. */
+bool MakeCarvedCard(SDL_Renderer *renderer, const CarvedLook &look, float dx, float dy, CarvedCard &card)
+{
+	carved::Card shape;
+	carved::MakeCard(look.sprite->BallsOf(*look.pose), look.facing, ViewLean, dx, dy, TileAcross, static_cast<int>(HalfTileHeight), shape);
+	if (shape.width <= 0 || shape.height <= 0)
+		return false;
+	const int width = shape.width + CastPad * 2;
+	const int height = shape.height + CastPad * 2;
+	std::vector<float> mask(static_cast<size_t>(width) * height, 0.F);
+	for (int y = 0; y < shape.height; y++)
+		std::copy_n(shape.cover.begin() + static_cast<ptrdiff_t>(y) * shape.width, shape.width, mask.begin() + static_cast<ptrdiff_t>(y + CastPad) * width + CastPad);
+	int halfWidth;
+	int halfHeight;
+	const std::vector<float> sharp = Halved(Blur(mask, width, height, SharpBlur), width, height, halfWidth, halfHeight);
+	const std::vector<float> soft = Blur(Halved(mask, width, height, halfWidth, halfHeight), halfWidth, halfHeight, SoftBlur / 2);
+	card.sharp = ShapeTexture(renderer, sharp, halfWidth, halfHeight);
+	card.soft = ShapeTexture(renderer, soft, halfWidth, halfHeight);
+	card.sharpPart = PartOf(sharp, halfWidth, halfHeight);
+	card.softPart = PartOf(soft, halfWidth, halfHeight);
+	card.width = static_cast<float>(shape.width);
+	card.height = static_cast<float>(shape.height);
+	card.floor = static_cast<float>(shape.floorRow) + 0.5F;
+	return card.sharp != nullptr && card.soft != nullptr;
+}
+
+/** @brief Lets the pictures not used for longest go once more are kept than CarvedKept. */
+void TrimCarvedCards()
+{
+	if (CarvedCards.size() <= CarvedKept)
+		return;
+	std::vector<uint32_t> ages;
+	ages.reserve(CarvedCards.size());
+	for (const auto &[key, card] : CarvedCards)
+		ages.push_back(card.used);
+	const size_t drop = CarvedCards.size() - CarvedKept * 3 / 4;
+	std::nth_element(ages.begin(), ages.begin() + static_cast<ptrdiff_t>(drop), ages.end());
+	const uint32_t before = ages[drop];
+	for (auto it = CarvedCards.begin(); it != CarvedCards.end();) {
+		if (it->second.used < before) {
+			if (it->second.sharp != nullptr)
+				SDL_DestroyTexture(it->second.sharp);
+			if (it->second.soft != nullptr)
+				SDL_DestroyTexture(it->second.soft);
+			it = CarvedCards.erase(it);
+		} else {
+			++it;
+		}
+	}
+}
+
+/**
+ * @brief The shadow pictures of a body as a light shining along (dx, dy) sees it: made the first time, else kept. When
+ * this frame has made its share, the nearest way round already made stands in; null when there is none yet.
+ */
+const CarvedCard *CarvedCardFor(SDL_Renderer *renderer, const CarvedLook &look, float dx, float dy)
+{
+	if (CarvedFrameOfBudget != CarvedFrame) {
+		CarvedFrameOfBudget = CarvedFrame;
+		CarvedMadeThisFrame = 0;
+		TrimCarvedCards();
+	}
+	constexpr float Turn = 6.2831853F / CarvedBearings;
+	const int bearing = (static_cast<int>(std::floor(std::atan2(dy, dx) / Turn + 0.5F)) % CarvedBearings + CarvedBearings) % CarvedBearings;
+	const auto found = CarvedCards.find(CarvedKey { look.pose, look.facing, bearing });
+	if (found != CarvedCards.end()) {
+		found->second.used = CarvedFrame;
+		return found->second.sharp != nullptr ? &found->second : nullptr;
+	}
+	if (CarvedMadeThisFrame >= CarvedPerFrame) {
+		for (int step = 1; step <= CarvedBearings / 2; step++) {
+			for (const int side : { bearing + step, bearing - step }) {
+				const auto near = CarvedCards.find(CarvedKey { look.pose, look.facing, (side + CarvedBearings) % CarvedBearings });
+				if (near != CarvedCards.end() && near->second.sharp != nullptr)
+					return &near->second;
+			}
+		}
+		return nullptr;
+	}
+	CarvedMadeThisFrame++;
+	CarvedCard &card = CarvedCards[CarvedKey { look.pose, look.facing, bearing }];
+	card.used = CarvedFrame;
+	const float angle = static_cast<float>(bearing) * Turn;
+	if (!MakeCarvedCard(renderer, look, std::cos(angle), std::sin(angle), card)) {
+		if (card.sharp != nullptr)
+			SDL_DestroyTexture(card.sharp);
+		if (card.soft != nullptr)
+			SDL_DestroyTexture(card.soft);
+		card.sharp = nullptr;
+		card.soft = nullptr;
+		return nullptr;
+	}
+	return &card;
+}
+
+/** @brief How much a carved body's facings are smoothed, in the pixels of its half-size picture (lumps between balls). */
+constexpr float BodyFacingSmooth = 2.F;
+
+/**
+ * @brief A hero's or monster's picture split by the way each part of it faces (as MakeShape does from a shape map), the
+ * facings worked out from its carved body (carved::ViewFacings), at half size: the light over a body changes slowly
+ * across it, and its pictures are many. Nothing is made without a carved body or with feel("bodylight", 0).
+ */
+void MakeBodyShape(SDL_Renderer *renderer, HdArt &art, SDL_Surface *picture, const std::string &name)
+{
+	if (atmosphere::Setting(atmosphere::Knob::BodyLight) <= 0 || atmosphere::Setting(atmosphere::Knob::Carved) <= 0)
+		return;
+	if (!name.starts_with("monsters/") && !name.starts_with("plrgfx/"))
+		return;
+	// A monster in other colours has its base art's body (see MakeShape).
+	std::string base = name;
+	const size_t slash = base.rfind('/');
+	if (slash == std::string::npos)
+		return;
+	if (const size_t cut = base.find_first_of("@+"); cut != std::string::npos && cut < slash)
+		base = base.substr(0, cut) + base.substr(slash);
+	const size_t baseSlash = base.rfind('/');
+	const int facing = carved::FacingOf(base);
+	if (facing < 0)
+		return;
+	const carved::Sprite *sprite = CarvedSpriteOf(std::string_view(base).substr(0, baseSlash));
+	if (sprite == nullptr)
+		return;
+	const carved::Pose *pose = sprite->Find(carved::PoseOf(base, 0));
+	if (pose == nullptr || pose->count == 0)
+		return;
+	if (picture->format->format != SDL_PIXELFORMAT_RGBA32 || picture->w < 2 || picture->h < 2)
+		return;
+	// The picture at half size (the original drawing's size: HD pictures are twice it), colours weighted by how much shows.
+	const int width = picture->w / 2;
+	const int height = picture->h / 2;
+	SDL_Surface *half = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+	if (half == nullptr)
+		return;
+	if (SDL_LockSurface(picture) != 0) {
+		SDL_FreeSurface(half);
+		return;
+	}
+	for (int y = 0; y < height; y++) {
+		auto *out = static_cast<uint8_t *>(half->pixels) + static_cast<ptrdiff_t>(y) * half->pitch;
+		for (int x = 0; x < width; x++) {
+			std::array<uint32_t, 4> sum {};
+			for (int dy = 0; dy < 2; dy++) {
+				const auto *row = static_cast<const uint8_t *>(picture->pixels) + static_cast<ptrdiff_t>(y * 2 + dy) * picture->pitch;
+				for (int dx = 0; dx < 2; dx++) {
+					const uint8_t *pixel = row + static_cast<ptrdiff_t>(x * 2 + dx) * 4;
+					for (size_t c = 0; c < 3; c++)
+						sum[c] += static_cast<uint32_t>(pixel[c]) * pixel[3];
+					sum[3] += pixel[3];
+				}
+			}
+			uint8_t *pixel = out + static_cast<ptrdiff_t>(x) * 4;
+			for (size_t c = 0; c < 3; c++)
+				pixel[c] = sum[3] > 0 ? static_cast<uint8_t>(sum[c] / sum[3]) : 0;
+			pixel[3] = static_cast<uint8_t>(sum[3] / 4);
+		}
+	}
+	SDL_UnlockSurface(picture);
+	std::vector<float> facings;
+	carved::ViewFacings(*sprite, sprite->BallsOf(*pose), facing, 2.F * static_cast<float>(width) / static_cast<float>(picture->w), width, height, BodyFacingSmooth, facings);
+	SDL_Surface *map = SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32);
+	if (map == nullptr) {
+		SDL_FreeSurface(half);
+		return;
+	}
+	for (int y = 0; y < height; y++) {
+		auto *row = static_cast<uint8_t *>(map->pixels) + static_cast<ptrdiff_t>(y) * map->pitch;
+		for (int x = 0; x < width; x++) {
+			const size_t at = (static_cast<size_t>(y) * static_cast<size_t>(width) + static_cast<size_t>(x)) * 4;
+			// Where the body is unsure (its edge, a part the balls miss), it turns to face the eye.
+			const float sure = facings[at + 3];
+			float right = facings[at] * sure;
+			float up = facings[at + 1] * sure;
+			float toEye = facings[at + 2] * sure + (1 - sure);
+			const float length = std::max(std::sqrt(right * right + up * up + toEye * toEye), 1e-6F);
+			right /= length;
+			up /= length;
+			toEye /= length;
+			uint8_t *pixel = row + static_cast<ptrdiff_t>(x) * 4;
+			pixel[0] = static_cast<uint8_t>(std::clamp((right + 1) * 127.5F + 0.5F, 0.F, 255.F));
+			pixel[1] = static_cast<uint8_t>(std::clamp((up + 1) * 127.5F + 0.5F, 0.F, 255.F));
+			pixel[2] = static_cast<uint8_t>(std::clamp((toEye + 1) * 127.5F + 0.5F, 0.F, 255.F));
+			pixel[3] = 255;
+		}
+	}
+	MakeShapeFrom(renderer, art, half, map, false, false);
+	SDL_FreeSurface(half);
+}
+
 /** @brief Which of a body's shadows a call draws (DrawCasterShadows). */
 enum class CastWhat : uint8_t {
 	/** All of them, straight onto the floor. */
@@ -4168,6 +4505,15 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 	float wy;
 	if (!CastsShadows(draw, wx, wy))
 		return;
+	// A carved body stands where its drawing's feet are (CarvedLookOf), and each light casts it as it sees it.
+	CarvedLook carvedLook;
+	const bool carvedBody = CarvedLookOf(draw, carvedLook);
+	if (carvedBody) {
+		gx = carvedLook.bx;
+		gy = carvedLook.by;
+		wx = carvedLook.wx;
+		wy = carvedLook.wy;
+	}
 	const LightsOn &on = pass != nullptr && pass->on != nullptr ? *pass->on : LightsOnPoint(wx, wy);
 	const std::array<light::ShadowLight, 3> &lights = on.lights;
 	const light::ShadowLight &overhead = on.overhead;
@@ -4234,7 +4580,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		}
 		const float alpha = ShadowAlpha(here, removed);
 		if (alpha > 0.004F) {
-			const SDL_FPoint centre = OnScreenAt(gx, gy + ContactDrop, toLogical);
+			const SDL_FPoint centre = OnScreenAt(gx, gy + (carvedBody ? 0.F : ContactDrop), toLogical);
 			// A circle on the floor `across` tiles wide.
 			const float width = across * TileAcross * Scale * toLogical;
 			const SDL_FRect spot { centre.x - width / 2, centre.y - width / 4, width, width / 2 };
@@ -4243,12 +4589,6 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		}
 	}
 
-	const float texWidth = w + pad * 2;
-	const float texHeight = h + pad * 2;
-	// Only the part of the shadow pictures that holds the body and its soft edge is drawn: the rest of them is empty.
-	const CastPart &sharpPart = raster.sharpPart;
-	const CastPart &softPart = raster.softPart;
-	const float vTop = std::min(sharpPart.vTop, softPart.vTop);
 	constexpr int Rows = CastBands + 2;
 	for (int n = 0; n < count; n++) {
 		const light::ShadowLight &source = lights[n];
@@ -4323,6 +4663,31 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			}
 			continue;
 		}
+		// The pictures this light's shadow is drawn from: the sprite's own, or its carved body as this light sees it.
+		SDL_Texture *sharpTexture = raster.castTexture;
+		SDL_Texture *softTexture = raster.castSoft;
+		CastPart sharpPart = raster.sharpPart;
+		CastPart softPart = raster.softPart;
+		float picWidth = w;
+		float picHeight = h;
+		float picFeet = feet;
+		bool fromCarved = false;
+		if (carvedBody) {
+			if (const CarvedCard *card = CarvedCardFor(renderer, carvedLook, dx, dy); card != nullptr) {
+				sharpTexture = card->sharp;
+				softTexture = card->soft;
+				sharpPart = card->sharpPart;
+				softPart = card->softPart;
+				picWidth = card->width;
+				picHeight = card->height;
+				picFeet = card->floor;
+				fromCarved = true;
+			}
+		}
+		const float texWidth = picWidth + pad * 2;
+		const float texHeight = picHeight + pad * 2;
+		// Only the part of the shadow pictures that holds the body and its soft edge is drawn: the rest of them is empty.
+		const float vTop = std::min(sharpPart.vTop, softPart.vTop);
 		// Where the shadow starts: under the feet, or just inside a round object's edge away from the light.
 		const float behind = object ? (halfX + halfY) / 2 * ObjectTuck : 0.F;
 		const float distance = toMiddle + behind;
@@ -4343,8 +4708,8 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		const auto landsAt = [&](float z) { return z <= 0 ? z * underSlope : distance * z / (lightHeight - z); };
 		// The top of the body's part of the pictures and their bottom row, and the highest part of the body whose shadow
 		// still lands on the floor.
-		const float topZ = (feet + pad - vTop * texHeight) * HeightPerPixel;
-		const float bottomZ = (feet - h - pad) * HeightPerPixel;
+		const float topZ = (picFeet + pad - vTop * texHeight) * HeightPerPixel;
+		const float bottomZ = (picFeet - picHeight - pad) * HeightPerPixel;
 		// The shadow's far end lies square to it, but a wall's foot may cross it at a slant: then its floor part goes on
 		// until both its sides reach the wall, and is kept in front of the wall's line, so it neither stops short of the
 		// wall on one side nor runs on into the wall on the other.
@@ -4354,7 +4719,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		if (atWall && towardWall < -0.05F) {
 			const float endZ = lightHeight * limit / (distance + limit);
 			const float endSpread = endZ > 0 ? std::min(lightHeight / std::max(lightHeight - endZ, 0.05F), MaxSpread) : 1.F;
-			const float half = std::max(std::abs(softPart.u0 * texWidth - pad - w / 2), std::abs(softPart.u1 * texWidth - pad - w / 2)) / TileAcross * endSpread * acrossShare;
+			const float half = std::max(std::abs(softPart.u0 * texWidth - pad - picWidth / 2), std::abs(softPart.u1 * texWidth - pad - picWidth / 2)) / TileAcross * endSpread * acrossShare;
 			floorEnd = limit + std::min(half * std::abs(wall.facesX ? dy : dx) / -towardWall, WallMostSlant);
 		}
 		const float highZ = std::min(topZ, lightHeight * floorEnd / (distance + floorEnd));
@@ -4375,7 +4740,8 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		const float facing = -(dx + dy) * ViewAcross;
 		std::array<float, 2> turns { 1.F, -1.F };
 		std::array<float, 2> weights { 1.F, 0.F };
-		if (!object) {
+		// A carved body is seen from the light's side already, standing where its feet are drawn: one layout, unturned.
+		if (!object && !fromCarved) {
 			weights[0] = std::clamp(0.5F + facing / (2 * TurnBand), 0.F, 1.F);
 			weights[1] = 1 - weights[0];
 		}
@@ -4407,15 +4773,15 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 				const float softness = std::clamp(penumbra / (SoftWidth * spread), 0.F, MaxSoftness);
 				const Uint8 sharpAlpha = ColourByte(alpha * (1 - softness));
 				const Uint8 softAlpha = ColourByte(alpha * softness);
-				const float v = std::clamp((feet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
+				const float v = std::clamp((picFeet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
 				// Across the shadow, square to it on the floor, at a point u (0 to 1) across the pictures.
 				// How far this height has turned from the view's layout to the light's.
 				const float rise = std::clamp(z / FeetBlend, 0.F, 1.F);
-				const float turned = object ? 1.F : rise * rise * (3 - 2 * rise);
+				const float turned = object || fromCarved ? 1.F : rise * rise * (3 - 2 * rise);
 				// The picture below the feet lies on the floor towards the view, as it is drawn.
 				const float below = z < 0 ? -z / HeightPerPixel / static_cast<float>(TILE_HEIGHT) : 0.F;
 				const auto placed = [&](float u) {
-					const float fromMiddle = (u * texWidth - pad - w / 2) / TileAcross;
+					const float fromMiddle = (u * texWidth - pad - picWidth / 2) / TileAcross;
 					const float across = fromMiddle * spread * acrossShare * turn;
 					float x = fx - dy * across;
 					float y = fy + dx * across;
@@ -4462,14 +4828,14 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 					SDL_RenderGeometry(renderer, texture, vertices.data(), static_cast<int>(vertices.size()), indices.data(), used);
 			};
 			if (cover) {
-				SDL_SetTextureBlendMode(raster.castTexture, SDL_BLENDMODE_ADD);
-				SDL_SetTextureBlendMode(raster.castSoft, SDL_BLENDMODE_ADD);
+				SDL_SetTextureBlendMode(sharpTexture, SDL_BLENDMODE_ADD);
+				SDL_SetTextureBlendMode(softTexture, SDL_BLENDMODE_ADD);
 			}
-			drawBands(raster.castTexture, sharp);
-			drawBands(raster.castSoft, soft);
+			drawBands(sharpTexture, sharp);
+			drawBands(softTexture, soft);
 			if (cover) {
-				SDL_SetTextureBlendMode(raster.castTexture, SDL_BLENDMODE_BLEND);
-				SDL_SetTextureBlendMode(raster.castSoft, SDL_BLENDMODE_BLEND);
+				SDL_SetTextureBlendMode(sharpTexture, SDL_BLENDMODE_BLEND);
+				SDL_SetTextureBlendMode(softTexture, SDL_BLENDMODE_BLEND);
 			}
 			if (!upWall)
 				continue;
@@ -4477,8 +4843,8 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			// start, is thrown on to the wall's line: the part of it that would land past the wall's foot stands on the
 			// wall instead, as high as the light's ray over that height of the body meets it.
 			std::array<WallStrip, 2> strips;
-			strips[0].texture = raster.castTexture;
-			strips[1].texture = raster.castSoft;
+			strips[0].texture = sharpTexture;
+			strips[1].texture = softTexture;
 			// The wall's height where the middle of the shadow meets it.
 			const float toWall = wall.facesX ? wall.at - source.x : wall.at - source.y;
 			const float toStart = wall.facesX ? sx - source.x : sy - source.y;
@@ -4493,7 +4859,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			for (int side = 0; side < 2 && meets; side++) {
 				for (int strip = 0; strip < 2; strip++) {
 					const float u = strip == 0 ? (side == 0 ? sharpPart.u0 : sharpPart.u1) : (side == 0 ? softPart.u0 : softPart.u1);
-					const float across = (u * texWidth - pad - w / 2) / TileAcross * acrossShare * turn;
+					const float across = (u * texWidth - pad - picWidth / 2) / TileAcross * acrossShare * turn;
 					const float ex = sx - dy * across - source.x;
 					const float ey = sy + dx * across - source.y;
 					const float toSide = wall.facesX ? ex : ey;
@@ -4525,7 +4891,7 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 						const float z = lowZ + std::max(endZ - lowZ, 0.F) * static_cast<float>(r) / static_cast<float>(WallRows - 1);
 						const float up = std::clamp(lightHeight - (lightHeight - z) * times, 0.F, wallTall);
 						const float fade = std::clamp((wallTall - up) / WallFade, 0.F, 1.F);
-						const float v = std::clamp((feet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
+						const float v = std::clamp((picFeet + pad - z / HeightPerPixel) / texHeight, 0.F, 1.F);
 						const SDL_FPoint at { foot.x, foot.y - (r == 0 ? -WallFootDrop : up) / RisePerPixel * Scale * toLogical };
 						const Uint8 alpha = ColourByte(dark * fade * (strip == 0 ? 1 - softness : softness));
 						strips[static_cast<size_t>(strip)].at[static_cast<size_t>(r) * 2 + side] = SDL_Vertex { at, { 0, 0, 0, alpha }, { u, v } };
@@ -5432,6 +5798,76 @@ bool DrawShapedObject(SDL_Renderer *renderer, const Draw &draw, float toLogical,
 	return true;
 }
 
+Shading LightFor(const Draw &draw, const std::array<float, 3> &tint);
+
+/** @brief How high a living body takes its light at, in tiles, and how strongly its sides differ (1 as a real thing). */
+constexpr float BodyMiddle = 0.5F;
+constexpr float BodyGiven = 0.8F;
+
+/**
+ * @brief Draws a hero or monster lit by the shape of its carved body (MakeBodyShape): its light as usual (LightFor, less
+ * the shadows over it), the side turned to a light brighter and the side away darker, as DrawShapedObject does.
+ * @return False where it has no shape (no carved body, feel("bodylight") or feel("shapes") off): it is drawn as usual.
+ */
+bool DrawShapedBody(SDL_Renderer *renderer, const Draw &draw, float toLogical, const Kept &kept, const std::array<float, 3> &tint)
+{
+	if (draw.kind != DrawKind::Sprite || draw.style != SpriteStyle::Normal || draw.corpse || IsObject(draw.caster))
+		return false;
+	if (draw.caster != Caster::MyHero && draw.caster != Caster::Hero && draw.caster != Caster::Monster && draw.caster != Caster::MonsterRecoloured)
+		return false;
+	if (draw.light < 0 && draw.caster != Caster::MyHero && draw.caster != Caster::MonsterRecoloured)
+		return false;
+	if (atmosphere::Setting(atmosphere::Knob::BodyLight) <= 0 || atmosphere::Setting(atmosphere::Knob::Shapes) <= 0)
+		return false;
+	const ArtChoice art = CachedArt(renderer, draw);
+	if (art.art == nullptr || !art.art->shaped)
+		return false;
+	const SDL_FRect dest = DestOf(draw, toLogical);
+	if (!OnScreen(dest, 0))
+		return true;
+	float wx;
+	float wy;
+	StandsAt(draw, wx, wy);
+	Shading shading = LightFor(draw, tint);
+	if (kept.foot < 1 || kept.top < 1)
+		Dim(shading, kept);
+	std::array<float, NumShapeAxes> shade;
+	if (!FacingShades(wx, wy, ShapeAxes.data(), shade.size(), shade.data(), BodyMiddle, BodyGiven))
+		shade.fill(1.F);
+	float least = std::numeric_limits<float>::max();
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		if (art.art->shape[k] != nullptr)
+			least = std::min(least, shade[k]);
+	}
+	if (least == std::numeric_limits<float>::max())
+		return false;
+	// The light it takes on average, for the parts turned to a light.
+	Colour3 flat {};
+	for (int s = 0; s < shading.count; s++) {
+		for (size_t c = 0; c < 3; c++)
+			flat[c] += (shading.colours[static_cast<size_t>(s)][c] + (shading.fades ? shading.top[static_cast<size_t>(s)][c] : shading.colours[static_cast<size_t>(s)][c])) / static_cast<float>(2 * shading.count);
+	}
+	for (int s = 0; s < shading.count; s++) {
+		for (size_t c = 0; c < 3; c++) {
+			shading.colours[static_cast<size_t>(s)][c] *= least;
+			shading.top[static_cast<size_t>(s)][c] *= least;
+		}
+	}
+	DrawShaded(renderer, draw, shading, toLogical, false);
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		SDL_Texture *texture = art.art->shape[k];
+		if (texture == nullptr)
+			continue;
+		Colour3 more { flat[0] * (shade[k] - least), flat[1] * (shade[k] - least), flat[2] * (shade[k] - least) };
+		for (int pass = 0; pass < 2 && std::max({ more[0], more[1], more[2] }) > 1.F / 255; pass++) {
+			SDL_SetTextureColorMod(texture, ColourByte(more[0]), ColourByte(more[1]), ColourByte(more[2]));
+			SDL_RenderCopyF(renderer, texture, nullptr, &dest);
+			more = AboveFull(more);
+		}
+	}
+	return true;
+}
+
 /**
  * @brief Draws a dead body whose HD art has a shape map, lit by its shape (as DrawShapedObject does an object): its light
  * across it from the floor (CorpseLight), less the shadows over it (`kept`), and each part turned to a light or away.
@@ -6069,6 +6505,8 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 		if (DrawShapedCorpse(renderer, draw, toLogical, corpseKept))
 			continue;
 		if (DrawShapedObject(renderer, draw, toLogical, (kept.foot + kept.top) / 2))
+			continue;
+		if (DrawShapedBody(renderer, draw, toLogical, kept, tint))
 			continue;
 		if (draw.kind == DrawKind::Tile && draw.hasTile && draw.light >= 0 && !IsTileBase(draw) && IsDirt(draw.cell)) {
 			DrawGroundLit(renderer, draw, toLogical);
@@ -6749,6 +7187,7 @@ void RenderRecorded(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 #endif
 	CheckPalette();
 	ReadAhead(worldSize);
+	CarvedFrame++;
 	if (Rasters.size() > 20000) {
 		// Every picture on screen is made again in the next frame: a likely freeze, so the play log notes it.
 		TelemetryHdCacheDropped(Rasters.size());

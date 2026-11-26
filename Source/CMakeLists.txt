@@ -57,6 +57,7 @@ set(libdevilutionx_SRCS
   poe2/atmosphere.cpp
   poe2/moments.cpp
   poe2/props.cpp
+  poe2/carved_bodies.cpp
   poe2/hd.cpp
   poe2/hd_batch.cpp
   poe2/hd_light.cpp
