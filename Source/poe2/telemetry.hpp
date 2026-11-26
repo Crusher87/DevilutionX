@@ -1,9 +1,10 @@
 /**
  * @file poe2/telemetry.hpp
  *
- * POE2 Mashup play log: writes what happens in a game (levels, kills, hits, skills, flasks, drops and
- * crashes) to a text file in the poe2_logs folder, one line per event, so crashes can be traced and
- * the balance tuned from real play.
+ * Play log: writes what happens in a game (levels, kills, hits, skills, flasks, drops and crashes) to a
+ * text file in the log folder, one line per event, so crashes can be traced and the balance tuned from
+ * real play. POE2 Mashup's go to poe2_logs; Sanctuary Reforged's go to logs, under its own name and with
+ * Diablo's own stats only (no energy shield, spirit, gems or passives), and it keeps no gem log.
  */
 #pragma once
 
@@ -63,8 +64,18 @@ constexpr uint32_t TelemetryFlushMs = 1000;
 /** @brief Every this many stats lines, the damage dealt and taken summaries are written too. */
 constexpr int TelemetrySummaryEvery = 5;
 
-/** @brief Opens this session's log file and starts catching crashes. Safe to call more than once. */
+/**
+ * @brief Opens this session's log file and starts catching crashes. Safe to call more than once. The mods load later,
+ * so the folder is a guess from the options until TelemetryModeChanged.
+ */
 void TelemetryInit();
+/** @brief The mods loaded or changed: a log opened for the other mode moves to this one's folder, under its name. */
+void TelemetryModeChanged();
+/** @brief The log folder's name and the game's name in the headers: Sanctuary Reforged's (logs) or POE2 Mashup's (poe2_logs). */
+std::string_view TelemetryFolderName(bool reforged);
+std::string_view TelemetryGameName(bool reforged);
+/** @brief Whether the open log is Sanctuary Reforged's: its lines carry Diablo's own stats only. */
+bool TelemetryIsReforged();
 /** @brief Whether a log file is open. */
 bool TelemetryEnabled();
 /** @brief Writes what's waiting in memory to both files now (they're otherwise written about once a second). */
@@ -311,7 +322,7 @@ std::string TelemetryBuildText(const Player &player);
 void TelemetryText(std::string_view category, std::string_view text);
 /** @brief An event stamped with the session time and area, like the play log's own. */
 TelemetryEvent TelemetryEventNow(LogChannel channel, LogLevel level, std::string_view kind);
-/** @brief The poe2_logs folder (empty before TelemetryInit), this session's log file name, and the local date and time. */
+/** @brief The log folder, poe2_logs or Sanctuary Reforged's logs (empty before TelemetryInit), this session's log file name, and the local date and time. */
 const std::string &TelemetryFolder();
 std::string_view TelemetrySessionName();
 std::string TelemetryLocalStamp();
