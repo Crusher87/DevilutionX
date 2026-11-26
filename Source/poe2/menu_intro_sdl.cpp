@@ -9,7 +9,11 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+// The words are worked out off the game's thread where it has threads for sure (as live_fire.cpp); elsewhere on it.
+#if defined(_WIN32) || defined(__APPLE__) || (defined(__linux__) && !defined(__ANDROID__))
+#define POE2_INTRO_THREADS 1
 #include <future>
+#endif
 #include <initializer_list>
 #include <memory>
 #include <string>
@@ -659,6 +663,7 @@ private:
 			return;
 		// Worked out 30 times a second at most (its flicker and cooling are slow); drawn every frame. Once the intro is
 		// over (on the menus, the Esc menu over the game too) off the game's thread: it only sends the words up.
+#ifdef POE2_INTRO_THREADS
 		if (!running_ && wordsPainted_) {
 			if (wordsJob_.valid() && wordsJob_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
 				wordsJob_.get();
@@ -670,9 +675,13 @@ private:
 					PaintWordsInto(wordsPicture_.data(), subtitle_.PictureWidth() * 4, t, sinceSlash);
 				});
 			}
-		} else if (!wordsPainted_ || std::abs(t - wordsT_) >= 1.F / 30.F) {
+		} else
+#endif
+		    if (!wordsPainted_ || std::abs(t - wordsT_) >= 1.F / 30.F) {
+#ifdef POE2_INTRO_THREADS
 			if (wordsJob_.valid())
 				wordsJob_.get();
+#endif
 			PaintWords(t, sinceSlash);
 			wordsPainted_ = true;
 			wordsT_ = t;
@@ -1085,7 +1094,9 @@ private:
 	SDL_Texture *vignette_ = nullptr;
 	/** @brief The words' picture as last painted, and the painting of the next off the game's thread (last: it ends first). */
 	std::vector<uint8_t> wordsPicture_;
+#ifdef POE2_INTRO_THREADS
 	std::future<void> wordsJob_;
+#endif
 };
 
 /** @brief The intro of this launch (kept after it ends, for the subtitle and the lines it leaves on the main menu). */
