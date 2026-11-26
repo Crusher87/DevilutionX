@@ -94,6 +94,8 @@ bool IsValidEntry(OptionEntryBase *pOptionEntry)
 		return false;
 	if (openedInGame && HasAnyOf(flags, OptionEntryFlags::CantChangeInGame))
 		return false;
+	if (!IsOptionInThisMode(flags))
+		return false;
 	return HasNoneOf(flags, OptionEntryFlags::Invisible | (gbIsHellfire ? OptionEntryFlags::OnlyDiablo : OptionEntryFlags::OnlyHellfire));
 }
 

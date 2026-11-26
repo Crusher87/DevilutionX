@@ -569,15 +569,15 @@ TEST_F(ReforgedShopTest, OnlyTabsWithStockAreShown)
 	SmithItems.push_back(MakeArmour());
 
 	OpenVisualStore(VisualStoreVendor::Smith);
-	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::Weapons, Poe2ShopTab::BodyArmour, Poe2ShopTab::Buyback }))
-	    << "No helmets, shields or jewelry for sale: no tabs for them";
+	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::Weapons, Poe2ShopTab::BodyArmour }))
+	    << "No helmets, shields or jewelry for sale: no tabs for them, and no buyback";
 	EXPECT_EQ(ActivePoe2ShopTab, Poe2ShopTab::Weapons);
 	ASSERT_EQ(GetVisualStoreItems().size(), 1u);
 
 	// Buying the last weapon takes the Weapons tab away, and the shop shows its first tab.
 	CheckVisualStoreItem(WareCell(0), /*isCtrlHeld=*/true, false);
 	EXPECT_EQ(SmithItems.size(), 2u);
-	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::BodyArmour, Poe2ShopTab::Buyback }));
+	EXPECT_EQ(Poe2ShopTabs(), (std::vector<Poe2ShopTab> { Poe2ShopTab::BodyArmour }));
 	EXPECT_EQ(ActivePoe2ShopTab, Poe2ShopTab::BodyArmour);
 	EXPECT_EQ(GetVisualStoreItems().size(), 2u);
 	CloseVisualStore();
@@ -608,7 +608,7 @@ TEST_F(ReforgedShopTest, ATabWithMoreThanAPageOfWaresHasPages)
 	EXPECT_EQ(onPages, 40u);
 }
 
-TEST_F(ReforgedShopTest, SoldItemsCanBeBoughtBackForWhatTheySoldFor)
+TEST_F(ReforgedShopTest, SoldItemsCannotBeBoughtBack)
 {
 	gbIsReforged = true;
 	StockTown(42);
@@ -623,20 +623,9 @@ TEST_F(ReforgedShopTest, SoldItemsCanBeBoughtBackForWhatTheySoldFor)
 	CheckVisualStorePaste(GetVisualStoreSlotCoord({ 0, 0 }));
 	EXPECT_TRUE(MyPlayer->HoldItem.isEmpty());
 	EXPECT_EQ(Gold(), goldBefore + sellPrice);
-	ASSERT_EQ(SmithBuyback.size(), 1u);
-
-	SetPoe2ShopTab(Poe2ShopTab::Buyback);
-	ASSERT_EQ(GetVisualStoreItems().size(), 1u);
-	EXPECT_EQ(VisualStoreItemPrice(0), sellPrice);
-	CheckVisualStoreItem(WareCell(0), /*isCtrlHeld=*/true, false);
-	EXPECT_TRUE(SmithBuyback.empty());
-	EXPECT_EQ(Gold(), goldBefore) << "Bought back for what it sold for";
-	bool back = false;
-	for (int i = 0; i < MyPlayer->_pNumInv; i++)
-		back = back || MyPlayer->InvList[i]._iSeed == sword._iSeed;
-	for (const Item &item : MyPlayer->InvBody)
-		back = back || (!item.isEmpty() && item._iSeed == sword._iSeed);
-	EXPECT_TRUE(back);
+	EXPECT_TRUE(SmithBuyback.empty()) << "Diablo's shops have no buyback";
+	const std::vector<Poe2ShopTab> tabs = Poe2ShopTabs();
+	EXPECT_EQ(std::find(tabs.begin(), tabs.end(), Poe2ShopTab::Buyback), tabs.end());
 }
 
 TEST_F(ReforgedShopTest, AWarePickedUpIsPaidForInTheBag)

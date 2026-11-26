@@ -143,7 +143,7 @@ enum class OptionEntryType : uint8_t {
 	PadButton,
 };
 
-enum class OptionEntryFlags : uint8_t {
+enum class OptionEntryFlags : uint16_t {
 	/** @brief No special logic. */
 	None = 0,
 	/** @brief Shouldn't be shown in settings dialog. */
@@ -160,8 +160,17 @@ enum class OptionEntryFlags : uint8_t {
 	RecreateUI = 1 << 5,
 	/** @brief diablo.mpq must be present. */
 	NeedDiabloMpq = 1 << 6,
+	/** @brief Only means something in POE2 Mashup: not shown, nor written to the ini, in any other mode. */
+	OnlyPoe2 = 1 << 7,
+	/** @brief Only means something with the look and comfort features on (POE2 Mashup or Sanctuary Reforged): not shown in plain Diablo or Hellfire. */
+	OnlyEnhanced = 1 << 8,
+	/** @brief An admin tool: only in POE2 Mashup, or when the game was started with --admin. Not shown, nor written to the ini, otherwise. */
+	AdminTool = 1 << 9,
 };
 use_enum_as_flags(OptionEntryFlags);
+
+/** @brief Whether an option with these flags belongs to the mode the game runs in now (OnlyPoe2, OnlyEnhanced, AdminTool). */
+[[nodiscard]] bool IsOptionInThisMode(OptionEntryFlags flags);
 
 class OptionEntryBase {
 public:
@@ -832,15 +841,54 @@ struct KeymapperOptions : OptionCategoryBase {
 
 		[[nodiscard]] std::string_view GetValueDescription() const override;
 
+		/** @brief Binds the key the player chose (SDLK_UNKNOWN unbinds). */
 		bool SetValue(int value);
 
 		[[nodiscard]] bool isEnabled() const { return !enable || enable(); }
+
+		/** @brief Adds OptionEntryFlags::OnlyPoe2 or OptionEntryFlags::AdminTool: outside that mode the action is hidden and takes no key. */
+		Action &SetModeFlags(OptionEntryFlags modeFlags)
+		{
+			flags |= modeFlags;
+			return *this;
+		}
+		/** @brief POE2 Mashup's own default key, where it differs from the other modes'. */
+		Action &SetPoe2DefaultKey(uint32_t key)
+		{
+			poe2DefaultKey = key;
+			hasPoe2DefaultKey = true;
+			return *this;
+		}
+		/**
+		 * @brief Outside POE2 Mashup, a binding an older ini got from POE2 Mashup's keys (its default key, or unbound
+		 * because a POE2 Mashup action took the key) counts as never changed, so the action gets its own default back.
+		 * Once the player picks a key for it outside POE2 Mashup, that key is kept.
+		 */
+		Action &RestoreDefaultOutsidePoe2()
+		{
+			restoreOutsidePoe2 = true;
+			return *this;
+		}
 
 		std::function<void()> actionPressed;
 		std::function<void()> actionReleased;
 
 	private:
+		[[nodiscard]] uint32_t DefaultKeyForThisMode() const;
+		[[nodiscard]] bool TakesPoe2Binding() const;
+		[[nodiscard]] uint32_t KeyForThisMode() const;
+		/** @brief Binds a key without changing what the player chose; a later action with the same key takes it. */
+		void Bind(uint32_t value);
+		[[nodiscard]] std::string KeptKey() const;
+
 		uint32_t defaultKey;
+		uint32_t poe2DefaultKey = SDLK_UNKNOWN;
+		bool hasPoe2DefaultKey = false;
+		bool restoreOutsidePoe2 = false;
+		/** @brief The player chose this binding outside POE2 Mashup (see RestoreDefaultOutsidePoe2). */
+		bool keptOutsidePoe2 = false;
+		/** @brief The key from the ini or the settings menu; none means the default key. */
+		std::optional<uint32_t> chosenKey;
 		std::function<bool()> enable;
 		uint32_t boundKey = SDLK_UNKNOWN;
 		unsigned dynamicIndex;
@@ -860,6 +908,13 @@ struct KeymapperOptions : OptionCategoryBase {
 	    std::function<bool()> enable = nullptr,
 	    unsigned index = 0);
 	void CommitActions();
+	/** @brief The action added last, before CommitActions. */
+	Action &LastAction() { return actions.front(); }
+	/**
+	 * @brief Binds every action again for the mode the game runs in now: the actions of another mode let go of their
+	 * keys, and default keys follow the mode. What the player chose is kept. Called once the mods are loaded.
+	 */
+	void BindForThisMode();
 
 	[[nodiscard]] const Action *findAction(uint32_t key) const;
 
@@ -971,6 +1026,11 @@ struct ModOptions : OptionCategoryBase {
 	 * @return true if it switched Sanctuary Reforged off, whose own change then reloads the mods.
 	 */
 	bool SwitchOffReforgedForPoe2();
+	/**
+	 * @brief True when this setup plays Sanctuary Reforged (switched on, and the other mode not). Such a setup
+	 * does not list the other mode in Settings > Mods.
+	 */
+	bool IsReforgedSetup();
 
 private:
 	struct ModEntry {

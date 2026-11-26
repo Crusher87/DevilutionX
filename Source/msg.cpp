@@ -2629,7 +2629,8 @@ size_t OnFreshFloor(const TCmdFreshFloor &message, const Player &player)
 {
 	if (gbBufferMsgs == 1)
 		return sizeof(message);
-	if (&player == MyPlayer)
+	// Only POE2 Mashup rolls floors afresh in multiplayer; Sanctuary Reforged keeps them as Diablo does and never sends this.
+	if (&player == MyPlayer || !gbIsPoe2)
 		return sizeof(message);
 	const bool isSetLevel = message.isSetLevel != 0;
 	const int level = message.level;

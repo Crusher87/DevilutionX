@@ -73,6 +73,18 @@ TMenuItem sgSingleMenu[] = {
 	{ GMENU_ENABLED, nullptr,                 nullptr             },
 	// clang-format on
 };
+/** The single player menu without the admin tools: outside POE2 Mashup unless the game was started with --admin. */
+TMenuItem sgPlainSingleMenu[] = {
+	// clang-format off
+	// dwFlags,      pszStr,                  fnMenu
+	{ GMENU_ENABLED, N_("Options"),           &GamemenuOptions    },
+	{ GMENU_ENABLED, N_("Save Game"),         &gamemenu_save_game },
+	{ GMENU_ENABLED, N_("Load Game"),         &gamemenu_load_game },
+	{ GMENU_ENABLED, N_("Exit to Main Menu"), &GamemenuNewGame    },
+	{ GMENU_ENABLED, N_("Quit Game"),         &gamemenu_quit_game },
+	{ GMENU_ENABLED, nullptr,                 nullptr             },
+	// clang-format on
+};
 /** POE2 Mashup: the single player menu without Save Game; the game saves on its own (poe2/autosave.hpp). */
 TMenuItem sgPoe2SingleMenu[] = {
 	// clang-format off
@@ -129,6 +141,15 @@ void GamemenuUpdateSingle()
 
 	sgSingleMenu[0].setEnabled(enable);
 	sgSingleMenu[5].setEnabled(enable);
+}
+
+void GamemenuUpdatePlainSingle()
+{
+	sgPlainSingleMenu[2].setEnabled(gbValidSaveFile);
+
+	const bool enable = MyPlayer->_pmode != PM_DEATH && !MyPlayerIsDead;
+
+	sgPlainSingleMenu[0].setEnabled(enable);
 }
 
 void GamemenuUpdatePoe2Single()
@@ -516,8 +537,10 @@ void gamemenu_on()
 	isGameMenuOpen = true;
 	if (!gbIsMultiplayer && gbIsPoe2) {
 		gmenu_set_items(sgPoe2SingleMenu, GamemenuUpdatePoe2Single);
-	} else if (!gbIsMultiplayer) {
+	} else if (!gbIsMultiplayer && AdminToolsOn()) {
 		gmenu_set_items(sgSingleMenu, GamemenuUpdateSingle);
+	} else if (!gbIsMultiplayer) {
+		gmenu_set_items(sgPlainSingleMenu, GamemenuUpdatePlainSingle);
 	} else {
 		gmenu_set_items(sgMultiMenu, nullptr);
 	}

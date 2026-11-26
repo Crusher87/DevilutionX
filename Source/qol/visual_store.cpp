@@ -189,7 +189,8 @@ std::string_view Poe2ShopTabName(Poe2ShopTab tab)
 	case Poe2ShopTab::Bows:
 		return _("Bows");
 	case Poe2ShopTab::BodyArmour:
-		return _("Armour");
+		// Diablo's own spelling outside POE2 Mashup.
+		return gbIsPoe2 ? _("Armour") : _("Armor");
 	case Poe2ShopTab::Helmets:
 		return _("Helmets");
 	case Poe2ShopTab::Shields:
@@ -302,7 +303,8 @@ std::string_view VendorLogName()
 void AddToBuyback(const Item &item, int price)
 {
 	std::vector<BuybackEntry> *buyback = VendorBuyback();
-	if (!UsesShopTabs() || buyback == nullptr)
+	// Buying back is POE2 Mashup's: Diablo's shops have none.
+	if (!gbIsPoe2 || !UsesShopTabs() || buyback == nullptr)
 		return;
 	if (buyback->size() >= MaxBuybackItems)
 		buyback->erase(buyback->begin());
@@ -522,12 +524,16 @@ bool VendorStocksTab(Poe2ShopTab tab)
 }
 
 /**
- * @brief Sanctuary Reforged: the POE2 vendor tabs that have some of Diablo's own stock, and buyback. Griswold and Adria
- * keep their Diablo and Hellfire stock, so a tab of a kind they have none of right now isn't shown.
+ * @brief Sanctuary Reforged: the vendor tabs that have some of Diablo's own stock, and no buyback (Diablo's shops have
+ * none). Griswold and Adria keep their Diablo and Hellfire stock, so a tab of a kind they have none of right now isn't
+ * shown. With nothing in stock at all, the first tab stays, so the shop always has one.
  */
 std::vector<Poe2ShopTab> ReforgedShopTabs(std::vector<Poe2ShopTab> tabs)
 {
-	std::erase_if(tabs, [](Poe2ShopTab tab) { return tab != Poe2ShopTab::Buyback && !VendorStocksTab(tab); });
+	const Poe2ShopTab first = tabs.front();
+	std::erase_if(tabs, [](Poe2ShopTab tab) { return tab == Poe2ShopTab::Buyback || !VendorStocksTab(tab); });
+	if (tabs.empty())
+		tabs.push_back(first);
 	return tabs;
 }
 

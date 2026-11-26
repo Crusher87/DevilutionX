@@ -34,6 +34,7 @@
 #include "controls/controller_buttons.h"
 #include "engine/assets.hpp"
 #include "engine/sound_defs.hpp"
+#include "game_mode.hpp"
 #include "platform/locale.hpp"
 #include "quick_messages.hpp"
 #include "utils/algorithm/container.hpp"
@@ -101,6 +102,11 @@ void DiscoverMods()
 			modNames.insert(modMpq.substr(0, modMpq.size() - 4));
 		}
 	}
+
+	// A Sanctuary Reforged setup does not offer the other mode at all: with Reforged switched on
+	// (and the other mode not), that entry is left out of the list and the ini.
+	if (GetOptions().Mods.IsReforgedSetup())
+		modNames.erase("poe2");
 
 	// Get the list of mods currently stored in the INI.
 	std::vector<std::string_view> existingMods = GetOptions().Mods.GetModList();
@@ -253,11 +259,25 @@ void LoadOptions()
 #endif
 }
 
+bool IsOptionInThisMode(OptionEntryFlags flags)
+{
+	if (HasAnyOf(flags, OptionEntryFlags::OnlyPoe2) && !gbIsPoe2)
+		return false;
+	if (HasAnyOf(flags, OptionEntryFlags::AdminTool) && !AdminToolsOn())
+		return false;
+	if (HasAnyOf(flags, OptionEntryFlags::OnlyEnhanced) && !HasEnhancements())
+		return false;
+	return true;
+}
+
 void SaveOptions()
 {
 	Options &options = GetOptions();
 	for (OptionCategoryBase *pCategory : options.GetCategories()) {
 		for (const OptionEntryBase *pEntry : pCategory->GetEntries()) {
+			// Another mode's setup gets no keys for POE2 Mashup's own options or the admin tools (keys already there are kept).
+			if (HasAnyOf(pEntry->GetFlags(), OptionEntryFlags::OnlyPoe2 | OptionEntryFlags::AdminTool) && !IsOptionInThisMode(pEntry->GetFlags()))
+				continue;
 			pEntry->SaveToIni(pCategory->GetKey());
 		}
 	}
@@ -921,7 +941,7 @@ GameplayOptions::GameplayOptions()
     , disableCripplingShrines("Disable Crippling Shrines", OptionEntryFlags::None, N_("Disable Crippling Shrines"), N_("When enabled Cauldrons, Fascinating Shrines, Goat Shrines, Ornate Shrines, Sacred Shrines and Murphy's Shrines are not able to be clicked on and labeled as disabled."), false)
     , quickCast("Quick Cast", OptionEntryFlags::None, N_("Quick Cast"), N_("Spell hotkeys instantly cast the spell, rather than switching the readied spell."), false)
     , wasdMovement("WASD Movement", OptionEntryFlags::None, N_("WASD Movement"), N_("On: walk with W, A, S and D; clicking the ground no longer walks and attacks hit in place. Off: click to move; W, A, S and D keep their usual shortcuts."), true)
-    , lootFilter("Loot Filter", OptionEntryFlags::None, N_("Loot Filter"), N_("POE2 mode: NeverSink's loot filter. Good items get coloured names, light beams, drop sounds and map icons. Each level hides more low value items than the one before. Off shows every item plainly."), LootFilter::Off,
+    , lootFilter("Loot Filter", OptionEntryFlags::OnlyPoe2, N_("Loot Filter"), N_("NeverSink's loot filter. Good items get coloured names, light beams, drop sounds and map icons. Each level hides more low value items than the one before. Off shows every item plainly."), LootFilter::Off,
           {
               { LootFilter::Off, N_("Off") },
               { LootFilter::Soft, N_("Soft") },
@@ -932,27 +952,27 @@ GameplayOptions::GameplayOptions()
               { LootFilter::UberStrict, N_("Uber Strict") },
               { LootFilter::UberPlusStrict, N_("Uber Plus Strict") },
           })
-    , lootFilterBeams("Loot Filter Beams", OptionEntryFlags::None, N_("Loot Filter Beams"), N_("POE2 mode, with the loot filter on: a column of light over good items."), true)
-    , lootFilterSounds("Loot Filter Sounds", OptionEntryFlags::None, N_("Loot Filter Sounds"), N_("POE2 mode, with the loot filter on: a sound when a good item drops."), true)
-    , lootFilterMapIcons("Loot Filter Map Icons", OptionEntryFlags::None, N_("Loot Filter Map Icons"), N_("POE2 mode, with the loot filter on: good items you have seen show on the maps."), true)
-    , showLifeManaLevels("Show Life Mana Levels", OptionEntryFlags::None, N_("Show Life/Mana Levels"), N_("POE2 mode: shows your current and maximum Life and Energy Shield above the life globe, and Mana and Spirit (reserved / total) above the mana globe."), false)
-    , heroMiniBar("Mini Life Bar Above You", OptionEntryFlags::None, N_("Mini Life Bar Above You"), N_("POE2 mode: a small life bar with a thin mana bar under it over your hero."), false)
-    , heroMiniBarEnergyShield("Mini Bar Shows Energy Shield", OptionEntryFlags::None, N_("Mini Bar Shows Energy Shield"), N_("POE2 mode: the mini bar over your hero shows your Energy Shield over the top of the life bar."), false)
-    , hurtMonsterBars("Life Bars Over Hurt Monsters", OptionEntryFlags::None, N_("Life Bars Over Hurt Monsters"), N_("POE2 mode: a small life bar over every monster that has taken damage, framed in its rarity's colour. The bar at the top of the screen for the monster you point at stays."), false)
-    , showCornerMap("Show Corner Map", OptionEntryFlags::None, N_("Show Corner Map"), N_("POE2 mode: a small map in the top right corner. The Tab map still opens over the whole screen."), true)
-    , cornerMapSize("Corner Map Size", OptionEntryFlags::None, N_("Corner Map Size"), N_("POE2 mode: how wide the corner map is."), CornerMapSize::Medium,
+    , lootFilterBeams("Loot Filter Beams", OptionEntryFlags::OnlyPoe2, N_("Loot Filter Beams"), N_("With the loot filter on: a column of light over good items."), true)
+    , lootFilterSounds("Loot Filter Sounds", OptionEntryFlags::OnlyPoe2, N_("Loot Filter Sounds"), N_("With the loot filter on: a sound when a good item drops."), true)
+    , lootFilterMapIcons("Loot Filter Map Icons", OptionEntryFlags::OnlyPoe2, N_("Loot Filter Map Icons"), N_("With the loot filter on: good items you have seen show on the maps."), true)
+    , showLifeManaLevels("Show Life Mana Levels", OptionEntryFlags::OnlyPoe2, N_("Show Life/Mana Levels"), N_("Shows your current and maximum Life and Energy Shield above the life globe, and Mana and Spirit (reserved / total) above the mana globe."), false)
+    , heroMiniBar("Mini Life Bar Above You", OptionEntryFlags::OnlyEnhanced, N_("Mini Life Bar Above You"), N_("A small life bar with a thin mana bar under it over your hero."), false)
+    , heroMiniBarEnergyShield("Mini Bar Shows Energy Shield", OptionEntryFlags::OnlyPoe2, N_("Mini Bar Shows Energy Shield"), N_("The mini bar over your hero shows your Energy Shield over the top of the life bar."), false)
+    , hurtMonsterBars("Life Bars Over Hurt Monsters", OptionEntryFlags::OnlyEnhanced, N_("Life Bars Over Hurt Monsters"), N_("A small life bar over every monster that has taken damage, with a coloured frame for the stronger ones. The bar at the top of the screen for the monster you point at stays."), false)
+    , showCornerMap("Show Corner Map", OptionEntryFlags::OnlyEnhanced, N_("Show Corner Map"), N_("A small map in the top right corner. The Tab map still opens over the whole screen."), true)
+    , cornerMapSize("Corner Map Size", OptionEntryFlags::OnlyEnhanced, N_("Corner Map Size"), N_("How wide the corner map is."), CornerMapSize::Medium,
           {
               { CornerMapSize::Small, N_("Small") },
               { CornerMapSize::Medium, N_("Medium") },
               { CornerMapSize::Large, N_("Large") },
           })
-    , autoCentreMap("Auto-Centre Map", OptionEntryFlags::None, N_("Auto-Centre Map"), N_("POE2 mode: on, the corner map keeps you in its middle. Off, it stays put until you near its edge."), true)
-    , mapTransparency("Map Transparency", OptionEntryFlags::None, N_("Map Transparency"), N_("POE2 mode: how see-through the whole map is, in percent: its lines and markers, and the floor under them with them. Also used by the Tab map."), 25, { 0, 25, 50, 75 })
-    , landscapeTransparency("Landscape Transparency", OptionEntryFlags::None, N_("Landscape Transparency"), N_("POE2 mode: how see-through the even grey tint over the explored floor is, in percent, on top of Map Transparency. 100 hides it. The corner map keeps a black backdrop; the Tab map shows the game through it."), 50, { 0, 25, 50, 75, 100 })
-    , mapZoom("Map Zoom", OptionEntryFlags::None, N_("Map Zoom"), N_("POE2 mode: how close the corner map is. + and - change it while the Tab map is closed."), 1, { 1, 2, 3, 4 })
-    , mapPoiNames("Point of Interest Names", OptionEntryFlags::None, N_("Point of Interest Names"), N_("POE2 mode: names next to the map's markers for stairs, portals, shrines, strongboxes and unique monsters."), true)
-    , enableQuestTracking("Enable Quest Tracking", OptionEntryFlags::None, N_("Enable Quest Tracking"), N_("POE2 mode: your quests under way, each with its next step, in a short list under the corner map. Hidden with the corner map."), true)
-    , newCathedralFloors("New Cathedral Floors", OptionEntryFlags::None, N_("New Cathedral Floors"), N_("On: Cathedral floors are a winding main way of rooms with side areas, like Path of Exile 2. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
+    , autoCentreMap("Auto-Centre Map", OptionEntryFlags::OnlyEnhanced, N_("Auto-Centre Map"), N_("On, the corner map keeps you in its middle. Off, it stays put until you near its edge."), true)
+    , mapTransparency("Map Transparency", OptionEntryFlags::OnlyEnhanced, N_("Map Transparency"), N_("How see-through the whole map is, in percent: its lines and markers, and the floor under them with them. Also used by the Tab map."), 25, { 0, 25, 50, 75 })
+    , landscapeTransparency("Landscape Transparency", OptionEntryFlags::OnlyEnhanced, N_("Landscape Transparency"), N_("How see-through the even grey tint over the explored floor is, in percent, on top of Map Transparency. 100 hides it. The corner map keeps a black backdrop; the Tab map shows the game through it."), 50, { 0, 25, 50, 75, 100 })
+    , mapZoom("Map Zoom", OptionEntryFlags::OnlyEnhanced, N_("Map Zoom"), N_("How close the corner map is. + and - change it while the Tab map is closed."), 1, { 1, 2, 3, 4 })
+    , mapPoiNames("Point of Interest Names", OptionEntryFlags::OnlyEnhanced, N_("Point of Interest Names"), N_("Names next to the map's markers for stairs, portals, shrines and unique monsters."), true)
+    , enableQuestTracking("Enable Quest Tracking", OptionEntryFlags::OnlyEnhanced, N_("Enable Quest Tracking"), N_("Your quests under way, each with its next step, in a short list under the corner map. Hidden with the corner map."), true)
+    , newCathedralFloors("New Cathedral Floors", OptionEntryFlags::None, N_("New Cathedral Floors"), N_("On: Cathedral floors are a winding main way of rooms with side areas. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , newCatacombsFloors("New Catacombs Floors", OptionEntryFlags::None, N_("New Catacombs Floors"), N_("On: Catacombs floors are built like the new Cathedral floors, from their own rooms. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , newCavesFloors("New Caves Floors", OptionEntryFlags::None, N_("New Caves Floors"), N_("On: Caves floors are built like the new Cathedral floors, from their own rooms. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
     , newHellFloors("New Hell Floors", OptionEntryFlags::None, N_("New Hell Floors"), N_("On: Hell floors (levels 13 to 15) are built like the new Cathedral floors, from their own rooms. Off: Diablo's own floors. A floor you have already been on keeps its shape until it is built fresh."), true)
@@ -1311,34 +1331,65 @@ std::string_view KeymapperOptions::Action::GetName() const
 	return dynamicName;
 }
 
+std::string KeymapperOptions::Action::KeptKey() const
+{
+	return StrCat(key, "Kept");
+}
+
+uint32_t KeymapperOptions::Action::DefaultKeyForThisMode() const
+{
+	return gbIsPoe2 && hasPoe2DefaultKey ? poe2DefaultKey : defaultKey;
+}
+
+bool KeymapperOptions::Action::TakesPoe2Binding() const
+{
+	if (gbIsPoe2 || !restoreOutsidePoe2 || keptOutsidePoe2 || !chosenKey)
+		return false;
+	return *chosenKey == SDLK_UNKNOWN || (hasPoe2DefaultKey && *chosenKey == poe2DefaultKey);
+}
+
+uint32_t KeymapperOptions::Action::KeyForThisMode() const
+{
+	if (!IsOptionInThisMode(flags))
+		return SDLK_UNKNOWN;
+	if (chosenKey && !TakesPoe2Binding())
+		return *chosenKey;
+	return DefaultKeyForThisMode();
+}
+
 void KeymapperOptions::Action::LoadFromIni(std::string_view category)
 {
+	chosenKey = std::nullopt;
+	keptOutsidePoe2 = restoreOutsidePoe2 && ini->getBool(category, KeptKey(), false);
 	const std::span<const Ini::Value> iniValues = ini->get(category, key);
-	if (iniValues.empty()) {
-		SetValue(defaultKey);
-		return; // Use the default key if no key has been set.
-	}
-
-	const std::string_view iniValue = iniValues.back().value;
-	if (iniValue.empty()) {
-		SetValue(SDLK_UNKNOWN);
-		return;
-	}
-
-	auto keyIt = GetOptions().Keymapper.keyNameToKeyID.find(iniValue);
-	if (keyIt == GetOptions().Keymapper.keyNameToKeyID.end()) {
-		// Use the default key if the key is unknown.
-		Log("Keymapper: unknown key '{}'", iniValue);
-		SetValue(defaultKey);
-		return;
+	if (!iniValues.empty()) {
+		const std::string_view iniValue = iniValues.back().value;
+		if (iniValue.empty()) {
+			chosenKey = SDLK_UNKNOWN;
+		} else {
+			auto keyIt = GetOptions().Keymapper.keyNameToKeyID.find(iniValue);
+			if (keyIt == GetOptions().Keymapper.keyNameToKeyID.end()) {
+				// Use the default key if the key is unknown.
+				Log("Keymapper: unknown key '{}'", iniValue);
+			} else {
+				chosenKey = keyIt->second;
+			}
+		}
 	}
 
 	// Store the key in action.key and in the map so we can save() the
 	// actions while keeping the same order as they have been added.
-	SetValue(keyIt->second);
+	Bind(KeyForThisMode());
 }
 void KeymapperOptions::Action::SaveToIni(std::string_view category) const
 {
+	// The default key is left out of the ini (unless chosen), as it can differ between the modes.
+	if (!chosenKey && boundKey == DefaultKeyForThisMode())
+		return;
+	if (TakesPoe2Binding() && boundKey == DefaultKeyForThisMode())
+		return;
+	if (keptOutsidePoe2)
+		ini->set(category, KeptKey(), true);
 	if (boundKey == SDLK_UNKNOWN) {
 		// Just add an empty config entry if the action is unbound.
 		ini->set(category, key, std::string {});
@@ -1370,9 +1421,31 @@ bool KeymapperOptions::Action::SetValue(int value)
 		return false;
 	}
 
+	// The action that had this key loses it for good, as before.
+	if (value != SDLK_UNKNOWN) {
+		auto it = GetOptions().Keymapper.keyIDToAction.find(value);
+		if (it != GetOptions().Keymapper.keyIDToAction.end() && &it->second.get() != this) {
+			Action &other = it->second.get();
+			other.chosenKey = SDLK_UNKNOWN;
+			if (!gbIsPoe2)
+				other.keptOutsidePoe2 = other.restoreOutsidePoe2;
+		}
+	}
+
+	chosenKey = static_cast<uint32_t>(value);
+	if (!gbIsPoe2)
+		keptOutsidePoe2 = restoreOutsidePoe2;
+	Bind(static_cast<uint32_t>(value));
+	return true;
+}
+
+void KeymapperOptions::Action::Bind(uint32_t value)
+{
 	// Remove old key
 	if (boundKey != SDLK_UNKNOWN) {
-		GetOptions().Keymapper.keyIDToAction.erase(boundKey);
+		auto it = GetOptions().Keymapper.keyIDToAction.find(boundKey);
+		if (it != GetOptions().Keymapper.keyIDToAction.end() && &it->second.get() == this)
+			GetOptions().Keymapper.keyIDToAction.erase(it);
 		boundKey = SDLK_UNKNOWN;
 	}
 
@@ -1388,13 +1461,21 @@ bool KeymapperOptions::Action::SetValue(int value)
 		GetOptions().Keymapper.keyIDToAction.insert_or_assign(value, *this);
 		boundKey = value;
 	}
-
-	return true;
 }
 
 void KeymapperOptions::AddAction(std::string_view key, const char *name, const char *description, uint32_t defaultKey, std::function<void()> actionPressed, std::function<void()> actionReleased, std::function<bool()> enable, unsigned index)
 {
 	actions.emplace_front(key, name, description, defaultKey, std::move(actionPressed), std::move(actionReleased), std::move(enable), index);
+}
+
+void KeymapperOptions::BindForThisMode()
+{
+	for (Action &action : actions)
+		action.Bind(SDLK_UNKNOWN);
+	keyIDToAction.clear();
+	// In the order they were added, so a later action still takes a key two actions share.
+	for (Action &action : actions)
+		action.Bind(action.KeyForThisMode());
 }
 
 void KeymapperOptions::CommitActions()
@@ -1775,6 +1856,14 @@ bool ModOptions::SwitchOffReforgedForPoe2()
 		return false;
 	reforged->enabled.SetValue(false);
 	return true;
+}
+
+bool ModOptions::IsReforgedSetup()
+{
+	// Read the ini itself: the mods' toggles are loaded from it only after the mods are discovered.
+	if (!ini)
+		return false;
+	return ini->getBool(key, "reforged", false) && !ini->getBool(key, "poe2", false);
 }
 
 std::forward_list<ModOptions::ModEntry> &ModOptions::GetModEntries()

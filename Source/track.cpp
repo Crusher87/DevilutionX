@@ -171,8 +171,8 @@ void RepeatPlayerAction()
 	switch (LastPlayerAction) {
 	case PlayerActionType::Attack:
 		if (InDungeonBounds(cursPosition)) {
-			// POE2 Mashup and Sanctuary Reforged: held, a bow keeps shooting exactly where the cursor points.
-			const Point target = HasEnhancements() && rangedAttack ? AimAlongCursor(myPlayer, AimTiles) : cursPosition;
+			// POE2 Mashup, and Sanctuary Reforged with WASD movement: held, a bow keeps shooting exactly where the cursor points.
+			const Point target = HasEnhancements() && rangedAttack && (gbIsPoe2 || IsWasdMovementEnabled()) ? AimAlongCursor(myPlayer, AimTiles) : cursPosition;
 			NetSendCmdLoc(MyPlayerId, true, rangedAttack ? CMD_RATTACKXY : CMD_SATTACKXY, target);
 		}
 		break;

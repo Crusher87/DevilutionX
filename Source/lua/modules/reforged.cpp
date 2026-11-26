@@ -14,7 +14,7 @@ sol::table LuaReforgedModule(sol::state_view &lua)
 	LuaSetDocFn(table, "enable", "()", "Switches the HD look and the comfort features on, on plain Diablo and Hellfire rules",
 	    []() { gbIsReforged = !gbIsPoe2; });
 	LuaSetDocFn(table, "is_enabled", "()", "Whether the game runs as Sanctuary Reforged", []() { return gbIsReforged; });
-	LuaSetDocFn(table, "has_enhancements", "()", "Whether the HD look and the comfort features are on (Sanctuary Reforged or POE2 Mashup)",
+	LuaSetDocFn(table, "has_enhancements", "()", "Whether the HD look and the comfort features are on",
 	    []() { return HasEnhancements(); });
 	return table;
 }
