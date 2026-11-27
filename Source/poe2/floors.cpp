@@ -20,6 +20,7 @@
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/cathedral_floors.hpp"
+#include "poe2/mix.hpp"
 #include "poe2/telemetry.hpp"
 #include "portal.h"
 #include "quests.h"
@@ -205,17 +206,6 @@ bool FloorIsFinalBossRest(int level, bool isSetLevel)
 	return false;
 }
 
-uint32_t MixSeed(uint32_t value)
-{
-	// SplitMix-style mixing: spreads a counter into a seed that looks nothing like its neighbours.
-	value ^= value >> 16;
-	value *= 0x7FEB352DU;
-	value ^= value >> 15;
-	value *= 0x846CA68BU;
-	value ^= value >> 16;
-	return value;
-}
-
 void Put32(std::vector<uint8_t> &out, uint32_t value)
 {
 	for (int i = 0; i < 4; i++)
@@ -304,7 +294,7 @@ void Poe2FloorsReset()
 	Poe2FloorFresh = false;
 	Poe2ForceFreshFloor = false;
 	CheckRoomsAfterLoad = false;
-	FloorRollState = MixSeed(sgGameInitInfo.gameSeed[0] ^ 0x5F10EDU);
+	FloorRollState = Mix(sgGameInitInfo.gameSeed[0] ^ 0x5F10EDU);
 	RecentRooms.fill(0);
 	ForgetKeptRoomCollections();
 	KeptFloorRooms.clear();
@@ -361,7 +351,7 @@ uint32_t Poe2RollFreshFloor(int level, bool isSetLevel)
 	if (record == nullptr)
 		return 0;
 	FloorRollState++;
-	const uint32_t seed = MixSeed(FloorRollState ^ MixSeed(static_cast<uint32_t>(level) + (isSetLevel ? 0x1000U : 0U)));
+	const uint32_t seed = Mix(FloorRollState ^ Mix(static_cast<uint32_t>(level) + (isSetLevel ? 0x1000U : 0U)));
 	const uint16_t visits = static_cast<uint16_t>(std::min<int>(record->visits + 1, UINT16_MAX));
 	Poe2ApplyFreshFloor(level, isSetLevel, seed, visits);
 	return seed;
