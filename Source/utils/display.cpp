@@ -708,6 +708,7 @@ void ReinitializeTexture()
 {
 	if (texture)
 		texture.reset();
+	ForgetMenuFrame();
 
 	if (renderer == nullptr)
 		return;

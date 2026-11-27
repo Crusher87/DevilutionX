@@ -33,8 +33,8 @@ namespace intro_sdl {
  * true while the intro draws it itself (where it lands, and so the intro's).
  */
 bool HoldsMenuLogo(const SDL_FRect &picture);
-/** @brief Once the intro has shown: the burning lines round the subtitle, behind the logo's letters. */
-void DrawLines(SDL_Renderer *renderer, const SDL_FRect &picture, float seconds);
+/** @brief Once the intro has shown: the burning lines round the subtitle, behind the logo's letters, their fire paced as `pace`. */
+void DrawLines(SDL_Renderer *renderer, const SDL_FRect &picture, float seconds, const fire::FirePace &pace = {});
 /** @brief Once the intro has shown: the subtitle, cooled, over the logo's letters. */
 void DrawSubtitle(SDL_Renderer *renderer, const SDL_FRect &picture);
 /** @brief Lets the lines' fire go (the logo's went with ForgetMenuFire). */

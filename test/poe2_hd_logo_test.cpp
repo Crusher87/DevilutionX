@@ -16,6 +16,7 @@
 #include "engine/ui_scale.hpp"
 #include "game_mode.hpp"
 #include "headless_mode.hpp"
+#include "init.hpp"
 #include "options.h"
 #include "poe2/hd.hpp"
 #include "poe2/live_fire.hpp"
@@ -481,6 +482,162 @@ TEST_F(HdLogoTest, UnscaledGameWithHdOrEffectsKeepsItsHdArt)
 	RenderDirectlyToOutputSurface = oldDirect;
 	RendererTextureSurface = nullptr;
 	Palette = std::move(oldPalette);
+}
+
+/**
+ * @brief Shows changing menu frames at a UI scale and checks every one against the frame as it was built before: each
+ * pixel the colour of the UI pixel under it (`x * UI width / frame width`), everywhere, every frame.
+ */
+void ShowsMenuFramesAsBefore(int frameWidth, int frameHeight, int scale, bool wholeTimes)
+{
+	SDL_Surface *screen = SDL_CreateRGBSurfaceWithFormat(0, frameWidth, frameHeight, 32, SDL_PIXELFORMAT_ARGB8888);
+	ASSERT_NE(screen, nullptr);
+	SDL_Renderer *shown = SDL_CreateSoftwareRenderer(screen);
+	ASSERT_NE(shown, nullptr);
+
+	SDLPaletteUniquePtr oldPalette = std::move(Palette);
+	Palette = SDLWrap::AllocPalette();
+	SDL_Color colours[256];
+	for (int i = 0; i < 256; i++)
+		colours[i] = SDL_Color { static_cast<Uint8>(i), static_cast<Uint8>(255 - i), static_cast<Uint8>(i * 7), 255 };
+	SDL_SetPaletteColors(Palette.get(), colours, 0, 256);
+	SDL_Renderer *const oldRenderer = renderer;
+	SDL_Surface *const oldPalSurface = PalSurface;
+	SDLTextureUniquePtr oldTexture = std::move(texture);
+	const bool oldDirect = RenderDirectlyToOutputSurface;
+	const bool oldRunGame = gbRunGame;
+	const bool oldActive = gbActive;
+	const uint16_t oldWidth = gnScreenWidth;
+	const uint16_t oldHeight = gnScreenHeight;
+	renderer = shown;
+	RenderDirectlyToOutputSurface = false;
+	gbRunGame = false;
+	gbActive = true;
+	const Size uiSize = SetRenderSize({ frameWidth, frameHeight }, scale, true);
+	gnScreenWidth = static_cast<uint16_t>(uiSize.width);
+	gnScreenHeight = static_cast<uint16_t>(uiSize.height);
+	ASSERT_TRUE(IsUiScaled());
+	EXPECT_EQ(frameWidth % uiSize.width == 0 && frameHeight % uiSize.height == 0, wholeTimes);
+	SDLSurfaceUniquePtr menu = SDLWrap::CreateRGBSurfaceWithFormat(0, uiSize.width, uiSize.height, 8, SDL_PIXELFORMAT_INDEX8);
+	SDL_SetSurfacePalette(menu.get(), Palette.get());
+	PalSurface = menu.get();
+	RendererTextureSurface = SDLWrap::CreateRGBSurfaceWithFormat(0, frameWidth, frameHeight, 32, SDL_PIXELFORMAT_ARGB8888);
+	texture = SDLTextureUniquePtr { SDL_CreateTexture(shown, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, frameWidth, frameHeight) };
+	ASSERT_NE(texture, nullptr);
+	SyncWorldLayer();
+	ASSERT_TRUE(HasWorldLayer());
+
+	uint32_t seed = 12345;
+	const auto random = [&seed]() {
+		seed = seed * 1664525U + 1013904223U;
+		return seed >> 8;
+	};
+	const auto pixel = [&](int x, int y) -> uint8_t & {
+		return *(static_cast<uint8_t *>(menu->pixels) + static_cast<ptrdiff_t>(y) * menu->pitch + x);
+	};
+	std::vector<uint32_t> got(static_cast<size_t>(frameWidth) * frameHeight);
+	const auto wrong = [&](bool draw = true) {
+		if (draw)
+			BltFast(nullptr, nullptr);
+		RenderPresent();
+		if (SDL_RenderReadPixels(shown, nullptr, SDL_PIXELFORMAT_ARGB8888, got.data(), frameWidth * 4) != 0)
+			return -1;
+		int count = 0;
+		for (int y = 0; y < frameHeight; y++) {
+			const int row = std::min(y * uiSize.height / frameHeight, uiSize.height - 1);
+			for (int x = 0; x < frameWidth; x++) {
+				const SDL_Color &colour = Palette->colors[pixel(std::min(x * uiSize.width / frameWidth, uiSize.width - 1), row)];
+				const uint32_t want = (static_cast<uint32_t>(colour.r) << 16) | (static_cast<uint32_t>(colour.g) << 8) | colour.b;
+				count += (got[static_cast<size_t>(y) * frameWidth + x] & 0xFFFFFF) != want ? 1 : 0;
+			}
+		}
+		return count;
+	};
+
+	// A whole new picture.
+	for (int y = 0; y < uiSize.height; y++) {
+		for (int x = 0; x < uiSize.width; x++)
+			pixel(x, y) = static_cast<uint8_t>(random());
+	}
+	EXPECT_EQ(wrong(), 0);
+	// The same again, then single pixels here and there (the first and last rows and columns among them), then runs of
+	// rows, frame after frame.
+	EXPECT_EQ(wrong(), 0);
+	pixel(0, 0) ^= 0x55;
+	pixel(uiSize.width - 1, uiSize.height - 1) ^= 0x55;
+	EXPECT_EQ(wrong(), 0);
+	for (int frame = 0; frame < 12; frame++) {
+		for (int i = 0; i < 6; i++)
+			pixel(static_cast<int>(random() % uiSize.width), static_cast<int>(random() % uiSize.height)) = static_cast<uint8_t>(random());
+		const int top = static_cast<int>(random() % uiSize.height);
+		const int rows = std::min(1 + static_cast<int>(random() % 40), uiSize.height - top);
+		for (int y = top; y < top + rows; y++) {
+			for (int x = static_cast<int>(random() % uiSize.width); x < uiSize.width; x += 1 + static_cast<int>(random() % 3))
+				pixel(x, y) = static_cast<uint8_t>(random());
+		}
+		EXPECT_EQ(wrong(), 0) << "frame " << frame;
+	}
+	// The colours change under the same picture (a fade), then the picture with them.
+	for (int i = 0; i < 256; i++)
+		colours[i] = SDL_Color { static_cast<Uint8>(i / 2), static_cast<Uint8>(i), static_cast<Uint8>(255 - i / 3), 255 };
+	SDL_SetPaletteColors(Palette.get(), colours, 0, 256);
+	EXPECT_EQ(wrong(), 0);
+	pixel(3, 5) ^= 0x33;
+	colours[7] = SDL_Color { 1, 2, 3, 255 };
+	SDL_SetPaletteColors(Palette.get(), colours, 0, 256);
+	EXPECT_EQ(wrong(), 0);
+	// Something else is drawn straight into the frame the game sends up (a video, a fade's black) and shown; the next
+	// menu frame shows whole again, changed or not.
+	SDL_FillRect(RendererTextureSurface.get(), nullptr, 0xFF123456);
+	OutputSurfaceDrawn();
+	RenderPresent();
+	ASSERT_EQ(SDL_RenderReadPixels(shown, nullptr, SDL_PIXELFORMAT_ARGB8888, got.data(), frameWidth * 4), 0);
+	EXPECT_EQ(got[0] & 0xFFFFFF, 0x123456U);
+	EXPECT_EQ(got.back() & 0xFFFFFF, 0x123456U);
+	EXPECT_EQ(wrong(), 0);
+	pixel(uiSize.width / 2, uiSize.height / 2) ^= 0x0F;
+	EXPECT_EQ(wrong(), 0);
+	// The graphics card lost its pictures: the next frame goes up whole.
+	ForgetMenuFrame();
+	EXPECT_EQ(wrong(), 0);
+	// Lost between a frame being made ready and shown (the window changed): that frame shows all the same.
+	pixel(1, 1) ^= 0x71;
+	BltFast(nullptr, nullptr);
+	ForgetMenuFrame();
+	EXPECT_EQ(wrong(false), 0);
+	EXPECT_EQ(wrong(), 0);
+
+	PalSurface = oldPalSurface;
+	texture = nullptr;
+	ForgetMenuFrame();
+	renderer = nullptr;
+	gnScreenWidth = oldWidth;
+	gnScreenHeight = oldHeight;
+	SetRenderSize({ oldWidth, oldHeight }, 100, false);
+	SyncWorldLayer();
+	EXPECT_FALSE(HasWorldLayer());
+	gbRunGame = oldRunGame;
+	gbActive = oldActive;
+	renderer = oldRenderer;
+	texture = std::move(oldTexture);
+	RenderDirectlyToOutputSurface = oldDirect;
+	RendererTextureSurface = nullptr;
+	Palette = std::move(oldPalette);
+	SDL_DestroyRenderer(shown);
+	SDL_FreeSurface(screen);
+}
+
+TEST_F(HdLogoTest, ScaledMenuFramesShowAsTheyDidAtTwiceTheUiSize)
+{
+	// UI Scale 200: the frame is kept at the UI's size and drawn twice as big by the graphics card.
+	ShowsMenuFramesAsBefore(1280, 960, 200, true);
+}
+
+TEST_F(HdLogoTest, ScaledMenuFramesShowAsTheyDidAtOtherUiSizes)
+{
+	// UI Scale 175 and 125: the changed rows are scaled up into the game's own frame.
+	ShowsMenuFramesAsBefore(1120, 840, 175, false);
+	ShowsMenuFramesAsBefore(1000, 750, 125, false);
 }
 
 #endif

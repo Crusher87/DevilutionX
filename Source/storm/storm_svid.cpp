@@ -225,6 +225,8 @@ bool BlitFrame()
 {
 #ifndef USE_SDL1
 	if (renderer != nullptr) {
+		// POE2 Mashup: the film's frame, not a menu's staged before it, is what RenderPresent shows.
+		OutputSurfaceDrawn();
 		if (
 #ifdef USE_SDL3
 		    !SDL_BlitSurface(SVidSurface.get(), nullptr, GetOutputSurface(), nullptr)
@@ -445,6 +447,7 @@ bool SVidPlayBegin(const char *filename, int flags)
 
 	// Set the background to black.
 	SDL_FillSurfaceRect(GetOutputSurface(), nullptr, 0x000000);
+	OutputSurfaceDrawn();
 
 	// The buffer for the frame. It is not the same as the SDL surface because the SDL surface also has pitch padding.
 	SVidFrameBuffer = std::unique_ptr<uint8_t[]> { new uint8_t[static_cast<size_t>(SVidWidth * SVidHeight)] };

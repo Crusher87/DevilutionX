@@ -31,6 +31,22 @@ namespace devilution {
 
 namespace fire {
 
+/** @brief How FireLayer::DrawAsync paces the fire's frames and how much of the computer it gives them. */
+struct FirePace {
+	/**
+	 * @brief The least time between two frames of the fire, in seconds (0: one each frame of the game). The game's
+	 * frames are counted whole: a frame of the fire starts on the game's frame that brings the time since the last to
+	 * within a third of a frame of this, so at a steady frame rate it starts every so many frames, always the same
+	 * number (not now every second, now every third, as the frames' lengths happen to add up).
+	 */
+	float interval = 1.F / 40.F;
+	/**
+	 * @brief How many of the fire's workers help its thread (-1: all it has). A few by default, so it keeps off most
+	 * of the computer's cores (the game's frame needs them).
+	 */
+	int workers = 2;
+};
+
 class FireLayer {
 public:
 	/**
@@ -53,8 +69,17 @@ public:
 	int GridWidth() const { return gridWidth_; }
 	int GridHeight() const { return gridHeight_; }
 
-	/** @brief Something painted over the fire's picture (LiveFire::Paint's, top row first) before it is sent up. */
-	void SetAfterPaint(std::function<void(uint8_t *, int)> afterPaint) { afterPaint_ = std::move(afterPaint); }
+	/**
+	 * @brief Something painted over the fire's picture (LiveFire::Paint's, top row first) before it is sent up. With
+	 * DrawAsync it runs on the fire's thread: what it reads is set in `beforeFrame`, which runs on the game's thread
+	 * each time a frame of the fire is started (Draw's too).
+	 */
+	void SetAfterPaint(std::function<void(uint8_t *, int)> afterPaint, std::function<void()> beforeFrame = {})
+	{
+		WaitForFrame();
+		afterPaint_ = std::move(afterPaint);
+		beforeFrame_ = std::move(beforeFrame);
+	}
 
 	/**
 	 * @brief Where the whole grid goes when its maps' picture goes at `picture`: wider by its padding (FireSource::pad)
@@ -75,11 +100,20 @@ public:
 	bool Draw(SDL_Renderer *renderer, const SDL_FRect &rect, float seconds, const uint8_t *cover = nullptr);
 
 	/**
-	 * @brief As Draw, but the fire is worked out off the game's thread, up to 40 times a second: each call sends up
-	 * the last frame finished (if a new one is) and starts the next, then draws what it has. The game's frame only
-	 * pays for sending it up. (Without threads: Draw.)
+	 * @brief As Draw, but the fire is worked out off the game's thread, up to 40 times a second (`pace`): each call
+	 * sends up the last frame finished (if a new one is) and starts the next, then draws what it has. The game's frame
+	 * only pays for sending it up. (Without threads: Draw.)
 	 */
-	bool DrawAsync(SDL_Renderer *renderer, const SDL_FRect &rect, float seconds, const uint8_t *cover = nullptr);
+	bool DrawAsync(SDL_Renderer *renderer, const SDL_FRect &rect, float seconds, const uint8_t *cover = nullptr, const FirePace &pace = {});
+
+	/**
+	 * @brief As DrawAsync without drawing it: the fire moves on unseen, off the game's thread. (Without threads it
+	 * moves on at once.)
+	 */
+	void AdvanceAsync(float seconds, const FirePace &pace = {});
+
+	/** @brief Whether a frame of the fire should start now: `owed` seconds since the last, the game's frame `seconds` long. */
+	static bool FrameIsDue(float owed, float seconds, float interval);
 
 	/**
 	 * @brief Draws `picture` at `dest`, lit by the fire as it was last drawn, the fire's maps' picture (the grid without
@@ -101,11 +135,14 @@ private:
 	void UploadFrame();
 	/** @brief The thread's loop: works out each frame it is given. */
 	void Loop();
+	/** @brief DrawAsync's and AdvanceAsync's: takes in a finished frame (sent up if `upload`) and starts the next when due. */
+	void Pump(float seconds, const uint8_t *cover, const FirePace &pace, bool upload);
 
 	std::unique_ptr<LiveFire> fire_;
 	int gridWidth_ = 0;
 	int gridHeight_ = 0;
 	std::function<void(uint8_t *, int)> afterPaint_;
+	std::function<void()> beforeFrame_;
 	SDL_Renderer *renderer_ = nullptr;
 	SDL_Texture *colour_ = nullptr;
 	SDL_Texture *multiply_ = nullptr;
@@ -125,8 +162,6 @@ private:
 	bool litValid_ = false;
 	SDL_Texture *litPicture_ = nullptr;
 	SDL_FRect litFire_ {};
-	/** @brief DrawAsync's: how many of the fire's workers help it (with its own thread). */
-	static constexpr int AsyncWorkers = 2;
 	float pointerX_ = 0;
 	float pointerY_ = 0;
 
@@ -140,11 +175,25 @@ private:
 	std::vector<uint8_t> frameAdd_;
 	std::vector<uint8_t> frameCover_;
 	bool frameHasCover_ = false;
+	/** @brief Whether the frame being worked out is painted (DrawAsync's) or only moves the fire on (AdvanceAsync's). */
+	bool framePainted_ = true;
 	float frameSeconds_ = 0;
 	/** @brief Seconds gone by since the last frame was started. */
 	float owedSeconds_ = 0;
 	bool frameReady_ = false;
 	bool frameShown_ = false;
+	/**
+	 * @brief Keeping up with a pace quicker than the steady one (Pump): late frames in the window of the game's frames
+	 * being counted, the game's frames left of a spell at the steady pace, and how many such spells there have been.
+	 */
+	static constexpr float SteadyInterval = 1.F / 40.F;
+	static constexpr int LateWindow = 120;
+	static constexpr int LateLimit = 4;
+	static constexpr int SteadyFrames = 600;
+	int late_ = 0;
+	int lateWindow_ = 0;
+	int steadyFrames_ = 0;
+	int steadySpells_ = 0;
 #ifdef POE2_FIRE_LAYER_THREAD
 	std::thread thread_;
 	std::mutex lock_;
