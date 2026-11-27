@@ -144,8 +144,6 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem);
 /** @brief Takes a support out of a socket. @param tier If given, set to the support's tier. */
 SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket, int *tier = nullptr);
-/** @brief Takes every support out of a slot, e.g. when its skill gem is taken out. */
-std::vector<TieredSupport> TakeSlotSupports(Poe2PlayerData &data, size_t slot);
 
 /** @brief Extra spell levels the spell's supports add. */
 int SupportSpellLevelBonus(const Player &player, SpellID spell);

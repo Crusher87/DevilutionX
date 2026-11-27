@@ -71,7 +71,6 @@ int CharmChargesPerUseFor(CharmEffect effect);
 int CharmChargesPerUseFor(const Item &item);
 
 void GainCharmCharges(Player &player, int charges);
-void RefillCharms(Player &player);
 /** @brief Whether the tile is at the well in Tristram's square. */
 bool IsBesideTownWell(Point tile);
 /** @brief Whether the tile is the well itself, which the hero clicks to use. */

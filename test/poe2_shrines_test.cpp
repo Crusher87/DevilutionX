@@ -386,8 +386,6 @@ TEST_F(Poe2ShrinesTest, PrimitivesReadTheHerosBuffs)
 	EXPECT_FALSE(AvoidsAilments(player));
 	Give(player.poe2.shrines, ShrineKind::Solar, SolarDay);
 	EXPECT_TRUE(AvoidsAilments(player));
-	EXPECT_TRUE(HasShrineEffect(player, ShrineEffect::Solar));
-	EXPECT_FALSE(HasShrineEffect(player, ShrineEffect::ExtraFire));
 }
 
 TEST_F(Poe2ShrinesTest, DiamondMakesEveryAttackCrit)
@@ -458,7 +456,6 @@ TEST_F(Poe2ShrinesTest, TooltipsAreOneLine)
 	ShrineBuffState state;
 	for (size_t i = 0; i < static_cast<size_t>(ShrineKind::Count); i++) {
 		const auto kind = static_cast<ShrineKind>(i);
-		EXPECT_EQ(ShrineHoverText(kind).find('\n'), std::string::npos);
 		const auto [power, text] = ShrineHoverLines(kind);
 		EXPECT_FALSE(power.empty());
 		EXPECT_FALSE(text.empty());

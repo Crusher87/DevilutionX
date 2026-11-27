@@ -12,7 +12,6 @@
 #include "data/file.hpp"
 #include "data/record_reader.hpp"
 #include "effects.h"
-#include "engine/palette.h"
 #include "engine/backbuffer_state.hpp"
 #include "engine/random.hpp"
 #include "game_mode.hpp"
@@ -54,13 +53,6 @@ std::expected<ShrineEffect, std::string> ParseEffect(std::string_view text)
 	return std::unexpected("unknown shrine effect");
 }
 
-std::expected<uint8_t, std::string> ParseGlow(std::string_view text)
-{
-	if (const std::optional<uint8_t> glow = ParseShrineGlow(text))
-		return *glow;
-	return std::unexpected("unknown glow colour");
-}
-
 std::expected<uint8_t, std::string> ParseIcon(std::string_view text)
 {
 	if (const std::optional<SpellIcon> icon = magic_enum::enum_cast<SpellIcon>(text))
@@ -93,7 +85,6 @@ bool LoadShrines()
 		reader.readString("power", shrine.power);
 		reader.read("effect", shrine.effect, ParseEffect);
 		reader.readInt("seconds", shrine.seconds);
-		reader.read("glow", shrine.glow, ParseGlow);
 		reader.read("icon", shrine.icon, ParseIcon);
 		reader.readBool("refresh", shrine.refresh);
 		reader.readBool("spawns", shrine.spawns);
@@ -394,29 +385,6 @@ std::vector<ShrineKind> RandomShrinePool()
 
 } // namespace
 
-std::optional<uint8_t> ParseShrineGlow(std::string_view name)
-{
-	if (name == "red")
-		return PAL16_RED + 2;
-	if (name == "orange")
-		return PAL16_ORANGE + 2;
-	if (name == "yellow")
-		return PAL16_YELLOW + 2;
-	if (name == "gold")
-		return PAL16_YELLOW + 5;
-	if (name == "blue")
-		return PAL16_BLUE + 4;
-	if (name == "iceblue")
-		return PAL16_BLUE + 1;
-	if (name == "white")
-		return PAL16_GRAY;
-	if (name == "beige")
-		return PAL16_BEIGE + 2;
-	if (name == "gray")
-		return PAL16_GRAY + 6;
-	return std::nullopt;
-}
-
 void LoadShrineData()
 {
 	Shrines.clear();
@@ -679,16 +647,6 @@ std::string ShrineGrantLine(const ShrineGrant &grant)
 	return line;
 }
 
-std::string ShrineHoverText(ShrineKind kind)
-{
-	const ShrineData &shrine = GetShrineData(kind);
-	if (shrine.kind >= ShrineKind::Count)
-		return {};
-	if (shrine.seconds <= 0)
-		return StrCat(shrine.power, ": ", shrine.text);
-	return StrCat(shrine.power, ": ", shrine.text, " (", shrine.seconds, "s)");
-}
-
 std::pair<std::string, std::string> ShrineHoverLines(ShrineKind kind)
 {
 	const ShrineData &shrine = GetShrineData(kind);
@@ -768,13 +726,6 @@ ShrineBonuses GetShrineBonuses(const Player &player)
 	return ShrineStateBonuses(player.poe2.shrines);
 }
 
-bool HasShrineEffect(const Player &player, ShrineEffect effect)
-{
-	if (!gbIsPoe2)
-		return false;
-	return std::any_of(player.poe2.shrines.buffs.begin(), player.poe2.shrines.buffs.end(), [effect](const ShrineBuff &buff) { return EffectOf(buff) == effect; });
-}
-
 int ShrineSkeletonLevel(const Player &player)
 {
 	return std::clamp(static_cast<int>(player.getCharacterLevel()) / 3, 1, 20);
@@ -827,20 +778,6 @@ void OnShrineHit(Player &player, Monster &monster)
 		return;
 	constexpr WeaponSkill Curses[] = { WeaponSkill::Weaken, WeaponSkill::IronMaiden, WeaponSkill::Decrepify, WeaponSkill::LowerResist, WeaponSkill::Despair };
 	ApplyTableCurse(player, monster, Curses[RandomIntLessThan(static_cast<int>(std::size(Curses)))], 100);
-}
-
-std::optional<uint8_t> ShrineGlowColor(const Player &player)
-{
-	if (!gbIsPoe2)
-		return std::nullopt;
-	const ShrineBuff *newest = NewestShrineBuff(player.poe2.shrines);
-	if (newest == nullptr)
-		return std::nullopt;
-	// Two shades lighter and back, about twice a second, from the base colour of the glow's ramp.
-	constexpr uint8_t Pulse[] = { 0, 1, 2, 1 };
-	const uint8_t base = GetShrineData(newest->kind).glow;
-	const uint8_t shade = Pulse[(newest->ticksLeft / 3) % 4];
-	return static_cast<uint8_t>((base & 0x0F) >= shade ? base - shade : base);
 }
 
 std::string ShrineBuffTooltip(const ShrineBuff &buff)

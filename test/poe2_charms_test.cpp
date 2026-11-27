@@ -145,8 +145,6 @@ TEST_F(Poe2CharmsTest, KillsRefillCharmsButTownDoesNot)
 	EXPECT_EQ(charm._iCharges, 2);
 	RefillFlasks(player);
 	EXPECT_EQ(charm._iCharges, 2);
-	RefillCharms(player);
-	EXPECT_EQ(charm._iCharges, MaxCharmCharges);
 }
 
 TEST_F(Poe2CharmsTest, TheTownWellRefillsCharms)

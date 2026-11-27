@@ -35,8 +35,6 @@ struct ShrineData {
 	ShrineEffect effect = ShrineEffect::None;
 	/** @brief How long the buff lasts; 0 for the shrines that give another's. */
 	int seconds = 0;
-	/** @brief The hero's glow while it is the newest buff: a palette index. */
-	uint8_t glow = 0;
 	/** @brief A SpellIcon for the icon row and over the hero's head. */
 	uint8_t icon = 0;
 	/** @brief Whether touching the same shrine again restarts its timer. */
@@ -112,8 +110,6 @@ void LoadShrineData();
 [[nodiscard]] bool HasShrineData();
 /** @brief The shrine's row; an empty row (no effect) without the table. */
 [[nodiscard]] const ShrineData &GetShrineData(ShrineKind kind);
-/** @brief Reads a glow name of shrines.tsv (red, orange, yellow, gold, blue, iceblue, white, beige, gray) as a palette index. */
-[[nodiscard]] std::optional<uint8_t> ParseShrineGlow(std::string_view name);
 
 // The buffs on their own, as the state that is saved and sent.
 
@@ -165,8 +161,6 @@ struct ShrineGrant {
 void ApplyShrineGrant(Player &player, const ShrineGrant &grant);
 /** @brief One line of what the buff does, for the message on touching it. */
 [[nodiscard]] std::string ShrineGrantLine(const ShrineGrant &grant);
-/** @brief What hovering a shrine shows under its name. */
-[[nodiscard]] std::string ShrineHoverText(ShrineKind kind);
 /**
  * @brief The same as two parts for the info box, which squeezes a long line until it can't be read:
  * the power and its time ("Meteoric (45s)"), then what it does. Both are empty for an unknown kind.
@@ -235,7 +229,6 @@ struct ShrineBonuses {
 [[nodiscard]] ShrineBonuses GetShrineBonuses(const Player &player);
 /** @brief The same for a bare state (tests, tooltips). */
 [[nodiscard]] ShrineBonuses ShrineStateBonuses(const ShrineBuffState &state);
-[[nodiscard]] bool HasShrineEffect(const Player &player, ShrineEffect effect);
 /** @brief Skeletal: the level its skeletons rise at, from the hero's level. */
 [[nodiscard]] int ShrineSkeletonLevel(const Player &player);
 /** @brief A storm's strike at an area level, as a raw Fixed26_6. */
@@ -247,9 +240,6 @@ void OnShrineKill(Player &player, const Monster &monster);
 void ShrineReflectHit(Player &player, Monster &monster, int32_t damageTakenRaw);
 /** @brief Hexing: a hit may curse the monster. */
 void OnShrineHit(Player &player, Monster &monster);
-
-/** @brief The hero's glow: the newest buff's colour, pulsing; none without a buff or outside POE2 mode. */
-[[nodiscard]] std::optional<uint8_t> ShrineGlowColor(const Player &player);
 
 /** @brief The tooltip line of a buff's icon: power, what it does and the seconds left. */
 [[nodiscard]] std::string ShrineBuffTooltip(const ShrineBuff &buff);
