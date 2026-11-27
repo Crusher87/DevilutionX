@@ -95,6 +95,9 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "corpses", 1.F, "dead bodies take the floor's light smoothly across them, shadows fall over them, and those with a shape map are lit by their shape; 0 gives each one flat light as before (works with Atmosphere off)" },
 	{ "carved", 1.F, "heroes' and monsters' shadows are cast from their carved bodies, each light seeing the body from its own side, where the bodies have been made; 0 casts the drawing facing you as before (works with Atmosphere off)" },
 	{ "bodylight", 1.F, "heroes and monsters with a carved body are lit by its shape: the side turned to a light brighter, the far side darker; 2 twice as strong, up to 3; 0 lights each one flat as before (turning it on or off shows after the level changes; works with Atmosphere off)" },
+	{ "seams", 1.F, "HD tiles are made solid wherever the game's own tile is solid, so no thin dark lines show between tiles and at the feet of buildings; 0 shows them as before, a number above 1 fills that many HD pixels deep (works with Atmosphere off)" },
+	{ "seamlight", 1.F, "floors that have a shape map are lit as floors, so flat floor takes the same light from one tile to the next; 0 lights them as things standing on the floor, as before (works with Atmosphere off)" },
+	{ "gaps", 0.F, "for finding gaps: bright pink is drawn under the HD world, so any hole left between tiles shows pink (works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

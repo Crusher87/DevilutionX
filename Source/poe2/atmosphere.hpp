@@ -138,8 +138,17 @@ enum class Knob : uint8_t {
 	Carved,
 	/** Heroes and monsters with a carved body are lit by its shape: the side turned to a light brighter, the far side darker. */
 	BodyLight,
+	/**
+	 * Not a look: a tile's HD picture is made solid wherever the game's own tile is solid (hd_seams.hpp), so no thin
+	 * dark lines show between tiles where the picture's edge was a little see-through. Above 1, how far in HD pixels.
+	 */
+	Seams,
+	/** Floor pieces with a shape map are lit against a floor facing up, so flat floor has no step in light from tile to tile. */
+	SeamLight,
+	/** For finding gaps: bright pink is drawn under the HD world, so any hole left in it shows. */
+	Gaps,
 };
-inline constexpr size_t NumKnobs = 47;
+inline constexpr size_t NumKnobs = 50;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);
