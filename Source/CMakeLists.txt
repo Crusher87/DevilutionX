@@ -62,6 +62,7 @@ set(libdevilutionx_SRCS
   poe2/hd_batch.cpp
   poe2/hd_light.cpp
   poe2/hd_outline.cpp
+  poe2/hd_seams.cpp
   poe2/hd_spell_icons.cpp
   poe2/hd_ui.cpp
   poe2/live_fire.cpp

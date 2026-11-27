@@ -45,6 +45,7 @@
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_outline.hpp"
 #include "poe2/hd_pack.hpp"
+#include "poe2/hd_seams.hpp"
 #include "poe2/moments.hpp"
 #include "poe2/props.hpp"
 #include "poe2/telemetry.hpp"
@@ -2106,7 +2107,11 @@ void RefreshFlow(HdArt &art)
  */
 HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &draw)
 {
-	const std::string key = name + "#" + std::to_string(static_cast<int>(draw.mask)) + "/" + std::to_string(static_cast<int>(draw.tile)) + "/" + std::to_string(draw.height);
+	// feel("seams"): how far the picture's see-through pixels are filled; a changed setting makes the pictures anew.
+	const int seamReach = SeamReachOf(atmosphere::Setting(atmosphere::Knob::Seams));
+	std::string key = name + "#" + std::to_string(static_cast<int>(draw.mask)) + "/" + std::to_string(static_cast<int>(draw.tile)) + "/" + std::to_string(draw.height);
+	if (seamReach != SeamReach)
+		key += "~" + std::to_string(seamReach);
 	auto [it, inserted] = Art.try_emplace(key);
 	HdArt &art = it->second;
 	if (!inserted && !art.waiting)
@@ -2131,13 +2136,9 @@ HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &dr
 		return nullptr;
 	const Raster &raster = FallbackRaster(draw, false);
 	if (surface->w == raster.width * Scale && surface->h == raster.height * Scale) {
-		for (int y = 0; y < surface->h; y++) {
-			uint8_t *row = static_cast<uint8_t *>(surface->pixels) + static_cast<ptrdiff_t>(y) * surface->pitch;
-			for (int x = 0; x < surface->w; x++) {
-				const uint8_t cover = raster.alpha[static_cast<size_t>(y / Scale) * raster.width + x / Scale];
-				row[x * 4 + 3] = static_cast<uint8_t>(row[x * 4 + 3] * cover / 255);
-			}
-		}
+		// Cut to the game's shape, and solid wherever the game's tile is: a picture a little see-through at its edge let
+		// the black under the world show as a thin line between two tiles. Once, as the picture is made.
+		CutTileArt(static_cast<uint8_t *>(surface->pixels), surface->w, surface->h, surface->pitch, raster.alpha.data(), raster.width, Scale, seamReach);
 		const int lastFlowing = raster.cycles ? LastFlowingColour() : 0;
 		if (lastFlowing > 0)
 			art.flow = FindFlow(surface, raster, lastFlowing);
@@ -2703,7 +2704,9 @@ void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading
 	// The game's own see-through pixels are already in the fallback's coverage.
 	const Uint8 alpha = art.hdArt && draw.style == SpriteStyle::Blended ? 128 : 255;
 	TileShapeLight shaped;
-	const bool byShape = TileShapeLightFor(draw, art, shaped, false);
+	// A piece of the floor is lit against a floor facing up (feel("seamlight")): measured against a thing standing on
+	// the tile, flat floor came out lighter or darker tile by tile, a step in the light along every tile's edge.
+	const bool byShape = TileShapeLightFor(draw, art, shaped, draw.floor && atmosphere::Setting(atmosphere::Knob::SeamLight) > 0);
 	if (shading.count == 1 && !shading.fades) {
 		const Colour3 flat = ArtColour(shading.colours[0], art);
 		Colour3 colour = flat;
@@ -5963,27 +5966,9 @@ bool TileShapeLightFor(const Draw &draw, const DrawTexture &art, TileShapeLight 
 	std::array<float, NumShapeAxes + 1> shade;
 	if (!FacingShades(wx, wy, faces.data(), faces.size(), shade.data(), middle, 1.F))
 		return false;
-	const float flat = shade[NumShapeAxes];
-	if (flat < 0.05F)
-		return false;
-	float least = std::numeric_limits<float>::max();
-	std::array<float, NumShapeAxes> against;
-	for (size_t k = 0; k < NumShapeAxes; k++) {
-		against[k] = std::clamp(1 + (shade[k] / flat - 1) * strength, 0.15F, 2.5F);
-		if (art.shapes->sheetHas[k])
-			least = std::min(least, against[k]);
-	}
-	if (least == std::numeric_limits<float>::max())
-		return false;
 	out.art = art.shapes;
-	out.base = least;
-	float most = 0;
-	for (size_t k = 0; k < NumShapeAxes; k++) {
-		out.extra[k] = art.shapes->sheetHas[k] ? against[k] - least : 0.F;
-		most = std::max(most, out.extra[k]);
-	}
 	// Where its ways of facing all take about the same light, it is drawn flat, with no draw added.
-	return most >= 0.03F;
+	return ShapeLightShares(shade.data(), art.shapes->sheetHas.data(), NumShapeAxes, shade[NumShapeAxes], strength, out.base, out.extra.data());
 }
 
 /**
@@ -7188,6 +7173,15 @@ void RenderRecorded(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	const BatchFrame batchFrame(renderer);
 #endif
 	CheckPalette();
+	{
+		// feel("seams") changed: each tile's picture is looked up again, and made anew for the new setting (MaskedArt).
+		static int seamReach = SeamReach;
+		const int now = SeamReachOf(atmosphere::Setting(atmosphere::Knob::Seams));
+		if (now != seamReach) {
+			seamReach = now;
+			ArtChoices.clear();
+		}
+	}
 	ReadAhead(worldSize);
 	CarvedFrame++;
 	if (Rasters.size() > 20000) {
@@ -7209,8 +7203,12 @@ void RenderRecorded(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 	};
 	SDL_RenderSetClipRect(renderer, &clip);
 	ViewClip = clip;
-	// The game's own world is underneath; the HD one replaces it entirely.
-	SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+	// The game's own world is underneath; the HD one replaces it entirely. (feel("gaps"): bright pink in place of the
+	// black, so a hole left between the HD tiles shows.)
+	if (atmosphere::Setting(atmosphere::Knob::Gaps) > 0)
+		SDL_SetRenderDrawColor(renderer, 255, 0, 255, 255);
+	else
+		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 	SDL_RenderFillRect(renderer, &clip);
 	ViewOnScreen = SDL_FRect { static_cast<float>(clip.x), static_cast<float>(clip.y), static_cast<float>(clip.w), static_cast<float>(clip.h) };
 
