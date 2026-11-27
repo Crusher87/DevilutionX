@@ -62,7 +62,6 @@ void SelectForCurrentLevel();
 /** @brief Forgets the mix (back to a normal map). */
 void Clear();
 
-const Spec &CurrentSpec();
 const std::vector<LoadedSet> &LoadedSets();
 
 /** @brief Replaces LoadLvlGFX for a mixed map: merged cels and mega tiles, main set's special cels. */

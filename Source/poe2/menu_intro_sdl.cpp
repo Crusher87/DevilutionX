@@ -450,7 +450,6 @@ public:
 
 	/** @brief How many frames in a row the game hasn't drawn the main menu's logo (then the intro can't land). */
 	int framesWithoutLogo_ = 0;
-	bool logoSeen_ = false;
 
 private:
 	bool Linesburning() const

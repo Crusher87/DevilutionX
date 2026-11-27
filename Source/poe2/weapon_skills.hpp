@@ -97,8 +97,6 @@ constexpr int BarrageArrowDamagePercent = 80;
 		return 100;
 	}
 }
-/** @brief The backhand starts from the end of the first swing, so it skips this many more frames of the animation. */
-constexpr int8_t FlurryBackhandSkippedFrames = 4;
 /** @brief Ticks between Barrage's arrows and between Ember Fusillade's embers. */
 constexpr int BarrageShotTicks = 3;
 constexpr int EmberShotTicks = 2;

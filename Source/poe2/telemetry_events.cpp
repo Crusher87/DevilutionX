@@ -158,11 +158,6 @@ bool ReopenTelemetryEvents(const std::string &path)
 	return EventsFile != nullptr;
 }
 
-bool TelemetryEventsOpen()
-{
-	return EventsFile != nullptr;
-}
-
 void FlushTelemetryEvents()
 {
 	if (EventsFile == nullptr)

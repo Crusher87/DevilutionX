@@ -187,7 +187,6 @@ static_assert(std::size(Table) == static_cast<size_t>(SupportGem::Count) - First
 constexpr int VolleyExtra = 2;
 /** Shadow Warrior repeats a skill this many game ticks after it. */
 constexpr int ShadowWarriorDelay = 8;
-constexpr int KashyaExtra = 3;
 constexpr int MaxStoredVolleySeals = 6;
 constexpr int MaxHoradricSeals = 2;
 constexpr int HoradricSealTicks = 30;

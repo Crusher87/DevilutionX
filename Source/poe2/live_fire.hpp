@@ -198,10 +198,8 @@ public:
 	 * It eases there at `perSecond` (0: at once).
 	 */
 	void SetZoneBoost(size_t zone, float boost, float perSecond = 0.F);
-	/** @brief A zone's boost now (1 without one). */
 	/** @brief Its zones (fixed once it is made). */
 	const std::vector<FireZone> &Zones() const { return source_.zones; }
-	float ZoneBoost(size_t zone) const { return zone < zoneBoost_.size() ? zoneBoost_[zone] : 1.F; }
 
 	/** @brief Puts out the fire: no heat, no wind, no sparks (its time goes on). */
 	void Clear();

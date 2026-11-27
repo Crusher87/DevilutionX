@@ -46,7 +46,6 @@ bool Enabled();
 /** @brief What the weather is doing; strength is 0 wherever there is no sky. */
 const State &Current();
 /** @brief The weather a level gets when its schedule turns wet: rain in town, snow where a cold zone asks for it. */
-Kind Preset();
 void SetPreset(Kind kind);
 /**
  * @brief A skill, boss or map calling the weather: the given kind at the given strength for the given time, fading in

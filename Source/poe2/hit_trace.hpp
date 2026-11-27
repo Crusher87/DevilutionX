@@ -19,7 +19,6 @@ struct Monster;
 
 /** @brief Whether every tile a traced projectile enters is logged too, not just its summary. */
 void HitTraceSetDetail(bool detail);
-[[nodiscard]] bool HitTraceDetail();
 
 /** @brief The projectile is about to check a tile it entered. */
 void HitTraceTile(const Missile &missile, Point tile);

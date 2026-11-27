@@ -708,8 +708,6 @@ struct GameplayOptions : OptionCategoryBase {
 	OptionEntryBoolean lootFilterSounds;
 	/** @brief The loot filter's icons for good items on the maps (POE2 Mashup). */
 	OptionEntryBoolean lootFilterMapIcons;
-	/** @brief No longer in the settings: POE2 mode always shows the numbers above the globes. Kept so old ini files still load. */
-	OptionEntryBoolean showLifeManaLevels;
 	/** @brief A small life bar with a thin mana bar under it over the hero (POE2 Mashup). */
 	OptionEntryBoolean heroMiniBar;
 	/** @brief The hero's mini bar shows Energy Shield over the top of the life bar (POE2 Mashup). */

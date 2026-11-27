@@ -78,7 +78,6 @@ bool OpenTelemetryEvents(const std::string &path, std::string_view header);
 void CloseTelemetryEvents();
 /** @brief Opens an event file again to add to it, its header already written. */
 bool ReopenTelemetryEvents(const std::string &path);
-bool TelemetryEventsOpen();
 /** @brief Writes the buffered events to the file (and the counts of any dropped by the rate limits). */
 void FlushTelemetryEvents();
 /** @brief Bytes written to the event file this session, and milliseconds spent writing both files. */
