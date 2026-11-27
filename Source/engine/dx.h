@@ -47,6 +47,14 @@ void PrepareScaledUi();
 /** @brief What is on screen now has no world under it (menus, loading screens). */
 void ClearScaledWorld();
 
+/**
+ * @brief POE2 Mashup: something was drawn straight into the output surface (GetOutputSurface, not through Blit or
+ * BltFast): it is what the next RenderPresent shows, not a menu's frame staged before it.
+ */
+void OutputSurfaceDrawn();
+/** @brief POE2 Mashup: the renderer's textures were made anew, or lost what they held: a menu's frame goes up whole again. */
+void ForgetMenuFrame();
+
 void dx_init();
 void dx_cleanup();
 void CreateBackBuffer();

@@ -123,6 +123,214 @@ std::vector<uint8_t> UiOverlayRow;
 /** A row of zero bytes, to tell rows with no cover or tint at a glance. */
 std::vector<uint8_t> UiOverlayZeros;
 
+/**
+ * POE2 Mashup: a menu's frame (the UI with no world under it) as the graphics card has it, so that only the rows of
+ * the UI that changed since the last frame are turned into full colour and sent up again. Before, every frame of
+ * every menu scaled the whole UI up to the window's size, turned all of that into full colour and sent all of it up
+ * (at 3440 x 1440: 5 million pixels three times over, some 10 ms of the game's thread a frame for a picture that
+ * mostly stands still).
+ *
+ * Where the window is a whole number of times the UI's size and the frame goes to the screen pixel for pixel, the frame
+ * is kept at the UI's size in a texture of its own (`small`), which the graphics card draws that many times bigger
+ * with no smoothing: the same pixels as the UI scaled up here. Otherwise the changed rows are scaled up into the
+ * game's own frame (RendererTextureSurface) and texture, as before.
+ */
+struct MenuFrameKept {
+	/** The UI-size texture (`small`), and the renderer it was made with. */
+	SDL_Texture *texture = nullptr;
+	SDL_Renderer *textureRenderer = nullptr;
+	int textureWidth = 0;
+	int textureHeight = 0;
+	/** The UI as last sent: its 8-bit pixels (width * height), its colours, and it in full colour. */
+	std::vector<uint8_t> ui;
+	SDL_Color colours[256] = {};
+	SDLSurfaceUniquePtr full;
+	/** One row of the game's own frame, scaled up from `full`. */
+	std::vector<uint32_t> row;
+	int width = 0;
+	int height = 0;
+	/** What holds it: the UI-size texture, or the game's own frame and texture (which ones). */
+	bool small = false;
+	const SDL_Surface *mainSurface = nullptr;
+	const SDL_Texture *mainTexture = nullptr;
+	/** Whether what holds it still does (nothing else was drawn there since), and when all of it last went up. */
+	bool kept = false;
+	uint32_t sentWhole = 0;
+	/** The frame to present is the one staged here (BltFast), not the game's own output surface. */
+	bool latest = false;
+};
+MenuFrameKept MenuFrame;
+/** A menu's frame goes up whole again this often, in case the graphics card lost what it had (milliseconds). */
+constexpr uint32_t MenuFrameWholeEvery = 1000;
+
+/** @brief Whether the frame goes to the screen pixel for pixel and is a whole number of times the UI's size. */
+bool MenuFrameFitsSmall(int width, int height)
+{
+	if (width <= 0 || height <= 0 || gnRenderWidth % width != 0 || gnRenderHeight % height != 0 || gnRenderWidth / width != gnRenderHeight / height)
+		return false;
+	int outputWidth = 0;
+	int outputHeight = 0;
+	if (SDL_GetRenderTarget(renderer) != nullptr || SDL_GetRendererOutputSize(renderer, &outputWidth, &outputHeight) != 0)
+		return false;
+	return outputWidth == gnRenderWidth && outputHeight == gnRenderHeight;
+}
+
+/**
+ * @brief Stages a menu's frame (the UI as it is in PalSurface, no world under it) for RenderPresent: sends up the rows
+ * that changed since the last one. False when it can't (the caller then builds the frame the long way).
+ */
+bool StageMenuFrame()
+{
+	MenuFrameKept &frame = MenuFrame;
+	SDL_Surface *ui = PalSurface;
+	SDL_Surface *output = RendererTextureSurface.get();
+	if (renderer == nullptr || texture == nullptr || ui == nullptr || output == nullptr || ui->format->palette == nullptr || ui->format->BitsPerPixel != 8)
+		return false;
+	const int width = ui->w;
+	const int height = ui->h;
+	if (width != gnScreenWidth || height != gnScreenHeight || output->w != gnRenderWidth || output->h != gnRenderHeight || output->format->BytesPerPixel != 4)
+		return false;
+	if (UiColumnOf.size() != static_cast<size_t>(gnRenderWidth) || UiRowOf.size() != static_cast<size_t>(gnRenderHeight))
+		return false;
+	const bool small = MenuFrameFitsSmall(width, height);
+	bool whole = !frame.kept || frame.small != small || frame.width != width || frame.height != height;
+	if (frame.full == nullptr || frame.full->w != width || frame.full->h != height || frame.full->format->format != output->format->format) {
+		frame.full = SDLWrap::CreateRGBSurfaceWithFormat(0, width, height, output->format->BitsPerPixel, output->format->format);
+		whole = true;
+	}
+	if (small) {
+		if (frame.texture == nullptr || frame.textureRenderer != renderer || frame.textureWidth != width || frame.textureHeight != height) {
+			if (frame.texture != nullptr && frame.textureRenderer == renderer)
+				SDL_DestroyTexture(frame.texture);
+			frame.texture = SDL_CreateTexture(renderer, output->format->format, SDL_TEXTUREACCESS_STREAMING, width, height);
+			frame.textureRenderer = renderer;
+			frame.textureWidth = width;
+			frame.textureHeight = height;
+			if (frame.texture == nullptr) {
+				frame.kept = false;
+				return false;
+			}
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+			SDL_SetTextureScaleMode(frame.texture, SDL_ScaleModeNearest);
+#endif
+			whole = true;
+		}
+	} else if (frame.mainSurface != output || frame.mainTexture != texture.get()) {
+		whole = true;
+	}
+	const SDL_Color *colours = ui->format->palette->colors;
+	if (ui->format->palette->ncolors != 256 || std::memcmp(frame.colours, colours, sizeof(frame.colours)) != 0)
+		whole = true;
+	const uint32_t now = SDL_GetTicks();
+	if (now - frame.sentWhole >= MenuFrameWholeEvery)
+		whole = true;
+	if (whole) {
+		frame.ui.resize(static_cast<size_t>(width) * height);
+		if (ui->format->palette->ncolors == 256)
+			std::memcpy(frame.colours, colours, sizeof(frame.colours));
+		frame.sentWhole = now;
+	}
+	frame.small = small;
+	frame.width = width;
+	frame.height = height;
+	frame.mainSurface = output;
+	frame.mainTexture = texture.get();
+	frame.kept = false;
+
+	// Sends UI rows first..last up: in full colour as SDL makes them from the UI's colours, then to what holds the frame.
+	const auto send = [&](int first, int last) {
+		SDL_Rect from { 0, first, width, last - first + 1 };
+		SDL_Rect to = from;
+		if (SDL_BlitSurface(ui, &from, frame.full.get(), &to) < 0)
+			return false;
+		const auto *pixels = static_cast<const uint8_t *>(frame.full->pixels);
+		if (small) {
+			const SDL_Rect rect { 0, first, width, last - first + 1 };
+			return SDL_UpdateTexture(frame.texture, &rect, pixels + static_cast<ptrdiff_t>(first) * frame.full->pitch, frame.full->pitch) == 0;
+		}
+		// Scaled up into the game's own frame, each UI row to the rows that show it (UiRowOf, UiColumnOf), as
+		// ComposeScaledFrame does.
+		frame.row.resize(gnRenderWidth);
+		const auto firstShown = static_cast<int>(std::lower_bound(UiRowOf.begin(), UiRowOf.end(), static_cast<uint16_t>(first)) - UiRowOf.begin());
+		int y = firstShown;
+		for (; y < gnRenderHeight && UiRowOf[y] <= last; y++) {
+			auto *line = static_cast<uint8_t *>(output->pixels) + static_cast<ptrdiff_t>(y) * output->pitch;
+			if (y > firstShown && UiRowOf[y] == UiRowOf[y - 1]) {
+				std::memcpy(line, line - output->pitch, static_cast<size_t>(gnRenderWidth) * 4);
+				continue;
+			}
+			const auto *source = reinterpret_cast<const uint32_t *>(pixels + static_cast<ptrdiff_t>(UiRowOf[y]) * frame.full->pitch);
+			if (gnRenderWidth == width) {
+				std::memcpy(line, source, static_cast<size_t>(width) * 4);
+				continue;
+			}
+			for (int x = 0; x < gnRenderWidth; x++)
+				frame.row[x] = source[UiColumnOf[x]];
+			std::memcpy(line, frame.row.data(), static_cast<size_t>(gnRenderWidth) * 4);
+		}
+		if (y == firstShown)
+			return true;
+		const SDL_Rect rect { 0, firstShown, gnRenderWidth, y - firstShown };
+		return SDL_UpdateTexture(texture.get(), &rect, static_cast<const uint8_t *>(output->pixels) + static_cast<ptrdiff_t>(firstShown) * output->pitch, output->pitch) == 0;
+	};
+
+	// The rows that changed go up in runs; a few unchanged rows between two changed ones go up with them.
+	constexpr int RunGap = 8;
+	int runStart = -1;
+	int runEnd = -1;
+	bool sent = true;
+	for (int y = 0; y < height && sent; y++) {
+		const auto *line = static_cast<const uint8_t *>(ui->pixels) + static_cast<ptrdiff_t>(y) * ui->pitch;
+		uint8_t *known = frame.ui.data() + static_cast<size_t>(y) * width;
+		if (whole || std::memcmp(line, known, width) != 0) {
+			std::memcpy(known, line, width);
+			if (runStart < 0)
+				runStart = y;
+			runEnd = y;
+		} else if (runStart >= 0 && y - runEnd > RunGap) {
+			sent = send(runStart, runEnd);
+			runStart = -1;
+		}
+	}
+	if (sent && runStart >= 0)
+		sent = send(runStart, runEnd);
+	if (!sent)
+		return false;
+	frame.kept = true;
+	frame.latest = true;
+	return true;
+}
+
+/**
+ * @brief The staged menu frame can't be shown from what held it (its texture was dropped between staging and showing it:
+ * the window changed): puts it whole into the game's own output surface, to go up from there as any frame does.
+ */
+void MenuFrameToOutputSurface()
+{
+	MenuFrameKept &frame = MenuFrame;
+	SDL_Surface *output = RendererTextureSurface.get();
+	frame.latest = false;
+	frame.kept = false;
+	if (!frame.small || frame.full == nullptr || output == nullptr || output->format->BytesPerPixel != 4)
+		return; // already there (or nothing to put there)
+	if (UiColumnOf.size() != static_cast<size_t>(output->w) || UiRowOf.size() != static_cast<size_t>(output->h))
+		return;
+	for (int y = 0; y < output->h; y++) {
+		const int row = std::min<int>(UiRowOf[y], frame.full->h - 1);
+		const auto *source = reinterpret_cast<const uint32_t *>(static_cast<const uint8_t *>(frame.full->pixels) + static_cast<ptrdiff_t>(row) * frame.full->pitch);
+		auto *line = reinterpret_cast<uint32_t *>(static_cast<uint8_t *>(output->pixels) + static_cast<ptrdiff_t>(y) * output->pitch);
+		for (int x = 0; x < output->w; x++)
+			line[x] = source[std::min<int>(UiColumnOf[x], frame.full->w - 1)];
+	}
+}
+
+/** @brief What is in the game's output surface (not a staged menu frame) is the frame to present, and may be new. */
+void OutputSurfaceIsLatest()
+{
+	MenuFrame.latest = false;
+	MenuFrame.kept = false;
+}
+
 bool WantsLayeredFrame()
 {
 	return WorldSurface != nullptr && HaveScaledWorld && renderer != nullptr && (vfx::Enabled() || hd::Active());
@@ -312,6 +520,8 @@ bool UpdateUiOverlay()
 void PresentLayeredFrame(SDL_Surface *surface)
 {
 	LayeredFramePending = false;
+	// A game's frame: no menu's frame (StageMenuFrame) is the one to show after it.
+	OutputSurfaceIsLatest();
 	// POE2 Mashup: an HD world that covers the whole view hides the game's own under it, so that isn't turned into
 	// full colour and sent to the graphics card at all.
 	const bool hdCovers = hd::Active() && hd::CoversView({ gnRenderWidth, gnRenderHeight });
@@ -610,6 +820,25 @@ void SyncWorldLayer()
 		CreateWorldSurface();
 }
 
+void OutputSurfaceDrawn()
+{
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+	OutputSurfaceIsLatest();
+#endif
+}
+
+void ForgetMenuFrame()
+{
+#if !defined(USE_SDL1) && !defined(USE_SDL3)
+	MenuFrame.kept = false;
+	// Its own texture is made anew when next wanted (it may be lost, or its renderer about to go).
+	if (MenuFrame.texture != nullptr && MenuFrame.textureRenderer == renderer && renderer != nullptr)
+		SDL_DestroyTexture(MenuFrame.texture);
+	MenuFrame.texture = nullptr;
+	MenuFrame.textureRenderer = nullptr;
+#endif
+}
+
 void ClearScaledWorld()
 {
 	HaveScaledWorld = false;
@@ -631,6 +860,7 @@ void dx_cleanup()
 	RendererTextureSurface = nullptr;
 #ifndef USE_SDL1
 	texture = nullptr;
+	ForgetMenuFrame();
 	FreeVirtualGamepadTextures();
 	if (*GetOptions().Graphics.upscale)
 		SDL_DestroyRenderer(renderer);
@@ -681,9 +911,16 @@ void BltFast(SDL_Rect *srcRect, SDL_Rect *dstRect)
 		const FramePartScope part(FramePart::WorldUpload);
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 		hd::PrepareUiSprites();
-		ComposeScaledFrame();
+		// POE2 Mashup: a menu's frame (no world under the UI) goes up as the rows of it that changed (StageMenuFrame).
+		bool staged = false;
+		if (!HaveScaledWorld && !RenderDirectlyToOutputSurface)
+			staged = StageMenuFrame();
+		if (!staged)
+			ComposeScaledFrame();
 		hd::RestoreUiSprites();
 		UiSpritesLeftOut = true;
+		if (staged)
+			return;
 #else
 		ComposeScaledFrame();
 #endif
@@ -726,6 +963,7 @@ void Blit(SDL_Surface *src, SDL_Rect *srcRect, SDL_Rect *dstRect)
 #if defined(USE_SDL3)
 	if (!SDL_BlitSurface(src, srcRect, dst, dstRect)) ErrSdl();
 #elif !defined(USE_SDL1)
+	OutputSurfaceIsLatest();
 	if (SDL_BlitSurface(src, srcRect, dst, dstRect) < 0)
 		ErrSdl();
 #else
@@ -848,14 +1086,23 @@ void RenderPresent()
 			}
 			if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255) <= -1) ErrSdl();
 			if (SDL_RenderClear(renderer) <= -1) ErrSdl();
-			if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
+			// POE2 Mashup: a menu's frame is already up (StageMenuFrame), in a texture of the UI's size where it fits.
+			SDL_Texture *frame = texture.get();
+			if (MenuFrame.latest && (!MenuFrame.kept || (MenuFrame.small && MenuFrame.texture == nullptr)))
+				MenuFrameToOutputSurface();
+			if (MenuFrame.latest) {
+				if (MenuFrame.small)
+					frame = MenuFrame.texture;
+			} else {
+				if (SDL_UpdateTexture(texture.get(), nullptr, surface->pixels, surface->pitch) <= -1) ErrSdl();
+			}
 			// POE2 Mashup: the main menu's HD background goes under the menu, whose black leaves it showing.
 			SDL_BlendMode blend = SDL_BLENDMODE_NONE;
-			SDL_GetTextureBlendMode(texture.get(), &blend);
-			const bool background = hd::DrawMenuBackground(renderer, texture.get());
-			if (SDL_RenderCopy(renderer, texture.get(), nullptr, nullptr) <= -1) ErrSdl();
+			SDL_GetTextureBlendMode(frame, &blend);
+			const bool background = hd::DrawMenuBackground(renderer, frame);
+			if (SDL_RenderCopy(renderer, frame, nullptr, nullptr) <= -1) ErrSdl();
 			if (background)
-				SDL_SetTextureBlendMode(texture.get(), blend);
+				SDL_SetTextureBlendMode(frame, blend);
 			// POE2 Mashup: the HD art of what was left out of the frame (BltFast) goes over it.
 			if (UiSpritesLeftOut)
 				hd::RenderUiSprites(renderer);
