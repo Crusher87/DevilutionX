@@ -23,6 +23,7 @@
 #include "engine/dx.h"
 #include "engine/render/primitive_render.hpp"
 #include "engine/render/text_render.hpp"
+#include "panels/poe2_widgets.hpp"
 #include "poe2/skill_lab.hpp"
 #include "poe2/skill_lab_notes.hpp"
 #include "poe2/skill_looks.hpp"
@@ -687,13 +688,7 @@ Layout CurrentLayout()
 	return ComputeLayout(GlobalBackBuffer());
 }
 
-void DrawFrame(const Surface &out, const Rectangle &rect, uint8_t color)
-{
-	DrawHorizontalLine(out, rect.position, rect.size.width, color);
-	DrawHorizontalLine(out, rect.position + Displacement { 0, rect.size.height - 1 }, rect.size.width, color);
-	DrawVerticalLine(out, rect.position, rect.size.height, color);
-	DrawVerticalLine(out, rect.position + Displacement { rect.size.width - 1, 0 }, rect.size.height, color);
-}
+using poe2ui::DrawFrame;
 
 void Fill(const Surface &out, const Rectangle &rect, uint8_t color)
 {
