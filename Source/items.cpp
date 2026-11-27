@@ -7964,11 +7964,6 @@ VendorCategory GetVendorCategory(const Item &item)
 	}
 }
 
-void SortVendorStock(std::span<Item> stock, size_t pinnedCount)
-{
-	SortVendor(stock, pinnedCount);
-}
-
 namespace {
 
 /** @brief POE2 Mashup: how many wares of one kind a vendor stocks. */

@@ -89,8 +89,6 @@ cathedral	quiet_dust	26		How many specks of dust drift down round the hero as th
 cathedral	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 cathedral	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
 cathedral	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
-cathedral	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
-cathedral	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
 cathedral	web_gap	2.5		One room corner in this many holds a cobweb (idea 64). 1 every corner, 0 none.
 cathedral	web_alpha	0.4		How much of a cobweb shows. 0 none, 1 solid.
 cathedral	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
@@ -131,9 +129,6 @@ catacombs	quiet_dust	26		How many specks of dust drift down round the hero as th
 catacombs	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 catacombs	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
 catacombs	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
-catacombs	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
-catacombs	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
-catacombs	chain_gap	9		One plain stretch of wall in this many holds a chain with a hook (idea 63). 0 none.
 catacombs	rat_every	25		About how many seconds of walking pass between rats (idea 62). 0 none.
 catacombs	rat_speed	5		How fast a rat runs, in tiles a second.
 catacombs	rat_size	0.4		How big a rat is. 1 is 32 game pixels from nose to tail.
@@ -177,8 +172,6 @@ caves	quiet_dust	26		How many specks of dust drift down round the hero as the qu
 caves	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 caves	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
 caves	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
-caves	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
-caves	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
 caves	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 caves	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 hell	falloff	1.40	1.55	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
@@ -206,9 +199,6 @@ hell	quiet_dust	26		How many specks of dust drift down round the hero as the qui
 hell	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 hell	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
 hell	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
-hell	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
-hell	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
-hell	chain_gap	8		One plain stretch of wall in this many holds a chain with a hook (idea 63). 0 none.
 hell	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 hell	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 hive	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
@@ -238,8 +228,6 @@ hive	quiet_dust	26		How many specks of dust drift down round the hero as the qui
 hive	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 hive	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
 hive	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
-hive	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
-hive	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
 hive	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 hive	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 crypt	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
@@ -269,8 +257,6 @@ crypt	quiet_dust	26		How many specks of dust drift down round the hero as the qu
 crypt	death_ms	1200		How long the hero's light takes to shrink and the colour to drain to red when the hero dies (idea 53), in milliseconds.
 crypt	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the air while it moves (idea 57). 0 none, 0.6 the most.
 crypt	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
-crypt	growl_every	9		About how many seconds pass between the sounds of monsters waiting unseen near you (idea 59).
-crypt	growl_quiet	9		How much quieter than in a fight those sounds are, in decibels. 0 as loud as a fight, 20 barely heard.
 crypt	web_gap	2.5		One room corner in this many holds a cobweb (idea 64). 1 every corner, 0 none.
 crypt	web_alpha	0.4		How much of a cobweb shows. 0 none, 1 solid.
 crypt	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
@@ -283,4 +269,3 @@ butcher	light_radius	6		How far it reaches, in tiles.
 butcher	door_light	0.45		How bright the dull red glow under his closed door is.
 butcher	drips	1.5		How many drops of blood fall in his room a second.
 butcher	drip_colour	0.45 0.03 0.04		The blood's colour, red green blue.
-butcher	chain_gap	2		One plain stretch of his walls in this many holds a chain with a hook (idea 63). 0 none.

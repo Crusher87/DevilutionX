@@ -126,11 +126,6 @@ void HitTraceSetDetail(bool detail)
 	Detail = detail;
 }
 
-bool HitTraceDetail()
-{
-	return Detail;
-}
-
 void HitTraceTile(const Missile &missile, Point tile)
 {
 	Trace *trace = TraceFor(missile);

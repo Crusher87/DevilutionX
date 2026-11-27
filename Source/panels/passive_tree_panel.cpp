@@ -25,6 +25,7 @@
 #include "inv.h"
 #include "items.h"
 #include "multi.h"
+#include "panels/poe2_widgets.hpp"
 #include "panels/skill_bar.hpp"
 #include "player.h"
 #include "plrmsg.h"
@@ -363,18 +364,8 @@ std::optional<PassiveNodeId> NodeAt(const Layout &layout, Point position)
 	return closest;
 }
 
-void FillRectangle(const Surface &out, const Rectangle &rect, uint8_t color)
-{
-	FillRect(out, rect.position.x, rect.position.y, rect.size.width, rect.size.height, color);
-}
-
-void DrawFrame(const Surface &out, const Rectangle &rect, uint8_t color)
-{
-	DrawHorizontalLine(out, rect.position, rect.size.width, color);
-	DrawHorizontalLine(out, rect.position + Displacement { 0, rect.size.height - 1 }, rect.size.width, color);
-	DrawVerticalLine(out, rect.position, rect.size.height, color);
-	DrawVerticalLine(out, rect.position + Displacement { rect.size.width - 1, 0 }, rect.size.height, color);
-}
+using poe2ui::DrawFrame;
+using poe2ui::FillRectangle;
 
 bool IsFarOutside(const Surface &out, Point p)
 {
@@ -414,15 +405,7 @@ void DrawLine(const Surface &out, Point from, Point to, uint8_t color, int thick
 	}
 }
 
-void FillCircle(const Surface &out, Point center, int radius, uint8_t color)
-{
-	for (int y = -radius; y <= radius; y++) {
-		int width = 0;
-		while ((width + 1) * (width + 1) + y * y <= radius * radius)
-			width++;
-		DrawHorizontalLine(out, center + Displacement { -width, y }, (2 * width) + 1, color);
-	}
-}
+using poe2ui::FillCircle;
 
 void DrawRing(const Surface &out, const Layout &layout, float radius, uint8_t color, int thickness)
 {

@@ -3,7 +3,6 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
-#include <optional>
 #include <vector>
 
 #include "diablo.h"
@@ -11,7 +10,6 @@
 #include "levels/dun_tile_data.hpp"
 #include "levels/gendung.h"
 #include "levels/tile_properties.hpp"
-#include "monster.h"
 #include "player.h"
 #include "poe2/atmosphere.hpp"
 #include "poe2/hd_light.hpp"
@@ -134,81 +132,6 @@ float Hash(uint32_t a, uint32_t b, uint32_t c = 0)
 	h *= 0x297A2D39U;
 	h ^= h >> 15;
 	return static_cast<float>(h & 0xFFFFFF) / static_cast<float>(0x1000000);
-}
-
-// The chain: links of dark iron hanging straight down, a hook on the last. The picture is the longest chain; a shorter
-// one shows its lower part.
-
-constexpr int ChainWide = 12;
-constexpr int ChainLong = 76;
-/** @brief The hook's share of the picture's length, at its foot. */
-constexpr float HookLong = 14;
-constexpr float LinkEvery = 4.6F;
-
-Canvas PaintChain()
-{
-	Canvas canvas;
-	canvas.resize(ChainWide, ChainLong);
-	const float axis = ChainWide / 2.F;
-	const Rgba iron { 82, 77, 72, 1 };
-	const Rgba rust { 104, 62, 42, 1 };
-	const int links = static_cast<int>((ChainLong - HookLong) / LinkEvery);
-	// The links seen edge on first, so the ones seen flat lie over their ends.
-	for (int pass = 0; pass < 2; pass++) {
-		for (int i = 0; i <= links; i++) {
-			if ((i % 2 == 0) != (pass == 1))
-				continue;
-			const float cy = 2.6F + static_cast<float>(i) * LinkEvery;
-			const Rgba metal = Mixed(iron, rust, 0.45F * Hash(static_cast<uint32_t>(i), 77));
-			if (i % 2 == 1) {
-				Fill(
-				    canvas, axis - 2, cy - 4.2F, axis + 2, cy + 4.2F,
-				    [&](float px, float py) { return ToLine(px, py, axis, cy - 3.1F, 0.7F, axis, cy + 3.1F, 0.7F); },
-				    [&](float px, float, float d) { return Scaled(metal, (d > -0.3F ? 0.5F : 1.F) * (1.25F - 0.6F * std::abs(px - axis + 0.25F))); });
-				continue;
-			}
-			Fill(
-			    canvas, axis - 3.6F, cy - 4.4F, axis + 3.6F, cy + 4.4F,
-			    [&](float px, float py) { return std::abs(ToEllipse(px, py, axis, cy, 2.25F, 3.25F)) - 0.62F; },
-			    [&](float px, float py, float d) {
-				    // Lit from the upper left, as the old game's own iron is.
-				    const float lit = 0.92F - 0.16F * (px - axis) - 0.07F * (py - cy);
-				    return Scaled(metal, (d > -0.28F ? 0.5F : 1.F) * std::clamp(lit, 0.55F, 1.5F));
-			    });
-		}
-	}
-	// The hook: a shank from the last link, round under to a point that turns back up.
-	const float top = ChainLong - HookLong;
-	const float cx = axis - 2.4F;
-	const float cy = top + 7.2F;
-	constexpr float Radius = 3.3F;
-	Line(canvas, axis + 0.9F, top - 1.5F, 0.9F, axis + 0.9F, cy, 1.15F, Scaled(iron, 1.05F));
-	constexpr int Steps = 22;
-	for (int s = 0; s < Steps; s++) {
-		const auto at = [&](int step, float &x, float &y, float &r) {
-			const float t = static_cast<float>(step) / Steps;
-			const float angle = t * 1.2F * Pi;
-			x = cx + Radius * std::cos(angle) + (t > 0.8F ? (t - 0.8F) * 4 : 0);
-			y = cy + Radius * std::sin(angle) - (t > 0.8F ? (t - 0.8F) * 9 : 0);
-			r = 1.15F - 0.7F * t * t;
-		};
-		float ax;
-		float ay;
-		float ra;
-		float bx;
-		float by;
-		float rb;
-		at(s, ax, ay, ra);
-		at(s + 1, bx, by, rb);
-		Fill(
-		    canvas, std::min(ax, bx) - 2, std::min(ay, by) - 2, std::max(ax, bx) + 2, std::max(ay, by) + 2,
-		    [&](float px, float py) { return ToLine(px, py, ax, ay, ra, bx, by, rb); },
-		    [&](float px, float py, float d) {
-			    const float lit = 1.15F - 0.1F * (px - cx) - 0.08F * (py - cy);
-			    return Scaled(iron, (d > -0.3F ? 0.6F : 1.F) * std::clamp(lit, 0.7F, 1.6F));
-		    });
-	}
-	return canvas;
 }
 
 // The cobweb: a sheet across a corner, hung from the corner's own line and from the two walls either side.
@@ -410,21 +333,13 @@ std::array<Canvas, NumKinds> Pictures;
 
 // Where the things stand.
 
-/** @brief A chain by a wall or a web in a corner, on the wall's own tile. */
+/** @brief A web in a corner, on the corner's own tile. */
 struct Fixed {
-	Kind kind;
 	Point tile;
-	/** @brief A chain's wall: the one on the tile's y-min edge (running down to the right on screen), else the x-min one. */
-	bool rightWall;
-	/** @brief How high it hangs from, and a chain's length, in game pixels. */
+	/** @brief How high it hangs from, in game pixels. */
 	float height;
-	float length;
 	/** @brief Its own beat, so no two move together. */
 	float phase;
-	/** @brief A chain's swing: its angle from straight down and how fast that turns. */
-	float angle = 0;
-	float turning = 0;
-	float kickedAgo = 10000;
 };
 
 std::vector<Fixed> Things;
@@ -434,7 +349,6 @@ std::array<uint16_t, MAXDUNX * MAXDUNY> Held {};
 uint32_t PlacedFor = 0;
 bool Placed = false;
 float Time = 0;
-float SinceKicks = 0;
 
 /**
  * @brief A rat on the run from one tile's middle to the next: out of the dark as far as the hero's light, then back along
@@ -477,7 +391,7 @@ uint32_t LevelNow()
 {
 	const uint32_t level = DungeonSeeds[currlevel] ^ (static_cast<uint32_t>(currlevel) << 8) ^ (static_cast<uint32_t>(leveltype) << 16) ^ (setlevel ? static_cast<uint32_t>(setlvlnum) << 24 : 0U);
 	const auto part = [](float value) { return static_cast<uint32_t>(std::clamp(value, 0.F, 3.F) * 100); };
-	return level ^ (part(atmosphere::Strength(atmosphere::Knob::Chains)) * 0x9E3779B1U) ^ (part(atmosphere::Strength(atmosphere::Knob::Cobwebs)) * 0x85EBCA6BU);
+	return level ^ (part(atmosphere::Strength(atmosphere::Knob::Cobwebs)) * 0x85EBCA6BU);
 }
 
 bool Wall(Point tile)
@@ -516,13 +430,9 @@ void Place()
 	PlacedFor = LevelNow();
 	if (leveltype == DTYPE_TOWN || leveltype == DTYPE_NONE)
 		return;
-	const float chains = std::min(atmosphere::Strength(atmosphere::Knob::Chains), 3.F);
 	const float webs = std::min(atmosphere::Strength(atmosphere::Knob::Cobwebs), 3.F);
-	// One wall in this many holds a chain, one corner in this many a web; 0 none.
-	float chainGap = atmosphere::Value("chain_gap", 0);
+	// One corner in this many holds a web; 0 none.
 	float webGap = atmosphere::Value("web_gap", 0);
-	const float butcherGap = atmosphere::RoomValue("butcher", "chain_gap", 2);
-	const std::optional<WorldTileRectangle> butcher = atmosphere::ButcherRoom();
 	const uint32_t seed = DungeonSeeds[currlevel] ^ (static_cast<uint32_t>(currlevel) << 8);
 	for (int x = 2; x < MAXDUNX - 2 && Things.size() < 600; x++) {
 		for (int y = 2; y < MAXDUNY - 2; y++) {
@@ -530,49 +440,23 @@ void Place()
 			bool left;
 			bool right;
 			BackWalls(tile, left, right);
-			if ((!left && !right) || !Plain(tile))
+			// A room's far corner: both walls meet here and the room's floor lies in front of them.
+			if (!left || !right || !Plain(tile))
 				continue;
 			const float pick = Hash(static_cast<uint32_t>(x), static_cast<uint32_t>(y), seed);
 			const float other = Hash(static_cast<uint32_t>(y), static_cast<uint32_t>(x), seed ^ 0xA5A5U);
-			if (left && right) {
-				// A room's far corner: both walls meet here and the room's floor lies in front of them.
-				if (webs <= 0 || webGap <= 0 || pick * webGap >= webs)
-					continue;
-				// The two walls run on from it, one a side, with the room's floor between them.
-				bool l;
-				bool r;
-				BackWalls(tile + Displacement { 1, 0 }, l, r);
-				const bool runsRight = r && !l && Plain(tile + Displacement { 1, 0 });
-				BackWalls(tile + Displacement { 0, 1 }, l, r);
-				const bool runsLeft = l && !r && Plain(tile + Displacement { 0, 1 });
-				if (!runsRight || !runsLeft || !Floor(tile + Displacement { 1, 1 }) || !Floor(tile + Displacement { 2, 1 }) || !Floor(tile + Displacement { 1, 2 }))
-					continue;
-				Things.push_back({ Kind::Web, tile, false, 50 + 6 * other, 0, other * 40 });
-				Held[static_cast<size_t>(x) * MAXDUNY + y] = static_cast<uint16_t>(Things.size());
+			if (webs <= 0 || webGap <= 0 || pick * webGap >= webs)
 				continue;
-			}
-			if (chains <= 0)
+			// The two walls run on from it, one a side, with the room's floor between them.
+			bool l;
+			bool r;
+			BackWalls(tile + Displacement { 1, 0 }, l, r);
+			const bool runsRight = r && !l && Plain(tile + Displacement { 1, 0 });
+			BackWalls(tile + Displacement { 0, 1 }, l, r);
+			const bool runsLeft = l && !r && Plain(tile + Displacement { 0, 1 });
+			if (!runsRight || !runsLeft || !Floor(tile + Displacement { 1, 1 }) || !Floor(tile + Displacement { 2, 1 }) || !Floor(tile + Displacement { 1, 2 }))
 				continue;
-			// A flat run of wall with a room's floor in front of it.
-			const Displacement along = right ? Displacement { 1, 0 } : Displacement { 0, 1 };
-			const Displacement front = right ? Displacement { 0, 1 } : Displacement { 1, 0 };
-			const auto sameWall = [&](Point at) {
-				bool l;
-				bool r;
-				BackWalls(at, l, r);
-				return (right ? r && !l : l && !r) && Plain(at);
-			};
-			if (!sameWall(tile + along) || !sameWall(tile - along) || !Floor(tile + front) || !Floor(tile + front + along) || !Floor(tile + front - along))
-				continue;
-			const Point before = tile + front;
-			const bool his = butcher && butcher->contains(WorldTilePosition(static_cast<WorldTileCoord>(before.x), static_cast<WorldTileCoord>(before.y)));
-			const float gap = his ? butcherGap : chainGap;
-			if (gap <= 0 || pick * gap >= chains)
-				continue;
-			// Never two side by side.
-			if (Held[static_cast<size_t>(x - along.deltaX) * MAXDUNY + (y - along.deltaY)] != 0)
-				continue;
-			Things.push_back({ Kind::Chain, tile, right, 50 + 6 * other, 12 + 14 * Hash(static_cast<uint32_t>(x), static_cast<uint32_t>(y), seed ^ 0x77U), other * 40 });
+			Things.push_back({ tile, 50 + 6 * other, other * 40 });
 			Held[static_cast<size_t>(x) * MAXDUNY + y] = static_cast<uint16_t>(Things.size());
 		}
 	}
@@ -585,59 +469,6 @@ void FromTile(float x, float y, Point tile, float &px, float &py)
 	const float dy = y - static_cast<float>(tile.y);
 	px = (dx - dy) * 32;
 	py = (dx + dy) * 16;
-}
-
-/** @brief Something moving close by sets a chain swinging, away from it. */
-void KickChains()
-{
-	struct Mover {
-		Point at;
-	};
-	std::array<Mover, 24> movers;
-	size_t count = 0;
-	if (MyPlayer != nullptr && MyPlayer->isWalking())
-		movers[count++] = { MyPlayer->position.tile };
-	Point hero { 0, 0 };
-	if (MyPlayer != nullptr)
-		hero = MyPlayer->position.tile;
-	for (size_t i = 0; i < ActiveMonsterCount && count < movers.size(); i++) {
-		const Monster &monster = Monsters[ActiveMonsters[i]];
-		if (!monster.isWalking() || std::abs(monster.position.tile.x - hero.x) > 14 || std::abs(monster.position.tile.y - hero.y) > 14)
-			continue;
-		movers[count++] = { monster.position.tile };
-	}
-	if (count == 0)
-		return;
-	for (Fixed &thing : Things) {
-		if (thing.kind != Kind::Chain || thing.kickedAgo < 700)
-			continue;
-		const Point front = thing.tile + (thing.rightWall ? Displacement { 0, 1 } : Displacement { 1, 0 });
-		for (size_t m = 0; m < count; m++) {
-			const Point at = movers[m].at;
-			if (std::abs(at.x - front.x) > 1 || std::abs(at.y - front.y) > 1)
-				continue;
-			// Which side of it on screen the mover is: it swings the other way first.
-			const int side = (at.x - at.y) - (thing.tile.x - thing.tile.y);
-			thing.turning += (side <= 0 ? 1.F : -1.F) * (1.1F + 0.5F * Hash(static_cast<uint32_t>(at.x), static_cast<uint32_t>(at.y), static_cast<uint32_t>(Time)));
-			thing.kickedAgo = 0;
-			break;
-		}
-	}
-}
-
-void SwingChains(float ms)
-{
-	const float dt = std::min(ms, 50.F) / 1000;
-	for (Fixed &thing : Things) {
-		if (thing.kind != Kind::Chain)
-			continue;
-		thing.kickedAgo += ms;
-		// A pendulum: the longer the chain the slower it swings; it rings down over a few swings.
-		const float rate = 5.4F * std::sqrt(40 / (thing.length + HookLong));
-		thing.turning += (-rate * rate * thing.angle - 0.9F * thing.turning) * dt;
-		thing.turning = std::clamp(thing.turning, -3.F, 3.F);
-		thing.angle = std::clamp(thing.angle + thing.turning * dt, -0.6F, 0.6F);
-	}
 }
 
 bool RatCanStand(Point tile)
@@ -810,41 +641,6 @@ void RunRats(float ms)
 		StartRat();
 }
 
-Shape ChainShape(const Fixed &thing)
-{
-	Shape shape {};
-	shape.kind = Kind::Chain;
-	shape.alpha = 1;
-	// Its wall stands on the tile's back edge; it hangs against the middle of that wall's face, lit as the face is.
-	const float side = thing.rightWall ? 1.F : -1.F;
-	shape.lightX = static_cast<float>(thing.tile.x) - (thing.rightWall ? 0.F : 0.45F);
-	shape.lightY = static_cast<float>(thing.tile.y) - (thing.rightWall ? 0.45F : 0.F);
-	shape.onWall = true;
-	const float total = std::min(thing.length + HookLong, static_cast<float>(ChainLong));
-	// The draft keeps it just alive; what swings it is what goes past.
-	const float angle = thing.angle + 0.012F * std::sin(Time * 0.0011F + thing.phase);
-	constexpr size_t Pairs = 7;
-	shape.pairs = Pairs;
-	const float ax = 16 * side;
-	float px = ax;
-	float py = -8 - thing.height;
-	const float step = total / (Pairs - 1);
-	for (size_t k = 0; k < Pairs; k++) {
-		// The foot of a chain swings wider than its head.
-		const float a = angle * (0.5F + 0.6F * static_cast<float>(k) / (Pairs - 1));
-		const float dx = std::sin(a);
-		const float dy = std::cos(a);
-		// It swings along its wall, which runs down the screen as it runs to the side.
-		const float lean = (px - ax) * 0.5F * side;
-		const float v = 1 - (total - step * static_cast<float>(k)) / ChainLong;
-		shape.corners[k * 2] = { px - dy * (ChainWide / 2.F), py + lean + dx * (ChainWide / 2.F), 0, v };
-		shape.corners[k * 2 + 1] = { px + dy * (ChainWide / 2.F), py + lean - dx * (ChainWide / 2.F), 1, v };
-		px += dx * step;
-		py += dy * step;
-	}
-	return shape;
-}
-
 Shape WebShape(const Fixed &thing)
 {
 	Shape shape {};
@@ -929,9 +725,6 @@ Picture PictureOf(Kind kind)
 	Canvas &canvas = Pictures[static_cast<size_t>(kind)];
 	if (canvas.rgba.empty()) {
 		switch (kind) {
-		case Kind::Chain:
-			canvas = PaintChain();
-			break;
 		case Kind::Web:
 			canvas = PaintWeb();
 			break;
@@ -956,7 +749,7 @@ size_t At(Point tile, std::array<Shape, MaxAtTile> &shapes)
 		return 0;
 	if (const uint16_t held = Held[static_cast<size_t>(tile.x) * MAXDUNY + tile.y]; held != 0) {
 		const Fixed &thing = Things[held - 1];
-		shapes[count++] = thing.kind == Kind::Chain ? ChainShape(thing) : WebShape(thing);
+		shapes[count++] = WebShape(thing);
 	}
 	for (const Rat &rat : Rats) {
 		if (count >= MaxAtTile)
@@ -979,14 +772,6 @@ void Advance(float ms)
 	if (PauseMode != 0)
 		return;
 	Time += ms;
-	if (!Things.empty()) {
-		SinceKicks += ms;
-		if (SinceKicks >= 100) {
-			SinceKicks = 0;
-			KickChains();
-		}
-		SwingChains(ms);
-	}
 	RunRats(ms);
 }
 

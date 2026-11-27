@@ -652,21 +652,6 @@ SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket, 
 	return std::exchange(data.supportsAt(slot)[socket], SupportGem::None);
 }
 
-std::vector<TieredSupport> TakeSlotSupports(Poe2PlayerData &data, size_t slot)
-{
-	std::vector<TieredSupport> taken;
-	if (slot > DefaultAttackRow)
-		return taken;
-	for (size_t socket = 0; socket < MaxSupportSockets; socket++) {
-		if (data.supportsAt(slot)[socket] == SupportGem::None)
-			continue;
-		int tier = 1;
-		const SupportGem gem = UnsocketSupportGem(data, slot, socket, &tier);
-		taken.push_back({ gem, tier });
-	}
-	return taken;
-}
-
 int SupportSpellLevelBonus(const Player &player, SpellID spell)
 {
 	return player.poe2.hasSupport(spell, SupportGem::Empower) ? EmpowerLevels : 0;

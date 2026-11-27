@@ -552,9 +552,6 @@ const char *PackPalette(uint8_t levelType);
  */
 bool ExportLevelTiles(const std::string &dir);
 
-/** @brief Forgets all cached textures (for example when the renderer is recreated). */
-void ClearCaches();
-
 } // namespace hd
 
 } // namespace devilution

@@ -1556,16 +1556,6 @@ struct Poe2PlayerData {
 	[[nodiscard]] const SupportTiers &tiersAt(size_t row) const { return row == DefaultAttackRow ? defaultSupportTiers : slotSupportTiers[row]; }
 	[[nodiscard]] bool hasSupport(SpellID spell, SupportGem gem) const { return hasSupport(SkillSlot::ForSpell(spell), gem); }
 
-	/** @brief Whether a gem for the spell is socketed in the Skills panel. */
-	[[nodiscard]] bool hasSpellGem(SpellID spell) const
-	{
-		for (const SkillSlot &slot : skillSlots) {
-			if (slot.spell() == spell)
-				return true;
-		}
-		return false;
-	}
-
 	/** @brief Level of the gem in a Skills panel socket. */
 	[[nodiscard]] int gemLevel(size_t socket) const
 	{

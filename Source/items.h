@@ -746,8 +746,6 @@ enum class VendorCategory : uint8_t {
 constexpr size_t NumVendorCategories = 8;
 /** @brief Which kind of ware an item is on a POE2 Mashup vendor's shop tabs. */
 VendorCategory GetVendorCategory(const Item &item);
-/** @brief Sorts a vendor's stock, after the pinned wares, the way the vendor lists it. */
-void SortVendorStock(std::span<Item> stock, size_t pinnedCount);
 void MakeGoldStack(Item &goldItem, int value);
 int ItemNoFlippy();
 void CreateSpellBook(Point position, SpellID ispell, bool sendmsg, bool delta);

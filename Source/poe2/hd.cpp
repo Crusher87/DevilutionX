@@ -7003,13 +7003,6 @@ bool ExportLevelTiles(const std::string &dir)
 	return true;
 }
 
-void ClearCaches()
-{
-	DestroyTextures();
-	CacheRenderer = nullptr;
-	PackState = -1;
-	ArtExists.clear();
-}
 
 /** @brief With HD Lift Dark Shades, black becomes this shade (out of 255); lighter shades are lifted less, white not at all. */
 constexpr float DarkShadeLift = 10.F;
@@ -7645,7 +7638,6 @@ bool HasArt(std::string_view) { return false; }
 bool DrawUiSprite(ClxSprite, Rectangle, float, std::string_view) { return false; }
 void RenderUi(SDL_Renderer *) { }
 void RenderOver(SDL_Renderer *) { }
-void ClearCaches() { }
 void Render(SDL_Renderer *, Size, Size) { }
 void KeepWorldPicture(bool) { }
 bool KeepWorldPictureAsked() { return false; }

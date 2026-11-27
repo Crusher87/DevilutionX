@@ -485,11 +485,6 @@ const State &Current()
 	return Now;
 }
 
-Kind Preset()
-{
-	return LevelPreset;
-}
-
 void SetPreset(Kind kind)
 {
 	LevelPreset = kind;

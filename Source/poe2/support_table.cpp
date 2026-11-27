@@ -187,7 +187,6 @@ static_assert(std::size(Table) == static_cast<size_t>(SupportGem::Count) - First
 constexpr int VolleyExtra = 2;
 /** Shadow Warrior repeats a skill this many game ticks after it. */
 constexpr int ShadowWarriorDelay = 8;
-constexpr int KashyaExtra = 3;
 constexpr int MaxStoredVolleySeals = 6;
 constexpr int MaxHoradricSeals = 2;
 constexpr int HoradricSealTicks = 30;
@@ -440,19 +439,10 @@ void UseSkillFree(Player &player, SkillSlot skill, Point source, Point target, i
 	RepeatPercent = oldPercent;
 }
 
-std::optional<size_t> SlotOf(const Player &player, SkillSlot skill)
-{
-	for (size_t slot = 0; slot < NumSkillSlots; slot++) {
-		if (player.poe2.skillSlots[slot] == skill)
-			return slot;
-	}
-	return std::nullopt;
-}
-
 /** @brief The Skills panel row whose supports the skill uses: its gem's socket, or the default attack's row for the weapon's attack or granted skill. */
 std::optional<size_t> SupportRowOf(const Player &player, SkillSlot skill)
 {
-	if (const std::optional<size_t> slot = SlotOf(player, skill); slot)
+	if (const std::optional<size_t> slot = FindSkillSlot(player, skill); slot)
 		return slot;
 	if (!skill.isEmpty() && (skill.kind == SkillKind::Default || player.poe2.takesDefaultSupports(skill)))
 		return DefaultAttackRow;

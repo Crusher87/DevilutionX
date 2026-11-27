@@ -173,11 +173,6 @@ void GainCharmCharges(Player &player, int charges)
 	}
 }
 
-void RefillCharms(Player &player)
-{
-	GainCharmCharges(player, MaxCharmCharges);
-}
-
 bool IsBesideTownWell(Point tile)
 {
 	// The well in Tristram's square covers tiles 60-61, 70-71 (see CleanTownFountain); a step from its rim counts.

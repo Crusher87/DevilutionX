@@ -27,14 +27,11 @@ struct Player;
 
 /** @brief Extra monsters a Pierce-supported projectile passes through. */
 constexpr int8_t PierceCount = 2;
-/** @brief Times a Chain-supported projectile jumps to a new monster. */
-constexpr int8_t ChainCount = 2;
 /** @brief Furthest a chain looks for its next target, in tiles. */
 constexpr int ChainRange = 7;
 /** @brief Angle of each fork either side of the projectile's path. */
 constexpr int ForkDegrees = 30;
 constexpr int ConcentratedEffectDamagePercent = 130;
-constexpr int FasterProjectilesSpeedPercent = 160;
 
 constexpr int BrutalityDamagePercent = 125;
 constexpr int8_t MartialTempoFrames = 2;
@@ -42,8 +39,6 @@ constexpr int8_t MartialTempoFrames = 2;
 // Like POE2's supports, most carry a price beyond their mana: damage, speed or a damage type.
 /** @brief Damage of a spell with Multiple Projectiles: 35% less. */
 constexpr int MultipleProjectilesDamagePercent = 65;
-/** @brief Cast speed Multiple Projectiles takes away, in percent. */
-constexpr int MultipleProjectilesSlowPercent = 20;
 /** @brief Cast speed Empower takes away, in percent. */
 constexpr int EmpowerSlowPercent = 10;
 /** @brief Damage of a projectile once it has pierced a monster: 20% less. */
@@ -149,8 +144,6 @@ SupportSocketResult SocketSupportGem(Player &player, size_t slot, std::optional<
 std::optional<size_t> FindSlotForSupport(const Player &player, SupportGem gem);
 /** @brief Takes a support out of a socket. @param tier If given, set to the support's tier. */
 SupportGem UnsocketSupportGem(Poe2PlayerData &data, size_t slot, size_t socket, int *tier = nullptr);
-/** @brief Takes every support out of a slot, e.g. when its skill gem is taken out. */
-std::vector<TieredSupport> TakeSlotSupports(Poe2PlayerData &data, size_t slot);
 
 /** @brief Extra spell levels the spell's supports add. */
 int SupportSpellLevelBonus(const Player &player, SpellID spell);

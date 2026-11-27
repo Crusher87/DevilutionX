@@ -28,6 +28,7 @@
 #include "msg.h"
 #include "multi.h"
 #include "panels/monster_spawner.hpp"
+#include "panels/poe2_widgets.hpp"
 #include "player.h"
 #include "plrmsg.h"
 #include "poe2/belt_uniques.hpp"
@@ -474,18 +475,8 @@ bool HandleClick(Point position, bool shift)
 	return true;
 }
 
-void FillRectangle(const Surface &out, const Rectangle &rect, uint8_t color)
-{
-	FillRect(out, rect.position.x, rect.position.y, rect.size.width, rect.size.height, color);
-}
-
-void DrawFrame(const Surface &out, const Rectangle &rect, uint8_t color)
-{
-	DrawHorizontalLine(out, rect.position, rect.size.width, color);
-	DrawHorizontalLine(out, rect.position + Displacement { 0, rect.size.height - 1 }, rect.size.width, color);
-	DrawVerticalLine(out, rect.position, rect.size.height, color);
-	DrawVerticalLine(out, rect.position + Displacement { rect.size.width - 1, 0 }, rect.size.height, color);
-}
+using poe2ui::DrawFrame;
+using poe2ui::FillRectangle;
 
 void DrawChip(const Surface &out, const Rectangle &rect, std::string_view text, bool active, bool hovered)
 {

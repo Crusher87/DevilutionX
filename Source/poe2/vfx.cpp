@@ -4698,12 +4698,6 @@ int LensOccurrences(float perSecond, float ms)
 	return count;
 }
 
-float LensSmoothStep(float edge0, float edge1, float x)
-{
-	const float t = std::clamp((x - edge0) / (edge1 - edge0), 0.F, 1.F);
-	return t * t * (3 - 2 * t);
-}
-
 /** @brief A number from 0 to 1 that changes smoothly along `at`, a different way for every `seed`. */
 float LensDrift(uint32_t seed, float at)
 {
@@ -4739,7 +4733,7 @@ bool LensSpot(float &x, float &y)
 		y = Random(-0.02F * LensHeight, LensHeight);
 		const float dx = (x - LensWidth / 2) / (LensWidth / 2);
 		const float dy = (y - LensHeight / 2) / (LensHeight / 2);
-		const float edge = LensSmoothStep(0.35F, 0.95F, std::sqrt(dx * dx + dy * dy));
+		const float edge = SmoothStep(0.35F, 0.95F, std::sqrt(dx * dx + dy * dy));
 		if (Random(0, 1) < middle + (1 - middle) * edge)
 			return true;
 	}
@@ -4908,7 +4902,7 @@ struct LensLobe {
 /** @brief How far a run is drawn out behind itself: hardly at all while it creeps, into a long tail at speed. */
 float LensRunStretch(const LensRun &run, float unit)
 {
-	return 0.45F + 0.8F * LensSmoothStep(0, unit * 130, run.speed);
+	return 0.45F + 0.8F * SmoothStep(0, unit * 130, run.speed);
 }
 
 /** @brief The pieces a run is made of this moment: its head, and three smaller ones behind it along the way it came. */

@@ -106,10 +106,6 @@ enum class Knob : uint8_t {
 	Death,
 	/** Idea 57: the unseen monsters of the Catacombs show as a faint bending of the air while they move. */
 	Hidden,
-	/** Idea 59: monsters waiting just outside the light are heard now and then, quietly, from their side. */
-	Growls,
-	/** Idea 63: chains with hooks hang by the walls of the Butcher's room, the Catacombs and Hell, and sway when something passes. */
-	Chains,
 	/** Idea 64: cobwebs in the wall corners of the Cathedral and the Crypt, trembling in the draft. */
 	Cobwebs,
 	/** Idea 62: a rat or two runs off into the dark as the hero's light reaches it (Cathedral and Catacombs). */
@@ -148,7 +144,7 @@ enum class Knob : uint8_t {
 	/** For finding gaps: bright pink is drawn under the HD world, so any hole left in it shows. */
 	Gaps,
 };
-inline constexpr size_t NumKnobs = 50;
+inline constexpr size_t NumKnobs = 48;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

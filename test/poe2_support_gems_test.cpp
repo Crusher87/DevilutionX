@@ -311,21 +311,6 @@ TEST_F(Poe2SupportGemsTest, AttackSupports)
 	EXPECT_EQ(WeaponSkillManaCost(player, WeaponSkill::Cleave), GemBaseManaCost(SkillSlot::ForAttack(WeaponSkill::Cleave), 1) * 120 / 100);
 }
 
-TEST_F(Poe2SupportGemsTest, TakingSupportsOut)
-{
-	Player &player = FreshPlayer();
-	Socket(player, SpellID::Firebolt, SupportGem::Pierce);
-	Socket(player, SpellID::Firebolt, SupportGem::Empower);
-	const size_t slot = *FindSkillSlot(player, SkillSlot::ForSpell(SpellID::Firebolt));
-	EXPECT_EQ(FindSlotForSupport(player, SupportGem::Fork), std::nullopt);
-	const std::vector<TieredSupport> taken = TakeSlotSupports(player.poe2, slot);
-	ASSERT_EQ(taken.size(), 2U);
-	EXPECT_EQ(taken[0].gem, SupportGem::Pierce);
-	EXPECT_EQ(taken[1].gem, SupportGem::Empower);
-	EXPECT_EQ(FindSlotForSupport(player, SupportGem::Fork), slot);
-	EXPECT_EQ(SupportManaCostPercent(player, SpellID::Firebolt), 100);
-}
-
 TEST_F(Poe2SupportGemsTest, SupportsChangeTheSpell)
 {
 	Player &player = FreshPlayer();

@@ -39,9 +39,6 @@ namespace {
 constexpr int TileColours = 128; // colours 0-127 belong to the ground and walls, 128-255 to everything else
 constexpr int RampCount = 8;
 constexpr int RampLength = 16;
-constexpr size_t FrameBytesSquare = 32 * 32;
-constexpr size_t FrameBytesTriangle = 544;
-constexpr size_t FrameBytesTrapezoid = 800;
 
 /** @brief One tile set's files as read from disk, before merging. */
 struct RawSet {
@@ -445,11 +442,6 @@ void SelectForCurrentLevel()
 		CurrentMix.primary = DTYPE_CATHEDRAL;
 		CurrentMix.guests = { DTYPE_TOWN };
 	}
-}
-
-const Spec &CurrentSpec()
-{
-	return CurrentMix;
 }
 
 const std::vector<LoadedSet> &LoadedSets()
