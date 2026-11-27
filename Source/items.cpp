@@ -2953,9 +2953,36 @@ void RecreateTownItem(const Player &player, Item &item, _item_indexes idx, uint1
 	NameFlask(item);
 }
 
+/**
+ * @brief The lowest level from lvl up at which RndTypeItems can pick a base with this picture, or -1 if no droppable base has it.
+ */
+int LevelForItemWithCursor(ItemType itemType, int imid, int icurs, int lvl)
+{
+	const int areaLevel = Poe2PickerAreaLevel();
+	int best = -1;
+	for (size_t i = 0; i < AllItemsList.size(); i++) {
+		const ItemData &data = AllItemsList[i];
+		if (data.itype != itemType || data.iCurs != icurs || data.dropRate == 0 || !IsItemAvailable(static_cast<int>(i)))
+			continue;
+		if (imid != -1 && data.iMiscId != imid)
+			continue;
+		int need = lvl;
+		while (PickerMaxLevel(data, need * 2, areaLevel) < data.iMinMLvl)
+			need = std::max(need + 1, 1);
+		if (best < 0 || need < best)
+			best = need;
+	}
+	return best;
+}
+
 void CreateMagicItem(Point position, int lvl, ItemType itemType, int imid, int icurs, bool sendmsg, bool delta, bool spawn = false)
 {
 	if (ActiveItemCount >= MAXITEMS)
+		return;
+	// A boss met away from its own floor (the admin monster spawner puts Na-Krul on floor 1) asks for a base whose
+	// drop level that floor never reaches, and the loop below would roll forever: raise the level just enough.
+	lvl = LevelForItemWithCursor(itemType, imid, icurs, lvl);
+	if (lvl < 0)
 		return;
 
 	const int ii = AllocateItem();

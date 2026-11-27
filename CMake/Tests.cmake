@@ -71,6 +71,7 @@ set(tests
   poe2_loot_test
   poe2_vendor_items_test
   poe2_item_levels_test
+  boss_drops_test
   poe2_modifiers_test
   poe2_crafting_test
   poe2_affix_glow_test
