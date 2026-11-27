@@ -1,9 +1,8 @@
 /**
  * @file poe2/props.hpp
  *
- * POE2 Mashup: the Atmosphere option's small things that stand in the HD world (step 6 of the old Diablo feel): chains
- * with hooks hanging by the walls (idea 63), cobwebs in the wall corners (64) and rats that run from the hero's light
- * (62). This file knows where they are, how they move and what they look like; hd.cpp draws them in their place among
+ * POE2 Mashup: the Atmosphere option's small things that stand in the HD world (step 6 of the old Diablo feel): cobwebs
+ * in the wall corners (idea 64) and rats that run from the hero's light (62). This file knows where they are, how they move and what they look like; hd.cpp draws them in their place among
  * the walls and sprites, in the light that falls there.
  *
  * Looks only: nothing here touches the game state, saves or the game's seeded random numbers, and nothing can be hit,
@@ -20,11 +19,10 @@
 namespace devilution::props {
 
 enum class Kind : uint8_t {
-	Chain,
 	Web,
 	Rat,
 };
-inline constexpr size_t NumKinds = 3;
+inline constexpr size_t NumKinds = 2;
 
 /** @brief A kind's picture: RGBA bytes, row by row. Made the first time it is asked for and kept. */
 struct Picture {
@@ -82,7 +80,7 @@ bool Any();
 /** @brief The things on a tile this frame; returns how many. */
 size_t At(Point tile, std::array<Shape, MaxAtTile> &shapes);
 
-/** @brief Once a drawn frame: the chains swing, the webs shiver, the rats run. */
+/** @brief Once a drawn frame: the webs shiver, the rats run. */
 void Advance(float ms);
 /** @brief Forgets the level (a new game, a level change): the next frame looks at the level afresh. */
 void Reset();

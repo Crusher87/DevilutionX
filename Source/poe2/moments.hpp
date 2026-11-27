@@ -4,10 +4,10 @@
  * POE2 Mashup: the Atmosphere option's moments (step 5 of the old Diablo feel). Short changes to the HD world's light and
  * air at a point in play: a door opening on a dark room (idea 47), taking the stairs down (49), the quiet after a fight
  * (50) and the hero's death (53). This file keeps what each moment is doing now; hd.cpp, hd_light.cpp and vfx.cpp ask it
- * and draw. Two of step 6's ideas live here too, as they follow the monsters round the hero the same way: the unseen
- * monsters' shimmer (57) and the sound of monsters waiting in the dark (59).
+ * and draw. One of step 6's ideas lives here too, as it follows the monsters round the hero the same way: the unseen
+ * monsters' shimmer (57).
  *
- * Looks and sounds only: nothing here touches the game state, saves or the game's seeded random numbers, and nothing
+ * Looks only: nothing here touches the game state, saves or the game's seeded random numbers, and nothing
  * waits: the game plays on under every one of them.
  */
 #pragma once
