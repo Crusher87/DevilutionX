@@ -29,6 +29,7 @@
 #include "engine/render/clx_render.hpp"
 #include "engine/surface.hpp"
 #include "engine/trn.hpp"
+#include "game_mode.hpp"
 #include "poe2/hd_outline.hpp"
 #include "poe2/hd_spell_icons.hpp"
 #include "poe2/live_fire.hpp"
@@ -1617,12 +1618,17 @@ bool DrawMenuFire(SDL_Renderer *renderer, const UiDraw &draw, const SDL_FRect &d
 	SDL_RenderGetViewport(renderer, &screen);
 	const float screenRight = screen.w > 0 ? static_cast<float>(screen.w) : rect.x + rect.w;
 	const uint8_t *cover = MenuFireCoverOf(draw, rect, layer->GridWidth(), layer->GridHeight(), 0.F, screenRight);
-	// Worked out off the game's thread: it costs the menus (the Esc menu over the game most) only sending it up.
-	if (!layer->DrawAsync(renderer, rect, seconds, cover))
+	// Worked out off the game's thread: it costs the menus (the Esc menu over the game most) only sending it up. Before
+	// a game (the title screen, the main menu and the screens after it) nothing else wants the computer's cores: there
+	// the fire gets a frame with each of the game's (up to 100 a second) while its thread keeps up, so it moves as
+	// smoothly as the screen shows; over a game it keeps to 40 a second and two workers.
+	const fire::FirePace logoPace = gbRunGame ? fire::FirePace {} : fire::FirePace { 1.F / 100.F, 3 };
+	const fire::FirePace linePace = gbRunGame ? fire::FirePace {} : fire::FirePace { 1.F / 100.F, 2 };
+	if (!layer->DrawAsync(renderer, rect, seconds, cover, logoPace))
 		return false;
 	// After the intro: its burning lines round the subtitle, behind the letters, and the subtitle over them.
 	if (subtitled)
-		intro_sdl::DrawLines(renderer, picture, seconds);
+		intro_sdl::DrawLines(renderer, picture, seconds, linePace);
 	if (!layer->DrawLit(renderer, texture, dest, spot))
 		SDL_RenderCopyF(renderer, texture, nullptr, &dest);
 	if (subtitled)

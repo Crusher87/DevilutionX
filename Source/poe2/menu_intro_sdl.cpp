@@ -233,6 +233,7 @@ public:
 		real_ = 0;
 		fireSeconds_ = 0;
 		running_ = true;
+		played_ = false;
 		landed_ = false;
 		raked_ = false;
 		restKnown_ = false;
@@ -302,6 +303,8 @@ public:
 	/** @brief Moves it on by a frame's real time (the hit-stops slow its own), its sounds by real time. */
 	void Advance(float realSeconds)
 	{
+		// Played frame by frame: its fires are worked out off the game's thread (DrawLogo).
+		played_ = true;
 		const float dtReal = std::clamp(realSeconds, 0.F, 0.05F);
 		real_ += dtReal;
 		PlaySounds();
@@ -379,6 +382,8 @@ public:
 					rest_.h * s,
 				};
 				DrawLogo(renderer, *logo, picture);
+			} else if (played_) {
+				logo->AdvanceAsync(fireSeconds_, LogoPace);
 			} else {
 				logo->Fire().Advance(fireSeconds_);
 			}
@@ -392,13 +397,13 @@ public:
 	}
 
 	/** @brief After the intro: the lines burning round the subtitle. */
-	void DrawLinesAfter(SDL_Renderer *renderer, const SDL_FRect &picture, float seconds)
+	void DrawLinesAfter(SDL_Renderer *renderer, const SDL_FRect &picture, float seconds, const fire::FirePace &pace)
 	{
 		if (lines_ == nullptr) {
 			lines_ = MakeLines(true);
 			reach_ = 1.F;
 		}
-		lines_->DrawAsync(renderer, LineRect(picture), seconds);
+		lines_->DrawAsync(renderer, LineRect(picture), seconds, nullptr, pace);
 	}
 
 	/** @brief After the intro: the subtitle, cooled. */
@@ -486,10 +491,16 @@ private:
 			intro::LineFeed(source.feed, 1.F);
 		auto lines = std::make_unique<fire::FireLayer>(std::move(source), fire::FireSettings {}, 91, -1, fire::LineRecipe(), warm);
 		reach_ = warm ? 1.F : 0.F;
-		lines->SetAfterPaint([this](uint8_t *rgba, int pitch) {
-			const float t = running_ ? t_ : static_cast<float>(SDL_GetTicks()) / 1000.F;
-			intro::PaintSeams(rgba, pitch, t, reach_, fire::FireSettings {}.red);
-		});
+		// The seams are painted with the lines' fire, on its thread when that is worked out there: with the time and
+		// the reach of the moment its frame was started.
+		lines->SetAfterPaint(
+		    [this](uint8_t *rgba, int pitch) {
+			    intro::PaintSeams(rgba, pitch, seamsT_, seamsReach_, fire::FireSettings {}.red);
+		    },
+		    [this] {
+			    seamsT_ = running_ ? t_ : static_cast<float>(SDL_GetTicks()) / 1000.F;
+			    seamsReach_ = reach_;
+		    });
 		return lines;
 	}
 
@@ -633,10 +644,20 @@ private:
 	void DrawLogo(SDL_Renderer *renderer, fire::FireLayer &logo, const SDL_FRect &picture)
 	{
 		const SDL_FRect grid = logo.GridRect(picture);
-		logo.Draw(renderer, grid, fireSeconds_, nullptr);
+		// Played, the fires are worked out off the game's thread, a frame each frame of the game: this frame shows
+		// the one started with the last (a frame late, some 12 ms; the game's thread no longer works them out, and
+		// they have until the next frame). For a test's still (Seek) they are worked out here and now.
+		if (played_)
+			logo.DrawAsync(renderer, grid, fireSeconds_, nullptr, LogoPace);
+		else
+			logo.Draw(renderer, grid, fireSeconds_, nullptr);
 		if (lines_ != nullptr) {
-			if (t_ > intro::Slash)
-				lines_->Draw(renderer, LineRect(picture), fireSeconds_);
+			if (t_ > intro::Slash) {
+				if (played_)
+					lines_->DrawAsync(renderer, LineRect(picture), fireSeconds_, nullptr, LinePace);
+				else
+					lines_->Draw(renderer, LineRect(picture), fireSeconds_);
+			}
 		}
 		if (SDL_Texture *art = MenuLogoArt(renderer); art != nullptr) {
 			if (!logo.DrawLit(renderer, art, picture, SDL_FRect { 0, 0, 1, 1 }))
@@ -1063,10 +1084,22 @@ private:
 	static constexpr int VignetteWidth = 64;
 	static constexpr int VignetteHeight = 36;
 
+	/**
+	 * @brief How its fires are paced while it plays: a frame each frame of the game, with more of their workers than
+	 * on the menus (nothing else is going on); the logo's grid is the bigger.
+	 */
+	static constexpr fire::FirePace LogoPace { 0.F, 5 };
+	static constexpr fire::FirePace LinePace { 0.F, 3 };
+
 	float t_ = 0;
 	float real_ = 0;
 	float fireSeconds_ = 0;
 	bool running_ = false;
+	/** @brief Whether it is played frame by frame (Advance), not sought to a moment (Seek, the tests' stills). */
+	bool played_ = false;
+	/** @brief The seams' time and reach for the lines' frame being worked out (set on the game's thread as it starts). */
+	float seamsT_ = 0;
+	float seamsReach_ = 0;
 	bool landed_ = false;
 	bool raked_ = false;
 	float reach_ = 0;
@@ -1222,11 +1255,11 @@ bool HoldsMenuLogo(const SDL_FRect &picture)
 	return true;
 }
 
-void DrawLines(SDL_Renderer *renderer, const SDL_FRect &picture, float seconds)
+void DrawLines(SDL_Renderer *renderer, const SDL_FRect &picture, float seconds, const fire::FirePace &pace)
 {
 	if (Current == nullptr || Current->Running())
 		return;
-	Current->DrawLinesAfter(renderer, picture, seconds);
+	Current->DrawLinesAfter(renderer, picture, seconds, pace);
 }
 
 void DrawSubtitle(SDL_Renderer *renderer, const SDL_FRect &picture)

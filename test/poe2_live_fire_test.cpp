@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <utility>
 #include <vector>
 
 #include <gtest/gtest.h>
@@ -482,6 +483,175 @@ TEST(FireLayerTest, DrawnOffTheGamesThreadItBurnsAndCostsTheFrameLittle)
 	EXPECT_GT(Sum(layer.Fire().Heat()), 0.F);
 	SDL_DestroyRenderer(renderer);
 	SDL_FreeSurface(target);
+}
+
+/** @brief A software renderer drawing into a picture of its own, and what it shows. */
+struct Canvas {
+	SDL_Surface *surface;
+	SDL_Renderer *renderer;
+
+	Canvas(int width, int height)
+	    : surface(SDL_CreateRGBSurfaceWithFormat(0, width, height, 32, SDL_PIXELFORMAT_RGBA32))
+	    , renderer(surface != nullptr ? SDL_CreateSoftwareRenderer(surface) : nullptr)
+	{
+	}
+
+	~Canvas()
+	{
+		if (renderer != nullptr)
+			SDL_DestroyRenderer(renderer);
+		if (surface != nullptr)
+			SDL_FreeSurface(surface);
+	}
+
+	void Clear() const
+	{
+		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
+		SDL_RenderClear(renderer);
+	}
+
+	[[nodiscard]] std::vector<uint8_t> Pixels() const
+	{
+		std::vector<uint8_t> pixels(static_cast<size_t>(surface->w) * surface->h * 4);
+		EXPECT_EQ(SDL_RenderReadPixels(renderer, nullptr, SDL_PIXELFORMAT_RGBA32, pixels.data(), surface->w * 4), 0) << SDL_GetError();
+		return pixels;
+	}
+};
+
+TEST(FireLayerTest, ASteadyFrameRateStartsTheFireEverySoManyFrames)
+{
+	// The menus' fire is worked out up to 40 times a second: 25 ms. At 80 frames a second that is two of the game's
+	// frames, whose lengths as the game times them come to a little under or over 25 ms by turns. Counted to the
+	// microsecond the fire started now on the second frame, now on the third (uneven, and a third frame's wait is two
+	// steps of the fire at once); a frame within a third of a frame of the interval counts as there.
+	// The frame lengths wobble by up to 4%, never the same twice running.
+	const auto startsEvery = [](float rate, float interval, int &least, int &most) {
+		least = 1000;
+		most = 0;
+		uint32_t seed = 12345;
+		float owed = 0;
+		int frames = 0;
+		for (int i = 0; i < 4000; i++) {
+			seed = seed * 1664525U + 1013904223U;
+			const float wobble = (static_cast<float>(seed >> 8) / 16777216.F - 0.5F) * 0.08F;
+			const float seconds = (1.F + wobble) / rate;
+			owed += seconds;
+			frames++;
+			if (FireLayer::FrameIsDue(owed, seconds, interval)) {
+				least = std::min(least, frames);
+				most = std::max(most, frames);
+				owed = 0;
+				frames = 0;
+			}
+		}
+	};
+	int least = 0;
+	int most = 0;
+	// 40 a second at the most.
+	for (const auto &[rate, every] : { std::pair { 60.F, 2 }, std::pair { 75.F, 2 }, std::pair { 80.F, 2 }, std::pair { 85.F, 2 }, std::pair { 100.F, 3 }, std::pair { 120.F, 3 }, std::pair { 144.F, 4 }, std::pair { 165.F, 4 }, std::pair { 240.F, 6 } }) {
+		startsEvery(rate, 1.F / 40.F, least, most);
+		EXPECT_EQ(least, every) << rate << " frames a second";
+		EXPECT_EQ(most, every) << rate << " frames a second";
+	}
+	// Never more often than its pace, to within that third of a frame: a slow game's every frame.
+	startsEvery(30.F, 1.F / 40.F, least, most);
+	EXPECT_EQ(least, 1);
+	EXPECT_EQ(most, 1);
+	// A frame with each of the game's, up to 100 a second (the title screen's and the main menu's).
+	for (const auto &[rate, every] : { std::pair { 60.F, 1 }, std::pair { 80.F, 1 }, std::pair { 85.F, 1 }, std::pair { 100.F, 1 }, std::pair { 120.F, 1 }, std::pair { 144.F, 2 }, std::pair { 165.F, 2 } }) {
+		startsEvery(rate, 1.F / 100.F, least, most);
+		EXPECT_EQ(least, every) << rate << " frames a second";
+		EXPECT_EQ(most, every) << rate << " frames a second";
+	}
+	// 240 a second is on the line between every second frame and every third: either, never more or fewer.
+	startsEvery(240.F, 1.F / 100.F, least, most);
+	EXPECT_GE(least, 2);
+	EXPECT_LE(most, 3);
+	// With each of the game's frames, whatever their rate (the menu intro's).
+	startsEvery(240.F, 0.F, least, most);
+	EXPECT_EQ(least, 1);
+	EXPECT_EQ(most, 1);
+}
+
+TEST(FireLayerTest, WorkedOutOffTheGamesThreadItIsTheSameFireAFrameLate)
+{
+	// The menu intro's fires: worked out on the game's thread each frame (Draw) until 2026-11-27, off it since, a frame
+	// with each of the game's (DrawAsync at an interval of 0). Each frame then shows the fire as Draw showed it the
+	// frame before, pixel for pixel: the same fire, a frame late. (The first frame shown is waited for: not late.)
+	constexpr int Width = 96;
+	constexpr int Height = 64;
+	const Canvas now(Width, Height);
+	const Canvas late(Width, Height);
+	ASSERT_NE(now.renderer, nullptr) << SDL_GetError();
+	ASSERT_NE(late.renderer, nullptr) << SDL_GetError();
+	FireLayer drawn(SmallSource(Width, Height, 30, 66), FireSettings {}, 5, 2);
+	FireLayer async(SmallSource(Width, Height, 30, 66), FireSettings {}, 5, 2);
+	// Something painted over both, from what is set as each frame starts (as the intro's seams are).
+	int drawnMark = 0;
+	int asyncMark = 0;
+	int frame = 0;
+	const auto mark = [](int *value) {
+		return [value](uint8_t *rgba, int /*pitch*/) { rgba[1] = static_cast<uint8_t>(*value); };
+	};
+	drawn.SetAfterPaint(mark(&drawnMark), [&] { drawnMark = frame + 1; });
+	async.SetAfterPaint(mark(&asyncMark), [&] { asyncMark = frame + 1; });
+	const SDL_FRect rect { 0, 0, Width, Height };
+	const FirePace pace { 0.F, 1 };
+	std::vector<uint8_t> before;
+	uint64_t lit = 0;
+	for (frame = 0; frame < 40; frame++) {
+		// Frames of uneven length, a pointer blowing across it, and a flare-up on the way (set through Fire(), as the
+		// intro's are: it waits for the frame being worked out).
+		const float seconds = frame % 3 == 0 ? 1.F / 60.F : 1.F / 85.F;
+		for (FireLayer *layer : { &drawn, &async }) {
+			if (frame == 12)
+				layer->Fire().Blow(48.F, 30.F, 400.F, 100.F);
+			if (frame > 20 && frame < 26)
+				layer->Pointer(20.F + static_cast<float>(frame - 20) * 9.F, 30.F, rect, seconds);
+		}
+		now.Clear();
+		ASSERT_TRUE(drawn.Draw(now.renderer, rect, seconds));
+		late.Clear();
+		ASSERT_TRUE(async.DrawAsync(late.renderer, rect, seconds, nullptr, pace));
+		const std::vector<uint8_t> shown = late.Pixels();
+		if (frame == 0)
+			EXPECT_EQ(shown, now.Pixels()) << "the first frame";
+		else
+			EXPECT_EQ(shown, before) << "frame " << frame;
+		before = now.Pixels();
+		// The fire itself is a frame ahead of what is shown: where Draw's is.
+		EXPECT_EQ(async.Fire().Heat(), drawn.Fire().Heat()) << "frame " << frame;
+		for (size_t i = 0; i < shown.size(); i += 4)
+			lit += shown[i];
+	}
+	EXPECT_GT(lit, 0U);
+}
+
+TEST(FireLayerTest, MovedOnUnseenOffTheGamesThreadItIsTheSameFire)
+{
+	// Before the intro's logo shows, its fire moves on unseen (AdvanceAsync, where the game's thread did it).
+	constexpr int Width = 96;
+	constexpr int Height = 64;
+	const Canvas a(Width, Height);
+	const Canvas b(Width, Height);
+	ASSERT_NE(a.renderer, nullptr) << SDL_GetError();
+	ASSERT_NE(b.renderer, nullptr) << SDL_GetError();
+	FireLayer drawn(SmallSource(Width, Height, 30, 66), FireSettings {}, 5, 2);
+	FireLayer async(SmallSource(Width, Height, 30, 66), FireSettings {}, 5, 2);
+	const FirePace pace { 0.F, 1 };
+	for (int frame = 0; frame < 12; frame++) {
+		drawn.Fire().Advance(1.F / 80.F);
+		async.AdvanceAsync(1.F / 80.F, pace);
+		// (As the intro does each frame: it asks for the fire, which waits for the frame being worked out.)
+		EXPECT_EQ(async.Fire().Heat(), drawn.Fire().Heat()) << "frame " << frame;
+	}
+	// The first frame of it shown is worked out there and then, as Draw's.
+	const SDL_FRect rect { 0, 0, Width, Height };
+	a.Clear();
+	b.Clear();
+	ASSERT_TRUE(drawn.Draw(a.renderer, rect, 1.F / 80.F));
+	ASSERT_TRUE(async.DrawAsync(b.renderer, rect, 1.F / 80.F, nullptr, pace));
+	EXPECT_EQ(a.Pixels(), b.Pixels());
 }
 #endif
 

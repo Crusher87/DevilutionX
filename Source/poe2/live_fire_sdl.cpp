@@ -70,15 +70,18 @@ void FireLayer::Loop()
 		// The fire is this thread's alone while it works (the game's waits in Fire()).
 		const int pitch = gridWidth_ * 4;
 		fire_->Advance(frameSeconds_);
-		fire_->Paint(frameColour_.data(), pitch, frameHasCover_ ? frameCover_.data() : nullptr);
-		if (afterPaint_)
-			afterPaint_(frameColour_.data(), pitch);
-		if (!frameMultiply_.empty())
-			fire_->PaintLight(frameMultiply_.data(), fire_->LightWidth() * 4, frameAdd_.data(), fire_->LightWidth() * 4, doubled_);
+		// (Moving on unseen, AdvanceAsync, it isn't painted.)
+		if (framePainted_) {
+			fire_->Paint(frameColour_.data(), pitch, frameHasCover_ ? frameCover_.data() : nullptr);
+			if (afterPaint_)
+				afterPaint_(frameColour_.data(), pitch);
+			if (!frameMultiply_.empty())
+				fire_->PaintLight(frameMultiply_.data(), fire_->LightWidth() * 4, frameAdd_.data(), fire_->LightWidth() * 4, doubled_);
+		}
 		{
 			const std::lock_guard<std::mutex> guard(lock_);
 			working_ = false;
-			frameReady_ = true;
+			frameReady_ = framePainted_;
 		}
 		done_.notify_all();
 	}
@@ -115,29 +118,53 @@ void FireLayer::UploadFrame()
 	frameShown_ = true;
 }
 
-bool FireLayer::DrawAsync(SDL_Renderer *renderer, const SDL_FRect &rect, float seconds, const uint8_t *cover)
+bool FireLayer::FrameIsDue(float owed, float seconds, float interval)
 {
-#ifndef POE2_FIRE_LAYER_THREAD
-	return Draw(renderer, rect, seconds, cover);
-#else
-	if (renderer == nullptr || !MakeTextures(renderer))
-		return false;
+	// Up to so many frames a second (40 on the menus: the fire's slow movement needs no more, and it leaves the
+	// computer's cores to the game). Within a third of the game's frame of the interval counts as there: 25 ms is two
+	// frames at 80 a second, and two frames timed at 12.4 ms each must not wait for a third.
+	return owed >= interval - 0.35F * std::max(seconds, 0.F);
+}
+
+void FireLayer::Pump(float seconds, const uint8_t *cover, const FirePace &pace, bool upload)
+{
+#ifdef POE2_FIRE_LAYER_THREAD
 	owedSeconds_ += seconds;
+	// Asked for more frames than the menus' steady 40 a second, it gives them only while its thread keeps up: a frame
+	// that is due while the last is still being worked out is late, and a few of those close together put it back to
+	// the steady pace for a while (longer each time), so it never runs now with the game's frames, now behind them.
+	float interval = pace.interval;
+	if (interval < SteadyInterval) {
+		if (steadyFrames_ > 0) {
+			steadyFrames_--;
+			interval = SteadyInterval;
+		}
+		if (++lateWindow_ >= LateWindow) {
+			lateWindow_ = 0;
+			late_ = 0;
+		}
+	}
 	bool start = false;
 	{
 		std::unique_lock<std::mutex> guard(lock_);
-		// The first frame (or the first after its textures went): waited for, so it never shows empty.
-		if (working_ && !frameShown_)
+		// The first frame shown (or the first after its textures went): waited for, so it never shows empty.
+		if (upload && working_ && !frameShown_)
 			done_.wait(guard, [this] { return !working_; });
 		if (!working_) {
-			if (frameReady_)
+			if (upload && frameReady_)
 				UploadFrame();
-			// Up to 40 frames a second: the fire's slow movement needs no more, and it leaves the computer's cores
-			// to the game.
-			start = !frameShown_ || owedSeconds_ >= 1.F / 40.F;
+			start = (upload && !frameShown_) || FrameIsDue(owedSeconds_, seconds, interval);
+		} else if (interval < SteadyInterval && FrameIsDue(owedSeconds_, seconds, interval) && ++late_ >= LateLimit) {
+			late_ = 0;
+			lateWindow_ = 0;
+			steadySpells_ = std::min(steadySpells_ + 1, 6);
+			steadyFrames_ = SteadyFrames << (steadySpells_ - 1);
 		}
 	}
-	if (start) {
+	if (!start)
+		return;
+	framePainted_ = upload;
+	if (upload) {
 		const size_t grid = static_cast<size_t>(gridWidth_) * gridHeight_;
 		frameColour_.resize(grid * 4);
 		const bool light = multiply_ != nullptr && add_ != nullptr;
@@ -147,32 +174,61 @@ bool FireLayer::DrawAsync(SDL_Renderer *renderer, const SDL_FRect &rect, float s
 		frameHasCover_ = cover != nullptr;
 		if (frameHasCover_)
 			frameCover_.assign(cover, cover + grid);
-		for (const PendingPush &push : pushes_)
-			fire_->Push(push.x0, push.y0, push.x1, push.y1, push.seconds);
-		pushes_.clear();
-		// A few of its workers, so it keeps off most of the computer's cores (the game's frame needs them).
-		fire_->LimitWorkers(AsyncWorkers);
-		frameSeconds_ = std::min(owedSeconds_, 0.25F);
-		owedSeconds_ = 0;
-		const bool first = !frameShown_;
-		{
-			const std::lock_guard<std::mutex> guard(lock_);
-			working_ = true;
-		}
-		if (!thread_.joinable())
-			thread_ = std::thread([this] { Loop(); });
-		wake_.notify_all();
-		if (first) {
-			std::unique_lock<std::mutex> guard(lock_);
-			done_.wait(guard, [this] { return !working_; });
-			UploadFrame();
-		}
 	}
+	for (const PendingPush &push : pushes_)
+		fire_->Push(push.x0, push.y0, push.x1, push.y1, push.seconds);
+	pushes_.clear();
+	fire_->LimitWorkers(pace.workers);
+	frameSeconds_ = std::min(owedSeconds_, 0.25F);
+	owedSeconds_ = 0;
+	if (beforeFrame_)
+		beforeFrame_();
+	const bool first = upload && !frameShown_;
+	{
+		const std::lock_guard<std::mutex> guard(lock_);
+		working_ = true;
+	}
+	if (!thread_.joinable())
+		thread_ = std::thread([this] { Loop(); });
+	wake_.notify_all();
+	if (first) {
+		std::unique_lock<std::mutex> guard(lock_);
+		done_.wait(guard, [this] { return !working_; });
+		UploadFrame();
+	}
+#else
+	(void)seconds;
+	(void)cover;
+	(void)pace;
+	(void)upload;
+#endif
+}
+
+bool FireLayer::DrawAsync(SDL_Renderer *renderer, const SDL_FRect &rect, float seconds, const uint8_t *cover, const FirePace &pace)
+{
+#ifndef POE2_FIRE_LAYER_THREAD
+	(void)pace;
+	return Draw(renderer, rect, seconds, cover);
+#else
+	if (renderer == nullptr || !MakeTextures(renderer))
+		return false;
+	Pump(seconds, cover, pace, true);
 	if (!frameShown_)
 		return false;
 	SDL_RenderCopyF(renderer, colour_, nullptr, &rect);
 	lightPainted_ = multiply_ != nullptr && add_ != nullptr && !frameMultiply_.empty();
 	return true;
+#endif
+}
+
+void FireLayer::AdvanceAsync(float seconds, const FirePace &pace)
+{
+#ifndef POE2_FIRE_LAYER_THREAD
+	(void)pace;
+	fire_->LimitWorkers(-1);
+	fire_->Advance(seconds);
+#else
+	Pump(seconds, nullptr, pace, false);
 #endif
 }
 
@@ -296,6 +352,8 @@ bool FireLayer::Draw(SDL_Renderer *renderer, const SDL_FRect &rect, float second
 	frameShown_ = false;
 	owedSeconds_ = 0;
 	fire_->LimitWorkers(-1);
+	if (beforeFrame_)
+		beforeFrame_();
 	fire_->Advance(seconds);
 	void *pixels = nullptr;
 	int pitch = 0;
