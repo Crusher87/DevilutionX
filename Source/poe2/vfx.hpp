@@ -297,6 +297,13 @@ size_t ThornsCueCount();
 size_t DropCount();
 /** @brief How many pieces of water lie on (or run down) the screen (tests). */
 size_t LensDropCount();
+/**
+ * @brief Notes where the game's panels are (rgba: the UI overlay, alpha in byte 3; hidden: pixels with HD panel art
+ * under them, or null), so rain on the screen runs over them and never lands on them. Null rgba forgets them.
+ */
+void NoteUiPanels(const uint8_t *rgba, const uint8_t *hidden, int width, int height);
+/** @brief How many pieces of water lie on panels as they should (run there), and how many landed there by mistake (tests). */
+void LensPanelCounts(size_t &onPanels, size_t &strays);
 
 /** @brief What a piece of physics debris is: a chip of stone, a spark off steel, or a drop of blood. */
 enum class DebrisKind : uint8_t {
@@ -373,6 +380,8 @@ void EndScene(SDL_Renderer *renderer);
  * a window). Called every frame, after EndScene: it also notes the UI's size, where the rain lands.
  */
 void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize);
+/** @brief Draws the water running over the game's panels, over the UI. Called every frame, after the UI is drawn. */
+void RenderLensOverUi(SDL_Renderer *renderer);
 #endif
 
 } // namespace devilution::vfx

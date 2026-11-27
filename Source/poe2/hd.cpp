@@ -316,6 +316,8 @@ std::array<SDL_Texture *, props::NumKinds> PropTextures {};
 SDL_Texture *RatRunTexture = nullptr;
 /** @brief Whether the rat's run was looked for: 0 not yet, 1 asked of the reader, 2 have it, 3 there is none. */
 int RatRunState = 0;
+/** @brief The rat's run split by the way each part of it faces, from the shape map beside its sheet (_n), if it has one. */
+HdArt RatRunShape;
 /** @brief A small thing standing in the world this frame: drawn just before the recorded draw `at`, its tile's floor middle at (x, y) in the world buffer. */
 struct PropDraw {
 	size_t at;
@@ -662,6 +664,12 @@ void DestroyTextures()
 		SDL_DestroyTexture(RatRunTexture);
 	RatRunTexture = nullptr;
 	RatRunState = 0;
+	for (SDL_Texture *&texture : RatRunShape.shape) {
+		if (texture != nullptr && CacheRenderer != nullptr)
+			SDL_DestroyTexture(texture);
+		texture = nullptr;
+	}
+	RatRunShape.shaped = false;
 	light::Reset();
 }
 
@@ -6184,7 +6192,8 @@ SDL_Texture *RatRun(SDL_Renderer *renderer)
 	if (RatRunState >= 2)
 		return RatRunTexture;
 	const std::string path = PicturePath("props/rat/rat_run_sheet_hd_2x");
-	if (ReaderOn() && !PictureIsIn(path, false)) {
+	const std::string mapPath = PicturePath("props/rat/rat_run_sheet_hd_2x_n");
+	if (ReaderOn() && (!PictureIsIn(path, false) || !PictureIsIn(mapPath, false))) {
 		RatRunState = 1;
 		return nullptr;
 	}
@@ -6198,6 +6207,18 @@ SDL_Texture *RatRun(SDL_Renderer *renderer)
 			SDL_SetTextureBlendMode(RatRunTexture, SDL_BLENDMODE_BLEND);
 			SDL_SetTextureScaleMode(RatRunTexture, SDL_ScaleModeLinear);
 			RatRunState = 2;
+			// Its shape map, if it has one: the rat is lit by its shape, as the monsters are (DrawRatRun).
+			if (SDL_Surface *map = TakePicture(mapPath, false); map != nullptr) {
+				SDL_Surface *picture = SDL_ConvertSurfaceFormat(sheet, SDL_PIXELFORMAT_RGBA32, 0);
+				if (picture != nullptr && map->w == sheet->w && map->h == sheet->h) {
+					MakeShapeFrom(renderer, RatRunShape, picture, map, false, false);
+				} else {
+					LogWarn("HD: {} is {}x{}, not the size of the rat's sheet: the rat is lit flat", mapPath, map->w, map->h);
+					SDL_FreeSurface(map);
+				}
+				if (picture != nullptr)
+					SDL_FreeSurface(picture);
+			}
 		}
 	} else {
 		LogWarn("HD: {} is {}x{}, not {}x{} ({} frames by {} ways): the drawn rat runs instead", path, sheet->w, sheet->h, RatRunCell * props::RatRunFrames, RatRunCell * RatRunWays, props::RatRunFrames, RatRunWays);
@@ -6240,7 +6261,41 @@ bool DrawRatRun(SDL_Renderer *renderer, const PropDraw &prop, float toLogical)
 	constexpr std::array<int, 6> Indices { 0, 1, 3, 0, 3, 2 };
 	SDL_SetTextureColorMod(texture, 255, 255, 255);
 	SDL_SetTextureAlphaMod(texture, 255);
-	SDL_RenderGeometry(renderer, texture, vertices.data(), static_cast<int>(vertices.size()), Indices.data(), static_cast<int>(Indices.size()));
+	// Lit by its shape (from its shape map, as a monster's carved body is): the side turned to a light brighter, the side
+	// away darker. Drawn in the least light any side takes, then each side's picture added on top in the light it takes over that.
+	std::array<float, NumShapeAxes> facing;
+	float least = std::numeric_limits<float>::max();
+	const bool shaped = RatRunShape.shaped && atmosphere::Setting(atmosphere::Knob::BodyLight) > 0 && atmosphere::Setting(atmosphere::Knob::Shapes) > 0
+	    && FacingShades(shape.lightX, shape.lightY, ShapeAxes.data(), facing.size(), facing.data(), CorpseMiddle, BodyGiven * std::clamp(atmosphere::Value("rat_shape", 1.F), 0.F, 3.F) * std::clamp(atmosphere::Setting(atmosphere::Knob::BodyLight), 0.F, 3.F));
+	if (shaped) {
+		for (size_t k = 0; k < NumShapeAxes; k++) {
+			if (RatRunShape.shape[k] != nullptr)
+				least = std::min(least, facing[k]);
+		}
+	}
+	if (!shaped || least == std::numeric_limits<float>::max()) {
+		SDL_RenderGeometry(renderer, texture, vertices.data(), static_cast<int>(vertices.size()), Indices.data(), static_cast<int>(Indices.size()));
+		return true;
+	}
+	std::array<SDL_Vertex, 4> lit = vertices;
+	const auto tint = [&](const Colour3 &colour) {
+		for (SDL_Vertex &vertex : lit)
+			vertex.color = SDL_Color { ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), ColourByte(shape.alpha) };
+	};
+	tint({ light[0] * least, light[1] * least, light[2] * least });
+	SDL_RenderGeometry(renderer, texture, lit.data(), static_cast<int>(lit.size()), Indices.data(), static_cast<int>(Indices.size()));
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		SDL_Texture *side = RatRunShape.shape[k];
+		if (side == nullptr)
+			continue;
+		Colour3 more { light[0] * (facing[k] - least), light[1] * (facing[k] - least), light[2] * (facing[k] - least) };
+		// A colour stops at full: light over that is added again.
+		for (int pass = 0; pass < 2 && std::max({ more[0], more[1], more[2] }) > 1.F / 255; pass++) {
+			tint(more);
+			SDL_RenderGeometry(renderer, side, lit.data(), static_cast<int>(lit.size()), Indices.data(), static_cast<int>(Indices.size()));
+			more = AboveFull(more);
+		}
+	}
 	return true;
 }
 

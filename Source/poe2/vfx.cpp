@@ -4548,6 +4548,8 @@ struct LensWater {
 	LensKind kind = LensKind::Speck;
 	/** @brief The pool it is part of: a number shared by the drops that touch each other (LensGather). */
 	uint16_t pool = 0;
+	/** @brief Left by water running over one of the game's panels: it lies on the panel and is drawn over it. */
+	bool panel = false;
 };
 
 /**
@@ -4587,6 +4589,16 @@ struct LensRun {
 	int pathAt = 0;
 	int pathCount = 0;
 	float pathGap = 0;
+	/**
+	 * @brief The game's panels stand out of the glass (Curtis 2026-11-27): a run that comes down onto one's top edge is
+	 * held there, spreading along it, and gathers water until it is heavy enough to run on over the panel (`panel`).
+	 * heldFor: how long it has been held; ledge: the edge's height; toBead: seconds until it next spreads a little.
+	 */
+	bool held = false;
+	bool panel = false;
+	float heldFor = 0;
+	float ledge = 0;
+	float toBead = 0;
 };
 
 /** @brief No more than this many pieces of water lie on the screen, and no more than this many run at once. */
@@ -4616,6 +4628,40 @@ float LensStormFor(float strength)
 	const float high = std::clamp(atmosphere::Value("lens_storm_high", 2.F), low, 3.F);
 	const float s = std::clamp(strength, 0.F, 1.F);
 	return low + (high - low) * s * std::sqrt(s);
+}
+
+/**
+ * @brief Where the game's panels are (the UI's solid parts), in squares of LensPanelCell UI pixels: water doesn't land on
+ * them, and running water stops at their upper edges (NoteUiPanels).
+ */
+constexpr int LensPanelCell = 4;
+std::vector<uint8_t> LensPanels;
+int LensPanelColumns = 0;
+int LensPanelRows = 0;
+/** @brief Water put on the screen now may lie on a panel: it was left there by water running over it. */
+bool LensPutOnPanel = false;
+
+bool LensOnPanel(float x, float y)
+{
+	if (LensPanels.empty() || x < 0 || y < 0)
+		return false;
+	const int column = static_cast<int>(x) / LensPanelCell;
+	const int row = static_cast<int>(y) / LensPanelCell;
+	if (column >= LensPanelColumns || row >= LensPanelRows)
+		return false;
+	return LensPanels[static_cast<size_t>(row) * LensPanelColumns + column] != 0;
+}
+
+/** @brief How much water (as a radius) a run held at a panel's edge must gather before it brims over and runs on. */
+float LensSpill(float unit)
+{
+	return unit * 4.4F * std::clamp(atmosphere::Value("lens_ledge", 1.F), 0.F, 3.F);
+}
+
+/** @brief A panel stands at this point that is thick enough to hold water back (not a line of text or a thin frame). */
+bool LensPanelHolds(float x, float y)
+{
+	return LensOnPanel(x, y) && LensOnPanel(x, y + LensPanelCell * 2) && LensOnPanel(x, y + LensPanelCell * 4);
 }
 
 bool LensSits(LensKind kind)
@@ -4724,7 +4770,11 @@ LensWater *LensPut(float x, float y, float r, float life, LensKind kind)
 {
 	if (LensWaters.size() >= LensMostWater)
 		return nullptr;
+	// (Rain doesn't land on the panels: only water running over one is left on it.)
+	if (!LensPutOnPanel && LensOnPanel(x, y))
+		return nullptr;
 	LensWater piece;
+	piece.panel = LensPutOnPanel;
 	piece.x = piece.toX = x;
 	piece.y = piece.toY = y;
 	piece.r = piece.want = r;
@@ -4754,6 +4804,8 @@ void LensDrawIn(LensWater &piece, float toX, float toY, int run, float ms)
  */
 void LensLand(float x, float y, float r, float life, float unit)
 {
+	if (LensOnPanel(x, y))
+		return;
 	// The biggest piece of water it touches.
 	int onto = -1;
 	float ontoFar = 0;
@@ -4988,7 +5040,8 @@ void LensGather(float unit, float runs, bool raining)
 		const float sag = unit * 0.11F * std::min(heavy - 0.6F, 1.F) * runs;
 		for (size_t i = 0; i < count; i++) {
 			LensWater &piece = LensWaters[drops[i]];
-			if (piece.pool == root + 1)
+			// (A pool resting on a panel's edge sags no further: the panel holds it.)
+			if (piece.pool == root + 1 && (piece.panel || !LensOnPanel(piece.x, piece.toY + sag + piece.r * 0.3F)))
 				piece.toY += sag;
 		}
 		// (Only rain sets it off: once the rain is over, or left behind, the water that hasn't let go by now dries where it is.)
@@ -5028,7 +5081,7 @@ void LensAdvanceRun(LensRun &run, int slot, float dt, float unit, float drying, 
 	} else if (run.goLeft <= 0) {
 		run.holdLeft = Random(0.12F, 0.5F) * std::clamp(unit * 6 / std::max(run.r, unit), 0.7F, 1.7F);
 	}
-	if (run.stopping)
+	if (run.stopping || run.held)
 		target = 0;
 	run.speed += (target - run.speed) * (1 - std::exp(-dt / (target > run.speed ? 0.24F : 0.1F)));
 
@@ -5049,7 +5102,59 @@ void LensAdvanceRun(LensRun &run, int slot, float dt, float unit, float drying, 
 	run.pull += (std::clamp(pull * 1.3F, -0.6F, 0.6F) - run.pull) * (1 - std::exp(-dt / 0.2F));
 	const float wander = (LensDrift(run.seed ^ 0x5BD1E995U, run.travelled / (unit * 36)) - 0.5F) * 0.6F;
 	const float heading = std::clamp(wander + wind * 0.08F + run.pull, -0.9F, 0.9F);
-	const float moved = run.speed * dt;
+	float moved = run.held ? 0.F : run.speed * dt;
+	// The game's panels stand out of the glass. Water running down onto one's upper edge is stopped there and lies
+	// along it, spreading a little, and the water that comes after it gathers in; once there is enough, it brims over
+	// and runs on down the panel's face.
+	if (run.held) {
+		run.heldFor += dt;
+		run.y = run.ledge - run.shown * 0.9F;
+		run.speed = 0;
+		run.toBead -= dt;
+		if (run.toBead <= 0 && run.heldFor < 4) {
+			run.toBead = Random(0.2F, 0.45F);
+			const float bead = run.shown * Random(0.35F, 0.55F);
+			const float side = Random(0, 1) < 0.5F ? -1.F : 1.F;
+			if (LensWater *piece = LensPut(run.x + side * run.shown * Random(1.25F, 2.3F), run.ledge - bead * 0.85F, bead, Random(5000, 9000), LensKind::Pearl)) {
+				piece->run = static_cast<int8_t>(slot);
+				run.r = std::cbrt(std::max(run.r * run.r * run.r - bead * bead * bead, 0.F));
+			}
+		}
+		if (run.r >= LensSpill(unit)) {
+			run.held = false;
+			run.panel = true;
+			run.speed = unit * 8;
+			run.holdLeft = 0;
+			run.goLeft = unit * Random(20, 60);
+		} else if (run.heldFor > 7) {
+			// It never got heavy enough: it stays on the edge as a drop.
+			run.stopping = true;
+		}
+	} else if (!run.panel && moved > 0) {
+		const float front = run.y + run.shown * 0.9F;
+		const float nextX = run.x + std::sin(heading) * moved;
+		const float next = front + std::cos(heading) * moved;
+		if (!LensOnPanel(nextX, front) && LensPanelHolds(nextX, next)) {
+			float top = std::floor(next / LensPanelCell) * LensPanelCell;
+			while (top >= LensPanelCell && LensOnPanel(nextX, top - LensPanelCell * 0.5F))
+				top -= LensPanelCell;
+			run.ledge = top;
+			if (run.r >= LensSpill(unit)) {
+				// Heavy enough to go straight over, slowed by the edge.
+				run.panel = true;
+				run.speed *= 0.45F;
+			} else {
+				run.held = true;
+				run.heldFor = 0;
+				run.toBead = 0.1F;
+				moved = std::max(top - front, 0.F);
+				run.speed = 0;
+			}
+		}
+	} else if (run.panel && run.y > run.ledge + run.shown * 2 && !LensOnPanel(run.x, run.y)) {
+		// Off the panel's lower edge, back onto the glass.
+		run.panel = false;
+	}
 	run.x += std::sin(heading) * moved;
 	run.y += std::cos(heading) * moved;
 	run.travelled += moved;
@@ -5102,6 +5207,7 @@ void LensAdvanceRun(LensRun &run, int slot, float dt, float unit, float drying, 
 		run.toThread = thick * Random(1.2F, 1.75F);
 		run.toPearl--;
 		LensWater *piece = nullptr;
+		LensPutOnPanel = run.panel;
 		if (run.toPearl <= 0) {
 			// (No two alike, and no even row of them: some close together, then a long gap.)
 			run.toPearl = static_cast<int>(Random(2, 7.99F)) + (Random(0, 1) < 0.3F ? 6 : 0);
@@ -5110,6 +5216,7 @@ void LensAdvanceRun(LensRun &run, int slot, float dt, float unit, float drying, 
 		} else {
 			piece = LensPut(x + Random(-0.12F, 0.12F) * thick, y, thick * Random(0.8F, 1.1F), Random(380, 1300), LensKind::Thread);
 		}
+		LensPutOnPanel = false;
 		if (piece != nullptr)
 			piece->run = static_cast<int8_t>(slot);
 	}
@@ -5119,6 +5226,7 @@ void LensAdvanceRun(LensRun &run, int slot, float dt, float unit, float drying, 
 	if (run.stopping && run.speed < unit * 2.5F) {
 		// Too little water left to go on: it stays where it stopped, a drop again, and takes its tail in.
 		LensEndRun(run, slot);
+		LensPutOnPanel = run.panel;
 		const float x = run.x;
 		const float y = run.y;
 		for (size_t k = 1; k < lobes.size(); k++) {
@@ -5126,6 +5234,7 @@ void LensAdvanceRun(LensRun &run, int slot, float dt, float unit, float drying, 
 				LensDrawIn(*piece, x, y, -1, 260);
 		}
 		LensPut(x, y, lobes[0].r, Random(2500, 5000) + LensDryTime(LensKind::Drop), LensKind::Drop);
+		LensPutOnPanel = false;
 	} else if (run.y - run.shown * 3.2F > LensHeight) {
 		LensEndRun(run, slot);
 	}
@@ -5183,7 +5292,11 @@ void LensStep(float ms, float unit, float drying, float wind)
 			}
 			const float dx = piece.toX - piece.x;
 			const float dy = piece.toY - piece.y;
-			if (dx * dx + dy * dy < 0.0004F) {
+			if (!piece.panel && LensOnPanel(piece.x + dx * settle, piece.y + dy * settle)) {
+				// (Water on the glass that would be drawn onto a panel stops at its edge.)
+				piece.toX = piece.x;
+				piece.toY = piece.y;
+			} else if (dx * dx + dy * dy < 0.0004F) {
 				piece.x = piece.toX;
 				piece.y = piece.toY;
 			} else {
@@ -7784,6 +7897,47 @@ size_t PortalCount()
 size_t DropCount()
 {
 	return Drops.size();
+}
+
+void NoteUiPanels(const uint8_t *rgba, const uint8_t *hidden, int width, int height)
+{
+	if (rgba == nullptr || width <= 0 || height <= 0 || atmosphere::Value("lens_panels", 1.F) <= 0) {
+		LensPanels.clear();
+		LensPanelColumns = LensPanelRows = 0;
+		return;
+	}
+	LensPanelColumns = (width + LensPanelCell - 1) / LensPanelCell;
+	LensPanelRows = (height + LensPanelCell - 1) / LensPanelCell;
+	LensPanels.assign(static_cast<size_t>(LensPanelColumns) * LensPanelRows, 0);
+	// A square is solid when three of four points spread over it are: the panels, not the odd letter or line.
+	const auto solid = [&](int x, int y) {
+		x = std::min(x, width - 1);
+		y = std::min(y, height - 1);
+		const size_t at = static_cast<size_t>(y) * width + x;
+		return rgba[at * 4 + 3] >= 240 || (hidden != nullptr && hidden[at] != 0);
+	};
+	for (int row = 0; row < LensPanelRows; row++) {
+		const int y = row * LensPanelCell;
+		for (int column = 0; column < LensPanelColumns; column++) {
+			const int x = column * LensPanelCell;
+			const int count = (solid(x + 1, y + 1) ? 1 : 0) + (solid(x + 3, y + 1) ? 1 : 0) + (solid(x + 1, y + 3) ? 1 : 0) + (solid(x + 3, y + 3) ? 1 : 0);
+			LensPanels[static_cast<size_t>(row) * LensPanelColumns + column] = count >= 3 ? 1 : 0;
+		}
+	}
+}
+
+void LensPanelCounts(size_t &onPanels, size_t &strays)
+{
+	onPanels = 0;
+	strays = 0;
+	for (const LensWater &piece : LensWaters) {
+		if (piece.panel)
+			onPanels++;
+		else if (LensSits(piece.kind) && LensOnPanel(piece.x, piece.y))
+			strays++;
+	}
+	for (const LensRun &run : LensRuns)
+		onPanels += run.live && (run.panel || run.held) ? 1 : 0;
 }
 
 size_t LensDropCount()
@@ -13155,7 +13309,7 @@ void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 
 	sheet.seen.clear();
 	for (const LensWater &piece : LensWaters) {
-		if (piece.kind != LensKind::Speck)
+		if (piece.kind != LensKind::Speck && !piece.panel)
 			LensSee(sheet, piece.x, piece.y, piece.r, piece.kind != LensKind::Ghost, piece.kind == LensKind::Thread);
 	}
 	std::array<LensLobe, 4> lobes;
@@ -13163,18 +13317,21 @@ void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		if (!run.live)
 			continue;
 		LensRunLobes(run, unit, lobes);
-		for (const LensLobe &lobe : lobes)
-			LensSee(sheet, lobe.x, lobe.y, lobe.r, false);
+		for (const LensLobe &lobe : lobes) {
+			// (What has run onto a panel is drawn over it: RenderLensOverUi.)
+			if (!run.panel || !LensOnPanel(lobe.x, lobe.y))
+				LensSee(sheet, lobe.x, lobe.y, lobe.r, false);
+		}
 	}
 	LensBuild(sheet, look, lookMark);
 	// The droplets by themselves: the bigger ones first, then the smallest, of which only the light is drawn.
 	for (const LensWater &piece : LensWaters) {
-		if (piece.kind == LensKind::Speck && piece.r >= unit * LensSpeckBends)
+		if (piece.kind == LensKind::Speck && !piece.panel && piece.r >= unit * LensSpeckBends)
 			LensDrawSpeck(sheet, look, piece, 8);
 	}
 	const int bending = static_cast<int>(sheet.indices.size());
 	for (const LensWater &piece : LensWaters) {
-		if (piece.kind == LensKind::Speck && piece.r < unit * LensSpeckBends)
+		if (piece.kind == LensKind::Speck && !piece.panel && piece.r < unit * LensSpeckBends)
 			LensDrawSpeck(sheet, look, piece, 6);
 	}
 	if (!sheet.indices.empty()) {
@@ -13190,8 +13347,99 @@ void RenderLens(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		}
 	}
 }
+
+namespace {
+
+/**
+ * @brief One spot of water on a panel: a darker wet patch with a slightly darker rim, and on top the light it catches,
+ * a soft highlight high on it and a faint one low down. Water on a panel's face is a film on a hard surface: there is
+ * nothing behind it to see through, as there is through the glass.
+ */
+void LensWetSpot(std::vector<SDL_Vertex> &shade, std::vector<SDL_Vertex> &shine, float x, float y, float r, float seen, SDL_Color light)
+{
+	constexpr int Sides = 12;
+	static const std::array<std::array<float, 2>, Sides> Round = [] {
+		std::array<std::array<float, 2>, Sides> round {};
+		for (int n = 0; n < Sides; n++)
+			round[n] = { std::cos(2 * Pi * static_cast<float>(n) / Sides), std::sin(2 * Pi * static_cast<float>(n) / Sides) };
+		return round;
+	}();
+	const auto ring = [&](std::vector<SDL_Vertex> &out, float cx, float cy, float inner, float outer, SDL_Color middle, uint8_t innerAlpha) {
+		// A middle point, a ring at `inner` and a fading ring at `outer`, as triangles.
+		const auto at = [&](float px, float py, SDL_Color colour) { return SDL_Vertex { { px, py }, colour, { 0, 0 } }; };
+		SDL_Color edge = middle;
+		edge.a = innerAlpha;
+		SDL_Color none = middle;
+		none.a = 0;
+		for (int n = 0; n < Sides; n++) {
+			const int m = (n + 1) % Sides;
+			const SDL_Vertex c = at(cx, cy, middle);
+			const SDL_Vertex a1 = at(cx + Round[n][0] * inner, cy + Round[n][1] * inner, edge);
+			const SDL_Vertex a2 = at(cx + Round[m][0] * inner, cy + Round[m][1] * inner, edge);
+			const SDL_Vertex b1 = at(cx + Round[n][0] * outer, cy + Round[n][1] * outer, none);
+			const SDL_Vertex b2 = at(cx + Round[m][0] * outer, cy + Round[m][1] * outer, none);
+			out.insert(out.end(), { c, a1, a2, a1, b1, b2, a1, b2, a2 });
+		}
+	};
+	ring(shade, x, y, r * 0.86F, r * 1.12F, { 0, 0, 0, LensByte(0.16F * seen) }, LensByte(0.27F * seen));
+	SDL_Color high = light;
+	high.a = LensByte(0.55F * seen);
+	ring(shine, x - r * 0.28F, y - r * 0.34F, r * 0.12F, r * 0.36F, high, LensByte(0.4F * seen));
+	SDL_Color low = light;
+	low.a = LensByte(0.2F * seen);
+	ring(shine, x + r * 0.08F, y + r * 0.56F, r * 0.1F, r * 0.3F, low, LensByte(0.12F * seen));
+}
+
+} // namespace
+
+void RenderLensOverUi(SDL_Renderer *renderer)
+{
+	if (renderer == nullptr || !LensWet() || LensWidth <= 0)
+		return;
+	const float knob = std::min(atmosphere::Strength(atmosphere::Knob::Lens) * LensStorm, 3.F);
+	if (knob <= 0)
+		return;
+	const float seen = std::clamp(std::max(atmosphere::Value("lens_alpha", 1.F), 0.F) * std::min(knob, 1.F), 0.F, 1.F) * std::clamp(atmosphere::Value("lens_panels", 1.F), 0.F, 2.F);
+	if (seen <= 0)
+		return;
+	const float unit = LensUnit();
+	const std::array<float, 3> tint = atmosphere::Colour("rain_colour", { 0.74F, 0.82F, 0.95F });
+	const float bright = std::clamp(atmosphere::Value("lens_sky", 0.34F) + 0.6F * weather::Current().flash, 0.F, 1.F) * 1.6F;
+	const SDL_Color light { LensByte(tint[0] * bright), LensByte(tint[1] * bright), LensByte(tint[2] * bright), 255 };
+	static std::vector<SDL_Vertex> shade;
+	static std::vector<SDL_Vertex> shine;
+	shade.clear();
+	shine.clear();
+	for (const LensWater &piece : LensWaters) {
+		if (piece.panel && piece.r > 0.3F)
+			LensWetSpot(shade, shine, piece.x, piece.y, piece.r, seen, light);
+	}
+	std::array<LensLobe, 4> lobes;
+	for (const LensRun &run : LensRuns) {
+		if (!run.live || !run.panel)
+			continue;
+		LensRunLobes(run, unit, lobes);
+		for (const LensLobe &lobe : lobes) {
+			if (LensOnPanel(lobe.x, lobe.y))
+				LensWetSpot(shade, shine, lobe.x, lobe.y, lobe.r, seen, light);
+		}
+	}
+	if (shade.empty())
+		return;
+	SDL_BlendMode before = SDL_BLENDMODE_NONE;
+	SDL_GetRenderDrawBlendMode(renderer, &before);
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+	SDL_RenderGeometry(renderer, nullptr, shade.data(), static_cast<int>(shade.size()), nullptr, 0);
+	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_ADD);
+	SDL_RenderGeometry(renderer, nullptr, shine.data(), static_cast<int>(shine.size()), nullptr, 0);
+	SDL_SetRenderDrawBlendMode(renderer, before);
+}
 #else
 bool BeginScene(SDL_Renderer *, Size)
+void RenderLensOverUi(SDL_Renderer *)
+{
+}
+
 {
 	return false;
 }

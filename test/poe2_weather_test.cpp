@@ -284,6 +284,46 @@ TEST_F(Poe2WeatherTest, AHarderStormPutsMoreWaterOnTheScreen)
 	graphics.weather.SetValue(rain);
 }
 
+TEST_F(Poe2WeatherTest, RainRunsOverThePanelsButNeverLandsOnThem)
+{
+	GraphicsOptions &graphics = GetOptions().Graphics;
+	const bool hd = *graphics.hdGraphics;
+	const bool lit = *graphics.hdLighting;
+	const bool rain = *graphics.weather;
+	graphics.hdGraphics.SetValue(true);
+	graphics.hdLighting.SetValue(true);
+	graphics.weather.SetValue(true);
+	vfx::Clear();
+	vfx::RenderLens(nullptr, { 640, 480 }, { 1280, 720 });
+	// A bottom bar across the screen and an inventory on the right, as the UI overlay shows them (alpha in byte 3).
+	constexpr int Width = 1280;
+	constexpr int Height = 720;
+	std::vector<uint8_t> ui(static_cast<size_t>(Width) * Height * 4, 0);
+	for (int y = 0; y < Height; y++) {
+		for (int x = 0; x < Width; x++) {
+			if (y >= 600 || (x >= 960 && y >= 100))
+				ui[(static_cast<size_t>(y) * Width + x) * 4 + 3] = 255;
+		}
+	}
+	vfx::NoteUiPanels(ui.data(), nullptr, Width, Height);
+	weather::Force(weather::Kind::Rain, 1);
+	size_t most = 0;
+	for (int i = 0; i < 1500; i++) {
+		vfx::Advance(40);
+		size_t onPanels = 0;
+		size_t strays = 0;
+		vfx::LensPanelCounts(onPanels, strays);
+		ASSERT_EQ(strays, 0U) << "rain landed on a panel after " << i << " steps";
+		most = std::max(most, onPanels);
+	}
+	EXPECT_GT(most, 0U) << "no water ever ran over a panel";
+	vfx::NoteUiPanels(nullptr, nullptr, 0, 0);
+	vfx::Clear();
+	graphics.hdGraphics.SetValue(hd);
+	graphics.hdLighting.SetValue(lit);
+	graphics.weather.SetValue(rain);
+}
+
 #if SDL_VERSION_ATLEAST(2, 0, 18)
 /** @brief What a window that is only a picture in memory shows now, without its alpha. */
 std::vector<uint32_t> Shown(SDL_Renderer *renderer, const SDL_Surface *window)

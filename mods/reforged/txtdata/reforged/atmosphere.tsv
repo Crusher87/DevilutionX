@@ -26,6 +26,8 @@ town	lens_blur	1		How out of focus the picture seen through the water is: 0 shar
 town	lens_cell	1		How fine the grid is that the water is worked out on: 1 normal, 0.7 finer outlines for more work each frame, 1.5 coarser and cheaper.
 town	lens_storm_low	0.35		Rain on the screen follows the storm (Curtis 2026-11-21): how much of it there is in the lightest drizzle, as a share of the lens switch. 0.35 normal; 1 as much as the switch says.
 town	lens_storm_high	2		And in the heaviest downpour: 2 twice what the switch says, 3 the most there can be. Between the two it rises with the storm, slowly at first.
+town	lens_panels	1		Water running down the screen over the game's panels (bottom bar, inventory and so on): it gathers along their top edges, then spills over and streams down them. 0 off (water goes behind them, as before), 1 as is, 2 twice as easy to see. Rain never lands on them.
+town	lens_ledge	1		How much water gathers at a panel's top edge before it spills over: 0.5 spills soon, 1 as is, 2 holds back a lot.
 town	wet_shine	1		How bright the lamps and lit windows shine back off wet ground (ideas 23 and 14): 0 none, 1 strong. The ground gets wet as it rains and dries in a few minutes after.
 town	roof_drips	1.2		How many drops a second fall from the roof edge over each lamp or lit window while the ground is wet.
 town	town_fog	30		How many patches of low mist lie by the stream and between the graves at once (idea 18); half as many again when the ground is wet. 0 none.
@@ -99,6 +101,7 @@ cathedral	rat_size	0.4		How big a rat is. 1 is 32 game pixels from nose to tail.
 cathedral	rat_run_size	1		How big a rat is drawn from its 3D run pictures (hd\props\rat\rat_run_sheet_hd_2x.png), when they are beside the game. 1 is as made.
 cathedral	rat_run_fps	60		How fast the rat's 3D run pictures play, in frames a second. 60 is as made.
 cathedral	rat_lift	2		How many light levels brighter than its floor a rat is drawn, so it can be seen at all. 0 none.
+cathedral	rat_shape	1		How strongly a rat is lit by its shape (from its shape map, rat_run_sheet_hd_2x_n.png beside its run pictures): the side turned to a lamp brighter, the side away darker. 0 flat, 1 as the monsters, 2 twice as strong.
 cathedral	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 cathedral	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
@@ -137,6 +140,7 @@ catacombs	rat_size	0.4		How big a rat is. 1 is 32 game pixels from nose to tail.
 catacombs	rat_run_size	1		How big a rat is drawn from its 3D run pictures (hd\props\rat\rat_run_sheet_hd_2x.png), when they are beside the game. 1 is as made.
 catacombs	rat_run_fps	60		How fast the rat's 3D run pictures play, in frames a second. 60 is as made.
 catacombs	rat_lift	2		How many light levels brighter than its floor a rat is drawn, so it can be seen at all. 0 none.
+catacombs	rat_shape	1		How strongly a rat is lit by its shape (from its shape map, rat_run_sheet_hd_2x_n.png beside its run pictures): the side turned to a lamp brighter, the side away darker. 0 flat, 1 as the monsters, 2 twice as strong.
 catacombs	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 catacombs	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
 caves	falloff	1.50	1.65	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.

@@ -354,12 +354,19 @@ void PresentLayeredFrame(SDL_Surface *surface)
 		// POE2 Mashup: item pictures in the UI show their HD art over it, so the UI keeps what was under them.
 		hd::PrepareUiSprites();
 		const bool overlay = UpdateUiOverlay();
+		// POE2 Mashup: rain on the screen learns where the panels are (a few times a second), to run over them.
+		static uint32_t panelsNoted = 0;
+		if (const uint32_t now = SDL_GetTicks(); overlay && now - panelsNoted >= 150) {
+			panelsNoted = now;
+			vfx::NoteUiPanels(UiOverlayPixels.data(), hd::UiHiddenPixels(gnScreenWidth, gnScreenHeight), gnScreenWidth, gnScreenHeight);
+		}
 		hd::RestoreUiSprites();
 		// POE2 Mashup: UI panels with HD art show it under the UI, which leaves out their own pixels there.
 		hd::RenderUiPanels(renderer);
 		if (overlay)
 			SDL_RenderCopy(renderer, UiOverlay, nullptr, nullptr);
 		hd::RenderUiSprites(renderer);
+		vfx::RenderLensOverUi(renderer);
 	}
 	// POE2 Mashup: a panel's HD preview (the monster spawner's) goes over the UI.
 	if (hd::Active())
