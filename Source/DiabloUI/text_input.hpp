@@ -77,7 +77,8 @@ class TextInputState {
 
 		Buffer &operator=(std::string_view value)
 		{
-			value = TruncateUtf8(value, maxLength_);
+			// CopyUtf8 keeps one byte of maxLength_ for the end mark, so the length kept must match what it copies.
+			value = TruncateUtf8(value, maxLength_ > 0 ? maxLength_ - 1 : 0);
 			CopyUtf8(buf_, value, maxLength_);
 			len_ = value.size();
 			return *this;
@@ -85,6 +86,7 @@ class TextInputState {
 
 		void insert(size_t pos, std::string_view value)
 		{
+			pos = std::min(pos, len_);
 			value = truncateForInsertion(value);
 			std::memmove(&buf_[pos + value.size()], &buf_[pos], len_ - pos);
 			std::memcpy(&buf_[pos], value.data(), value.size());
@@ -94,6 +96,9 @@ class TextInputState {
 
 		void erase(size_t pos, size_t len)
 		{
+			// A stale range (from text that was since replaced) must never reach past the end.
+			pos = std::min(pos, len_);
+			len = std::min(len, len_ - pos);
 			std::memmove(&buf_[pos], &buf_[pos + len], len_ - (pos + len));
 			len_ -= len;
 			buf_[len_] = '\0';
@@ -165,12 +170,14 @@ public:
 	{
 		value_ = text;
 		cursor_->position = value_.size();
+		cursor_->selection.clear();
 	}
 
 	void clear()
 	{
 		value_.clear();
 		cursor_->position = 0;
+		cursor_->selection.clear();
 	}
 
 	/**
@@ -182,6 +189,7 @@ public:
 			return;
 		value_ = value().substr(0, length);
 		cursor_->position = std::min(cursor_->position, value_.size());
+		cursor_->selection.clear();
 	}
 
 	/**
