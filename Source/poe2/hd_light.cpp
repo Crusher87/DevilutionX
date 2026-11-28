@@ -2347,6 +2347,8 @@ int Lamps(Lamp *out, int maxCount)
 			continue;
 		Lamp &lamp = out[count++];
 		lamp.door = source.flickerKind == DoorBreath;
+		lamp.window = source.flickerKind == CandleFlicker;
+		lamp.sheltered = leveltype == DTYPE_TOWN && source.flickerKind == FireFlicker;
 		lamp.x = source.rayX;
 		lamp.y = source.rayY;
 		lamp.height = source.height;

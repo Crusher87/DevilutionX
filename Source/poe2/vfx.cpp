@@ -11231,13 +11231,6 @@ void DrawMarks()
  * falls, so it glints round the lamps and all but goes in the dark, and where it lands a few droplets jump. The sky
  * itself darkens in the HD light (hd_light's UpdateSky); nothing is laid over the screen but a breath of haze.
  */
-/**
- * @brief Wet ground shines under the lamps (ideas 23 and 14): a lamp's image lies as far under the ground as the lamp
- * hangs over it, and rough wet ground smears it into a soft streak running from the lamp's foot towards the eye, with
- * brighter glints where water stands. The glints stay where they are on the ground; they shiver while rain still
- * falls on them and lie nearly still after. All of it lies on the floor, so whatever stands there hides it, and it is
- * drawn only under the lamps, which keeps the floor's mask small.
- */
 /** @brief A lamp's own colour, deeper than the colour it lights the ground (the flame itself, not its glow). */
 Rgb LampColour(const hd::light::Lamp &lamp)
 {
@@ -11333,6 +11326,76 @@ void DrawShafts(Batch &batch)
 	}
 }
 
+/**
+ * @brief One upright patch of a light's mirror image in wet ground (DrawWetShine): the opening's shape upside down
+ * under it, then a fading smear on towards the eye, as rough wet ground stretches a reflection out. Rows of it are
+ * broken up where the ground is rougher or drier, and while rain falls they shiver from side to side and flicker.
+ * @param top The middle of its top edge, in the world. @param across Half its width along the wall, in the world.
+ * @param tall How tall the mirrored opening is, and smear how much further its streak runs on, in world pixels.
+ * @param mullion How dark the bar across its middle is (a window's frame), 0 for none.
+ */
+void MirrorPatch(Batch &batch, Vec top, Vec across, float tall, float smear, Rgb colour, float alpha, uint32_t seed, float shimmer, float mullion)
+{
+	if (alpha < 0.01F || tall <= 0.5F)
+		return;
+	constexpr int Smears = 7;
+	// Down the patch: a soft top, the opening (a bar across the middle of a window), then the streak.
+	std::array<float, 8 + Smears> rows {};
+	std::array<float, 8 + Smears> shares {};
+	const std::array<float, 8> opening { -0.14F, 0.F, 0.25F, 0.43F, 0.5F, 0.57F, 0.75F, 1.F };
+	int count = 0;
+	for (const float v : opening) {
+		rows[count] = v * tall;
+		shares[count] = v < 0 ? 0.F : (std::abs(v - 0.5F) < 0.01F ? 1 - mullion : 1.F);
+		count++;
+	}
+	for (int k = 1; k <= Smears; k++) {
+		const float f = static_cast<float>(k) / Smears;
+		rows[count] = tall + f * smear;
+		shares[count] = 0.8F * std::pow(1 - f, 1.6F);
+		count++;
+	}
+	// Across: soft sides, a little wider down the streak.
+	constexpr std::array<float, 7> Columns { -1.35F, -0.9F, -0.45F, 0.F, 0.45F, 0.9F, 1.35F };
+	constexpr std::array<float, 7> Edges { 0.F, 0.75F, 1.F, 1.F, 1.F, 0.75F, 0.F };
+	const float length = std::max(tall + smear, 1.F);
+	const Vec side = Length(across) > 0.01F ? across * (1 / Length(across)) : Vec { 1, 0 };
+	const float halfWide = Length(across);
+	const int first = static_cast<int>(batch.vertices.size());
+	for (int r = 0; r < count; r++) {
+		const float down = rows[static_cast<size_t>(r)];
+		const float spread = 1 + 0.4F * std::max(down - tall, 0.F) / length;
+		// Rain on the water: each row shivers sideways and flickers.
+		const float flicker = SmoothNoise(seed ^ 0x9E3779B9U, AmbientTime * 0.004F + static_cast<float>(r) * 1.7F);
+		const float sway = (SmoothNoise(seed ^ 0x85EBCA6BU, AmbientTime * 0.006F + static_cast<float>(r) * 2.3F) - 0.5F) * shimmer * halfWide * 0.9F;
+		const float rowAlpha = alpha * shares[static_cast<size_t>(r)] * (1 - shimmer * 0.45F * flicker);
+		for (size_t c = 0; c < Columns.size(); c++) {
+			// The ground is no mirror: only where water stands in a hollow does the image show, in broken pieces.
+			const float water = 0.7F * SmoothNoise(seed, static_cast<float>(r) * 1.1F + static_cast<float>(c) * 0.12F) + 0.3F * SmoothNoise(seed + static_cast<uint32_t>(c) * 7919U, static_cast<float>(r) * 0.6F);
+			const float puddle = std::clamp((water - 0.3F) / 0.45F, 0.F, 1.F);
+			const Vec at = top + across * (Columns[c] * spread) + side * sway + Vec { 0, down };
+			batch.add(ToScreen(at), colour, rowAlpha * Edges[c] * puddle * puddle * (3 - 2 * puddle));
+		}
+	}
+	const int across5 = static_cast<int>(Columns.size());
+	for (int r = 0; r + 1 < count; r++) {
+		for (int c = 0; c + 1 < across5; c++) {
+			const int corner = first + r * across5 + c;
+			batch.tri(corner, corner + across5, corner + 1);
+			batch.tri(corner + 1, corner + across5, corner + across5 + 1);
+		}
+	}
+}
+
+/**
+ * @brief Wet ground mirrors the lights by it (ideas 23 and 14, redone after Curtis's 2026-11-28 look: "it should look
+ * appropriate to each portal/window that is casting it - real"). Seen from above, a light's image in water lies
+ * straight down from it, as far under the ground as the light is over it: so a lit window shows as its own shape
+ * upside down at the foot of its wall, panes and frame and all, a doorway as a tall patch of firelight, a lamp as a
+ * small bright mark; rough wet ground then smears each image on towards the eye. Its brightest glints shiver while
+ * rain falls on it. Nothing shines where a roof keeps the ground dry (Griswold's forge). All of it lies on the floor
+ * (DrawFloorShafts), so whoever stands there hides it.
+ */
 void DrawWetShine(Batch &batch)
 {
 	const float wet = Wetness() * atmosphere::Value("wet_shine", 1.F);
@@ -11340,54 +11403,73 @@ void DrawWetShine(Batch &batch)
 		return;
 	std::array<hd::light::Lamp, 32> lamps;
 	const int count = hd::light::Lamps(lamps.data(), static_cast<int>(lamps.size()));
-	const float shiver = weather::Current().strength > 0.05F ? 0.012F : 0.0025F;
-	constexpr int Glints = 22;
+	const float raining = weather::Current().strength;
+	const float shimmer = std::clamp(raining * 1.5F, 0.F, 1.F);
+	const float mirror = atmosphere::Value("wet_mirror", 0.35F);
+	constexpr int Glints = 10;
 	for (int i = 0; i < count; i++) {
 		const hd::light::Lamp &lamp = lamps[static_cast<size_t>(i)];
+		if (lamp.sheltered)
+			continue;
 		const Vec foot = FloorToWorld(lamp.x, lamp.y);
-		// The shine lies where the lamp's light does: out over the ground the way the door or window faces, the way
-		// its shadows fall, not straight down the screen whichever way the light goes (Curtis 2026-11-14: the shine ran
-		// north to south while the shadows said the light came from the north-east). A lamp that shines all round has
-		// its shine in a pool at its foot.
+		if (OutOfView(foot + Vec { 0, 50 }, 140))
+			continue;
 		const float facing = std::hypot(lamp.outX, lamp.outY);
 		const bool aimed = facing > 0.1F;
-		const Vec out = aimed ? FloorToWorld(lamp.outX / facing, lamp.outY / facing) : Vec { 0, 12 };
-		const Vec side = aimed ? FloorToWorld(-lamp.outY / facing, lamp.outX / facing) : Vec { 24, 0 };
-		const float reach = aimed ? 3.F : 1.F;
-		if (OutOfView(foot + out * (reach * 0.5F), Length(out) * reach + 60))
+		// Along the wall it is in (a lamp hanging free: across the screen).
+		const Vec along = aimed ? FloorToWorld(-lamp.outY / facing, lamp.outX / facing) : Vec { 32, 0 };
+		const Vec alongUnit = along * (1 / std::max(Length(along), 0.01F));
+		// The opening the light comes out of: how wide (in tiles along the wall) and from what height to what height.
+		const bool doorway = lamp.door || (aimed && !lamp.window && lamp.size >= 0.5F);
+		float halfWide;
+		float bottom;
+		float top;
+		if (lamp.window) {
+			halfWide = 0.2F;
+			bottom = std::max(lamp.height - 0.3F, 0.15F);
+			top = lamp.height + 0.3F;
+		} else if (doorway) {
+			halfWide = 0.22F + 0.25F * lamp.size;
+			bottom = 0;
+			top = std::max(lamp.height + 0.25F, 1.2F);
+		} else {
+			halfWide = 0.05F + 0.08F * lamp.size;
+			bottom = std::max(lamp.height - 0.12F, 0.F);
+			top = lamp.height + 0.12F;
+		}
+		const float tall = (top - bottom) * TileTall;
+		// Rough wet ground drags a small bright light out into a long streak, a big opening less so.
+		const float smear = doorway ? tall * 0.7F : std::max(tall * 1.1F, 34.F);
+		// In water the light shows as the flame or glass itself, deeper and warmer than the glow it casts.
+		const Rgb glow = LampColour(lamp);
+		const Rgb colour { glow.r, static_cast<uint8_t>(glow.g * 0.8F), static_cast<uint8_t>(glow.b * 0.55F) };
+		const float power = wet * mirror * std::min(lamp.strength, 1.6F);
+		const Vec patchTop = foot + Vec { 0, bottom * TileTall };
+		const uint32_t seed = ((static_cast<uint32_t>(lamp.x * 16) * 73856093U) ^ (static_cast<uint32_t>(lamp.y * 16) * 19349663U)) | 1;
+		const Vec half = along * halfWide;
+		if (lamp.window) {
+			// Two panes side by side with the frame between them, each with a bar across: four panes of glass.
+			const Vec pane = half * 0.42F;
+			MirrorPatch(batch, patchTop - half * 0.5F, pane, tall, smear, colour, power, seed, shimmer, 0.65F);
+			MirrorPatch(batch, patchTop + half * 0.5F, pane, tall, smear, colour, power, seed * 3U + 1, shimmer, 0.65F);
+		} else {
+			MirrorPatch(batch, patchTop, half * 0.8F, tall, smear, colour, power * (doorway ? 0.8F : 1.4F), seed, shimmer, 0);
+		}
+		// Where rain lands on the image, the light's own colour catches in bright little glints.
+		if (shimmer <= 0.02F)
 			continue;
-		// The light's own colour, deeper than the colour it lights the ground (a flame seen in water, not its glow).
-		const float top = std::max({ lamp.colour[0], lamp.colour[1], lamp.colour[2], 0.01F });
-		const auto deep = [&](int c) { return static_cast<uint8_t>(255 * std::pow(std::clamp(lamp.colour[static_cast<size_t>(c)] / top, 0.F, 1.F), 1.4F)); };
-		const Rgb colour { deep(0), deep(1), deep(2) };
-		// The sparkles are the flame itself seen in the water: paler than the ground it lights, or they would be lost
-		// in the lamp's own pool.
 		const Rgb spark = Mix(colour, { 255, 250, 235 }, 0.4F);
-		const float power = wet * std::min(lamp.strength, 1.6F);
-		const float half = 5 + lamp.size * 22;
-		const Vec from = foot + out * (0.15F * reach);
-		const Vec middle = foot + out * (0.5F * reach);
-		const Vec to = foot + out * reach;
-		SoftLine(batch, from, middle, half * 2.2F, colour, colour, 0, power * 0.2F);
-		SoftLine(batch, middle, to, half * 2.2F, colour, colour, power * 0.2F, 0);
-		uint32_t seed = ((static_cast<uint32_t>(lamp.x * 16) * 73856093U) ^ (static_cast<uint32_t>(lamp.y * 16) * 19349663U)) | 1;
+		uint32_t glintSeed = seed;
 		for (int k = 0; k < Glints; k++) {
-			const float f = SeededRandom(seed);
-			const float across = SeededRandom(seed) + SeededRandom(seed) - 1;
-			const float length = 2.5F + 4 * SeededRandom(seed);
-			const float thick = 1.8F + 1.4F * SeededRandom(seed);
-			// Brightest in the middle of the lit ground, fading towards the wall, outwards and to the sides.
-			const float away = std::abs(f - 0.45F) / 0.55F;
-			const float share = (1 - away) * (1 - away) * (1 - 0.6F * std::abs(across));
-			const float glint = SmoothNoise(seed, AmbientTime * shiver);
-			const float alpha = power * share * (0.25F + 0.75F * glint) * 1.1F;
+			const float down = SeededRandom(glintSeed) * (tall + smear * 0.6F);
+			const float side = (SeededRandom(glintSeed) * 2 - 1) * Length(half);
+			const float life = SmoothNoise(glintSeed, AmbientTime * 0.012F);
+			const float alpha = power * shimmer * std::max(life - 0.55F, 0.F) * 2.2F;
 			if (alpha < 0.01F)
 				continue;
-			const Vec centre = foot + out * (reach * (0.1F + 0.85F * f)) + side * (across * (0.3F + 0.7F * f));
-			// Each glint is a small flat sparkle on the water lying on the ground.
-			const Vec lie { length * (0.8F + 0.4F * glint), 0 };
-			SoftLine(batch, centre, centre + lie, thick, spark, spark, alpha, 0);
-			SoftLine(batch, centre, centre - lie, thick, spark, spark, alpha, 0);
+			const Vec centre = patchTop + alongUnit * side + Vec { 0, down };
+			const Vec lie { 2.5F + 2 * life, 0 };
+			SoftLine(batch, centre - lie, centre + lie, 2.2F, spark, spark, alpha, alpha);
 		}
 	}
 }

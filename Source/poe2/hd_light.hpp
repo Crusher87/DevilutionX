@@ -190,6 +190,10 @@ struct Lamp {
 	float strength = 1;
 	/** @brief It is the cathedral's doorway in town. */
 	bool door = false;
+	/** @brief It is a lit window (candlelight behind glass): what water on the ground mirrors is the window, panes and all. */
+	bool window = false;
+	/** @brief It burns under a roof (Griswold's forge): the ground its light falls on stays dry in the rain. */
+	bool sheltered = false;
 	/** @brief How far its light reaches, in tiles. */
 	float reach = 0;
 	/**
