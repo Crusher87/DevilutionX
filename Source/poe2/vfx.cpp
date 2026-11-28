@@ -4255,22 +4255,29 @@ SDLSurfaceUniquePtr PieceFloorPicture(int piece)
 {
 	constexpr int Width = 2 * DunFrameWidth;
 	constexpr int Height = DunFrameHeight;
-	SDLSurfaceUniquePtr surface = SDLWrap::CreateRGBSurfaceWithFormat(0, Width, Height, 8, SDL_PIXELFORMAT_INDEX8);
-	const Surface out(surface.get());
-	std::memset(surface->pixels, 0, static_cast<size_t>(surface->pitch) * Height);
+	// Drawn in the middle of a wider picture, so anything drawn past the diamond lands in the margin, never past the end
+	// of the picture (drawing a floor as the wrong kind of block once ran far past it and broke the game).
+	constexpr int Margin = 64;
+	SDLSurfaceUniquePtr padded = SDLWrap::CreateRGBSurfaceWithFormat(0, Width + 2 * Margin, Height + 2 * Margin, 8, SDL_PIXELFORMAT_INDEX8);
+	std::memset(padded->pixels, 0, static_cast<size_t>(padded->pitch) * (Height + 2 * Margin));
+	const Surface whole(padded.get());
+	const Surface out = whole.subregion(Margin, Margin, Width, Height);
 	static std::vector<uint8_t> unlit;
-	const size_t size = static_cast<size_t>(out.pitch()) * (out.h() + 1);
+	const size_t size = static_cast<size_t>(whole.pitch()) * (whole.h() + 1);
 	if (unlit.size() < size)
 		unlit.assign(size, 0);
-	const Lightmap lightmap(out.at(0, 0), std::span<const uint8_t>(unlit.data(), size), static_cast<uint16_t>(out.pitch()), LightTables, FullyLitLightTable, FullyDarkLightTable);
+	const Lightmap lightmap(whole.at(0, 0), std::span<const uint8_t>(unlit.data(), size), static_cast<uint16_t>(whole.pitch()), LightTables, FullyLitLightTable, FullyDarkLightTable);
 	for (int half = 0; half < 2; half++) {
 		const LevelCelBlock block { DPieceMicros[piece].mt[half] };
 		if (!block.hasValue())
 			continue;
-		const TileType type = block.type();
-		const int_fast16_t height = IsAnyOf(type, TileType::LeftTriangle, TileType::RightTriangle) ? DunFrameTriangleHeight : DunFrameHeight;
-		RenderTileFrame(out, lightmap, Point { static_cast<int>(half * DunFrameWidth), Height - 1 }, type, GetDunFrame(pDungeonCels.get(), block.frame()), height, MaskType::Solid, FullyLitLightTable);
+		// As the game draws a floor (DrawFloorTile): always its two triangles, whatever the block says it is. A floor with
+		// plants on it says it is a see-through square, but its floor is stored as a triangle all the same.
+		RenderTileFrame(out, lightmap, Point { static_cast<int>(half * DunFrameWidth), Height - 1 }, half == 0 ? TileType::LeftTriangle : TileType::RightTriangle, GetDunFrame(pDungeonCels.get(), block.frame()), DunFrameTriangleHeight, MaskType::Solid, FullyLitLightTable);
 	}
+	SDLSurfaceUniquePtr surface = SDLWrap::CreateRGBSurfaceWithFormat(0, Width, Height, 8, SDL_PIXELFORMAT_INDEX8);
+	for (int y = 0; y < Height; y++)
+		std::memcpy(static_cast<uint8_t *>(surface->pixels) + static_cast<ptrdiff_t>(y) * surface->pitch, static_cast<const uint8_t *>(padded->pixels) + static_cast<ptrdiff_t>(y + Margin) * padded->pitch + Margin, Width);
 	return surface;
 }
 
