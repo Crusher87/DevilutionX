@@ -112,6 +112,8 @@ cathedral	mood_cool	0.03		Blending in: one colour mood over the whole picture, d
 cathedral	wrap	0.5		Blending in: how bright the thin soft edge of light is on the side of a body turned to a strong light close by (a brazier, a torch, a spell). 0 none, 0.5 as is, 1 strong.
 cathedral	wrap_wide	1.6		Blending in: how wide that edge of light is, in game pixels. 1 thin, 1.6 as is, 3 wide.
 cathedral	echo	1		Blending in: how much the game's own sounds ring in this place (it also follows the size of the room you stand in: passages nearly dry, big halls ring longer). 0 none, 1 normal, 2 double.
+cathedral	sheen	0.18		Blending in, a Maybe (switched off until feel("sheen",1)): how bright the soft shine is that worn floor stones catch in front of each lamp and fire. 0 none, 0.18 as is, 0.4 strong.
+cathedral	step_dust	1		Blending in, a Maybe (switched off until feel("react",1)): how much dust feet stir off the old floor as heroes and monsters walk. 0 none, 1 as is, 2 double.
 catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 catacombs	warm	1.00 0.97 0.93	1.04 0.92 0.85	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 catacombs	cool	0.68 0.82 1.14	0.62 0.76 1.08	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -158,6 +160,8 @@ catacombs	mood_cool	0.03		Blending in: one colour mood over the whole picture, d
 catacombs	wrap	0.5		Blending in: how bright the thin soft edge of light is on the side of a body turned to a strong light close by (a brazier, a torch, a spell). 0 none, 0.5 as is, 1 strong.
 catacombs	wrap_wide	1.6		Blending in: how wide that edge of light is, in game pixels. 1 thin, 1.6 as is, 3 wide.
 catacombs	echo	1.1		Blending in: how much the game's own sounds ring in this place (it also follows the size of the room you stand in: passages nearly dry, big halls ring longer). 0 none, 1 normal, 2 double.
+catacombs	foot_haze	0.16		Blending in, a Maybe (switched off until feel("foothaze",1)): a very thin haze of the room's air over feet and the foot of objects, so they stand in the damp air. Only over the thing itself, nothing floats over bare floor. 0 none, 0.16 as is, 0.3 clearly seen.
+catacombs	step_dust	1		Blending in, a Maybe (switched off until feel("react",1)): how much dust feet stir off the old floor as heroes and monsters walk. 0 none, 1 as is, 2 double.
 caves	falloff	1.50	1.65	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 caves	warm	1.16 0.90 0.66	1.20 0.85 0.58	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 caves	cool	0.84 0.76 0.74	0.78 0.70 0.68	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -323,6 +327,9 @@ crypt	mood_cool	0.03		Blending in: one colour mood over the whole picture, dark 
 crypt	wrap	0.5		Blending in: how bright the thin soft edge of light is on the side of a body turned to a strong light close by (a brazier, a torch, a spell). 0 none, 0.5 as is, 1 strong.
 crypt	wrap_wide	1.6		Blending in: how wide that edge of light is, in game pixels. 1 thin, 1.6 as is, 3 wide.
 crypt	echo	1.1		Blending in: how much the game's own sounds ring in this place (it also follows the size of the room you stand in: passages nearly dry, big halls ring longer). 0 none, 1 normal, 2 double.
+crypt	foot_haze	0.16		Blending in, a Maybe (switched off until feel("foothaze",1)): a very thin haze of the room's air over feet and the foot of objects, so they stand in the damp air. Only over the thing itself, nothing floats over bare floor. 0 none, 0.16 as is, 0.3 clearly seen.
+crypt	sheen	0.18		Blending in, a Maybe (switched off until feel("sheen",1)): how bright the soft shine is that worn floor stones catch in front of each lamp and fire. 0 none, 0.18 as is, 0.4 strong.
+crypt	step_dust	1		Blending in, a Maybe (switched off until feel("react",1)): how much dust feet stir off the old floor as heroes and monsters walk. 0 none, 1 as is, 2 double.
 butcher	light	1.4		The Butcher's room (idea 46): how bright the red light inside is. A torch is 2. It spills out when his door opens.
 butcher	light_colour	1.00 0.18 0.10		Its colour, red green blue.
 butcher	light_radius	6		How far it reaches, in tiles.

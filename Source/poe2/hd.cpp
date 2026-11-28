@@ -307,6 +307,8 @@ std::vector<uint32_t> VeilPixels;
 bool FieldMultiplies = false;
 /** @brief A soft round dark spot, for the shadow round a hero's feet from the light they carry. */
 SDL_Texture *BlobTexture = nullptr;
+/** @brief The soft round spot the floor's shine is drawn with (DrawSheen): brightness, not see-through. */
+SDL_Texture *SheenTexture = nullptr;
 /** @brief Dark towards the screen's edges and corners, clear in the middle (the Atmosphere option's edges, idea 6). */
 SDL_Texture *EdgesTexture = nullptr;
 /** @brief The dark that closes in round the hero (the Atmosphere option's moments): clear in the middle, black at the rim. */
@@ -684,6 +686,9 @@ void DestroyTextures()
 	if (BlobTexture != nullptr && CacheRenderer != nullptr)
 		SDL_DestroyTexture(BlobTexture);
 	BlobTexture = nullptr;
+	if (SheenTexture != nullptr && CacheRenderer != nullptr)
+		SDL_DestroyTexture(SheenTexture);
+	SheenTexture = nullptr;
 	if (EdgesTexture != nullptr && CacheRenderer != nullptr)
 		SDL_DestroyTexture(EdgesTexture);
 	EdgesTexture = nullptr;
@@ -6654,6 +6659,134 @@ void DrawBounce(SDL_Renderer *renderer, const Draw &draw, float toLogical, float
 #endif
 }
 
+/** @brief Blending in (feel("foothaze"), a Maybe): how far up a body the haze reaches, as a share of its height. */
+constexpr float HazeReach = 0.2F;
+
+/**
+ * @brief Blending in (feel("foothaze"), a Maybe, off until asked for): a very thin layer of the room's air over the feet of
+ * a body or the foot of an object, thickest at the floor and gone by the shin, so it stands in the air of the room and
+ * not in front of it. Only over the thing's own shape: nothing floats over the bare floor. atmosphere.tsv's foot_haze is how
+ * thick (it has rows only where the air is damp: the Catacombs and the Crypt), foot_haze_colour its colour in full light.
+ */
+void DrawHaze(SDL_Renderer *renderer, const Draw &draw, float toLogical)
+{
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+	const float amount = std::clamp(atmosphere::Setting(atmosphere::Knob::FootHaze), 0.F, 3.F) * std::clamp(atmosphere::Value("foot_haze", 0.F), 0.F, 1.F);
+	if (amount <= 0.004F)
+		return;
+	if (!OnScreen(DestOf(draw, toLogical), static_cast<float>(CastPad * Scale) * toLogical))
+		return;
+	Raster &raster = FallbackRaster(draw, false);
+	if (!CastTextures(renderer, raster))
+		return;
+	float wx;
+	float wy;
+	StandsAt(draw, wx, wy);
+	// Air shows only as far as it is lit.
+	const Colour3 lit = ToColour(light::At(wx, wy));
+	const std::array<float, 3> air = atmosphere::Colour("foot_haze_colour", { 0.62F, 0.68F, 0.74F });
+	const SDL_Color full { ColourByte(lit[0] * air[0]), ColourByte(lit[1] * air[1]), ColourByte(lit[2] * air[2]), ColourByte(std::min(amount, 0.6F)) };
+	const SDL_Color none { full.r, full.g, full.b, 0 };
+	// Its shape's picture is the sprite with a border round it; its feet stand half a tile above the sprite's foot.
+	const float whole = static_cast<float>(raster.height + CastPad * 2);
+	const float feet = (static_cast<float>(CastPad + raster.height - 1) - HalfTileHeight) / whole;
+	const float bodyTop = static_cast<float>(CastPad + raster.bodyTop) / whole;
+	const float from = std::clamp(feet - (feet - std::min(bodyTop, feet)) * HazeReach, 0.F, feet);
+	const SDL_FRect around {
+		(ViewportOffsetX + static_cast<float>(draw.x - CastPad) * Scale) * toLogical,
+		static_cast<float>(draw.y - CastPad) * Scale * toLogical,
+		static_cast<float>(raster.width + CastPad * 2) * Scale * toLogical,
+		whole * Scale * toLogical,
+	};
+	const std::array<float, 3> rows { from, feet, 1.F };
+	std::array<SDL_Vertex, 6> vertices;
+	for (size_t r = 0; r < rows.size(); r++) {
+		for (size_t side = 0; side < 2; side++) {
+			const float fx = static_cast<float>(side);
+			vertices[r * 2 + side] = SDL_Vertex { { around.x + fx * around.w, around.y + rows[r] * around.h }, r == 0 ? none : full, { fx, rows[r] } };
+		}
+	}
+	static constexpr std::array<int, 12> Indices { 0, 1, 3, 0, 3, 2, 2, 3, 5, 2, 5, 4 };
+	SDL_SetTextureColorMod(raster.castTexture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(raster.castTexture, 255);
+	SDL_SetTextureBlendMode(raster.castTexture, SDL_BLENDMODE_BLEND);
+	SDL_RenderGeometry(renderer, raster.castTexture, vertices.data(), static_cast<int>(vertices.size()), Indices.data(), static_cast<int>(Indices.size()));
+#else
+	(void)renderer;
+	(void)draw;
+	(void)toLogical;
+#endif
+}
+
+/**
+ * @brief Blending in (feel("sheen"), a Maybe, off until asked for): worn stone catches a soft shine from each lamp and
+ * fire near it: on the floor in front of the light, towards us, where its mirror picture would lie. The floor there is
+ * made brighter by a share of itself, so the tops of the stones catch it and the gaps between them stay dark.
+ * Drawn on the lit floor before anything that stands on it. atmosphere.tsv's sheen is how bright.
+ */
+void DrawSheen(SDL_Renderer *renderer, float toLogical)
+{
+#if SDL_VERSION_ATLEAST(2, 0, 6)
+	const float amount = std::clamp(atmosphere::Setting(atmosphere::Knob::Sheen), 0.F, 3.F) * std::clamp(atmosphere::Value("sheen", 0.F), 0.F, 2.F);
+	if (amount <= 0.004F)
+		return;
+	static const SDL_BlendMode Gain = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_DST_COLOR, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
+	if (SheenTexture == nullptr) {
+		constexpr int Size = 64;
+		std::vector<uint8_t> rgba(static_cast<size_t>(Size) * Size * 4, 255);
+		for (int y = 0; y < Size; y++) {
+			for (int x = 0; x < Size; x++) {
+				const float dx = (static_cast<float>(x) + 0.5F) / (Size / 2.F) - 1.F;
+				const float dy = (static_cast<float>(y) + 0.5F) / (Size / 2.F) - 1.F;
+				const float fade = std::clamp(1.F - (dx * dx + dy * dy), 0.F, 1.F);
+				const uint8_t bright = static_cast<uint8_t>(fade * fade * 255.F + 0.5F);
+				uint8_t *pixel = &rgba[(static_cast<size_t>(y) * Size + x) * 4];
+				pixel[0] = pixel[1] = pixel[2] = bright;
+			}
+		}
+		SheenTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, Size, Size);
+		if (SheenTexture == nullptr)
+			return;
+		SDL_SetTextureScaleMode(SheenTexture, SDL_ScaleModeLinear);
+		SDL_UpdateTexture(SheenTexture, nullptr, rgba.data(), Size * 4);
+	}
+	if (SDL_SetTextureBlendMode(SheenTexture, Gain) != 0)
+		return;
+	static std::array<light::Lamp, 48> lamps;
+	const int count = light::Lamps(lamps.data(), static_cast<int>(lamps.size()));
+	for (int i = 0; i < count; i++) {
+		const light::Lamp &lamp = lamps[static_cast<size_t>(i)];
+		// A lamp that shines away from us has its shine behind its own wall.
+		if (lamp.door || lamp.outX + lamp.outY < -0.01F)
+			continue;
+		const float bright = std::min(lamp.strength * amount, 1.F);
+		if (bright <= 0.02F)
+			continue;
+		float bx;
+		float by;
+		BufferOf(lamp.x + lamp.outX * 0.6F, lamp.y + lamp.outY * 0.6F, bx, by);
+		// Its mirror picture lies as far under the floor as the lamp hangs over it: the shine is the smear between.
+		const float drop = std::clamp(lamp.height, 0.3F, 2.F) * HalfTileHeight * 2;
+		const float wide = HalfTileWidth * 1.5F;
+		const float tall = drop * 0.75F + HalfTileHeight * 0.6F;
+		const SDL_FRect spot {
+			(ViewportOffsetX + (bx - wide) * Scale) * toLogical,
+			(by + drop * 0.55F - tall) * Scale * toLogical,
+			wide * 2 * Scale * toLogical,
+			tall * 2 * Scale * toLogical,
+		};
+		if (!OnScreen(spot, 0))
+			continue;
+		SDL_SetTextureColorMod(SheenTexture, ColourByte(lamp.colour[0] * bright), ColourByte(lamp.colour[1] * bright), ColourByte(lamp.colour[2] * bright));
+		SDL_RenderCopyF(renderer, SheenTexture, nullptr, &spot);
+	}
+#else
+	(void)renderer;
+	(void)toLogical;
+#endif
+}
+
 /** @brief Blending in (feel("wrap")): a light this bright where a body stands (as drawn, 1 is full) gives it an edge; from here it grows. */
 constexpr float WrapFrom = 0.3F;
 
@@ -6798,6 +6931,7 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 		batch::Flush(renderer);
 #endif
 		vfx::DrawFloorShafts(renderer, toLogical);
+		DrawSheen(renderer, toLogical);
 	}
 	const bool joined = DrawJoinedShadows(renderer, worldSize, toLogical);
 	size_t nextProp = 0;
@@ -6820,13 +6954,16 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 		const CorpseShade corpseKept = joined && i < CorpseKept.size() ? CorpseKept[i] : CorpseShade { 1.F, 1.F, 1.F, 1.F };
 		if (DrawShapedCorpse(renderer, draw, toLogical, corpseKept))
 			continue;
-		if (DrawShapedObject(renderer, draw, toLogical, (kept.foot + kept.top) / 2))
+		if (DrawShapedObject(renderer, draw, toLogical, (kept.foot + kept.top) / 2)) {
+			DrawHaze(renderer, draw, toLogical);
 			continue;
+		}
 		const bool living = IsLivingBody(draw);
 		if (living)
 			DrawWrap(renderer, draw, toLogical);
 		if (DrawShapedBody(renderer, draw, toLogical, kept, tint)) {
 			DrawBounce(renderer, draw, toLogical, kept.foot);
+			DrawHaze(renderer, draw, toLogical);
 			continue;
 		}
 		if (draw.kind == DrawKind::Tile && draw.hasTile && draw.light >= 0 && !IsTileBase(draw) && IsDirt(draw.cell)) {
@@ -6846,6 +6983,8 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 		DrawShaded(renderer, draw, shading, toLogical, draw.caster == Caster::None);
 		if (living)
 			DrawBounce(renderer, draw, toLogical, kept.foot);
+		if (living || (draw.kind == DrawKind::Sprite && draw.style == SpriteStyle::Normal && IsObject(draw.caster)))
+			DrawHaze(renderer, draw, toLogical);
 	}
 	if (!Draws.empty())
 		DrawWallShadesAfter(renderer, Draws.size() - 1);

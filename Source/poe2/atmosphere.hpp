@@ -157,8 +157,14 @@ enum class Knob : uint8_t {
 	Wrap,
 	/** Blending in: the game's own sounds ring a little in big halls and caverns, by the size of the space round the hero. */
 	Echo,
+	/** Blending in (a Maybe, off until asked for): a very thin haze of the room's air over feet and the foot of things. */
+	FootHaze,
+	/** Blending in (a Maybe, off until asked for): feet stir a little dust off the floor as heroes and monsters walk. */
+	React,
+	/** Blending in (a Maybe, off until asked for): worn floors catch a soft shine from the lamps and fires near them. */
+	Sheen,
 };
-inline constexpr size_t NumKnobs = 55;
+inline constexpr size_t NumKnobs = 58;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

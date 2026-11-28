@@ -3856,6 +3856,31 @@ void AdvanceDust(float ms)
 			throwUp(door + Vec { Random(-12, 12), Random(-6, 6) }, Random(10, 60), { std::cos(angle) * speed, std::sin(angle) * speed * 0.5F }, Random(-5, 7));
 		}
 	}
+	// Blending in (feel("react"), a Maybe, off until asked for): feet stir a little dust off the floor as they walk.
+	const float steps = std::min(atmosphere::Setting(atmosphere::Knob::React) * atmosphere::Value("step_dust", 0.F), 3.F);
+	static float sinceSteps = 0;
+	sinceSteps += ms;
+	if (steps > 0 && sinceSteps >= 130 && Motes.size() < 400) {
+		sinceSteps = 0;
+		auto step = [&](Point tile) {
+			const Vec feet = TileCentre(tile);
+			if (Random(0, 1) > 0.45F * steps || OutOfView(feet, 0))
+				return;
+			throwUp(feet + Vec { Random(-10, 10), Random(-5, 5) }, Random(1, 4), { Random(-7, 7), Random(-3.5F, 3.5F) }, Random(5, 12));
+		};
+		for (const Player &player : Players) {
+			if (player.plractive && player.isOnActiveLevel() && player.isWalking())
+				step(player.position.tile);
+		}
+		for (size_t i = 0; i < ActiveMonsterCount; i++) {
+			const Monster &monster = Monsters[ActiveMonsters[i]];
+			// (What flies stirs nothing.)
+			if (monster.isWalking() && (monster.flags & MFLAG_HIDDEN) == 0 && monster.ai != MonsterAIID::Bat)
+				step(monster.position.tile);
+		}
+	} else if (steps <= 0) {
+		sinceSteps = 0;
+	}
 	// Arriving on a floor, the dust is already there.
 	if (Motes.empty()) {
 		for (int i = static_cast<int>(target); i > 0; i--)

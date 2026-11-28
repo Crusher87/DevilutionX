@@ -103,6 +103,9 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "mood", 1.F, "blending in: one colour mood over the whole picture, spells and all: dark parts lean cool, lit parts lean to firelight; 2 twice as strong, 0 none" },
 	{ "wrap", 1.F, "blending in: a body in front of a strong light gets a thin soft edge of that light on the side turned to it; 2 twice as bright, 0 none" },
 	{ "echo", 1.F, "blending in: the game's own sounds ring a little in big halls and caverns, by the size of the space round you; 2 twice as much, 0 none (works with Atmosphere off)" },
+	{ "foothaze", 0.F, "blending in, a Maybe (off): a very thin haze of the room's air over feet and the foot of things, in the Catacombs and Crypt; 1 on, 2 twice as much" },
+	{ "react", 0.F, "blending in, a Maybe (off): feet stir a little dust off the floor as heroes and monsters walk (needs the dust in the air on); 1 on, 2 twice as much" },
+	{ "sheen", 0.F, "blending in, a Maybe (off): worn floors catch a soft shine from the lamps and fires near them; 1 on, 2 twice as bright" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
