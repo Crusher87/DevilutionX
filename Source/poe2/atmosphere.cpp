@@ -108,6 +108,7 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "sheen", 1.F, "blending in: worn floors catch a soft shine from the lamps and fires near them (Curtis 11-28: on, at his strength); 2 twice as bright, 0 none" },
 	{ "lightseams", 1.F, "each piece of a tile takes the same light as the pieces beside it where they meet (foliage over the floor lit as the floor, things on open ground and shapes lit from the tiles' corners), so no faint line shows along the tiles' edges; 0 lights each piece by itself as before (works with Atmosphere off)" },
 	{ "hellcrack", 1.F, "town: the crack down to the Hive (Hellfire) glows and breathes, lights the ground and people round it red, throws up embers and smoke, steams in the rain and now and then surges; 2 twice as much, 0 as the art has it" },
+	{ "wallfoot", 1.F, "the foot of a wall or a door and the floor in front of it each take their own light, pixel by pixel, so no step in the light shows across them; 0 cuts them along the floor's edge as before (also off with lightseams 0; works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
