@@ -55,6 +55,7 @@ set(libdevilutionx_SRCS
   poe2/vfx.cpp
   poe2/weather.cpp
   poe2/atmosphere.cpp
+  poe2/echo.cpp
   poe2/moments.cpp
   poe2/props.cpp
   poe2/carved_bodies.cpp

@@ -66,7 +66,8 @@ extern MIX_Mixer *CurrentMixer;
 extern _music_id sgnMusicTrack;
 
 void ClearDuplicateSounds();
-void snd_play_snd(TSnd *pSnd, int lVolume, int lPan, int userVolume);
+/** `rings`: the sound is out in the level, so it may ring in the room round the hero (room echo). */
+void snd_play_snd(TSnd *pSnd, int lVolume, int lPan, int userVolume, bool rings = false);
 std::unique_ptr<TSnd> sound_file_load(const char *path, bool stream = false);
 std::expected<std::unique_ptr<TSnd>, std::string> SoundFileLoadWithStatus(const char *path, bool stream = false);
 void snd_init();

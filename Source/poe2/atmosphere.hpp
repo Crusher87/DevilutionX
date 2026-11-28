@@ -143,8 +143,22 @@ enum class Knob : uint8_t {
 	SeamLight,
 	/** For finding gaps: bright pink is drawn under the HD world, so any hole left in it shows. */
 	Gaps,
+	/** Blending in: the soft dark spot right under whoever and whatever stands on the floor is deeper, darkest where they touch it. */
+	Contact,
+	/** Blending in: cast shadows take a little of the area's own cool colour, as a room lights its shadows, in place of plain black. */
+	ShadeTint,
+	/** Blending in: dimly lit things far from a light lean further to the area's colour, and a faint veil of it lies over them. */
+	Far,
+	/** Blending in: the legs and lower body of heroes and monsters take a little of the light lying on the floor under them. */
+	Bounce,
+	/** Blending in: one colour mood over the whole finished picture, spells and all: dark parts lean to the area's cool colour, lit parts to firelight. */
+	Mood,
+	/** Blending in: a body in front of a strong light gets a thin soft edge of that light on the side turned to it. */
+	Wrap,
+	/** Blending in: the game's own sounds ring a little in big halls and caverns, by the size of the space round the hero. */
+	Echo,
 };
-inline constexpr size_t NumKnobs = 48;
+inline constexpr size_t NumKnobs = 55;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

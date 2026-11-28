@@ -17,6 +17,7 @@ struct MIX_Track;
 // on SDL_audiolib to every user of this header.
 namespace Aulib {
 class Stream;
+class Processor;
 } // namespace Aulib
 #endif
 
@@ -91,6 +92,12 @@ public:
 	void Stop();
 
 	void SetVolume(int logVolume, int logMin, int logMax);
+
+	/**
+	 * @brief Room echo: how much of this sound, as it is about to be played at these volumes, also goes into the
+	 * room's ring (0 none). Set it just before playing.
+	 */
+	void SetEcho(float send, int logSoundVolume, int logUserVolume);
 	void SetStereoPosition(int logPan);
 
 	void Mute();
@@ -121,7 +128,14 @@ private:
 	float rightGain_ = 1.0f;
 #else
 	std::unique_ptr<Aulib::Stream> stream_;
+	// Room echo: passes a share of this sound on to the room's ring. Made the first time the sound needs one.
+	std::shared_ptr<Aulib::Processor> echo_;
 #endif
 };
+
+/** @brief Room echo: starts the one quiet stream that carries the ring of every sound. After the sound system is up. */
+void StartEchoRoom();
+/** @brief Room echo: stops that stream. Before the sound system goes down. */
+void StopEchoRoom();
 
 } // namespace devilution

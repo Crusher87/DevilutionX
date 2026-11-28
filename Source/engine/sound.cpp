@@ -29,6 +29,7 @@
 #include "engine/assets.hpp"
 #include "game_mode.hpp"
 #include "options.h"
+#include "poe2/echo.hpp"
 #include "poe2/weather.hpp"
 #include "utils/log.hpp"
 #include "utils/math.h"
@@ -203,7 +204,7 @@ void ClearDuplicateSounds()
 	}
 }
 
-void snd_play_snd(TSnd *pSnd, int lVolume, int lPan, int userVolume)
+void snd_play_snd(TSnd *pSnd, int lVolume, int lPan, int userVolume, bool rings)
 {
 	if (pSnd == nullptr || !gbSoundOn) {
 		return;
@@ -221,6 +222,8 @@ void snd_play_snd(TSnd *pSnd, int lVolume, int lPan, int userVolume)
 			return;
 	}
 
+	// Blending in: a sound out in the level rings a little in the room round the hero.
+	sound->SetEcho(rings ? echo::Send() : 0.F, lVolume, userVolume);
 	sound->PlayWithVolumeAndPan(lVolume, userVolume, lPan);
 	pSnd->start_tc = tc;
 }
@@ -286,6 +289,7 @@ void snd_init()
 	LogVerbose(LogCategory::Audio, "Aulib sampleRate={} channels={} frameSize={} format={:#x}",
 	    Aulib::sampleRate(), Aulib::channelCount(), Aulib::frameSize(), Aulib::sampleFormat());
 #endif
+	StartEchoRoom();
 
 	duplicateSoundsMutex.emplace();
 	gbSndInited = true;
@@ -296,6 +300,7 @@ void snd_deinit()
 	if (gbSndInited) {
 		weather::StopSound();
 		ClearDuplicateSounds();
+		StopEchoRoom();
 #ifdef USE_SDL3
 		MIX_DestroyMixer(CurrentMixer);
 		CurrentMixer = nullptr;

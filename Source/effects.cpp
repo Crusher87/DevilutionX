@@ -30,6 +30,7 @@
 #include "game_mode.hpp"
 #include "options.h"
 #include "player.h"
+#include "poe2/echo.hpp"
 #include "utils/is_of.hpp"
 #include "utils/str_cat.hpp"
 
@@ -112,7 +113,7 @@ void PlaySfxPriv(TSFX *pSFX, bool loc, Point position)
 	const auto id = static_cast<SfxID>(pSFX - sgSFX.data());
 	const bool useCuesVolume = (id >= SfxID::AccessibilityWeapon && id <= SfxID::AccessibilityInteract);
 	const int userVolume = useCuesVolume ? *GetOptions().Audio.audioCuesVolume : *GetOptions().Audio.soundVolume;
-	snd_play_snd(pSFX->pSnd.get(), lVolume, lPan, userVolume);
+	snd_play_snd(pSFX->pSnd.get(), lVolume, lPan, userVolume, /*rings=*/loc && !useCuesVolume);
 }
 
 SfxID RndSFX(SfxID psfx)
@@ -259,7 +260,7 @@ void PlayModSfxLoc(std::string_view path, Point position)
 		snd = sound_file_load(std::string(path).c_str());
 	if (snd == nullptr || !snd->DSB.IsLoaded())
 		return;
-	snd_play_snd(snd.get(), lVolume, lPan, *GetOptions().Audio.soundVolume);
+	snd_play_snd(snd.get(), lVolume, lPan, *GetOptions().Audio.soundVolume, /*rings=*/true);
 }
 
 namespace {
@@ -324,7 +325,7 @@ void PlayPitchedSfxLoc(SfxID psfx, Point position, int ratePercent)
 	int lPan = 0;
 	if (!CalculateSoundPosition(position, &lVolume, &lPan) || !snd->DSB.IsLoaded())
 		return;
-	snd_play_snd(snd.get(), lVolume, lPan, *GetOptions().Audio.soundVolume);
+	snd_play_snd(snd.get(), lVolume, lPan, *GetOptions().Audio.soundVolume, /*rings=*/true);
 }
 
 void sound_stop()
@@ -350,6 +351,7 @@ void sound_update()
 	}
 
 	StreamUpdate();
+	echo::Update();
 }
 
 void effects_cleanup_sfx(bool fullUnload)

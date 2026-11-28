@@ -1,9 +1,13 @@
 #include "utils/soundsample.h"
 
+#include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <utility>
+#include <vector>
 
 #ifdef USE_SDL3
 #include <SDL3/SDL_error.h>
@@ -12,7 +16,10 @@
 #else
 #include <Aulib/DecoderDrmp3.h>
 #include <Aulib/DecoderDrwav.h>
+#include <Aulib/Decoder.h>
+#include <Aulib/Processor.h>
 #include <Aulib/Stream.h>
+#include <aulib.h>
 
 #include <SDL.h>
 #ifdef USE_SDL1
@@ -28,6 +35,7 @@
 #include "engine/sound.h" // for CurrentMixer
 #endif
 #include "options.h"
+#include "poe2/echo.hpp"
 #include "utils/log.hpp"
 #include "utils/math.h"
 #include "utils/stubs.h"
@@ -128,9 +136,125 @@ std::unique_ptr<Aulib::Stream> CreateStream(SDL_IOStream *handle, bool isMp3)
 	auto resampler = CreateAulibResampler(decoder->getRate());
 	return std::make_unique<Aulib::Stream>(handle, std::move(decoder), std::move(resampler), /*closeRw=*/true);
 }
+
+/**
+ * Room echo. Every sound that should ring passes a share of itself to one shared room, and one endless quiet stream
+ * plays that room's ring. All of it runs on the sound card's own thread, one after the other, so nothing here needs
+ * a lock; the game only ever sets the plain numbers (how much, how long).
+ */
+constexpr int EchoFrames = 8192;
+std::vector<float> EchoIn(EchoFrames, 0.F);
+bool EchoHasSound = false;
+echo::Room EchoRoomNow;
+std::unique_ptr<Aulib::Stream> EchoStream;
+const uint8_t EchoNothing[4] = {};
+
+/** Sits on one sound and passes a share of it on to the room. */
+class EchoSend final : public Aulib::Processor {
+public:
+	void process(float dest[], const float source[], int len) override
+	{
+		std::memcpy(dest, source, len * sizeof(float));
+		const float share = share_.load(std::memory_order_relaxed);
+		if (share <= 0)
+			return;
+		const int channels = std::max(Aulib::channelCount(), 1);
+		const int frames = std::min(len / channels, EchoFrames);
+		if (channels == 1) {
+			for (int i = 0; i < frames; i++)
+				EchoIn[i] += source[i] * share;
+		} else {
+			for (int i = 0; i < frames; i++)
+				EchoIn[i] += (source[i * channels] + source[i * channels + 1]) * (share * 0.5F);
+		}
+		EchoHasSound = true;
+	}
+	void Set(float share) { share_.store(share, std::memory_order_relaxed); }
+
+private:
+	std::atomic<float> share_ { 0.F };
+};
+
+/** The endless stream that plays the room's ring: what the sounds passed on last time round comes out as their tail. */
+class EchoRing final : public Aulib::Decoder {
+public:
+	auto open(SDL_RWops * /*rwops*/) -> bool override { return true; }
+	auto getChannels() const -> int override { return std::max(Aulib::channelCount(), 1); }
+	auto getRate() const -> int override { return Aulib::sampleRate(); }
+	auto rewind() -> bool override { return true; }
+	auto duration() const -> std::chrono::microseconds override { return {}; }
+	auto seekToTime(std::chrono::microseconds /*pos*/) -> bool override { return false; }
+
+protected:
+	auto doDecoding(float buf[], int len, bool &callAgain) -> int override
+	{
+		callAgain = false;
+		const int channels = getChannels();
+		const int frames = std::min(len / channels, EchoFrames);
+		if (!EchoHasSound && EchoRoomNow.Silent()) {
+			std::fill(buf, buf + len, 0.F);
+			return len;
+		}
+		EchoRoomNow.Shape(echo::Feedback(), 0.45F);
+		EchoRoomNow.Process(EchoIn.data(), buf, frames, channels);
+		std::fill(buf + frames * channels, buf + len, 0.F);
+		if (EchoHasSound) {
+			std::fill(EchoIn.begin(), EchoIn.end(), 0.F);
+			EchoHasSound = false;
+		}
+		return len;
+	}
+};
+
 #endif // USE_SDL3
 
 } // namespace
+
+#ifdef USE_SDL3
+void StartEchoRoom() { }
+void StopEchoRoom() { }
+void SoundSample::SetEcho(float /*send*/, int /*logSoundVolume*/, int /*logUserVolume*/) { }
+#else
+void StartEchoRoom()
+{
+	StopEchoRoom();
+	{
+		SDL_LockAudio();
+		EchoRoomNow.Setup(Aulib::sampleRate());
+		std::fill(EchoIn.begin(), EchoIn.end(), 0.F);
+		EchoHasSound = false;
+		SDL_UnlockAudio();
+	}
+	SDL_RWops *nothing = SDL_RWFromConstMem(EchoNothing, sizeof(EchoNothing));
+	if (nothing == nullptr)
+		return;
+	EchoStream = std::make_unique<Aulib::Stream>(nothing, std::make_unique<EchoRing>(), /*closeRw=*/true);
+	if (!EchoStream->play(/*iterations=*/0))
+		EchoStream = nullptr;
+}
+
+void StopEchoRoom()
+{
+	if (EchoStream == nullptr)
+		return;
+	EchoStream->stop();
+	EchoStream = nullptr;
+}
+
+void SoundSample::SetEcho(float send, int logSoundVolume, int logUserVolume)
+{
+	if (stream_ == nullptr || EchoStream == nullptr)
+		return;
+	if (echo_ == nullptr) {
+		if (send <= 0)
+			return;
+		echo_ = std::make_shared<EchoSend>();
+		stream_->addProcessor(echo_);
+	}
+	const float volume = send <= 0 ? 0.F : VolumeLogToLinear(logSoundVolume + logUserVolume * (ATTENUATION_MIN / VOLUME_MIN), ATTENUATION_MIN, 0);
+	static_cast<EchoSend *>(echo_.get())->Set(std::max(send, 0.F) * volume);
+}
+#endif
 
 ///// SoundSample /////
 
@@ -149,6 +273,7 @@ SoundSample::SoundSample(SoundSample &&other) noexcept
     , rightGain_(other.rightGain_)
 #else
     , stream_(std::move(other.stream_))
+    , echo_(std::move(other.echo_))
 #endif
 {
 #ifdef USE_SDL3
@@ -178,6 +303,7 @@ SoundSample &SoundSample::operator=(SoundSample &&other) noexcept
 		other.track_ = nullptr;
 #else
 		stream_ = std::move(other.stream_);
+		echo_ = std::move(other.echo_);
 #endif
 		other.file_data_size_ = 0;
 	}
@@ -244,6 +370,7 @@ void SoundSample::Release()
 	}
 #else
 	stream_ = nullptr;
+	echo_ = nullptr;
 #endif
 	file_data_ = nullptr;
 	file_data_size_ = 0;
@@ -350,6 +477,7 @@ int SoundSample::SetChunkStream(std::string filePath, bool isMp3, bool logErrors
 	}
 	file_path_ = std::move(filePath);
 	isMp3_ = isMp3;
+	echo_ = nullptr;
 	stream_ = CreateStream(handle, isMp3);
 	if (!stream_->open()) {
 		stream_ = nullptr;
@@ -393,6 +521,7 @@ int SoundSample::SetChunk(ArraySharedPtr<std::uint8_t> fileData, std::size_t dwB
 		return -1;
 	}
 
+	echo_ = nullptr;
 	stream_ = CreateStream(buf, isMp3_);
 	if (!stream_->open()) {
 		stream_ = nullptr;

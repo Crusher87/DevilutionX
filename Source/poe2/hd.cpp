@@ -299,6 +299,10 @@ bool FrameLit = false;
 bool RecordingLit = false;
 SDL_Texture *FieldTexture = nullptr;
 Size FieldTextureSize;
+/** @brief Blending in (feel("far")): the faint veil of the area's colour over what is dimly lit, a pixel per light sample. */
+SDL_Texture *VeilTexture = nullptr;
+Size VeilTextureSize;
+std::vector<uint32_t> VeilPixels;
 /** @brief The field multiplies the floor by light above full too (SDL_BLENDMODE_MUL); without it, it lights it up to full. */
 bool FieldMultiplies = false;
 /** @brief A soft round dark spot, for the shadow round a hero's feet from the light they carry. */
@@ -330,6 +334,8 @@ std::vector<PropDraw> PropDraws;
 /** @brief Set when the HD world was drawn in this present, with where: RenderOver then draws the moments over the effects. */
 bool OverPending = false;
 SDL_Rect OverClip {};
+/** @brief The screen's fade and brightness when the lit world was drawn, for what goes over the effects (DrawMood). */
+std::array<float, 3> OverTint { 1.F, 1.F, 1.F };
 SDL_FPoint OverHero {};
 float OverTilePixels = 0;
 
@@ -530,6 +536,31 @@ Mood CurrentMood()
 	return mood;
 }
 
+/**
+ * @brief Blending in (feel("far")): the colour dim light leans to, further from grey than the area's own cool colour
+ * (atmosphere.tsv's far_colour is how much further), so what is far from every light takes more of the area's colour
+ * as it dims, before it goes dark.
+ */
+std::array<float, 3> FarCool(const std::array<float, 3> &cool)
+{
+	const float more = atmosphere::Strength(atmosphere::Knob::Far) * std::clamp(atmosphere::Value("far_colour", 0.6F), 0.F, 2.F);
+	if (more <= 0)
+		return cool;
+	const float mean = (cool[0] + cool[1] + cool[2]) / 3;
+	std::array<float, 3> out;
+	for (size_t c = 0; c < 3; c++)
+		out[c] = std::clamp(mean + (cool[c] - mean) * (1 + more), 0.3F, 1.4F);
+	return out;
+}
+
+/** @brief A colour's lean: each part of it by how far it is above the colour's least part, against its greatest (0 to 1). */
+std::array<float, 3> LeanOf(const std::array<float, 3> &colour)
+{
+	const float most = std::max({ colour[0], colour[1], colour[2], 0.01F });
+	const float least = std::min({ colour[0], colour[1], colour[2] });
+	return { (colour[0] - least) / most, (colour[1] - least) / most, (colour[2] - least) / most };
+}
+
 /** @brief The level's palette against the one the HD tiles were made in: Cathedral levels pick one of four. */
 std::array<float, 3> TileGain { 1.F, 1.F, 1.F };
 /** @brief Which of its palettes the level uses (1 is the one the pack was made in); the pack can hold tiles recoloured for each. */
@@ -647,6 +678,9 @@ void DestroyTextures()
 	if (FieldTexture != nullptr && CacheRenderer != nullptr)
 		SDL_DestroyTexture(FieldTexture);
 	FieldTexture = nullptr;
+	if (VeilTexture != nullptr && CacheRenderer != nullptr)
+		SDL_DestroyTexture(VeilTexture);
+	VeilTexture = nullptr;
 	if (BlobTexture != nullptr && CacheRenderer != nullptr)
 		SDL_DestroyTexture(BlobTexture);
 	BlobTexture = nullptr;
@@ -2914,6 +2948,14 @@ constexpr float CastReach = 10.F;
  */
 constexpr float BounceShare = 0.3F;
 constexpr float FootShade = 0.8F;
+/**
+ * @brief Blending in (feel("contact")): how much deeper the dark right under a standing thing is than the light alone
+ * makes it, so it sits on the floor and doesn't seem to hover over it: the spot under a body darkened by this share more,
+ * with a tighter, darker spot inside it right where the feet are; atmosphere.tsv's contact is how dark that one is.
+ */
+constexpr float ContactWider = 0.14F;
+constexpr float ContactCoreWidth = 1.15F;
+constexpr float ContactBlock = 0.22F;
 /** @brief How far below the tile's centre the middle of the spot under the feet is (the art stands its feet a little below it). */
 constexpr float ContactDrop = 5.F;
 /** @brief The hero is never drawn darker than this much of full light (the game always draws them fully lit). */
@@ -3563,6 +3605,69 @@ void DrawFloorLight(SDL_Renderer *renderer, float toLogical)
 		vertices[i] = SDL_Vertex { OnScreenAt(bx, by, toLogical), { 255, 255, 255, 255 }, { corners[i][2], corners[i][3] } };
 	}
 	SDL_RenderGeometry(renderer, FieldTexture, vertices.data(), 4, QuadIndices.data(), static_cast<int>(QuadIndices.size()));
+}
+
+/**
+ * @brief Blending in (feel("far")): a faint veil of the area's colour over everything that is dimly lit, walls, bodies
+ * and all, as the air between it and the eye. None where it is bright and none where it is dark, so the dark stays dark:
+ * it shows as the band where a light gives out. atmosphere.tsv's far_veil is how much.
+ */
+void DrawFarVeil(SDL_Renderer *renderer, float toLogical, const std::array<float, 3> &tint)
+{
+	const float amount = atmosphere::Strength(atmosphere::Knob::Far) * std::clamp(atmosphere::Value("far_veil", 0.02F), 0.F, 0.3F);
+	const int width = light::FieldWidth();
+	const int height = light::FieldHeight();
+	if (amount <= 0.001F || width <= 0 || height <= 0)
+		return;
+	const FramePartScope part(FramePart::Atmosphere);
+	if (VeilTexture == nullptr || VeilTextureSize.width < width || VeilTextureSize.height < height) {
+		if (VeilTexture != nullptr)
+			SDL_DestroyTexture(VeilTexture);
+		const Size size { (width + 31) / 32 * 32, (height + 31) / 32 * 32 };
+		VeilTexture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, size.width, size.height);
+		VeilTextureSize = size;
+		if (VeilTexture == nullptr)
+			return;
+		SDL_SetTextureBlendMode(VeilTexture, SDL_BLENDMODE_ADD);
+		SDL_SetTextureScaleMode(VeilTexture, SDL_ScaleModeLinear);
+	}
+	// The veil's colour at each of 256 brightnesses: rising from nothing in the dark, gone again by half light.
+	const std::array<float, 3> lean = LeanOf(CurrentMood().cool);
+	std::array<uint32_t, 256> shades;
+	for (size_t level = 0; level < shades.size(); level++) {
+		const float bright = static_cast<float>(level) / 255.F;
+		const float in = std::clamp(bright / 0.10F, 0.F, 1.F);
+		const float out = 1 - std::clamp((bright - 0.16F) / 0.34F, 0.F, 1.F);
+		const float veil = in * in * (3 - 2 * in) * out * out * (3 - 2 * out) * amount;
+		uint32_t pixel = 0xFF000000U;
+		for (int c = 0; c < 3; c++)
+			pixel |= static_cast<uint32_t>(ColourByte(veil * (0.35F + lean[static_cast<size_t>(c)]) * tint[static_cast<size_t>(c)])) << (16 - c * 8);
+		shades[level] = pixel;
+	}
+	const uint32_t *field = light::FieldPixels();
+	VeilPixels.resize(static_cast<size_t>(width) * height);
+	for (size_t i = 0; i < VeilPixels.size(); i++) {
+		const uint32_t pixel = field[i];
+		VeilPixels[i] = shades[std::max({ (pixel >> 16) & 0xFF, (pixel >> 8) & 0xFF, pixel & 0xFF })];
+	}
+	const SDL_Rect whole { 0, 0, width, height };
+	SDL_UpdateTexture(VeilTexture, &whole, VeilPixels.data(), width * 4);
+	float x0;
+	float y0;
+	float x1;
+	float y1;
+	light::FieldRect(x0, y0, x1, y1);
+	const float u1 = static_cast<float>(width) / static_cast<float>(VeilTextureSize.width);
+	const float v1 = static_cast<float>(height) / static_cast<float>(VeilTextureSize.height);
+	const std::array<std::array<float, 4>, 4> corners { { { x0, y0, 0, 0 }, { x1, y0, u1, 0 }, { x1, y1, u1, v1 }, { x0, y1, 0, v1 } } };
+	std::array<SDL_Vertex, 4> vertices;
+	for (size_t i = 0; i < corners.size(); i++) {
+		float bx;
+		float by;
+		BufferOf(corners[i][0], corners[i][1], bx, by);
+		vertices[i] = SDL_Vertex { OnScreenAt(bx, by, toLogical), { 255, 255, 255, 255 }, { corners[i][2], corners[i][3] } };
+	}
+	SDL_RenderGeometry(renderer, VeilTexture, vertices.data(), 4, QuadIndices.data(), static_cast<int>(QuadIndices.size()));
 }
 
 /** @brief A coverage mask (0 to 1 per pixel) at half size, each pixel the average of a 2x2 block. */
@@ -4572,7 +4677,8 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 		float removed = FootShade * (leveltype == DTYPE_TOWN ? SkyShade : BounceShare) * here;
 		if (overhead.strength > 0)
 			removed += (1 - overhead.fill) * light::ToLinear(overhead.strength) * 0.5F;
-		const float alpha = ShadowAlpha(here, removed);
+		const float contact = std::clamp(atmosphere::Setting(atmosphere::Knob::Contact), 0.F, 3.F);
+		const float alpha = 1 - (1 - ShadowAlpha(here, removed)) * (1 - std::min(ContactBlock * contact, 0.6F));
 		const std::array<float, 4> alphas { alpha, alpha, alpha, alpha };
 		const std::array<float, 4> feathers { BlockSkirt, BlockSkirt, BlockSkirt, BlockSkirt };
 		DrawFloorShade(renderer, base.data(), alphas.data(), feathers.data(), 4, alpha, toLogical);
@@ -4589,7 +4695,8 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			across = std::max(core + edge, bodyWidth * 2);
 			removed += (1 - overhead.fill) * light::ToLinear(overhead.strength) * core / across;
 		}
-		const float alpha = ShadowAlpha(here, removed);
+		const float contact = std::clamp(atmosphere::Setting(atmosphere::Knob::Contact), 0.F, 3.F);
+		const float alpha = 1 - (1 - ShadowAlpha(here, removed)) * (1 - std::min(ContactWider * contact, 0.5F));
 		if (alpha > 0.004F) {
 			const SDL_FPoint centre = OnScreenAt(gx, gy + (carvedBody ? 0.F : ContactDrop), toLogical);
 			// A circle on the floor `across` tiles wide.
@@ -4597,6 +4704,14 @@ void DrawCasterShadows(SDL_Renderer *renderer, const Draw &draw, float toLogical
 			const SDL_FRect spot { centre.x - width / 2, centre.y - width / 4, width, width / 2 };
 			SDL_SetTextureAlphaMod(BlobTexture, ColourByte(alpha));
 			SDL_RenderCopyF(renderer, BlobTexture, nullptr, &spot);
+			// Right where the feet touch the floor it is darkest (feel("contact")).
+			const float core = std::min(atmosphere::Value("contact", 0.34F) * contact, 0.85F);
+			if (core > 0.004F) {
+				const float tight = bodyWidth * ContactCoreWidth * TileAcross * Scale * toLogical;
+				const SDL_FRect under { centre.x - tight / 2, centre.y - tight / 4, tight, tight / 2 };
+				SDL_SetTextureAlphaMod(BlobTexture, ColourByte(core));
+				SDL_RenderCopyF(renderer, BlobTexture, nullptr, &under);
+			}
 		}
 	}
 
@@ -5139,6 +5254,25 @@ struct ShadeGroup {
 	std::vector<size_t> jobs;
 };
 
+/**
+ * @brief Blending in (feel("shadetint")): how much of a cast shadow's darkness each colour takes. A shadow is lit by the
+ * room round it, so it leans to the area's cool colour and isn't plain black: the colour the area's dark has most of is
+ * darkened a little less (atmosphere.tsv's shade_tint is how much less).
+ */
+Colour3 ShadeKeeps()
+{
+	const float tint = std::clamp(atmosphere::Setting(atmosphere::Knob::ShadeTint), 0.F, 2.F) * std::clamp(atmosphere::Value("shade_tint", 0.5F), 0.F, 1.F);
+	if (tint <= 0)
+		return { 1.F, 1.F, 1.F };
+	const std::array<float, 3> cool = CurrentMood().cool;
+	const float most = std::max({ cool[0], cool[1], cool[2], 0.01F });
+	const float least = std::min({ cool[0], cool[1], cool[2] });
+	Colour3 keeps;
+	for (size_t c = 0; c < 3; c++)
+		keeps[c] = std::clamp(1 - tint * (cool[c] - least) / most, 0.F, 1.F);
+	return keeps;
+}
+
 /** @brief The most a joined shadow's picture is cut into across, where it takes the light's share of the floor's light. */
 constexpr int ShadeSteps = 16;
 
@@ -5187,6 +5321,7 @@ void DrawShade(SDL_Renderer *renderer, const ShadeGroup &group, const SDL_FRect 
 	std::array<SDL_Vertex, (ShadeSteps + 1) * (ShadeSteps + 1)> vertices;
 	std::array<int, ShadeSteps * ShadeSteps * 6> indices;
 	bool any = false;
+	const Colour3 keeps = ShadeKeeps();
 	for (int j = 0; j <= down; j++) {
 		for (int i = 0; i <= across; i++) {
 			const float px = left + (right - left) * static_cast<float>(i) / static_cast<float>(across);
@@ -5196,8 +5331,7 @@ void DrawShade(SDL_Renderer *renderer, const ShadeGroup &group, const SDL_FRect 
 			WorldOf((px - ViewportOffsetX) / Scale, py / Scale, x, y);
 			const float dark = CastAlphaAt(group.light, x, y, 1.F, group.atBody);
 			any = any || dark > 0.004F;
-			const Uint8 shade = ColourByte(dark);
-			vertices[static_cast<size_t>(j * (across + 1) + i)] = SDL_Vertex { { px * toLogical, py * toLogical }, { shade, shade, shade, 255 },
+			vertices[static_cast<size_t>(j * (across + 1) + i)] = SDL_Vertex { { px * toLogical, py * toLogical }, { ColourByte(dark * keeps[0]), ColourByte(dark * keeps[1]), ColourByte(dark * keeps[2]), 255 },
 				{ px / pictureWidth, py / pictureHeight } };
 		}
 	}
@@ -6452,6 +6586,146 @@ void DrawHeatHaze(SDL_Renderer *renderer, float toLogical)
  * shadows on the floor (DrawJoinedShadows), then everything standing on the floor, back to front.
  * @return False where HD Lighting isn't used, and nothing was drawn.
  */
+/** @brief A living hero or monster drawn solid: what takes the floor's light on its legs (DrawBounce) and a light's edge (DrawWrap). */
+bool IsLivingBody(const Draw &draw)
+{
+	if (draw.kind != DrawKind::Sprite || draw.style != SpriteStyle::Normal || draw.corpse || draw.ghost > 0)
+		return false;
+	return draw.caster == Caster::MyHero || draw.caster == Caster::Hero || draw.caster == Caster::Monster || draw.caster == Caster::MonsterRecoloured;
+}
+
+/** @brief Blending in (feel("bounce")): how far up a body the floor's light reaches, as a share of its height. */
+constexpr float BounceReach = 0.42F;
+
+/**
+ * @brief Blending in (feel("bounce")): the legs and lower body take a little of the light lying on the floor under them,
+ * in its colour (orange by a fire, red in the Butcher's room), strongest at the feet and gone before the waist. Its art
+ * is added once more over what is drawn, in that light, so dark cloth stays dark. atmosphere.tsv's bounce is how much.
+ * @param kept How much of the floor's light is left there in the shadows over it.
+ */
+void DrawBounce(SDL_Renderer *renderer, const Draw &draw, float toLogical, float kept)
+{
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+	const float amount = std::clamp(atmosphere::Setting(atmosphere::Knob::Bounce), 0.F, 3.F) * std::clamp(atmosphere::Value("bounce", 0.22F), 0.F, 1.F) * kept;
+	if (amount <= 0.004F)
+		return;
+	const SDL_FRect dest = DestOf(draw, toLogical);
+	if (!OnScreen(dest, 0))
+		return;
+	const DrawTexture art = TextureFor(renderer, draw, false);
+	if (art.texture == nullptr)
+		return;
+	float wx;
+	float wy;
+	StandsAt(draw, wx, wy);
+	const std::array<float, 3> floorColour = atmosphere::Colour("bounce_colour", { 1.F, 1.F, 1.F });
+	Colour3 colour = ArtColour(ToColour(light::At(wx, wy)), art);
+	for (size_t c = 0; c < 3; c++)
+		colour[c] = std::min(colour[c] * floorColour[c] * amount, 1.F);
+	if (std::max({ colour[0], colour[1], colour[2] }) <= 1.F / 255)
+		return;
+	// Where its feet and the top of its body are in its picture (its feet stand half a tile above the picture's foot).
+	Raster &raster = FallbackRaster(draw, false);
+	const float height = static_cast<float>(std::max(draw.height, 1));
+	const float feet = std::clamp((height - 1 - HalfTileHeight) / height, 0.F, 1.F);
+	const float bodyTop = CastTextures(renderer, raster) ? static_cast<float>(raster.bodyTop) / height : 0.F;
+	const float from = std::clamp(feet - (feet - std::min(bodyTop, feet)) * BounceReach, 0.F, feet);
+	const SDL_Color none { 0, 0, 0, 255 };
+	const SDL_Color full { ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), 255 };
+	const std::array<float, 3> rows { from, feet, 1.F };
+	std::array<SDL_Vertex, 6> vertices;
+	for (size_t r = 0; r < rows.size(); r++) {
+		for (size_t side = 0; side < 2; side++) {
+			const float fx = static_cast<float>(side);
+			vertices[r * 2 + side] = SDL_Vertex { { dest.x + fx * dest.w, dest.y + rows[r] * dest.h }, r == 0 ? none : full, { fx, rows[r] } };
+		}
+	}
+	static constexpr std::array<int, 12> Indices { 0, 1, 3, 0, 3, 2, 2, 3, 5, 2, 5, 4 };
+	SDL_SetTextureColorMod(art.texture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(art.texture, 255);
+	SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_ADD);
+	SDL_RenderGeometry(renderer, art.texture, vertices.data(), static_cast<int>(vertices.size()), Indices.data(), static_cast<int>(Indices.size()));
+	SDL_SetTextureBlendMode(art.texture, SDL_BLENDMODE_BLEND);
+#else
+	(void)renderer;
+	(void)draw;
+	(void)toLogical;
+	(void)kept;
+#endif
+}
+
+/** @brief Blending in (feel("wrap")): a light this bright where a body stands (as drawn, 1 is full) gives it an edge; from here it grows. */
+constexpr float WrapFrom = 0.3F;
+
+/**
+ * @brief Blending in (feel("wrap")): a body standing by a strong light (a brazier, a torch, a spell) gets a thin soft
+ * edge of that light on the side turned to it, as light curls round what stands in it. Drawn just before the body: its
+ * shape in the light's colour, moved a little towards the light, so only that sliver shows from behind it.
+ * atmosphere.tsv's wrap is how bright, wrap_wide how far it reaches out (game pixels).
+ */
+void DrawWrap(SDL_Renderer *renderer, const Draw &draw, float toLogical)
+{
+	const float amount = atmosphere::Strength(atmosphere::Knob::Wrap) * std::clamp(atmosphere::Value("wrap", 0.5F), 0.F, 2.F);
+	if (amount <= 0.004F)
+		return;
+	if (!OnScreen(DestOf(draw, toLogical), static_cast<float>(CastPad * Scale) * toLogical))
+		return;
+	float wx;
+	float wy;
+	StandsAt(draw, wx, wy);
+	// The strongest light on it that has a place (not a hero's own glow, not the sky).
+	const LightsOn &on = LightsOnPoint(wx, wy);
+	const light::ShadowLight *strongest = nullptr;
+	for (int n = 0; n < on.count; n++) {
+		const light::ShadowLight &source = on.lights[static_cast<size_t>(n)];
+		if (source.glow || source.source == light::SkyLight || source.source == light::LavaLight)
+			continue;
+		if (strongest == nullptr || source.strength > strongest->strength)
+			strongest = &source;
+	}
+	if (strongest == nullptr || strongest->strength <= WrapFrom)
+		return;
+	float bodyX;
+	float bodyY;
+	BufferOf(wx, wy, bodyX, bodyY);
+	float lightX;
+	float lightY;
+	BufferOf(strongest->x, strongest->y, lightX, lightY);
+	// (A light hangs above the floor it is drawn over.)
+	lightY -= strongest->height * HalfTileHeight * 2;
+	float dx = lightX - bodyX;
+	float dy = lightY - (bodyY - HalfTileHeight * 2);
+	const float far = std::sqrt(dx * dx + dy * dy);
+	if (far < 4)
+		return;
+	dx /= far;
+	dy /= far;
+	// A light in front of the body lights the side we see: its edge is behind the body, out of sight.
+	const float behind = 1 - std::clamp(dy, 0.F, 1.F);
+	const float bright = std::clamp((strongest->strength - WrapFrom) / (1 - WrapFrom), 0.F, 1.2F) * amount * behind;
+	if (bright <= 0.01F)
+		return;
+	Raster &raster = FallbackRaster(draw, false);
+	if (!CastTextures(renderer, raster))
+		return;
+	// The light's colour there, at full strength.
+	Colour3 colour = ToColour(light::At(wx, wy));
+	const float most = std::max({ colour[0], colour[1], colour[2], 0.01F });
+	const float wide = std::clamp(atmosphere::Value("wrap_wide", 1.6F), 0.F, 6.F);
+	const SDL_FRect around {
+		(ViewportOffsetX + (static_cast<float>(draw.x - CastPad) + dx * wide) * Scale) * toLogical,
+		(static_cast<float>(draw.y - CastPad) + std::min(dy, 0.F) * wide) * Scale * toLogical,
+		static_cast<float>(raster.width + CastPad * 2) * Scale * toLogical,
+		static_cast<float>(raster.height + CastPad * 2) * Scale * toLogical,
+	};
+	SDL_SetTextureColorMod(raster.castTexture, ColourByte(colour[0] / most * bright), ColourByte(colour[1] / most * bright), ColourByte(colour[2] / most * bright));
+	SDL_SetTextureAlphaMod(raster.castTexture, 255);
+	SDL_SetTextureBlendMode(raster.castTexture, SDL_BLENDMODE_ADD);
+	SDL_RenderCopyF(renderer, raster.castTexture, nullptr, &around);
+	SDL_SetTextureBlendMode(raster.castTexture, SDL_BLENDMODE_BLEND);
+	SDL_SetTextureColorMod(raster.castTexture, 255, 255, 255);
+}
+
 bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const std::array<float, 3> &tint)
 {
 	// The world on screen, in tiles: the view's corners, with room for the walls that stand up into it from below.
@@ -6488,7 +6762,7 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 	look.levelBrightness = LightLevel;
 	look.falloff = mood.falloff;
 	look.warm = mood.warm;
-	look.cool = mood.cool;
+	look.cool = FarCool(mood.cool);
 	look.tint = tint;
 	IndexDirt();
 	light::SetOpenGround(IsOpenGround);
@@ -6548,8 +6822,13 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 			continue;
 		if (DrawShapedObject(renderer, draw, toLogical, (kept.foot + kept.top) / 2))
 			continue;
-		if (DrawShapedBody(renderer, draw, toLogical, kept, tint))
+		const bool living = IsLivingBody(draw);
+		if (living)
+			DrawWrap(renderer, draw, toLogical);
+		if (DrawShapedBody(renderer, draw, toLogical, kept, tint)) {
+			DrawBounce(renderer, draw, toLogical, kept.foot);
 			continue;
+		}
 		if (draw.kind == DrawKind::Tile && draw.hasTile && draw.light >= 0 && !IsTileBase(draw) && IsDirt(draw.cell)) {
 			DrawGroundLit(renderer, draw, toLogical);
 			continue;
@@ -6565,12 +6844,15 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 		}
 		// Heroes, monsters and solid objects cast shadows of their own, in place of the one painted under them.
 		DrawShaded(renderer, draw, shading, toLogical, draw.caster == Caster::None);
+		if (living)
+			DrawBounce(renderer, draw, toLogical, kept.foot);
 	}
 	if (!Draws.empty())
 		DrawWallShadesAfter(renderer, Draws.size() - 1);
 	WallShades.clear();
 	while (nextProp < PropDraws.size())
 		DrawProp(renderer, PropDraws[nextProp++], toLogical);
+	DrawFarVeil(renderer, toLogical, tint);
 	// Item and monster outlines glow on top of the light.
 	const Shading glow = Uniform(tint);
 	for (size_t i = 0; i < Draws.size(); i++) {
@@ -7206,6 +7488,7 @@ void RenderRecorded(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		DropReadPictures();
 		LightTexture = nullptr;
 		FieldTexture = nullptr;
+		VeilTexture = nullptr;
 		BlobTexture = nullptr;
 		EdgesTexture = nullptr;
 		IrisTexture = nullptr;
@@ -7274,6 +7557,7 @@ void RenderRecorded(SDL_Renderer *renderer, Size worldSize, Size logicalSize)
 		// The moments go over the effects (RenderOver): where the hero is on screen, and how wide a tile is there.
 		OverPending = true;
 		OverClip = clip;
+		OverTint = tint;
 		OverHero = SDL_FPoint { static_cast<float>(clip.x) + static_cast<float>(clip.w) / 2, static_cast<float>(clip.y) + static_cast<float>(clip.h) / 2 };
 		if (!std::isnan(LitHeroX)) {
 			float bx;
@@ -7587,6 +7871,46 @@ void DrawIris(SDL_Renderer *renderer, float open, float darkness, float smallest
  * @brief Idea 53: the colour drains to red at the hero's death, as the original's death screen does (the game's own red
  * is drawn on its own world, which the HD world covers). What is there keeps its red and loses the rest.
  */
+/**
+ * @brief Blending in (feel("mood")): one colour mood over the whole finished picture, the spells and effects on it too,
+ * so that nothing keeps colours of its own: what is lit leans to the area's firelight (each colour made brighter by a
+ * share of itself, so the dark isn't touched), and what is dark leans to the area's cool colour (a little of it added by
+ * what each point lacks of white, so the bright isn't touched). atmosphere.tsv's mood_warm and mood_cool are how much.
+ */
+void DrawMood(SDL_Renderer *renderer)
+{
+#if SDL_VERSION_ATLEAST(2, 0, 6)
+	const float strength = std::clamp(atmosphere::Strength(atmosphere::Knob::Mood), 0.F, 3.F);
+	if (strength <= 0)
+		return;
+	const Mood mood = CurrentMood();
+	const std::array<float, 3> warm = LeanOf(mood.warm);
+	const std::array<float, 3> cool = LeanOf(mood.cool);
+	const float lit = std::clamp(atmosphere::Value("mood_warm", 0.22F), 0.F, 1.F) * strength;
+	const float dark = std::clamp(atmosphere::Value("mood_cool", 0.03F), 0.F, 0.5F) * strength;
+	SDL_BlendMode before = SDL_BLENDMODE_NONE;
+	SDL_GetRenderDrawBlendMode(renderer, &before);
+	// What is there, plus this share of itself.
+	static const SDL_BlendMode Gain = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_DST_COLOR, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
+	// What is there, plus this times what it lacks of white.
+	static const SDL_BlendMode Screen = SDL_ComposeCustomBlendMode(SDL_BLENDFACTOR_ONE_MINUS_DST_COLOR, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD,
+	    SDL_BLENDFACTOR_ZERO, SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
+	if (lit > 0.002F && SDL_SetRenderDrawBlendMode(renderer, Gain) == 0) {
+		SDL_SetRenderDrawColor(renderer, ColourByte(warm[0] * lit), ColourByte(warm[1] * lit), ColourByte(warm[2] * lit), 255);
+		SDL_RenderFillRect(renderer, &OverClip);
+	}
+	if (dark > 0.002F && SDL_SetRenderDrawBlendMode(renderer, Screen) == 0) {
+		// (It fades with the screen, so a fade still goes to black.)
+		SDL_SetRenderDrawColor(renderer, ColourByte(cool[0] * dark * OverTint[0]), ColourByte(cool[1] * dark * OverTint[1]), ColourByte(cool[2] * dark * OverTint[2]), 255);
+		SDL_RenderFillRect(renderer, &OverClip);
+	}
+	SDL_SetRenderDrawBlendMode(renderer, before);
+#else
+	(void)renderer;
+#endif
+}
+
 void DrawDeathRed(SDL_Renderer *renderer, float drain)
 {
 	SDL_BlendMode before = SDL_BLENDMODE_NONE;
@@ -7604,6 +7928,7 @@ void RenderOver(SDL_Renderer *renderer)
 		return;
 	OverPending = false;
 	const FramePartScope part(FramePart::Atmosphere);
+	DrawMood(renderer);
 	float darkness = 1;
 	const float open = moments::Iris(darkness);
 	if (open < 1 && darkness > 0.004F)

@@ -102,6 +102,16 @@ cathedral	rat_lift	2		How many light levels brighter than its floor a rat is dra
 cathedral	rat_shape	1		How strongly a rat is lit by its shape (from its shape map, rat_run_sheet_hd_2x_n.png beside its run pictures): the side turned to a lamp brighter, the side away darker. 0 flat, 1 as the monsters, 2 twice as strong.
 cathedral	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 cathedral	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+cathedral	contact	0.34		Blending in: how dark the small shadow right where feet (or the foot of a barrel, a chest) touch the floor is. This is what makes things stand ON the floor instead of floating over it. 0 none, 0.34 as is, 0.6 heavy.
+cathedral	shade_tint	0.5		Blending in: how much shadows take the colour of the room's dark (bluish in the Cathedral, greenish in the Crypt) instead of plain black. 0 plain black shadows, 0.5 as is, 1 full.
+cathedral	far_colour	0.6		Blending in: how much more of the room's dark colour things take the further they are from any light. 0 none, 0.6 as is.
+cathedral	far_veil	0.02		Blending in: a very thin layer of the room's air colour over the far, unlit parts, so the dark has depth. Keep it tiny or the black turns milky. 0 none, 0.02 as is, 0.05 clearly seen.
+cathedral	bounce	0.22		Blending in: how much of the light lying on the floor comes back up onto legs and the lower body (orange by lava, warm by a brazier). 0 none, 0.22 as is, 0.5 strong.
+cathedral	mood_warm	0.22		Blending in: one colour mood over the whole picture, lit parts: how far everything bright leans to the room's warm light colour. 0 none, 0.22 as is.
+cathedral	mood_cool	0.03		Blending in: one colour mood over the whole picture, dark parts: how far everything dark leans to the room's cold dark colour. Keep it tiny or the black turns milky. 0 none, 0.03 as is.
+cathedral	wrap	0.5		Blending in: how bright the thin soft edge of light is on the side of a body turned to a strong light close by (a brazier, a torch, a spell). 0 none, 0.5 as is, 1 strong.
+cathedral	wrap_wide	1.6		Blending in: how wide that edge of light is, in game pixels. 1 thin, 1.6 as is, 3 wide.
+cathedral	echo	1		Blending in: how much the game's own sounds ring in this place (it also follows the size of the room you stand in: passages nearly dry, big halls ring longer). 0 none, 1 normal, 2 double.
 catacombs	falloff	1.45	1.60	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 catacombs	warm	1.00 0.97 0.93	1.04 0.92 0.85	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 catacombs	cool	0.68 0.82 1.14	0.62 0.76 1.08	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -138,6 +148,16 @@ catacombs	rat_lift	2		How many light levels brighter than its floor a rat is dra
 catacombs	rat_shape	1		How strongly a rat is lit by its shape (from its shape map, rat_run_sheet_hd_2x_n.png beside its run pictures): the side turned to a lamp brighter, the side away darker. 0 flat, 1 as the monsters, 2 twice as strong.
 catacombs	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 catacombs	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+catacombs	contact	0.34		Blending in: how dark the small shadow right where feet (or the foot of a barrel, a chest) touch the floor is. This is what makes things stand ON the floor instead of floating over it. 0 none, 0.34 as is, 0.6 heavy.
+catacombs	shade_tint	0.5		Blending in: how much shadows take the colour of the room's dark (bluish in the Cathedral, greenish in the Crypt) instead of plain black. 0 plain black shadows, 0.5 as is, 1 full.
+catacombs	far_colour	0.6		Blending in: how much more of the room's dark colour things take the further they are from any light. 0 none, 0.6 as is.
+catacombs	far_veil	0.02		Blending in: a very thin layer of the room's air colour over the far, unlit parts, so the dark has depth. Keep it tiny or the black turns milky. 0 none, 0.02 as is, 0.05 clearly seen.
+catacombs	bounce	0.22		Blending in: how much of the light lying on the floor comes back up onto legs and the lower body (orange by lava, warm by a brazier). 0 none, 0.22 as is, 0.5 strong.
+catacombs	mood_warm	0.22		Blending in: one colour mood over the whole picture, lit parts: how far everything bright leans to the room's warm light colour. 0 none, 0.22 as is.
+catacombs	mood_cool	0.03		Blending in: one colour mood over the whole picture, dark parts: how far everything dark leans to the room's cold dark colour. Keep it tiny or the black turns milky. 0 none, 0.03 as is.
+catacombs	wrap	0.5		Blending in: how bright the thin soft edge of light is on the side of a body turned to a strong light close by (a brazier, a torch, a spell). 0 none, 0.5 as is, 1 strong.
+catacombs	wrap_wide	1.6		Blending in: how wide that edge of light is, in game pixels. 1 thin, 1.6 as is, 3 wide.
+catacombs	echo	1.1		Blending in: how much the game's own sounds ring in this place (it also follows the size of the room you stand in: passages nearly dry, big halls ring longer). 0 none, 1 normal, 2 double.
 caves	falloff	1.50	1.65	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 caves	warm	1.16 0.90 0.66	1.20 0.85 0.58	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 caves	cool	0.84 0.76 0.74	0.78 0.70 0.68	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -174,6 +194,16 @@ caves	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in th
 caves	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
 caves	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 caves	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+caves	contact	0.34		Blending in: how dark the small shadow right where feet (or the foot of a barrel, a chest) touch the floor is. This is what makes things stand ON the floor instead of floating over it. 0 none, 0.34 as is, 0.6 heavy.
+caves	shade_tint	0.5		Blending in: how much shadows take the colour of the room's dark (bluish in the Cathedral, greenish in the Crypt) instead of plain black. 0 plain black shadows, 0.5 as is, 1 full.
+caves	far_colour	0.6		Blending in: how much more of the room's dark colour things take the further they are from any light. 0 none, 0.6 as is.
+caves	far_veil	0.02		Blending in: a very thin layer of the room's air colour over the far, unlit parts, so the dark has depth. Keep it tiny or the black turns milky. 0 none, 0.02 as is, 0.05 clearly seen.
+caves	bounce	0.28		Blending in: how much of the light lying on the floor comes back up onto legs and the lower body (orange by lava, warm by a brazier). 0 none, 0.28 as is, 0.5 strong.
+caves	mood_warm	0.22		Blending in: one colour mood over the whole picture, lit parts: how far everything bright leans to the room's warm light colour. 0 none, 0.22 as is.
+caves	mood_cool	0.03		Blending in: one colour mood over the whole picture, dark parts: how far everything dark leans to the room's cold dark colour. Keep it tiny or the black turns milky. 0 none, 0.03 as is.
+caves	wrap	0.5		Blending in: how bright the thin soft edge of light is on the side of a body turned to a strong light close by (a brazier, a torch, a spell). 0 none, 0.5 as is, 1 strong.
+caves	wrap_wide	1.6		Blending in: how wide that edge of light is, in game pixels. 1 thin, 1.6 as is, 3 wide.
+caves	echo	1.3		Blending in: how much the game's own sounds ring in this place (it also follows the size of the room you stand in: passages nearly dry, big halls ring longer). 0 none, 1 normal, 2 double.
 hell	falloff	1.40	1.55	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 hell	warm	1.18 0.86 0.64	1.22 0.81 0.56	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 hell	cool	1.00 0.60 0.56	0.94 0.54 0.50	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -201,6 +231,16 @@ hell	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the
 hell	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
 hell	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 hell	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+hell	contact	0.34		Blending in: how dark the small shadow right where feet (or the foot of a barrel, a chest) touch the floor is. This is what makes things stand ON the floor instead of floating over it. 0 none, 0.34 as is, 0.6 heavy.
+hell	shade_tint	0.5		Blending in: how much shadows take the colour of the room's dark (bluish in the Cathedral, greenish in the Crypt) instead of plain black. 0 plain black shadows, 0.5 as is, 1 full.
+hell	far_colour	0.6		Blending in: how much more of the room's dark colour things take the further they are from any light. 0 none, 0.6 as is.
+hell	far_veil	0.02		Blending in: a very thin layer of the room's air colour over the far, unlit parts, so the dark has depth. Keep it tiny or the black turns milky. 0 none, 0.02 as is, 0.05 clearly seen.
+hell	bounce	0.28		Blending in: how much of the light lying on the floor comes back up onto legs and the lower body (orange by lava, warm by a brazier). 0 none, 0.28 as is, 0.5 strong.
+hell	mood_warm	0.22		Blending in: one colour mood over the whole picture, lit parts: how far everything bright leans to the room's warm light colour. 0 none, 0.22 as is.
+hell	mood_cool	0.03		Blending in: one colour mood over the whole picture, dark parts: how far everything dark leans to the room's cold dark colour. Keep it tiny or the black turns milky. 0 none, 0.03 as is.
+hell	wrap	0.5		Blending in: how bright the thin soft edge of light is on the side of a body turned to a strong light close by (a brazier, a torch, a spell). 0 none, 0.5 as is, 1 strong.
+hell	wrap_wide	1.6		Blending in: how wide that edge of light is, in game pixels. 1 thin, 1.6 as is, 3 wide.
+hell	echo	1.2		Blending in: how much the game's own sounds ring in this place (it also follows the size of the room you stand in: passages nearly dry, big halls ring longer). 0 none, 1 normal, 2 double.
 hive	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 hive	warm	1.08 1.02 0.70	1.12 0.97 0.62	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 hive	cool	0.80 0.94 0.62	0.74 0.88 0.56	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -230,6 +270,16 @@ hive	hidden_shimmer	0.22		How much of an unseen monster shows as a ripple in the
 hive	hidden_sway	1.6		How far that ripple sways from side to side, in game pixels.
 hive	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 hive	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+hive	contact	0.34		Blending in: how dark the small shadow right where feet (or the foot of a barrel, a chest) touch the floor is. This is what makes things stand ON the floor instead of floating over it. 0 none, 0.34 as is, 0.6 heavy.
+hive	shade_tint	0.5		Blending in: how much shadows take the colour of the room's dark (bluish in the Cathedral, greenish in the Crypt) instead of plain black. 0 plain black shadows, 0.5 as is, 1 full.
+hive	far_colour	0.6		Blending in: how much more of the room's dark colour things take the further they are from any light. 0 none, 0.6 as is.
+hive	far_veil	0.02		Blending in: a very thin layer of the room's air colour over the far, unlit parts, so the dark has depth. Keep it tiny or the black turns milky. 0 none, 0.02 as is, 0.05 clearly seen.
+hive	bounce	0.22		Blending in: how much of the light lying on the floor comes back up onto legs and the lower body (orange by lava, warm by a brazier). 0 none, 0.22 as is, 0.5 strong.
+hive	mood_warm	0.22		Blending in: one colour mood over the whole picture, lit parts: how far everything bright leans to the room's warm light colour. 0 none, 0.22 as is.
+hive	mood_cool	0.03		Blending in: one colour mood over the whole picture, dark parts: how far everything dark leans to the room's cold dark colour. Keep it tiny or the black turns milky. 0 none, 0.03 as is.
+hive	wrap	0.5		Blending in: how bright the thin soft edge of light is on the side of a body turned to a strong light close by (a brazier, a torch, a spell). 0 none, 0.5 as is, 1 strong.
+hive	wrap_wide	1.6		Blending in: how wide that edge of light is, in game pixels. 1 thin, 1.6 as is, 3 wide.
+hive	echo	0.8		Blending in: how much the game's own sounds ring in this place (it also follows the size of the room you stand in: passages nearly dry, big halls ring longer). 0 none, 1 normal, 2 double.
 crypt	falloff	1.35	1.50	How small each flame's pool of light is, first floor to last: higher is smaller and darker (idea 4). The first floor is the area's look today.
 crypt	warm	0.98 1.04 0.90	1.02 0.99 0.82	Firelight's colour, red green blue, first floor to last: redder further down (idea 4).
 crypt	cool	0.72 0.98 0.80	0.66 0.92 0.74	The shadows' colour, first floor to last: deeper further down (idea 4).
@@ -263,9 +313,29 @@ crypt	web_size	0.75		How big a cobweb is. 1 is 40 game pixels across.
 crypt	web_shiver	0.6		How far a cobweb trembles in the draft, in game pixels. 0 still.
 crypt	glow_alpha	0.10		How bright the wide soft glow in the air round a flame is (idea 66). 0 none, 0.4 twice as bright.
 crypt	glow_size	1		How wide that glow is: 1 normal, 1.5 half as wide again.
+crypt	contact	0.34		Blending in: how dark the small shadow right where feet (or the foot of a barrel, a chest) touch the floor is. This is what makes things stand ON the floor instead of floating over it. 0 none, 0.34 as is, 0.6 heavy.
+crypt	shade_tint	0.5		Blending in: how much shadows take the colour of the room's dark (bluish in the Cathedral, greenish in the Crypt) instead of plain black. 0 plain black shadows, 0.5 as is, 1 full.
+crypt	far_colour	0.6		Blending in: how much more of the room's dark colour things take the further they are from any light. 0 none, 0.6 as is.
+crypt	far_veil	0.02		Blending in: a very thin layer of the room's air colour over the far, unlit parts, so the dark has depth. Keep it tiny or the black turns milky. 0 none, 0.02 as is, 0.05 clearly seen.
+crypt	bounce	0.22		Blending in: how much of the light lying on the floor comes back up onto legs and the lower body (orange by lava, warm by a brazier). 0 none, 0.22 as is, 0.5 strong.
+crypt	mood_warm	0.22		Blending in: one colour mood over the whole picture, lit parts: how far everything bright leans to the room's warm light colour. 0 none, 0.22 as is.
+crypt	mood_cool	0.03		Blending in: one colour mood over the whole picture, dark parts: how far everything dark leans to the room's cold dark colour. Keep it tiny or the black turns milky. 0 none, 0.03 as is.
+crypt	wrap	0.5		Blending in: how bright the thin soft edge of light is on the side of a body turned to a strong light close by (a brazier, a torch, a spell). 0 none, 0.5 as is, 1 strong.
+crypt	wrap_wide	1.6		Blending in: how wide that edge of light is, in game pixels. 1 thin, 1.6 as is, 3 wide.
+crypt	echo	1.1		Blending in: how much the game's own sounds ring in this place (it also follows the size of the room you stand in: passages nearly dry, big halls ring longer). 0 none, 1 normal, 2 double.
 butcher	light	1.4		The Butcher's room (idea 46): how bright the red light inside is. A torch is 2. It spills out when his door opens.
 butcher	light_colour	1.00 0.18 0.10		Its colour, red green blue.
 butcher	light_radius	6		How far it reaches, in tiles.
 butcher	door_light	0.45		How bright the dull red glow under his closed door is.
 butcher	drips	1.5		How many drops of blood fall in his room a second.
 butcher	drip_colour	0.45 0.03 0.04		The blood's colour, red green blue.
+butcher	contact	0.34		Blending in: how dark the small shadow right where feet (or the foot of a barrel, a chest) touch the floor is. This is what makes things stand ON the floor instead of floating over it. 0 none, 0.34 as is, 0.6 heavy.
+butcher	shade_tint	0.5		Blending in: how much shadows take the colour of the room's dark (bluish in the Cathedral, greenish in the Crypt) instead of plain black. 0 plain black shadows, 0.5 as is, 1 full.
+butcher	far_colour	0.6		Blending in: how much more of the room's dark colour things take the further they are from any light. 0 none, 0.6 as is.
+butcher	far_veil	0.02		Blending in: a very thin layer of the room's air colour over the far, unlit parts, so the dark has depth. Keep it tiny or the black turns milky. 0 none, 0.02 as is, 0.05 clearly seen.
+butcher	bounce	0.22		Blending in: how much of the light lying on the floor comes back up onto legs and the lower body (orange by lava, warm by a brazier). 0 none, 0.22 as is, 0.5 strong.
+butcher	mood_warm	0.22		Blending in: one colour mood over the whole picture, lit parts: how far everything bright leans to the room's warm light colour. 0 none, 0.22 as is.
+butcher	mood_cool	0.03		Blending in: one colour mood over the whole picture, dark parts: how far everything dark leans to the room's cold dark colour. Keep it tiny or the black turns milky. 0 none, 0.03 as is.
+butcher	wrap	0.5		Blending in: how bright the thin soft edge of light is on the side of a body turned to a strong light close by (a brazier, a torch, a spell). 0 none, 0.5 as is, 1 strong.
+butcher	wrap_wide	1.6		Blending in: how wide that edge of light is, in game pixels. 1 thin, 1.6 as is, 3 wide.
+butcher	echo	1		Blending in: how much the game's own sounds ring in this place (it also follows the size of the room you stand in: passages nearly dry, big halls ring longer). 0 none, 1 normal, 2 double.

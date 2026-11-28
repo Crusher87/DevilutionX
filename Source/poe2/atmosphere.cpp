@@ -96,6 +96,13 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "seams", 1.F, "HD tiles are made solid wherever the game's own tile is solid, so no thin dark lines show between tiles and at the feet of buildings; 0 shows them as before, a number above 1 fills that many HD pixels deep (works with Atmosphere off)" },
 	{ "seamlight", 1.F, "floors that have a shape map are lit as floors, so flat floor takes the same light from one tile to the next; 0 lights them as things standing on the floor, as before (works with Atmosphere off)" },
 	{ "gaps", 0.F, "for finding gaps: bright pink is drawn under the HD world, so any hole left between tiles shows pink (works with Atmosphere off)" },
+	{ "contact", 1.F, "blending in: a deeper soft dark spot right under everyone and everything that stands on the floor; 2 twice as deep, 0 as before (works with Atmosphere off)" },
+	{ "shadetint", 1.F, "blending in: cast shadows take a little of the area's own colour in place of plain black; 0 plain as before (works with Atmosphere off)" },
+	{ "far", 1.F, "blending in: far from a light, things lean to the area's colour and a faint veil of it lies over them before the dark; 0 as before" },
+	{ "bounce", 1.F, "blending in: legs and lower bodies take a little of the light lying on the floor under them; 2 twice as much, 0 none (works with Atmosphere off)" },
+	{ "mood", 1.F, "blending in: one colour mood over the whole picture, spells and all: dark parts lean cool, lit parts lean to firelight; 2 twice as strong, 0 none" },
+	{ "wrap", 1.F, "blending in: a body in front of a strong light gets a thin soft edge of that light on the side turned to it; 2 twice as bright, 0 none" },
+	{ "echo", 1.F, "blending in: the game's own sounds ring a little in big halls and caverns, by the size of the space round you; 2 twice as much, 0 none (works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
