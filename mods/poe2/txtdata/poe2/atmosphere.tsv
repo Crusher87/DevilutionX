@@ -29,6 +29,7 @@ town	lens_storm_high	2		And in the heaviest downpour: 2 twice what the switch sa
 town	lens_panels	1		Water running down the screen over the game's panels (bottom bar, inventory and so on): it gathers along their top edges, then spills over and streams down them. 0 off (water goes behind them, as before), 1 as is, 2 twice as easy to see. Rain never lands on them.
 town	lens_ledge	1		How much water gathers at a panel's top edge before it spills over: 0.5 spills soon, 1 as is, 2 holds back a lot.
 town	wet_shine	1		How bright the lamps and lit windows shine back off wet ground (ideas 23 and 14): 0 none, 1 strong. The ground gets wet as it rains and dries in a few minutes after.
+town	wet_mirror	0.35		How bright the lights' mirror images are in wet ground (each lit window shows as its own panes upside down at the foot of its wall, a doorway as a tall patch of firelight, a lamp as a small streak). 0 none, 0.35 as is, 0.6 bright.
 town	roof_drips	1.2		How many drops a second fall from the roof edge over each lamp or lit window while the ground is wet.
 town	town_fog	30		How many patches of low mist lie by the stream and between the graves at once (idea 18); half as many again when the ground is wet. 0 none.
 town	town_fog_alpha	0.14		How thick each patch of that mist is: 0.05 barely there, 0.15 heavy.
