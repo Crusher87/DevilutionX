@@ -101,11 +101,11 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "far", 1.F, "blending in: far from a light, things lean to the area's colour and a faint veil of it lies over them before the dark; 0 as before" },
 	{ "bounce", 1.F, "blending in: legs and lower bodies take a little of the light lying on the floor under them; 2 twice as much, 0 none (works with Atmosphere off)" },
 	{ "mood", 1.F, "blending in: one colour mood over the whole picture, spells and all: dark parts lean cool, lit parts lean to firelight; 2 twice as strong, 0 none" },
-	{ "wrap", 1.F, "blending in: a body in front of a strong light gets a thin soft edge of that light on the side turned to it; 2 twice as bright, 0 none" },
-	{ "echo", 1.F, "blending in: the game's own sounds ring a little in big halls and caverns, by the size of the space round you; 2 twice as much, 0 none (works with Atmosphere off)" },
-	{ "foothaze", 0.F, "blending in, a Maybe (off): a very thin haze of the room's air over feet and the foot of things, in the Catacombs and Crypt; 1 on, 2 twice as much" },
-	{ "react", 0.F, "blending in, a Maybe (off): feet stir a little dust off the floor as heroes and monsters walk (needs the dust in the air on); 1 on, 2 twice as much" },
-	{ "sheen", 0.F, "blending in, a Maybe (off): worn floors catch a soft shine from the lamps and fires near them; 1 on, 2 twice as bright" },
+	{ "wrap", 0.F, "blending in: a body in front of a strong light gets a thin soft edge of that light on the side turned to it; off (Curtis 11-28: looks terrible), 1 on" },
+	{ "echo", 0.4F, "blending in: the game's own sounds ring a little in big halls and caverns, by the size of the space round you; 0.4 as Curtis chose (11-28), 1 stronger, 0 none (works with Atmosphere off)" },
+	{ "foothaze", 0.F, "blending in, a Maybe (off; Curtis 11-28: looks terrible): a very thin haze of the room's air over feet and the foot of things, in the Catacombs and Crypt; 1 on, 2 twice as much" },
+	{ "react", 0.F, "blending in, a Maybe (off; Curtis 11-28: keep off): feet stir a little dust off the floor as heroes and monsters walk (needs the dust in the air on); 1 on, 2 twice as much" },
+	{ "sheen", 1.F, "blending in: worn floors catch a soft shine from the lamps and fires near them (Curtis 11-28: on, at his strength); 2 twice as bright, 0 none" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */
