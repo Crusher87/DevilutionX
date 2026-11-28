@@ -163,8 +163,10 @@ enum class Knob : uint8_t {
 	React,
 	/** Blending in (a Maybe, off until asked for): worn floors catch a soft shine from the lamps and fires near them. */
 	Sheen,
+	/** Town: the crack down to the Hive (Hellfire) glows and breathes, lights the ground round it red, and throws up embers, smoke and steam. */
+	HellCrack,
 };
-inline constexpr size_t NumKnobs = 58;
+inline constexpr size_t NumKnobs = 59;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

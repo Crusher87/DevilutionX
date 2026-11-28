@@ -106,6 +106,7 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "foothaze", 0.F, "blending in, a Maybe (off; Curtis 11-28: looks terrible): a very thin haze of the room's air over feet and the foot of things, in the Catacombs and Crypt; 1 on, 2 twice as much" },
 	{ "react", 0.F, "blending in, a Maybe (off; Curtis 11-28: keep off): feet stir a little dust off the floor as heroes and monsters walk (needs the dust in the air on); 1 on, 2 twice as much" },
 	{ "sheen", 1.F, "blending in: worn floors catch a soft shine from the lamps and fires near them (Curtis 11-28: on, at his strength); 2 twice as bright, 0 none" },
+	{ "hellcrack", 1.F, "town: the crack down to the Hive (Hellfire) glows and breathes, lights the ground and people round it red, throws up embers and smoke, steams in the rain and now and then surges; 2 twice as much, 0 as the art has it" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

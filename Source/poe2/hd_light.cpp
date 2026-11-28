@@ -125,6 +125,10 @@ constexpr uint8_t FireFlicker = 3;
 constexpr uint8_t StairsBreath = 4;
 /** @brief The cathedral's doorway in town: its red glow breathes, and is stronger the deeper the hero has been (idea 21). */
 constexpr uint8_t DoorBreath = 5;
+/** @brief The Hell crack in town (vfx's feel "hellcrack"): its fire swells and rolls along it, and surges now and then. */
+constexpr uint8_t CrackBreath = 6;
+/** @brief The crack's fire, a deep red-orange. */
+constexpr Colour CrackColour { 1.00F, 0.30F, 0.10F };
 
 // The colours of the lights, before they're evened out.
 constexpr Colour TorchColour { 1.00F, 0.60F, 0.28F };
@@ -276,6 +280,8 @@ struct StaticKey {
 	uint32_t objects = 0;
 	/** @brief The Atmosphere option and its switches (the stairs' light is baked in). */
 	uint32_t atmosphere = 0;
+	/** @brief The Hell crack in town, which opens with the Hive. */
+	uint64_t crack = 0;
 	bool operator==(const StaticKey &other) const = default;
 };
 StaticKey BuiltStatics;
@@ -1370,6 +1376,7 @@ float FlickerOf(const Source &source, float flicker, float stairs, float flutter
 		const float breath = 1 + atmosphere::Value("cathedral_breath", 0.15F) * std::sin(vfx::Clock() * 0.00126F);
 		return 1 + std::min(door, 1.F) * (glow * breath - 1);
 	}
+	case CrackBreath: return vfx::HellCrackGlow(static_cast<float>(source.flickerSeed) - 4096);
 	default: return 1;
 	}
 }
@@ -1519,7 +1526,8 @@ void ApplyFlicker()
 	const float door = atmosphere::Strength(atmosphere::Knob::Cathedral);
 	// Idea 53: the flames near a dying hero die down.
 	const bool dimmed = moments::FlamesDimmed();
-	if (flicker <= 0 && stairs <= 0 && !flutters && door <= 0 && !dimmed) {
+	const bool crack = leveltype == DTYPE_TOWN && atmosphere::Strength(atmosphere::Knob::HellCrack) > 0;
+	if (flicker <= 0 && stairs <= 0 && !flutters && door <= 0 && !dimmed && !crack) {
 		for (Source &source : StaticSources)
 			source.flicker = 1;
 		return;
@@ -1560,7 +1568,7 @@ void ApplyFlicker()
 
 void UpdateStatics()
 {
-	const StaticKey key { static_cast<int>(leveltype), static_cast<int>(currlevel), setlevel, static_cast<int>(setlvlnum), BlockVersion, ObjectsSignature(), atmosphere::Version() };
+	const StaticKey key { static_cast<int>(leveltype), static_cast<int>(currlevel), setlevel, static_cast<int>(setlvlnum), BlockVersion, ObjectsSignature(), atmosphere::Version(), vfx::HellCrackKey() };
 	if (key == BuiltStatics && std::memcmp(BuiltPreLight.data(), dPreLight, sizeof(dPreLight)) == 0)
 		return;
 	BuiltStatics = key;
@@ -1591,6 +1599,26 @@ void UpdateStatics()
 			else if (fire.colour == CathedralDoorColour)
 				source.flickerKind = DoorBreath;
 			source.flickerSeed = (static_cast<uint32_t>(fire.x * 8) * 73856093U) ^ (static_cast<uint32_t>(fire.y * 8) * 19349663U);
+			PlaceRays(source);
+			StaticSources.push_back(source);
+		}
+		// The Hell crack's fire, low in the ground: red over the ground and whoever stands round it.
+		std::array<vfx::CrackLight, 4> crack;
+		const int lights = vfx::HellCrackLights(crack.data(), static_cast<int>(crack.size()));
+		for (int i = 0; i < lights; i++) {
+			Source source;
+			source.x = crack[i].x;
+			source.y = crack[i].y;
+			source.radius = 6;
+			source.colour = Even(CrackColour);
+			source.height = 0.15F;
+			source.size = 1.F;
+			source.fill = 0.35F;
+			source.power = atmosphere::Value("crack_light", 1.5F) * crack[i].power * std::min(atmosphere::Strength(atmosphere::Knob::HellCrack), 2.F);
+			source.castsShadows = false;
+			source.flickerKind = CrackBreath;
+			// Where along the crack it is, for its swell (HellCrackGlow), in whole pixels from the far end.
+			source.flickerSeed = static_cast<uint32_t>(std::lround(crack[i].along + 4096));
 			PlaceRays(source);
 			StaticSources.push_back(source);
 		}
@@ -2343,7 +2371,7 @@ int Lamps(Lamp *out, int maxCount)
 	for (const Source &source : StaticSources) {
 		if (count >= maxCount)
 			break;
-		if (source.lava || source.glow || source.carried || source.flickerKind == StairsBreath)
+		if (source.lava || source.glow || source.carried || source.flickerKind == StairsBreath || source.flickerKind == CrackBreath)
 			continue;
 		Lamp &lamp = out[count++];
 		lamp.door = source.flickerKind == DoorBreath;
