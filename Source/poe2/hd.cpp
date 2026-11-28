@@ -45,6 +45,7 @@
 #include "poe2/hd_batch.hpp"
 #include "poe2/hd_light.hpp"
 #include "poe2/hd_light_seams.hpp"
+#include "poe2/hd_wall_foot.hpp"
 #include "poe2/hd_outline.hpp"
 #include "poe2/hd_pack.hpp"
 #include "poe2/hd_seams.hpp"
@@ -268,6 +269,13 @@ struct HdArt {
 	std::array<Outline, NumOutlineCuts> outlines;
 	/** @brief For tile art with flowing lava or water in it. */
 	std::unique_ptr<Flow> flow;
+	/**
+	 * @brief A wall's bottom piece cut into its floor and its wall, pixel by pixel (feel("wallfoot"), hd_wall_foot.hpp):
+	 * each part its own art (in Art too), null where the piece has none of it.
+	 */
+	bool footSplit = false;
+	HdArt *footFloor = nullptr;
+	HdArt *footWall = nullptr;
 };
 
 std::vector<Draw> Draws;
@@ -397,6 +405,9 @@ void DropKept(bool destroy)
 
 const std::byte *CacheCels = nullptr;
 dungeon_type CacheLevelType = DTYPE_NONE;
+/** @brief The floor pieces of the level whose tiles are named (IndexTiles), read the first time a wall's foot needs them. */
+hd::FootFloors FootFloorPieces;
+const std::byte *FootFloorCels = nullptr;
 
 /** @brief A sprite frame's HD art name, with the frame's size to tell it from other art loaded where freed art was. */
 struct SpriteName {
@@ -447,6 +458,8 @@ struct ArtChoice {
 	HdArt *art = nullptr;
 	/** @brief The tile art shown, when lava or water flows in it. */
 	HdArt *flowing = nullptr;
+	/** @brief The tile art shown, when it is a wall's bottom piece cut into its floor and its wall (MakeFootParts). */
+	const HdArt *foot = nullptr;
 	/** @brief The tile art shown, when it has a shape map (MakeShape). */
 	const HdArt *shapes = nullptr;
 };
@@ -744,6 +757,7 @@ void IndexTiles()
 	RecolouredTileArtShown = false;
 	CacheCels = pDungeonCels.get();
 	CacheLevelType = leveltype;
+	FootFloorCels = nullptr;
 	if (CacheCels == nullptr)
 		return;
 	const auto *table = reinterpret_cast<const uint32_t *>(CacheCels);
@@ -2149,6 +2163,77 @@ void RefreshFlow(HdArt &art)
 	SDL_UpdateTexture(art.texture, &flow.rect, pixels.data(), width * 4);
 }
 
+bool IsTileBase(const Draw &draw);
+bool IsFloorOnly(const Draw &draw);
+bool IsRightColumn(const Draw &draw);
+
+/**
+ * @brief Cuts a wall's bottom piece (its HD picture `surface`, as cut for the draw) into its floor and its wall, each
+ * its own art beside it in Art (feel("wallfoot"), hd_wall_foot.hpp): drawn with the floor in the floor's light and with
+ * the wall in the wall's, each pixel takes the light of what it shows. Once, as the picture is made. With a shape map
+ * (`map`, kept for the picture's own shape) the wall's part gets its own, so the light it adds stays off the floor.
+ */
+void MakeFootParts(SDL_Renderer *renderer, HdArt &art, const std::string &key, SDL_Surface *surface, const Draw &draw, SDL_Surface *map)
+{
+	if (draw.width != hd::FootSize || draw.height != hd::FootSize || surface->w != hd::FootSize * Scale || surface->h != hd::FootSize * Scale)
+		return;
+	if (FootFloorCels != pDungeonCels.get()) {
+		FootFloorPieces = hd::LevelFootFloors();
+		FootFloorCels = pDungeonCels.get();
+	}
+	const bool right = IsRightColumn(draw);
+	const hd::FootPixels piece = hd::ReadFootPiece(draw.src, draw.tile, draw.height);
+	hd::FootParts parts;
+	hd::SplitWallFoot(piece, FootFloorPieces, right, parts, hd::FootAbove(PieceToDraw(draw.cell), right));
+	const int width = surface->w;
+	const int height = surface->h;
+	std::vector<uint8_t> floorPixels(static_cast<size_t>(width) * height * 4);
+	std::vector<uint8_t> wallPixels(floorPixels.size());
+	int floorCount = 0;
+	int wallCount = 0;
+	if (SDL_LockSurface(surface) != 0)
+		return;
+	hd::SplitFootArt(static_cast<const uint8_t *>(surface->pixels), width, height, surface->pitch, parts, Scale, floorPixels.data(), wallPixels.data(), floorCount, wallCount);
+	SDL_UnlockSurface(surface);
+	const auto make = [&](const char *suffix, std::vector<uint8_t> &pixels, int count) -> HdArt * {
+		if (count == 0)
+			return nullptr;
+		HdArt &part = Art[key + suffix];
+		if (part.texture != nullptr) {
+#ifdef POE2_HD_BATCH
+			batch::Forget(part.texture);
+#endif
+			SDL_DestroyTexture(part.texture);
+		}
+		part.texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STATIC, width, height);
+		if (part.texture == nullptr)
+			return nullptr;
+		SDL_UpdateTexture(part.texture, nullptr, pixels.data(), width * 4);
+		SDL_SetTextureBlendMode(part.texture, SDL_BLENDMODE_BLEND);
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+		SDL_SetTextureScaleMode(part.texture, SDL_ScaleModeNearest);
+#endif
+#ifdef POE2_HD_BATCH
+		batch::Add(renderer, part.texture, pixels.data(), width, height, width * 4);
+#endif
+		part.missing = false;
+		return &part;
+	};
+	art.footFloor = make("#footfloor", floorPixels, floorCount);
+	art.footWall = make("#footwall", wallPixels, wallCount);
+	art.footSplit = art.footFloor != nullptr || art.footWall != nullptr;
+	if (map != nullptr && art.footWall != nullptr && art.footWall->sheet == nullptr) {
+		SDL_Surface *wall = SDL_CreateRGBSurfaceWithFormatFrom(wallPixels.data(), width, height, 32, width * 4, SDL_PIXELFORMAT_RGBA32);
+		SDL_Surface *copy = SDL_ConvertSurfaceFormat(map, SDL_PIXELFORMAT_RGBA32, 0);
+		if (wall != nullptr && copy != nullptr)
+			MakeShapeFrom(renderer, *art.footWall, wall, copy, true, false);
+		else if (copy != nullptr)
+			SDL_FreeSurface(copy);
+		if (wall != nullptr)
+			SDL_FreeSurface(wall);
+	}
+}
+
 /**
  * @brief A tile's HD art cut to exactly the pixels the game draws for it: the same frame can be drawn as
  * a floor triangle or a full square, and walls near the hero are see-through or half cut away.
@@ -2213,8 +2298,11 @@ HdArt *MaskedArt(SDL_Renderer *renderer, const std::string &name, const Draw &dr
 				batch::Add(renderer, art.texture, surface->pixels, surface->w, surface->h, surface->pitch);
 #endif
 			// Made from the picture as cut here, so a wall cut away near the hero has its shape cut the same way.
-			if (TileMapsHere && art.flow == nullptr)
-				MakeShape(renderer, art, surface, TileMapName(name), true);
+			SDL_Surface *map = TileMapsHere && art.flow == nullptr ? TakePicture(PicturePath(TileMapName(name) + "_n"), false) : nullptr;
+			if (art.flow == nullptr && IsTileBase(draw) && !IsFloorOnly(draw))
+				MakeFootParts(renderer, art, key, surface, draw, map);
+			if (map != nullptr)
+				MakeShapeFrom(renderer, art, surface, map, true, false);
 		} else {
 			art.flow = nullptr;
 		}
@@ -2298,6 +2386,7 @@ ArtChoice ChooseArt(SDL_Renderer *renderer, const Draw &draw)
 	choice.art = choice.hdArt ? art : nullptr;
 	choice.flowing = tileArt != nullptr && tileArt->flow != nullptr ? tileArt : nullptr;
 	choice.shapes = tileArt != nullptr && tileArt->shaped && texture == tileArt->texture ? tileArt : nullptr;
+	choice.foot = tileArt != nullptr && tileArt->footSplit && texture == tileArt->texture ? tileArt : nullptr;
 	if (texture != nullptr && draw.kind == DrawKind::Tile) {
 		if (recoloured)
 			RecolouredTileArtShown = true;
@@ -2656,6 +2745,15 @@ bool SmoothLight()
 	return atmosphere::Setting(atmosphere::Knob::LightSeams) > 0;
 }
 
+/**
+ * @brief A wall's bottom piece is drawn as its floor in the floor's light and its wall in the wall's, pixel by pixel
+ * (feel("wallfoot"), hd_wall_foot.hpp), not cut along the floor's back edge. Off with feel("lightseams", 0) too.
+ */
+bool WallFootSplit()
+{
+	return SmoothLight() && atmosphere::Setting(atmosphere::Knob::WallFoot) > 0;
+}
+
 /** @brief What a draw shows: its HD art or the game's own pixels, and the painted shadow that goes under the game's pixels. */
 struct DrawTexture {
 	SDL_Texture *texture = nullptr;
@@ -2665,6 +2763,8 @@ struct DrawTexture {
 	bool tileColours = false;
 	/** @brief A wall's or floor's art split by the way each part of it faces, when it has a shape map. */
 	const HdArt *shapes = nullptr;
+	/** @brief A wall's bottom piece cut into its floor and its wall (MakeFootParts), else null. */
+	const HdArt *foot = nullptr;
 };
 
 /**
@@ -2694,6 +2794,7 @@ DrawTexture TextureFor(SDL_Renderer *renderer, const Draw &draw, bool paintedSha
 	out.hdArt = art.hdArt;
 	out.tileColours = art.tileArt;
 	out.shapes = art.shapes;
+	out.foot = art.foot;
 	// HD arches are made in the HD walls' palette, so they are evened out to this level's palette like the walls.
 	if (art.hdArt && leveltype != DTYPE_TOWN && IsArchPiece(draw))
 		out.tileColours = true;
@@ -3337,9 +3438,18 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 	const SDL_FRect dest = DestOf(draw, toLogical);
 	if (!OnScreen(dest, 0))
 		return;
-	const DrawTexture art = TextureFor(renderer, draw, false);
+	DrawTexture art = TextureFor(renderer, draw, false);
 	if (art.texture == nullptr)
 		return;
+	// Cut into its floor and its wall (feel("wallfoot")): the floor's part, all over the piece, and the wall's part
+	// after with the walls (DrawTileWall). The shapes stay the whole piece's: what they add where the wall is goes
+	// under the wall's part.
+	const bool split = art.foot != nullptr && WallFootSplit();
+	if (split) {
+		if (art.foot->footFloor == nullptr)
+			return;
+		art.texture = art.foot->footFloor->texture;
+	}
 	SDL_SetTextureColorMod(art.texture, 255, 255, 255);
 	SDL_SetTextureAlphaMod(art.texture, 255);
 	const bool right = IsRightColumn(draw);
@@ -3350,9 +3460,9 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 	// The half diamond's corner where its two outer edges meet, and points along those edges at fractions a and b:
 	// left half, from (0, 1/2) towards the top (1, 0) and the bottom (1, 1); right half, from (1, 1/2) towards (0, 0) and (0, 1).
 	static constexpr std::array<float, 4> Steps { 0.F, 0.25F, 0.75F, 1.F };
-	std::array<SDL_Vertex, 11> vertices;
-	std::array<Colour3, 11> colours;
-	std::array<LightPoint, 11> points;
+	std::array<SDL_Vertex, 12> vertices;
+	std::array<Colour3, 12> colours;
+	std::array<LightPoint, 12> points;
 	std::array<std::array<int, 4>, 4> at;
 	int count = 0;
 	for (int ia = 0; ia < 4; ia++) {
@@ -3377,7 +3487,7 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 			at[ia][ib] = count++;
 		}
 	}
-	std::array<int, 36> indices;
+	std::array<int, 45> indices;
 	int used = 0;
 	for (int ia = 0; ia < 3; ia++) {
 		for (int ib = 0; ib < 3; ib++) {
@@ -3417,10 +3527,31 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 				indices[used++] = v;
 		}
 	}
-	const std::array<Colour3, 11> flats = colours;
+	// Cut into its floor and its wall, the floor's part is drawn over the whole piece: above the floor's back edge
+	// (b = 0) too, in the floor's light carried on past it, for what of the floor shows there.
+	if (split) {
+		const float cornerX = right ? 1.F : 0.F;
+		float wx;
+		float wy;
+		BaseWorldOf(right, cornerX, 0.F, draw.cell, wx, wy);
+		const Colour3 colour = ArtColour(BaseFloorLight(wx, wy, draw.cell, walls, behind), art);
+		colours[static_cast<size_t>(count)] = colour;
+		points[static_cast<size_t>(count)] = LightPoint { wx, wy };
+		vertices[count] = SDL_Vertex {
+			{ dest.x + cornerX * dest.w, dest.y },
+			{ ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), 255 },
+			{ cornerX, 0.F },
+		};
+		const int corner = count++;
+		for (int ia = 0; ia < 3; ia++) {
+			for (const int v : { corner, at[ia + 1][0], at[ia][0] })
+				indices[used++] = v;
+		}
+	}
+	const std::array<Colour3, 12> flats = colours;
 	// Lit by its shape at each vertex (feel("lightseams")), as the floor round it is, or by one light for the piece.
-	std::array<float, 11> bases;
-	std::array<ShapeExtra, 11> extras;
+	std::array<float, 12> bases;
+	std::array<ShapeExtra, 12> extras;
 	float most = 0;
 	const bool byCorners = SmoothLight() && FloorShapesAt(draw, art, points.data(), count, bases.data(), extras.data(), most);
 	TileShapeLight shaped;
@@ -3447,22 +3578,37 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 	const SDL_FRect dest = DestOf(draw, toLogical);
 	if (!OnScreen(dest, 0))
 		return;
-	const DrawTexture art = TextureFor(renderer, draw, false);
+	DrawTexture art = TextureFor(renderer, draw, false);
 	if (art.texture == nullptr)
 		return;
+	const bool floorOnly = IsFloorOnly(draw);
+	// Cut into its floor and its wall (feel("wallfoot")): the wall's part, all over the piece, in the wall's light,
+	// with a shape of its own so the light that adds stays off the floor (drawn before, DrawTileFloor).
+	const bool split = !floorOnly && art.foot != nullptr && WallFootSplit();
+	if (split) {
+		const HdArt *wall = art.foot->footWall;
+		if (wall == nullptr)
+			return;
+		art.texture = wall->texture;
+		art.shapes = art.shapes != nullptr && wall->shaped && wall->sheet != nullptr ? wall : nullptr;
+	}
 	SDL_SetTextureColorMod(art.texture, 255, 255, 255);
 	SDL_SetTextureAlphaMod(art.texture, 255);
-	static constexpr std::array<std::array<float, 2>, 3> LeftHalf { { { 0, 0 }, { 1, 0 }, { 0, 0.5F } } };
-	static constexpr std::array<std::array<float, 2>, 3> RightHalf { { { 0, 0 }, { 1, 0 }, { 1, 0.5F } } };
+	static constexpr std::array<std::array<float, 2>, 4> LeftHalf { { { 0, 0 }, { 1, 0 }, { 0, 0.5F }, { 0, 0 } } };
+	static constexpr std::array<std::array<float, 2>, 4> RightHalf { { { 0, 0 }, { 1, 0 }, { 1, 0.5F }, { 0, 0 } } };
+	static constexpr std::array<std::array<float, 2>, 4> Whole { { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 } } };
+	static constexpr std::array<int, 6> WholeIndices { 0, 1, 2, 0, 2, 3 };
 	const bool right = IsRightColumn(draw);
-	const auto &corners = right ? RightHalf : LeftHalf;
+	const auto &corners = split ? Whole : right ? RightHalf : LeftHalf;
+	const int count = split ? 4 : 3;
+	const int *indices = split ? WholeIndices.data() : nullptr;
+	const int indexCount = split ? static_cast<int>(WholeIndices.size()) : 0;
 	const BackWalls walls = BackWallsOf(draw.cell);
 	const BehindWalls behind = BehindWallsOf(draw.cell, walls);
-	const bool floorOnly = IsFloorOnly(draw);
-	std::array<SDL_Vertex, 3> vertices;
-	std::array<Colour3, 3> colours;
-	std::array<LightPoint, 3> points;
-	for (size_t i = 0; i < corners.size(); i++) {
+	std::array<SDL_Vertex, 4> vertices;
+	std::array<Colour3, 4> colours;
+	std::array<LightPoint, 4> points;
+	for (size_t i = 0; i < static_cast<size_t>(count); i++) {
 		const float fx = corners[i][0];
 		const float fy = corners[i][1];
 		Colour3 light;
@@ -3483,25 +3629,25 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 			{ fx, fy },
 		};
 	}
-	const std::array<Colour3, 3> flats = colours;
+	const std::array<Colour3, 4> flats = colours;
 	// Floor lit by its shape at each vertex (feel("lightseams")), as the floor beside it is.
 	const bool cornered = floorOnly && SmoothLight();
-	std::array<float, 3> bases;
-	std::array<ShapeExtra, 3> extras;
+	std::array<float, 4> bases;
+	std::array<ShapeExtra, 4> extras;
 	float most = 0;
-	const bool byCorners = cornered && FloorShapesAt(draw, art, points.data(), 3, bases.data(), extras.data(), most);
+	const bool byCorners = cornered && FloorShapesAt(draw, art, points.data(), count, bases.data(), extras.data(), most);
 	TileShapeLight shaped;
 	const bool byShape = !cornered && TileShapeLightFor(draw, art, shaped, floorOnly);
 	if (byShape)
-		ScaleVertices(vertices, colours, static_cast<int>(vertices.size()), shaped.base);
+		ScaleVertices(vertices, colours, count, shaped.base);
 	if (byCorners)
-		ScaleVerticesEach(vertices, colours, 3, bases.data());
-	SDL_RenderGeometry(renderer, art.texture, vertices.data(), static_cast<int>(vertices.size()), nullptr, 0);
-	DrawAboveFull(renderer, art.texture, vertices, colours, static_cast<int>(vertices.size()), nullptr, 0);
+		ScaleVerticesEach(vertices, colours, count, bases.data());
+	SDL_RenderGeometry(renderer, art.texture, vertices.data(), count, indices, indexCount);
+	DrawAboveFull(renderer, art.texture, vertices, colours, count, indices, indexCount);
 	if (byShape)
-		AddShapeLight(renderer, shaped, vertices.data(), flats.data(), static_cast<int>(vertices.size()), nullptr, 0);
+		AddShapeLight(renderer, shaped, vertices.data(), flats.data(), count, indices, indexCount);
 	if (byCorners && most > 0)
-		AddShapeLightAt(renderer, art.shapes->sheet, art.shapes->sheetCell, vertices.data(), flats.data(), extras.data(), 3, nullptr, 0);
+		AddShapeLightAt(renderer, art.shapes->sheet, art.shapes->sheetCell, vertices.data(), flats.data(), extras.data(), count, indices, indexCount);
 }
 
 /**

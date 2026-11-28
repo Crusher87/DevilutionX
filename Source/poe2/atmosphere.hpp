@@ -170,8 +170,13 @@ enum class Knob : uint8_t {
 	LightSeams,
 	/** Town: the crack down to the Hive (Hellfire) glows and breathes, lights the ground round it red, and throws up embers, smoke and steam. */
 	HellCrack,
+	/**
+	 * Not a look: a wall's bottom piece is drawn as its floor in the floor's light and its wall in the wall's, pixel by
+	 * pixel (hd_wall_foot.hpp). At 0 (or with LightSeams at 0) it is cut along the floor's back edge, as before.
+	 */
+	WallFoot,
 };
-inline constexpr size_t NumKnobs = 60;
+inline constexpr size_t NumKnobs = 61;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);
