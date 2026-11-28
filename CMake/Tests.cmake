@@ -82,6 +82,7 @@ set(tests
   poe2_hd_logo_test
   poe2_hd_keep_test
   poe2_hd_seams_test
+  poe2_hd_light_seams_test
   poe2_live_fire_test
   poe2_menu_intro_test
   poe2_rune_outline_test

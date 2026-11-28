@@ -13,6 +13,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <tuple>
 #include <unordered_map>
 #include <vector>
 
@@ -43,6 +44,7 @@
 #include "poe2/carved_bodies.hpp"
 #include "poe2/hd_batch.hpp"
 #include "poe2/hd_light.hpp"
+#include "poe2/hd_light_seams.hpp"
 #include "poe2/hd_outline.hpp"
 #include "poe2/hd_pack.hpp"
 #include "poe2/hd_seams.hpp"
@@ -2645,6 +2647,15 @@ bool IsAboveFull(const Colour3 &colour)
 	return colour[0] > 1.F + 1.F / 255 || colour[1] > 1.F + 1.F / 255 || colour[2] > 1.F + 1.F / 255;
 }
 
+/**
+ * @brief Each piece of a tile takes its light from points it shares with the pieces round it (feel("lightseams"),
+ * hd_light_seams.hpp), so no step in the light shows along the tiles' edges.
+ */
+bool SmoothLight()
+{
+	return atmosphere::Setting(atmosphere::Knob::LightSeams) > 0;
+}
+
 /** @brief What a draw shows: its HD art or the game's own pixels, and the painted shadow that goes under the game's pixels. */
 struct DrawTexture {
 	SDL_Texture *texture = nullptr;
@@ -2667,6 +2678,9 @@ struct TileShapeLight {
 };
 bool TileShapeLightFor(const Draw &draw, const DrawTexture &art, TileShapeLight &out, bool floor);
 void AddShapeLight(SDL_Renderer *renderer, const TileShapeLight &shaped, SDL_Vertex *vertices, const Colour3 *colours, int count, const int *indices, int indexCount);
+using ShapeExtra = std::array<float, NumShapeAxes>;
+bool FloorShapesAt(const Draw &draw, const DrawTexture &art, const LightPoint *points, int count, float *bases, ShapeExtra *extras, float &most);
+void AddShapeLightAt(SDL_Renderer *renderer, SDL_Texture *sheet, int cell, const SDL_Vertex *vertices, const Colour3 *colours, const ShapeExtra *extras, int count, const int *indices, int indexCount);
 
 DrawTexture TextureFor(SDL_Renderer *renderer, const Draw &draw, bool paintedShadow)
 {
@@ -2730,6 +2744,8 @@ Colour3 ArtColour(const Colour3 &light, const DrawTexture &art)
 	return colour;
 }
 
+bool DrawFloorPieceByCorners(SDL_Renderer *renderer, const Draw &draw, const DrawTexture &art, const Shading &shading, Uint8 alpha, const SDL_FRect &dest);
+
 /** @brief Draws one recorded draw, lit by one colour or a left-to-right gradient. */
 void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading, float toLogical, bool paintedShadow)
 {
@@ -2750,10 +2766,15 @@ void DrawShaded(SDL_Renderer *renderer, const Draw &draw, const Shading &shading
 	}
 	// The game's own see-through pixels are already in the fallback's coverage.
 	const Uint8 alpha = art.hdArt && draw.style == SpriteStyle::Blended ? 128 : 255;
+	// A piece of the floor lit by its shape takes that light at its corners, shared with the pieces round it
+	// (feel("lightseams")): taken at its middle, each piece's bumps were lit a little differently from its neighbour's.
+	const bool byCorners = draw.floor && FrameLit && SmoothLight() && (draw.tile == TileType::LeftTriangle || draw.tile == TileType::RightTriangle);
+	if (byCorners && DrawFloorPieceByCorners(renderer, draw, art, shading, alpha, dest))
+		return;
 	TileShapeLight shaped;
 	// A piece of the floor is lit against a floor facing up (feel("seamlight")): measured against a thing standing on
 	// the tile, flat floor came out lighter or darker tile by tile, a step in the light along every tile's edge.
-	const bool byShape = TileShapeLightFor(draw, art, shaped, draw.floor && atmosphere::Setting(atmosphere::Knob::SeamLight) > 0);
+	const bool byShape = !byCorners && TileShapeLightFor(draw, art, shaped, draw.floor && atmosphere::Setting(atmosphere::Knob::SeamLight) > 0);
 	if (shading.count == 1 && !shading.fades) {
 		const Colour3 flat = ArtColour(shading.colours[0], art);
 		Colour3 colour = flat;
@@ -3169,7 +3190,7 @@ constexpr float BehindNone = 9.F;
  * them too, and showed black on both sides of the doorway.
  * @param right The face on the tile's y-min edge (looking towards +y), else the one on its x-min edge (towards +x).
  */
-float FromBehind(Point tile, bool right)
+float FromBehind(Point tile, bool right, float along = 0)
 {
 	if (TileHasAny(tile, TileProperties::Transparent) && TransList[static_cast<uint8_t>(dTransVal[tile.x][tile.y])])
 		return 1.F;
@@ -3185,10 +3206,11 @@ float FromBehind(Point tile, bool right)
 		return 1.F;
 	if (std::isnan(LitHeroX))
 		return 0.F;
-	// The middle of the face, how far behind the front of the wall's tile the hero stands (fully from half a tile, so all
-	// through a doorway in it), and how near they are.
-	const float fx = static_cast<float>(tile.x) - (right ? 0.F : 0.5F);
-	const float fy = static_cast<float>(tile.y) - (right ? 0.5F : 0.F);
+	// The middle of the face (or a point `along` it, see FacePoint), how far behind the front of the wall's tile the hero
+	// stands (fully from half a tile, so all through a doorway in it), and how near they are.
+	const LightPoint face = FacePoint(static_cast<float>(tile.x), static_cast<float>(tile.y), right, true, along);
+	const float fx = face.x;
+	const float fy = face.y;
 	const float behind = right ? static_cast<float>(tile.y) + 0.5F - LitHeroY : static_cast<float>(tile.x) + 0.5F - LitHeroX;
 	const float dx = fx - LitHeroX;
 	const float dy = fy - LitHeroY;
@@ -3231,10 +3253,14 @@ Colour3 BaseFloorLight(float x, float y, Point tile, BackWalls walls, BehindWall
 		for (int c = 0; c < 3; c++)
 			light[c] = std::max(light[c], room[c] * weight);
 	};
-	if (behind.left > 0)
-		spill(x - (tx - 0.5F), behind.left, BehindLight(tx - 0.75F, std::clamp(y, ty - 0.5F, ty + 0.5F), false));
-	if (behind.right > 0)
-		spill(y - (ty - 0.5F), behind.right, BehindLight(std::clamp(x, tx - 0.5F, tx + 0.5F), ty - 0.75F, true));
+	// Weighed where the point is along the wall (feel("lightseams")), so two walls' feet in a row meet with no step.
+	const bool smooth = SmoothLight();
+	const float left = smooth && walls.left ? FromBehind(tile, false, ty - y) : behind.left;
+	const float right = smooth && walls.right ? FromBehind(tile, true, x - tx) : behind.right;
+	if (left > 0)
+		spill(x - (tx - 0.5F), left, BehindLight(tx - 0.75F, std::clamp(y, ty - 0.5F, ty + 0.5F), false));
+	if (right > 0)
+		spill(y - (ty - 0.5F), right, BehindLight(std::clamp(x, tx - 0.5F, tx + 0.5F), ty - 0.75F, true));
 	return light;
 }
 
@@ -3246,6 +3272,19 @@ void ScaleVertices(std::array<SDL_Vertex, N> &vertices, std::array<Colour3, N> &
 		Colour3 &colour = colours[static_cast<size_t>(i)];
 		for (float &part : colour)
 			part *= share;
+		SDL_Vertex &vertex = vertices[static_cast<size_t>(i)];
+		vertex.color = SDL_Color { ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), vertex.color.a };
+	}
+}
+
+/** @brief As ScaleVertices, each vertex by its own share. */
+template <size_t N>
+void ScaleVerticesEach(std::array<SDL_Vertex, N> &vertices, std::array<Colour3, N> &colours, int count, const float *shares)
+{
+	for (int i = 0; i < count; i++) {
+		Colour3 &colour = colours[static_cast<size_t>(i)];
+		for (float &part : colour)
+			part *= shares[i];
 		SDL_Vertex &vertex = vertices[static_cast<size_t>(i)];
 		vertex.color = SDL_Color { ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), vertex.color.a };
 	}
@@ -3313,6 +3352,7 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 	static constexpr std::array<float, 4> Steps { 0.F, 0.25F, 0.75F, 1.F };
 	std::array<SDL_Vertex, 11> vertices;
 	std::array<Colour3, 11> colours;
+	std::array<LightPoint, 11> points;
 	std::array<std::array<int, 4>, 4> at;
 	int count = 0;
 	for (int ia = 0; ia < 4; ia++) {
@@ -3328,6 +3368,7 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 			const float wy = right ? ty - 0.5F + b : ty + 0.5F - a;
 			const Colour3 colour = ArtColour(BaseFloorLight(wx, wy, draw.cell, walls, behind), art);
 			colours[static_cast<size_t>(count)] = colour;
+			points[static_cast<size_t>(count)] = LightPoint { wx, wy };
 			vertices[count] = SDL_Vertex {
 				{ dest.x + fx * dest.w, dest.y + fy * dest.h },
 				{ ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), 255 },
@@ -3364,6 +3405,7 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 		BaseWorldOf(right, cornerX, 1.F, draw.cell, wx, wy);
 		const Colour3 colour = ArtColour(BaseFloorLight(wx, wy, draw.cell, walls, behind), art);
 		colours[static_cast<size_t>(count)] = colour;
+		points[static_cast<size_t>(count)] = LightPoint { wx, wy };
 		vertices[count] = SDL_Vertex {
 			{ dest.x + cornerX * dest.w, dest.y + dest.h },
 			{ ColourByte(colour[0]), ColourByte(colour[1]), ColourByte(colour[2]), 255 },
@@ -3375,15 +3417,24 @@ void DrawTileFloor(SDL_Renderer *renderer, const Draw &draw, float toLogical)
 				indices[used++] = v;
 		}
 	}
-	TileShapeLight shaped;
-	const bool byShape = TileShapeLightFor(draw, art, shaped, true);
 	const std::array<Colour3, 11> flats = colours;
+	// Lit by its shape at each vertex (feel("lightseams")), as the floor round it is, or by one light for the piece.
+	std::array<float, 11> bases;
+	std::array<ShapeExtra, 11> extras;
+	float most = 0;
+	const bool byCorners = SmoothLight() && FloorShapesAt(draw, art, points.data(), count, bases.data(), extras.data(), most);
+	TileShapeLight shaped;
+	const bool byShape = !SmoothLight() && TileShapeLightFor(draw, art, shaped, true);
 	if (byShape)
 		ScaleVertices(vertices, colours, count, shaped.base);
+	if (byCorners)
+		ScaleVerticesEach(vertices, colours, count, bases.data());
 	SDL_RenderGeometry(renderer, art.texture, vertices.data(), count, indices.data(), used);
 	DrawAboveFull(renderer, art.texture, vertices, colours, count, indices.data(), used);
 	if (byShape)
 		AddShapeLight(renderer, shaped, vertices.data(), flats.data(), count, indices.data(), used);
+	if (byCorners && most > 0)
+		AddShapeLightAt(renderer, art.shapes->sheet, art.shapes->sheetCell, vertices.data(), flats.data(), extras.data(), count, indices.data(), used);
 }
 
 /**
@@ -3410,6 +3461,7 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 	const bool floorOnly = IsFloorOnly(draw);
 	std::array<SDL_Vertex, 3> vertices;
 	std::array<Colour3, 3> colours;
+	std::array<LightPoint, 3> points;
 	for (size_t i = 0; i < corners.size(); i++) {
 		const float fx = corners[i][0];
 		const float fy = corners[i][1];
@@ -3421,6 +3473,7 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 			float wy;
 			BaseWorldOf(right, fx, fy, draw.cell, wx, wy);
 			light = BaseFloorLight(wx, wy, draw.cell, walls, behind);
+			points[i] = LightPoint { wx, wy };
 		}
 		const Colour3 colour = ArtColour(light, art);
 		colours[i] = colour;
@@ -3430,15 +3483,156 @@ void DrawTileWall(SDL_Renderer *renderer, const Draw &draw, const Shading &shadi
 			{ fx, fy },
 		};
 	}
-	TileShapeLight shaped;
-	const bool byShape = TileShapeLightFor(draw, art, shaped, floorOnly);
 	const std::array<Colour3, 3> flats = colours;
+	// Floor lit by its shape at each vertex (feel("lightseams")), as the floor beside it is.
+	const bool cornered = floorOnly && SmoothLight();
+	std::array<float, 3> bases;
+	std::array<ShapeExtra, 3> extras;
+	float most = 0;
+	const bool byCorners = cornered && FloorShapesAt(draw, art, points.data(), 3, bases.data(), extras.data(), most);
+	TileShapeLight shaped;
+	const bool byShape = !cornered && TileShapeLightFor(draw, art, shaped, floorOnly);
 	if (byShape)
 		ScaleVertices(vertices, colours, static_cast<int>(vertices.size()), shaped.base);
+	if (byCorners)
+		ScaleVerticesEach(vertices, colours, 3, bases.data());
 	SDL_RenderGeometry(renderer, art.texture, vertices.data(), static_cast<int>(vertices.size()), nullptr, 0);
 	DrawAboveFull(renderer, art.texture, vertices, colours, static_cast<int>(vertices.size()), nullptr, 0);
 	if (byShape)
 		AddShapeLight(renderer, shaped, vertices.data(), flats.data(), static_cast<int>(vertices.size()), nullptr, 0);
+	if (byCorners && most > 0)
+		AddShapeLightAt(renderer, art.shapes->sheet, art.shapes->sheetCell, vertices.data(), flats.data(), extras.data(), 3, nullptr, 0);
+}
+
+/**
+ * @brief Draws a piece of the floor (in the floor's own pass, lit after by the light over it) lit by its shape at its
+ * corners (feel("lightseams")), which it shares with the pieces round it: lit by the light at its middle, each piece's
+ * bumps and cracks took a little more or less light than its neighbour's, a faint line along every tile's edge.
+ * @return False if it isn't lit by its shape: it is drawn as any other.
+ */
+bool DrawFloorPieceByCorners(SDL_Renderer *renderer, const Draw &draw, const DrawTexture &art, const Shading &shading, Uint8 alpha, const SDL_FRect &dest)
+{
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+	if (shading.count != 1 || shading.fades || !draw.hasTile)
+		return false;
+	const bool right = IsRightColumn(draw);
+	// The half diamond's outer corner, its top and its bottom (the tile's corners), then the piece's two corners outside
+	// it, which take the light halfway along the diamond's edge beside them.
+	static constexpr std::array<std::array<float, 2>, 5> LeftPiece { { { 0.F, 0.5F }, { 1.F, 0.F }, { 1.F, 1.F }, { 0.F, 0.F }, { 0.F, 1.F } } };
+	static constexpr std::array<std::array<float, 2>, 5> RightPiece { { { 1.F, 0.5F }, { 0.F, 0.F }, { 0.F, 1.F }, { 1.F, 0.F }, { 1.F, 1.F } } };
+	static constexpr std::array<int, 9> Indices { 3, 1, 0, 0, 1, 2, 0, 2, 4 };
+	const auto &at = right ? RightPiece : LeftPiece;
+	std::array<LightPoint, 3> points;
+	for (size_t i = 0; i < points.size(); i++) {
+		const LightPoint floor = PieceFloorPoint(right, at[i][0], at[i][1]);
+		points[i] = LightPoint { static_cast<float>(draw.cell.x) + floor.x, static_cast<float>(draw.cell.y) + floor.y };
+	}
+	std::array<float, 5> bases;
+	std::array<ShapeExtra, 5> extras;
+	float most = 0;
+	if (!FloorShapesAt(draw, art, points.data(), 3, bases.data(), extras.data(), most))
+		return false;
+	for (const auto &[to, a, b] : { std::tuple { 3, 0, 1 }, std::tuple { 4, 0, 2 } }) {
+		bases[to] = (bases[a] + bases[b]) / 2;
+		for (size_t k = 0; k < NumShapeAxes; k++)
+			extras[to][k] = (extras[a][k] + extras[b][k]) / 2;
+	}
+	const Colour3 flat = ArtColour(shading.colours[0], art);
+	std::array<SDL_Vertex, 5> vertices;
+	std::array<Colour3, 5> colours;
+	std::array<Colour3, 5> flats;
+	for (size_t v = 0; v < vertices.size(); v++) {
+		flats[v] = flat;
+		colours[v] = flat;
+		vertices[v] = SDL_Vertex { { dest.x + at[v][0] * dest.w, dest.y + at[v][1] * dest.h }, { 255, 255, 255, alpha }, { at[v][0], at[v][1] } };
+	}
+	ScaleVerticesEach(vertices, colours, 5, bases.data());
+	SDL_SetTextureColorMod(art.texture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(art.texture, 255);
+	SDL_RenderGeometry(renderer, art.texture, vertices.data(), 5, Indices.data(), static_cast<int>(Indices.size()));
+	DrawAboveFull(renderer, art.texture, vertices, colours, 5, Indices.data(), static_cast<int>(Indices.size()));
+	if (most > 0)
+		AddShapeLightAt(renderer, art.shapes->sheet, art.shapes->sheetCell, vertices.data(), flats.data(), extras.data(), 5, Indices.data(), static_cast<int>(Indices.size()));
+	return true;
+#else
+	(void)renderer;
+	(void)draw;
+	(void)art;
+	(void)shading;
+	(void)alpha;
+	(void)dest;
+	return false;
+#endif
+}
+
+/** @brief Foliage (FoliageMesh): the top half of a floor tile's piece that the game draws over the floor after it. */
+bool IsFoliage(const Draw &draw)
+{
+	constexpr int FoliageHeight = TILE_HEIGHT / 2;
+	return draw.kind == DrawKind::Tile && !draw.floor && draw.hasTile && draw.light >= 0 && draw.tile == TileType::TransparentSquare
+	    && draw.height == FoliageHeight && draw.y + draw.height - 1 == draw.tileOrigin.y - FoliageHeight && InDungeonBounds(draw.cell)
+	    && !light::Blocks(draw.cell.x, draw.cell.y);
+}
+
+/**
+ * @brief Draws a piece of foliage in the floor's light at each point of it, as the floor under it is lit
+ * (feel("lightseams")). It is earth, grass and stones reaching over the tile's back edge onto the floor behind: lit as a
+ * thing standing on the tile, it took other light than the floor it lies on, a thin line along every tile's back edges.
+ * Over a tile behind that stops light (a wall's foot), it takes the light at its own tile's back edge.
+ */
+void DrawFoliageLit(SDL_Renderer *renderer, const Draw &draw, float toLogical)
+{
+	const SDL_FRect dest = DestOf(draw, toLogical);
+	if (!OnScreen(dest, 0))
+		return;
+	const DrawTexture art = TextureFor(renderer, draw, false);
+	if (art.texture == nullptr)
+		return;
+	SDL_SetTextureColorMod(art.texture, 255, 255, 255);
+	SDL_SetTextureAlphaMod(art.texture, 255);
+	const bool right = IsRightColumn(draw);
+	static const auto Meshes = [] {
+		std::array<std::pair<std::array<MeshVertex, FoliageVertexCount>, std::array<int, FoliageIndexCount>>, 2> meshes;
+		FoliageMesh(false, meshes[0].first, meshes[0].second);
+		FoliageMesh(true, meshes[1].first, meshes[1].second);
+		return meshes;
+	}();
+	const auto &[mesh, indices] = Meshes[right ? 1 : 0];
+	const Point back = draw.cell + (right ? Displacement { 0, -1 } : Displacement { -1, 0 });
+	const bool walled = !InDungeonBounds(back) || light::Blocks(back.x, back.y);
+	const float tx = static_cast<float>(draw.cell.x);
+	const float ty = static_cast<float>(draw.cell.y);
+	std::array<SDL_Vertex, FoliageVertexCount> vertices;
+	std::array<Colour3, FoliageVertexCount> colours;
+	std::array<LightPoint, FoliageVertexCount> points;
+	for (size_t v = 0; v < mesh.size(); v++) {
+		float x = tx + mesh[v].wx;
+		float y = ty + mesh[v].wy;
+		if (walled) {
+			if (right)
+				y = std::max(y, ty - 0.5F);
+			else
+				x = std::max(x, tx - 0.5F);
+		}
+		points[v] = LightPoint { x, y };
+		colours[v] = ArtColour(LightAt(x, y), art);
+		vertices[v] = SDL_Vertex {
+			{ dest.x + mesh[v].fx * dest.w, dest.y + mesh[v].fy * dest.h },
+			{ ColourByte(colours[v][0]), ColourByte(colours[v][1]), ColourByte(colours[v][2]), 255 },
+			{ mesh[v].fx, mesh[v].fy },
+		};
+	}
+	const std::array<Colour3, FoliageVertexCount> flats = colours;
+	std::array<float, FoliageVertexCount> bases;
+	std::array<ShapeExtra, FoliageVertexCount> extras;
+	float most = 0;
+	const bool byCorners = FloorShapesAt(draw, art, points.data(), FoliageVertexCount, bases.data(), extras.data(), most);
+	if (byCorners)
+		ScaleVerticesEach(vertices, colours, FoliageVertexCount, bases.data());
+	SDL_RenderGeometry(renderer, art.texture, vertices.data(), FoliageVertexCount, indices.data(), FoliageIndexCount);
+	DrawAboveFull(renderer, art.texture, vertices, colours, FoliageVertexCount, indices.data(), FoliageIndexCount);
+	if (byCorners && most > 0)
+		AddShapeLightAt(renderer, art.shapes->sheet, art.shapes->sheetCell, vertices.data(), flats.data(), extras.data(), FoliageVertexCount, indices.data(), FoliageIndexCount);
 }
 
 /**
@@ -5586,16 +5780,21 @@ Shading FaceLight(Point tile, bool right)
 Shading WallLight(Point tile, bool right)
 {
 	Shading shading = FaceLight(tile, right);
-	const float share = FromBehind(tile, right);
-	if (share <= 0)
+	// Weighed at each end of the face (feel("lightseams")), which it shares with the face beside it in a row, so a wall
+	// lit partly from behind has no step at every tile; at its middle, as before.
+	const bool smooth = SmoothLight();
+	const float share = FromBehind(tile, right, smooth ? -0.5F : 0.F);
+	const float shareTo = smooth ? FromBehind(tile, right, 0.5F) : share;
+	if (share <= 0 && shareTo <= 0)
 		return shading;
 	const float tx = static_cast<float>(tile.x);
 	const float ty = static_cast<float>(tile.y);
 	const Shading behind = right ? Gradient(BehindLight(tx - 0.5F, ty - 0.75F, true), BehindLight(tx + 0.5F, ty - 0.75F, true))
 	                             : Gradient(BehindLight(tx - 0.75F, ty + 0.5F, false), BehindLight(tx - 0.75F, ty - 0.5F, false));
 	for (int s = 0; s < shading.count; s++) {
+		const float weight = s == 0 ? share : shareTo;
 		for (int c = 0; c < 3; c++)
-			shading.colours[s][c] = std::max(shading.colours[s][c], behind.colours[s][c] * share);
+			shading.colours[s][c] = std::max(shading.colours[s][c], behind.colours[s][c] * weight);
 	}
 	return shading;
 }
@@ -5603,11 +5802,12 @@ Shading WallLight(Point tile, bool right)
 /** @brief The light on something standing on an open tile: the tile's own light, across it from left to right. */
 Shading OpenTileLight(Point tile, bool right)
 {
-	const float tx = static_cast<float>(tile.x);
-	const float ty = static_cast<float>(tile.y);
-	if (right)
-		return Gradient(LightAt(tx, ty), LightAt(tx + 0.25F, ty - 0.25F));
-	return Gradient(LightAt(tx - 0.25F, ty + 0.25F), LightAt(tx, ty));
+	// From the column's outer corner (feel("lightseams")), shared with the column beside it: a quarter tile in, as
+	// before, the columns stepped at every edge.
+	LightPoint from;
+	LightPoint to;
+	OpenColumnEnds(static_cast<float>(tile.x), static_cast<float>(tile.y), right, SmoothLight(), from, to);
+	return Gradient(LightAt(from.x, from.y), LightAt(to.x, to.y));
 }
 
 /** @brief Rock with no open tile round it: the rock between and round the rooms, of which only the top shows. */
@@ -5646,12 +5846,10 @@ bool IsRockTop(Point tile)
  */
 Shading RockTopLight(Point tile, bool right)
 {
-	const float tx = static_cast<float>(tile.x);
-	const float ty = static_cast<float>(tile.y);
-	const auto at = [](float x, float y) { return ToColour(light::RockTopAt(x, y)); };
-	if (right)
-		return Gradient(at(tx, ty), at(tx + 0.25F, ty - 0.25F));
-	return Gradient(at(tx - 0.25F, ty + 0.25F), at(tx, ty));
+	LightPoint from;
+	LightPoint to;
+	OpenColumnEnds(static_cast<float>(tile.x), static_cast<float>(tile.y), right, SmoothLight(), from, to);
+	return Gradient(ToColour(light::RockTopAt(from.x, from.y)), ToColour(light::RockTopAt(to.x, to.y)));
 }
 
 /** @brief The light on a whole piece standing on a tile, both of its columns lit as they are when the piece is drawn. */
@@ -6158,6 +6356,151 @@ void AddShapeLight(SDL_Renderer *renderer, const TileShapeLight &shaped, SDL_Ver
 	}
 	if (litCount > 0)
 		SDL_RenderGeometry(renderer, shaped.art->sheet, lit.data(), litCount, order.data(), orderCount);
+}
+
+/** @brief Less of a way of facing's light than this, at every vertex of a piece, isn't added (as AddShapeLight's LeastExtra). */
+constexpr float ShapeLeastAdded = 0.02F;
+
+/** @brief Each tile corner's ways of facing's light against the flat floor's (CornerAgainst), worked out once a frame. */
+struct CornerShapeLight {
+	ShapeExtra against {};
+	uint32_t made = 0;
+};
+/** @brief By corner, MAXDUNX + 1 a row: corner (k - 0.5, l - 0.5) at k + l * (MAXDUNX + 1). */
+std::vector<CornerShapeLight> CornerShapes;
+/** @brief Which light (light::UpdateCount) and feel("tileshapes") the corners were worked out for, as one count. */
+uint32_t CornerShapesMade = 0;
+uint32_t CornerShapesUpdate = std::numeric_limits<uint32_t>::max();
+float CornerShapesStrength = -1;
+
+/**
+ * @brief The light each way of facing takes at a tile's corner, against a floor facing up there (as TileShapeLightFor's
+ * floor): 1 for all of them where no light with a direction falls. `cx` and `cy` count half tiles (odd: a corner).
+ */
+const ShapeExtra &CornerAgainst(int cx, int cy, float strength)
+{
+	constexpr int Row = MAXDUNX + 1;
+	if (CornerShapes.empty())
+		CornerShapes.resize(static_cast<size_t>(Row) * (MAXDUNY + 1));
+	const uint32_t update = light::UpdateCount();
+	if (update != CornerShapesUpdate || strength != CornerShapesStrength) {
+		CornerShapesUpdate = update;
+		CornerShapesStrength = strength;
+		CornerShapesMade++;
+		if (CornerShapesMade == 0) {
+			for (CornerShapeLight &corner : CornerShapes)
+				corner.made = 0;
+			CornerShapesMade = 1;
+		}
+	}
+	const int k = std::clamp((cx + 1) / 2, 0, Row - 1);
+	const int l = std::clamp((cy + 1) / 2, 0, MAXDUNY);
+	CornerShapeLight &corner = CornerShapes[static_cast<size_t>(l) * Row + k];
+	if (corner.made == CornerShapesMade)
+		return corner.against;
+	corner.made = CornerShapesMade;
+	std::array<std::array<float, 3>, NumShapeAxes + 1> faces;
+	std::copy(ShapeAxes.begin(), ShapeAxes.end(), faces.begin());
+	faces[NumShapeAxes] = { 0.F, 0.F, 1.F };
+	std::array<float, NumShapeAxes + 1> shade;
+	if (!FacingShades(static_cast<float>(k) - 0.5F, static_cast<float>(l) - 0.5F, faces.data(), faces.size(), shade.data(), 0.05F, 1.F) || shade[NumShapeAxes] < 0.05F) {
+		corner.against.fill(1.F);
+		return corner.against;
+	}
+	for (size_t axis = 0; axis < NumShapeAxes; axis++)
+		corner.against[axis] = AgainstOf(shade[axis], shade[NumShapeAxes], strength);
+	return corner.against;
+}
+
+/** @brief The light each way of facing takes at a point of the floor, blended from the corners of the tile it lies in. */
+void FloorAgainstAt(float x, float y, float strength, ShapeExtra &out)
+{
+	int cx;
+	int cy;
+	float u;
+	float v;
+	CornerCell(x, cx, u);
+	CornerCell(y, cy, v);
+	const ShapeExtra &c00 = CornerAgainst(cx, cy, strength);
+	// A point on a tile's edge takes only that edge's two corners, as the tile on its other side does.
+	const ShapeExtra &c10 = u > 0 ? CornerAgainst(cx + 2, cy, strength) : c00;
+	const ShapeExtra &c01 = v > 0 ? CornerAgainst(cx, cy + 2, strength) : c00;
+	const ShapeExtra &c11 = u > 0 && v > 0 ? CornerAgainst(cx + 2, cy + 2, strength) : (u > 0 ? c10 : c01);
+	for (size_t k = 0; k < NumShapeAxes; k++)
+		out[k] = BlendCorners(c00[k], c10[k], c01[k], c11[k], u, v);
+}
+
+/**
+ * @brief How a floor with a shape map is lit by its shape at each of some points of it (feel("lightseams")): the light
+ * at the tiles' corners blended, so pieces side by side take the same light where they meet.
+ * @param bases Each point's art in this times its light (SharesFromAgainst)...
+ * @param extras ...and each way's picture added in this times it.
+ * @param most The most of any extra: none to add where it is nothing.
+ * @return False if it has no shape map or feel("tileshapes") is off.
+ */
+bool FloorShapesAt(const Draw &draw, const DrawTexture &art, const LightPoint *points, int count, float *bases, ShapeExtra *extras, float &most)
+{
+	most = 0;
+	if (art.shapes == nullptr || art.shapes->sheet == nullptr || draw.kind != DrawKind::Tile || !draw.hasTile || draw.light < 0)
+		return false;
+	const float strength = std::clamp(atmosphere::Setting(atmosphere::Knob::TileShapes), 0.F, 2.F);
+	if (strength <= 0)
+		return false;
+	ShapeExtra against;
+	for (int i = 0; i < count; i++) {
+		FloorAgainstAt(points[i].x, points[i].y, strength, against);
+		most = std::max(most, SharesFromAgainst(against.data(), art.shapes->sheetHas.data(), NumShapeAxes, bases[i], extras[i].data()));
+	}
+	// Too little to see anywhere on it: left out, as AddShapeLight leaves out a way of facing. Where a piece beside it
+	// adds that way, it adds next to nothing along their shared edge, as this one's corners there have next to nothing.
+	if (most < ShapeLeastAdded)
+		most = 0;
+	return true;
+}
+
+/**
+ * @brief As AddShapeLight, with each vertex's own share of each way of facing: each way's picture is added where any
+ * vertex has some of it, so the light goes smoothly to nothing across the piece instead of stopping at its edge.
+ */
+void AddShapeLightAt(SDL_Renderer *renderer, SDL_Texture *sheet, int cell, const SDL_Vertex *vertices, const Colour3 *colours, const ShapeExtra *extras, int count, const int *indices, int indexCount)
+{
+	constexpr int MostVertices = FoliageVertexCount;
+	if (sheet == nullptr || count > MostVertices)
+		return;
+	const float side = static_cast<float>(cell);
+	const float across = (side + 2) * NumShapeAxes;
+	std::array<SDL_Vertex, MostVertices * NumShapeAxes> lit;
+	std::array<int, FoliageIndexCount * NumShapeAxes> order;
+	int litCount = 0;
+	int orderCount = 0;
+	if (indexCount > FoliageIndexCount || (indices == nullptr && count > FoliageIndexCount))
+		return;
+	for (size_t k = 0; k < NumShapeAxes; k++) {
+		float more = 0;
+		for (int v = 0; v < count; v++)
+			more = std::max(more, extras[v][k]);
+		if (more < ShapeLeastAdded)
+			continue;
+		const float left = static_cast<float>(k) * (side + 2) + 1;
+		for (int v = 0; v < count; v++) {
+			SDL_Vertex vertex = vertices[v];
+			const Colour3 &c = colours[v];
+			const float share = extras[v][k];
+			vertex.color = SDL_Color { ColourByte(c[0] * share), ColourByte(c[1] * share), ColourByte(c[2] * share), vertices[v].color.a };
+			vertex.tex_coord.x = (left + vertices[v].tex_coord.x * side) / across;
+			lit[static_cast<size_t>(litCount + v)] = vertex;
+		}
+		if (indices != nullptr) {
+			for (int i = 0; i < indexCount; i++)
+				order[static_cast<size_t>(orderCount++)] = litCount + indices[i];
+		} else {
+			for (int i = 0; i < count; i++)
+				order[static_cast<size_t>(orderCount++)] = litCount + i;
+		}
+		litCount += count;
+	}
+	if (litCount > 0)
+		SDL_RenderGeometry(renderer, sheet, lit.data(), litCount, order.data(), orderCount);
 }
 
 /** @brief The colour of the edge the lava gives a body standing by it (LavaEdge). */
@@ -6968,6 +7311,10 @@ bool RenderLit(SDL_Renderer *renderer, Size worldSize, float toLogical, const st
 		}
 		if (draw.kind == DrawKind::Tile && draw.hasTile && draw.light >= 0 && !IsTileBase(draw) && IsDirt(draw.cell)) {
 			DrawGroundLit(renderer, draw, toLogical);
+			continue;
+		}
+		if (SmoothLight() && IsFoliage(draw)) {
+			DrawFoliageLit(renderer, draw, toLogical);
 			continue;
 		}
 		Shading shading = LightFor(draw, tint);

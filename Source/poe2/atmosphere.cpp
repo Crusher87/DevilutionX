@@ -106,6 +106,7 @@ constexpr std::array<KnobInfo, NumKnobs> Knobs { {
 	{ "foothaze", 0.F, "blending in, a Maybe (off): a very thin haze of the room's air over feet and the foot of things, in the Catacombs and Crypt; 1 on, 2 twice as much" },
 	{ "react", 0.F, "blending in, a Maybe (off): feet stir a little dust off the floor as heroes and monsters walk (needs the dust in the air on); 1 on, 2 twice as much" },
 	{ "sheen", 0.F, "blending in, a Maybe (off): worn floors catch a soft shine from the lamps and fires near them; 1 on, 2 twice as bright" },
+	{ "lightseams", 1.F, "each piece of a tile takes the same light as the pieces beside it where they meet (foliage over the floor lit as the floor, things on open ground and shapes lit from the tiles' corners), so no faint line shows along the tiles' edges; 0 lights each piece by itself as before (works with Atmosphere off)" },
 } };
 
 /** @brief feel()'s settings, kept until the game closes. */

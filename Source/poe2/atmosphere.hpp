@@ -163,8 +163,13 @@ enum class Knob : uint8_t {
 	React,
 	/** Blending in (a Maybe, off until asked for): worn floors catch a soft shine from the lamps and fires near them. */
 	Sheen,
+	/**
+	 * Not a look: each piece of a tile takes its light from points it shares with the pieces round it (hd_light_seams.hpp),
+	 * so no step in the light shows along the tiles' edges. At 0 each piece takes its light from points of its own, as before.
+	 */
+	LightSeams,
 };
-inline constexpr size_t NumKnobs = 58;
+inline constexpr size_t NumKnobs = 59;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);
