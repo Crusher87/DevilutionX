@@ -1061,10 +1061,18 @@ void LiveFire::BlowOutward(float x, float y, float strength, float dt)
 	windAny_ = true;
 }
 
+namespace {
+/** @brief Where in its step a pixel's trail samples sit, by the pixel's place two by two (0.5 on average, the middle). */
+constexpr float TrailShift[4] = { 0.125F, 0.625F, 0.875F, 0.375F };
+} // namespace
+
 void LiveFire::BuildTrail()
 {
 	// The heat's first mip level drawn out toward the viewer from the logo's middle (FS_FIRE's trail): the most of 14
 	// samples along the line to it, each less the further out.
+	// Fourteen copies of the letters' heat, each a step bigger, show one by one: bars beside the D and the O, the
+	// letters' ghosts. So the samples sit a quarter of a step apart from one pixel to the next (four patterns, two by
+	// two), and the four are then mixed evenly: 56 copies for the cost of 14, which run into one another.
 	const int w = mipWidth_[0];
 	const int h = mipHeight_[0];
 	trailMap_.resize(static_cast<size_t>(w) * h);
@@ -1079,8 +1087,9 @@ void LiveFire::BuildTrail()
 			for (int i = 0; i < w; i++) {
 				const float u = (static_cast<float>(i) + 0.5F) / static_cast<float>(w);
 				float acc = 0.F;
+				const float shift = TrailShift[(j & 1) * 2 + (i & 1)];
 				for (int k = 0; k < 14; k++) {
-					const float f = (static_cast<float>(k) + 0.5F) / 14.F;
+					const float f = (static_cast<float>(k) + shift) / 14.F;
 					const float m = 1.F - f * trail * 0.45F;
 					const float qu = cx + (u - cx) * m;
 					const float qv = cy + (v - cy) * m;
@@ -1090,6 +1099,22 @@ void LiveFire::BuildTrail()
 			}
 		}
 	});
+	// The four patterns mixed evenly: each pixel with its neighbours, a quarter, a half and a quarter each way.
+	trailScratch_.resize(trailMap_.size());
+	for (int j = 0; j < h; j++) {
+		const float *from = trailMap_.data() + static_cast<size_t>(j) * w;
+		float *to = trailScratch_.data() + static_cast<size_t>(j) * w;
+		for (int i = 0; i < w; i++)
+			to[i] = (from[std::max(i - 1, 0)] + 2.F * from[i] + from[std::min(i + 1, w - 1)]) * 0.25F;
+	}
+	for (int j = 0; j < h; j++) {
+		const float *above = trailScratch_.data() + static_cast<size_t>(std::max(j - 1, 0)) * w;
+		const float *at = trailScratch_.data() + static_cast<size_t>(j) * w;
+		const float *below = trailScratch_.data() + static_cast<size_t>(std::min(j + 1, h - 1)) * w;
+		float *to = trailMap_.data() + static_cast<size_t>(j) * w;
+		for (int i = 0; i < w; i++)
+			to[i] = (above[i] + 2.F * at[i] + below[i]) * 0.25F;
+	}
 }
 
 void LiveFire::BuildBack()

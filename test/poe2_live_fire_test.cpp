@@ -437,6 +437,60 @@ TEST(LiveFireTest, PaddedLogoGridFrameTime)
 }
 
 
+TEST(LiveFireTest, TheTrailTowardTheViewerIsASmearNotCopies)
+{
+	// Curtis 2026-11-28: "the intro almost has a letter burnt in effect as it flies in on the left and right, like a
+	// ghost effect to it". While the intro's logo flies its heat trails toward the viewer: the heat drawn again bigger
+	// and bigger about the logo's middle. Fourteen copies showed one by one beside the outer letters, as bars.
+	// One letter's fire here, a narrow one well to the right of the middle; its trail runs on to the right of it.
+	const int w = LogoGridWidth;
+	const int h = LogoGridHeight;
+	constexpr int Bar = 1000;
+	constexpr int BarWidth = 8;
+	std::vector<uint8_t> rgba(static_cast<size_t>(w) * h * 4, 0);
+	for (int row = h / 2; row < h - 60; row++) {
+		for (int x = Bar; x < Bar + BarWidth; x++)
+			rgba[(static_cast<size_t>(row) * w + x) * 4] = row < h / 2 + 8 ? 255 : 120;
+	}
+	for (int row = 0; row < h; row++)
+		for (int x = 0; x < w; x++)
+			rgba[(static_cast<size_t>(row) * w + x) * 4 + 1] = static_cast<uint8_t>(std::clamp((h - 60 - row) * 255 / 160, 0, 255));
+	FireSource source;
+	ASSERT_TRUE(SourceFromMaps(rgba.data(), w, h, w * 4, source, LogoGridPad));
+	LiveFire fire(std::move(source), FireSettings {}, 7, 0);
+	fire.WarmUp(1.5F);
+	const int gw = fire.Width();
+	std::vector<uint8_t> plain(static_cast<size_t>(gw) * h * 4);
+	std::vector<uint8_t> trailed(plain.size());
+	fire.Paint(plain.data(), gw * 4);
+	fire.SetPaintExtras(1.F, 0.F);
+	fire.Paint(trailed.data(), gw * 4);
+	// What the trail adds, along the rows at the height it is drawn out from (120 of 432 up from the bottom), from
+	// just right of the fire itself to the grid's edge.
+	const int from = Bar + BarWidth + LogoGridPad + 40;
+	std::vector<int> added(gw - from, 0);
+	for (int row = h - 1 - 124; row <= h - 1 - 116; row++) {
+		for (int x = from; x < gw; x++) {
+			const size_t at = (static_cast<size_t>(row) * gw + x) * 4;
+			for (int c = 0; c < 4; c++)
+				added[x - from] += std::max(0, static_cast<int>(trailed[at + c]) - static_cast<int>(plain[at + c]));
+		}
+	}
+	const int most = *std::max_element(added.begin(), added.end());
+	ASSERT_GT(most, 200) << "no trail to look at";
+	// Bars: places where it is brighter than a little way to either side, by a tenth of its most or more.
+	int bars = 0;
+	constexpr int Aside = 6;
+	for (size_t i = Aside; i + Aside < added.size(); i++) {
+		const bool top = added[i] >= added[i - 1] && added[i] > added[i + 1];
+		if (top && added[i] - added[i - Aside] > most / 10 && added[i] - added[i + Aside] > most / 10)
+			bars++;
+	}
+	EXPECT_LE(bars, 1);
+	// And no dark between: over the nearer half of it the trail never falls under a third of its most.
+	EXPECT_GT(*std::min_element(added.begin(), added.begin() + static_cast<ptrdiff_t>(added.size() / 2)), most / 3);
+}
+
 #if !defined(USE_SDL1) && !defined(USE_SDL3)
 TEST(FireLayerTest, DrawnOffTheGamesThreadItBurnsAndCostsTheFrameLittle)
 {

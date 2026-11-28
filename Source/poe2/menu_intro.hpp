@@ -116,6 +116,25 @@ struct Lens {
 /** @brief The lens at `t`; `jitterX` and `jitterY` (-0.5..0.5) shake it a little as the logo rushes in. */
 Lens LensAt(float t, float jitterX, float jitterY);
 
+/**
+ * @brief The rays from the logo (FS_POST's light shafts): the bright light of the picture drawn again and again, each
+ * copy bigger about the logo's middle than the last and fainter. Enough of them that they run into one another: six
+ * showed one by one, as bars beside the D and the O (the letters' fire, bigger and bigger: their ghosts).
+ */
+constexpr int RayTaps = 24;
+struct RayTap {
+	/** @brief The scene's scale for this copy, under 1: the copy is drawn 1 / scale as big. */
+	float scale;
+	/** @brief How much of the bright light it adds, at the rays' full strength. */
+	float weight;
+};
+/** @brief The rays' copy `i` of `RayTaps`, nearest the picture's own size first. */
+constexpr RayTap RayTapAt(int i)
+{
+	const float f = (static_cast<float>(i) + 0.5F) / RayTaps;
+	return RayTap { 1.F - f * 0.62F, (1.F - f) * 22.F / RayTaps / 9.F };
+}
+
 /** @brief A sound of the intro: when it starts (seconds of real time from the start), how loud and how it fades in. */
 struct SoundCue {
 	/** @brief Its file under hd\ui_art\intro\. For the claws, one of two at random (`alternative`). */
