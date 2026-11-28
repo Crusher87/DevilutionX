@@ -4248,16 +4248,11 @@ bool IsWaterColour(const SDL_Color &c)
 }
 
 /**
- * @brief Where a stream piece is water and where it is bank, read once from the game's own picture of its floor (the
- * HD art is the same picture, redrawn). Rain's rings spread only on the water (Curtis 2026-11-14: they lay over the
- * whole tile, banks and all).
+ * @brief A piece's floor as the game draws it, fully lit: a 64 by 32 picture in the level's colours' numbers, 0 outside
+ * its diamond. (The HD art is the same picture, redrawn, so what is where in it holds for both.)
  */
-const WaterMask &WaterMaskOf(int piece)
+SDLSurfaceUniquePtr PieceFloorPicture(int piece)
 {
-	auto [it, inserted] = WaterMasks.try_emplace(piece);
-	WaterMask &mask = it->second;
-	if (!inserted || pDungeonCels == nullptr)
-		return mask;
 	constexpr int Width = 2 * DunFrameWidth;
 	constexpr int Height = DunFrameHeight;
 	SDLSurfaceUniquePtr surface = SDLWrap::CreateRGBSurfaceWithFormat(0, Width, Height, 8, SDL_PIXELFORMAT_INDEX8);
@@ -4276,6 +4271,23 @@ const WaterMask &WaterMaskOf(int piece)
 		const int_fast16_t height = IsAnyOf(type, TileType::LeftTriangle, TileType::RightTriangle) ? DunFrameTriangleHeight : DunFrameHeight;
 		RenderTileFrame(out, lightmap, Point { static_cast<int>(half * DunFrameWidth), Height - 1 }, type, GetDunFrame(pDungeonCels.get(), block.frame()), height, MaskType::Solid, FullyLitLightTable);
 	}
+	return surface;
+}
+
+/**
+ * @brief Where a stream piece is water and where it is bank, read once from the game's own picture of its floor (the
+ * HD art is the same picture, redrawn). Rain's rings spread only on the water (Curtis 2026-11-14: they lay over the
+ * whole tile, banks and all).
+ */
+const WaterMask &WaterMaskOf(int piece)
+{
+	auto [it, inserted] = WaterMasks.try_emplace(piece);
+	WaterMask &mask = it->second;
+	if (!inserted || pDungeonCels == nullptr)
+		return mask;
+	constexpr int Width = 2 * DunFrameWidth;
+	constexpr int Height = DunFrameHeight;
+	SDLSurfaceUniquePtr surface = PieceFloorPicture(piece);
 	for (int y = 0; y < Height; y++) {
 		const uint8_t *row = static_cast<const uint8_t *>(surface->pixels) + static_cast<ptrdiff_t>(y) * surface->pitch;
 		std::memcpy(&mask.picture[static_cast<size_t>(y) * Width], row, Width);
@@ -4317,6 +4329,250 @@ const WaterMask &WaterMaskOf(int piece)
 		}
 	}
 	return mask;
+}
+
+// The crack in Tristram's ground that leads down to the Hive (Hellfire), east of the stream (Curtis
+// 2026-11-28: "for a crack in the earth to HELL this should have a little more JUICE"). Its art paints it red inside
+// and nothing more; here the fire down in it lives: a slow glow of magma moving along it and breathing, its red light
+// on the ground, people and smoke round it, embers and smoke rising out of it, steam where the rain falls into it, and
+// now and then a deeper surge, as if something below stirred. The crack's hot parts are found in the game's own
+// picture of its pieces, so all of it follows the art, opened or closed. Looks only (feel "hellcrack").
+
+/** @brief A small patch of the crack that is red-hot in its art: where (world pixels, on the floor), how hot (0 to 1), and how far along the crack. */
+struct CrackHeat {
+	Vec at;
+	float heat;
+	float along;
+};
+
+struct HellCrackState {
+	/** @brief The pieces of the area it is in when it was last looked for: a change (the Hive opened) finds it again. */
+	uint64_t key = 0;
+	bool found = false;
+	std::vector<CrackHeat> hot;
+	/** @brief Its middle and the way it runs, and its half length, in world pixels. */
+	Vec middle;
+	Vec way { 1, 0 };
+	float half = 0;
+	/** @brief A surge: how strong it is now (1 at its start, dying away) and the ambient time of the next. */
+	float surge = 0;
+	float nextSurge = 0;
+};
+HellCrackState HellCrack;
+
+/** @brief Where the Hive's way in is in town (tiles): Hellfire's pieces for it, open or closed, all lie in here. */
+constexpr int CrackX0 = 74;
+constexpr int CrackX1 = 88;
+constexpr int CrackY0 = 56;
+constexpr int CrackY1 = 69;
+
+/** @brief Red-hot in the town's colours: strongly red, far more than it is green or blue (the town has no other such colour there). */
+bool IsCrackHot(const SDL_Color &c)
+{
+	return c.r >= 72 && 10 * c.r >= 18 * std::max(c.g, c.b);
+}
+
+/** @brief Finds the crack's hot parts in the game's own picture of the pieces there, once (and again if they change). */
+void FindHellCrack()
+{
+	HellCrackState &crack = HellCrack;
+	if (leveltype != DTYPE_TOWN || pDungeonCels == nullptr) {
+		crack.found = false;
+		crack.key = 0;
+		return;
+	}
+	uint64_t key = 1469598103934665603ULL;
+	for (int x = CrackX0; x <= CrackX1; x++) {
+		for (int y = CrackY0; y <= CrackY1; y++)
+			key = (key ^ static_cast<uint64_t>(dPiece[x][y] + 7)) * 1099511628211ULL;
+	}
+	if (key == crack.key)
+		return;
+	crack.key = key;
+	crack.hot.clear();
+	crack.found = false;
+	// The hot pixels, gathered into small patches fixed to the ground: for each, the sum of where its hot pixels are,
+	// of how hot they are, how many of them there are, and how many pixels of floor it has in all.
+	constexpr int Patch = 6;
+	std::unordered_map<int64_t, std::array<float, 5>> patches;
+	for (int x = CrackX0; x <= CrackX1; x++) {
+		for (int y = CrackY0; y <= CrackY1; y++) {
+			const int piece = dPiece[x][y];
+			if (piece < 0)
+				continue;
+			const SDLSurfaceUniquePtr picture = PieceFloorPicture(piece);
+			// The game draws a piece's floor a pixel lower than its middle says (as OnWater).
+			const Vec corner = TileCentre({ x, y }) - Vec { static_cast<float>(DunFrameWidth), DunFrameHeight / 2.F - 1 };
+			for (int py = 0; py < DunFrameHeight; py++) {
+				const uint8_t *row = static_cast<const uint8_t *>(picture->pixels) + static_cast<ptrdiff_t>(py) * picture->pitch;
+				for (int px = 0; px < 2 * DunFrameWidth; px++) {
+					if (row[px] == 0)
+						continue;
+					const Vec at = corner + Vec { px + 0.5F, py + 0.5F };
+					const int64_t cell = (static_cast<int64_t>(std::floor(at.x / Patch)) << 32) ^ static_cast<int64_t>(static_cast<uint32_t>(static_cast<int32_t>(std::floor(at.y / Patch))));
+					std::array<float, 5> &sum = patches[cell];
+					sum[4] += 1;
+					const SDL_Color &c = logical_palette[row[px]];
+					if (!IsCrackHot(c))
+						continue;
+					sum[0] += at.x;
+					sum[1] += at.y;
+					sum[2] += std::min((static_cast<float>(c.r) - 40.F) / 160.F, 1.F);
+					sum[3] += 1;
+				}
+			}
+		}
+	}
+	float weight = 0;
+	Vec middle {};
+	for (const auto &[cell, sum] : patches) {
+		(void)cell;
+		// Where at least a quarter of the patch is red-hot, and a few pixels of it: a stray red pixel is not the crack.
+		if (sum[3] < 3 || sum[3] < sum[4] * 0.25F)
+			continue;
+		const float heat = std::clamp(sum[2] / sum[3] * std::min(sum[3] / (sum[4] * 0.6F), 1.F), 0.2F, 1.F);
+		const Vec at = Vec { sum[0], sum[1] } * (1 / sum[3]);
+		crack.hot.push_back({ at, heat, 0 });
+		middle = middle + at * heat;
+		weight += heat;
+	}
+	if (crack.hot.size() < 4 || weight <= 0) {
+		crack.hot.clear();
+		return;
+	}
+	// Keep the patches in one order whatever the map's order was, so the same crack always looks the same.
+	std::sort(crack.hot.begin(), crack.hot.end(), [](const CrackHeat &l, const CrackHeat &r) { return l.at.y != r.at.y ? l.at.y < r.at.y : l.at.x < r.at.x; });
+	middle = middle * (1 / weight);
+	// The way it runs: the long axis of its hot parts.
+	float xx = 0;
+	float xy = 0;
+	float yy = 0;
+	for (const CrackHeat &h : crack.hot) {
+		const Vec d = h.at - middle;
+		xx += d.x * d.x * h.heat;
+		xy += d.x * d.y * h.heat;
+		yy += d.y * d.y * h.heat;
+	}
+	const float angle = 0.5F * std::atan2(2 * xy, xx - yy);
+	crack.middle = middle;
+	crack.way = { std::cos(angle), std::sin(angle) };
+	crack.half = 0;
+	for (CrackHeat &h : crack.hot) {
+		const Vec d = h.at - middle;
+		h.along = d.x * crack.way.x + d.y * crack.way.y;
+		crack.half = std::max(crack.half, std::abs(h.along));
+	}
+	crack.found = true;
+	crack.nextSurge = AmbientTime + Random(6000, 14000);
+}
+
+/**
+ * @brief How bright the crack's fire is at a place along it now, against its usual (about 1): a slow swell that rolls
+ * along the crack every seven seconds or so, a quicker stir on top of it, and a surge when one comes.
+ */
+float CrackGlow(float along, float surge)
+{
+	const float t = AmbientTime;
+	const float roll = 0.5F + 0.5F * std::sin(t * 0.0009F - along * 0.045F);
+	const float stir = 0.5F + 0.5F * std::sin(t * 0.0023F + along * 0.13F + 1.7F);
+	return 0.55F + 0.55F * roll + 0.2F * stir + 1.1F * surge;
+}
+
+/** @brief The crack's hot parts, chosen as often as they're hot: where embers, smoke and steam come out of it. */
+const CrackHeat &RandomCrackHeat()
+{
+	const std::vector<CrackHeat> &hot = HellCrack.hot;
+	for (int tries = 0; tries < 4; tries++) {
+		const CrackHeat &h = hot[static_cast<size_t>(Random(0, static_cast<float>(hot.size()) - 0.001F))];
+		if (Random(0, 1) < h.heat)
+			return h;
+	}
+	return hot[static_cast<size_t>(Random(0, static_cast<float>(hot.size()) - 0.001F))];
+}
+
+/** @brief Embers and smoke out of the crack, steam where the rain falls into it, and now and then a surge from below. */
+void EmitHellCrack(float ms)
+{
+	const float strength = atmosphere::Strength(atmosphere::Knob::HellCrack);
+	if (strength <= 0 || leveltype != DTYPE_TOWN) {
+		HellCrack.surge = 0;
+		return;
+	}
+	FindHellCrack();
+	HellCrackState &crack = HellCrack;
+	if (!crack.found)
+		return;
+	crack.surge *= std::exp(-ms / 900.F);
+	bool surging = false;
+	if (AmbientTime >= crack.nextSurge) {
+		crack.surge = 1;
+		surging = true;
+		crack.nextSurge = AmbientTime + Random(0.6F, 1.4F) * 1000 * atmosphere::Value("crack_surge_s", 15) / std::max(std::min(strength, 2.F), 0.5F);
+	}
+	const float size = std::max(crack.half / 40.F, 1.F);
+	const weather::State &sky = weather::Current();
+	const float wind = sky.wind;
+	// Embers: bright specks thrown up from its hottest places, drifting on the air as they cool from yellow to dull red.
+	const float many = strength * atmosphere::Value("crack_embers", 1);
+	const int embers = Occurrences(5.F * size * many * (1 + 4 * crack.surge), ms) + (surging ? static_cast<int>(18 * size * std::min(many, 2.F)) : 0);
+	for (int i = 0; i < embers; i++) {
+		const CrackHeat &h = RandomCrackHeat();
+		Particle p;
+		p.pos = h.at + Vec { Random(-3, 3), Random(-1.5F, 1.5F) };
+		p.vel = { Random(-10, 10) + wind * 22, Random(-4, 4) };
+		p.vz = Random(20, 55) * (1 + crack.surge);
+		p.gravity = -7;
+		p.drag = 0.5F;
+		p.life = Random(1200, 2800);
+		p.size0 = Random(0.9F, 1.7F);
+		p.size1 = 0.2F;
+		p.c0 = { 255, 205, 120 };
+		p.c1 = { 190, 35, 8 };
+		p.alpha = 0.9F;
+		AddParticle(p);
+	}
+	// Smoke, dark and slow, lit red from below where it leaves the crack.
+	const int smoke = Occurrences(0.9F * size * many * (1 + 2 * crack.surge), ms) + (surging ? 3 : 0);
+	for (int i = 0; i < smoke; i++) {
+		const CrackHeat &h = RandomCrackHeat();
+		Particle p;
+		p.pos = h.at + Vec { Random(-2, 2), 0 };
+		p.vel = { Random(-4, 4) + wind * 16, 0 };
+		p.vz = Random(10, 20);
+		p.life = Random(2600, 4200);
+		p.size0 = 4;
+		p.size1 = Random(18, 28);
+		p.c0 = { 70, 30, 22 };
+		p.c1 = { 26, 22, 21 };
+		p.alpha = 0.12F;
+		p.shape = Shape::Puff;
+		AddParticle(p);
+	}
+	// Rain falling into it boils off as steam, pale, quick and thin, more the harder it rains; and spits now and then.
+	if (sky.kind == weather::Kind::Rain && sky.strength > 0.02F) {
+		for (int i = Occurrences(5.F * size * sky.strength * std::min(strength, 2.F), ms); i > 0; i--) {
+			const CrackHeat &h = RandomCrackHeat();
+			Particle p;
+			p.pos = h.at + Vec { Random(-3, 3), Random(-1.5F, 1.5F) };
+			p.vel = { Random(-5, 5) + wind * 26, 0 };
+			p.vz = Random(22, 40);
+			p.life = Random(1300, 2300);
+			p.size0 = 3;
+			p.size1 = Random(12, 18);
+			p.c0 = { 200, 160, 145 };
+			p.c1 = { 120, 112, 112 };
+			p.alpha = 0.1F;
+			p.shape = Shape::Puff;
+			AddParticle(p);
+		}
+		for (int i = Occurrences(1.5F * size * sky.strength * std::min(strength, 2.F), ms); i > 0; i--)
+			Spray(RandomCrackHeat().at, 2, 10, 35, 180, 380, Shape::Streak, { 255, 230, 170 }, { 230, 80, 20 }, 1.F, 0.3F, 40, 90, 260, 1.F, 0.8F);
+	}
+	if (surging) {
+		// The surge: the crack's fire heaves up, throwing a spray of sparks along it.
+		for (int i = 0; i < 3; i++)
+			Spray(RandomCrackHeat().at, 4, 15, 45, 300, 650, Shape::Streak, { 255, 225, 150 }, { 220, 60, 10 }, 1.3F, 0.4F, 60, 130, 220, 1.F, 0.9F);
+	}
 }
 
 /** @brief Whether a point on the ground lies on the stream's water itself, not its bank. */
@@ -8136,6 +8392,39 @@ void AdvancePortals(float ms)
 	std::erase_if(ClosingPortals, [](const PortalFx &portal) { return portal.closing >= MetricsOf(portal).closeMs; });
 }
 
+uint64_t HellCrackKey()
+{
+	if (leveltype != DTYPE_TOWN || atmosphere::Strength(atmosphere::Knob::HellCrack) <= 0)
+		return 0;
+	FindHellCrack();
+	return HellCrack.found ? HellCrack.key : 0;
+}
+
+int HellCrackLights(CrackLight *out, int maxCount)
+{
+	if (HellCrackKey() == 0 || maxCount <= 0)
+		return 0;
+	const HellCrackState &crack = HellCrack;
+	// One light every hundred pixels or so of crack, spread evenly along it.
+	const int count = std::clamp(static_cast<int>(std::lround(2 * crack.half / 100.F)) + 1, 1, std::min(maxCount, 4));
+	for (int i = 0; i < count; i++) {
+		const float along = count == 1 ? 0.F : crack.half * 0.7F * (2.F * static_cast<float>(i) / static_cast<float>(count - 1) - 1);
+		const Vec at = crack.middle + crack.way * along;
+		float x;
+		float y;
+		WorldToFloor(at, x, y);
+		out[i] = { x, y, along, 1.F / std::sqrt(static_cast<float>(count)) };
+	}
+	return count;
+}
+
+float HellCrackGlow(float along)
+{
+	if (!HellCrack.found)
+		return 1;
+	return CrackGlow(along, HellCrack.surge) / 0.95F;
+}
+
 void Advance(float ms)
 {
 	if (ms <= 0)
@@ -8151,6 +8440,7 @@ void Advance(float ms)
 		LensClear();
 	}
 	EmitAmbient(ms);
+	EmitHellCrack(ms);
 	for (auto &[missile, trail] : Trails) {
 		if (trail.count > 0) {
 			const SkillLookScope skillLook(trail.skillKind, trail.skillId);
@@ -14129,6 +14419,36 @@ void RenderLens(SDL_Renderer *, Size, Size logicalSize)
 }
 #endif
 
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+namespace {
+
+/**
+ * @brief The fire down in the Hell crack (EmitHellCrack): its hot parts glow on the floor, more and less in a slow
+ * swell that rolls along it, white-hot at the heart of the swell, and a wide dull red round it all. On the floor, so
+ * whoever stands on it hides it (DrawFloorShafts).
+ */
+void DrawHellCrack(Batch &batch)
+{
+	const float strength = atmosphere::Strength(atmosphere::Knob::HellCrack);
+	if (strength <= 0 || leveltype != DTYPE_TOWN || !HellCrack.found)
+		return;
+	const HellCrackState &crack = HellCrack;
+	const float s = std::min(strength, 2.5F) * atmosphere::Value("crack_glow", 1);
+	const float wide = crack.half + 26;
+	SoftOvalDisc(batch, crack.middle, wide, wide * 0.5F, { 150, 26, 6 }, 0.05F * s * (1 + 0.8F * crack.surge));
+	for (const CrackHeat &h : crack.hot) {
+		const float glow = CrackGlow(h.along, crack.surge) * h.heat * s;
+		SoftOvalDisc(batch, h.at, 11, 5.5F, { 255, 70, 14 }, 0.16F * glow);
+		SoftOvalDisc(batch, h.at, 5.5F, 2.8F, { 255, 150, 50 }, 0.21F * glow);
+		const float roll = std::max(CrackGlow(h.along, crack.surge) - 1.F, 0.F);
+		if (roll > 0.02F)
+			SoftOvalDisc(batch, h.at, 3.2F, 1.6F, { 255, 225, 160 }, 0.45F * roll * roll * h.heat * s);
+	}
+}
+
+} // namespace
+#endif
+
 void DrawFloorShafts(SDL_Renderer *renderer, float toLogical)
 {
 #if SDL_VERSION_ATLEAST(2, 0, 18)
@@ -14139,6 +14459,7 @@ void DrawFloorShafts(SDL_Renderer *renderer, float toLogical)
 	// people and walls stand, a pass over the floor's pixels each frame for as long as the ground stayed wet: some 2 ms a
 	// frame on Curtis's computer (2026-11-15 play log: 67 fps dry, 58 in and after rain).
 	DrawWetShine(shafts);
+	DrawHellCrack(shafts);
 	if (shafts.indices.empty())
 		return;
 	SDL_BlendMode before = SDL_BLENDMODE_NONE;

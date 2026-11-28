@@ -168,8 +168,10 @@ enum class Knob : uint8_t {
 	 * so no step in the light shows along the tiles' edges. At 0 each piece takes its light from points of its own, as before.
 	 */
 	LightSeams,
+	/** Town: the crack down to the Hive (Hellfire) glows and breathes, lights the ground round it red, and throws up embers, smoke and steam. */
+	HellCrack,
 };
-inline constexpr size_t NumKnobs = 59;
+inline constexpr size_t NumKnobs = 60;
 
 /** @brief How strong an effect is now: the option's level times its feel() setting; 0 when off or without HD Lighting. */
 float Strength(Knob knob);

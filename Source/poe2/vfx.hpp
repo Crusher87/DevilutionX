@@ -216,6 +216,20 @@ std::array<uint8_t, 3> LightColourOf(const Missile &missile);
 uint32_t FlameSeed(Point tile);
 /** @brief How bright a flame with this seed is now against its average (about 0.7 to 1.15), as its glow flickers. */
 float FlameFlicker(uint32_t seed, bool candle);
+
+/** @brief A light down in the Hell crack in town: where (tiles), how far along the crack (world pixels), and its share of the crack's light. */
+struct CrackLight {
+	float x;
+	float y;
+	float along;
+	float power;
+};
+/** @brief Which Hell crack the town has now (0 for none, or with its feel("hellcrack") off): its lights change with it. */
+uint64_t HellCrackKey();
+/** @brief The Hell crack's lights, for the HD light: up to maxCount of them; how many. */
+int HellCrackLights(CrackLight *out, int maxCount);
+/** @brief How bright the crack's fire is now at a place along it, against its usual (1): it swells, rolls along and surges. */
+float HellCrackGlow(float along);
 /** @brief The effects' clock in milliseconds: it runs while the game does and stops while it is paused. */
 float Clock();
 /**
