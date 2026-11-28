@@ -8696,8 +8696,11 @@ void Fleck(Batch &batch, Vec centre, float radius, Rgb colour, float alpha)
 	batch.tri(middle, up, right);
 }
 
-/** @brief A disc that falls off the way a blurred light does: brightest in the middle, most of it gone a third of the way out. */
-void BlurredDisc(Batch &batch, Vec centre, float radius, Rgb colour, float alpha)
+/**
+ * @brief A disc that falls off the way a blurred light does: brightest in the middle, most of it gone a third of the way
+ * out. Up below 1 squashes its upper half to that share of its height (a glow kept off what is above it).
+ */
+void BlurredDisc(Batch &batch, Vec centre, float radius, Rgb colour, float alpha, float up = 1)
 {
 	const Vec c = ToScreen(centre);
 	radius *= CameraScale;
@@ -8711,7 +8714,8 @@ void BlurredDisc(Batch &batch, Vec centre, float radius, Rgb colour, float alpha
 	for (size_t ring = 0; ring < At.size(); ring++) {
 		for (int i = 0; i < Segments; i++) {
 			const float angle = 2 * Pi * i / Segments;
-			batch.add(c + Vec { std::cos(angle), std::sin(angle) } * (radius * At[ring]), colour, alpha * Share[ring]);
+			const float sine = std::sin(angle);
+			batch.add(c + Vec { std::cos(angle), sine < 0 ? sine * up : sine } * (radius * At[ring]), colour, alpha * Share[ring]);
 		}
 	}
 	for (int i = 0; i < Segments; i++) {
@@ -11861,7 +11865,12 @@ void DrawLampGlow()
 		const float radius = (16 + 46 * lamp.size) * reach;
 		if (OutOfView(at, radius))
 			continue;
-		BlurredDisc(Haze, at, radius, LampColour(lamp), glow * std::min(lamp.strength, 1.6F));
+		// Drawn over everything, so above its light it would lie over the roof's edge over a window or door, and over the
+		// smithy's roof in front of the forge (Curtis 2026-11-28: the roofs over the lit houses looked odd). The eaves keep
+		// the lit air under them: the glow stays round the opening and below it, and the forge's lies low in its shed.
+		const float up = lamp.sheltered ? 0.12F : (lamp.window ? 0.3F : 0.45F);
+		const Vec centre = lamp.sheltered ? at + Vec { 0, radius * 0.35F } : at;
+		BlurredDisc(Haze, centre, radius, LampColour(lamp), glow * std::min(lamp.strength, 1.6F), up);
 	}
 }
 
