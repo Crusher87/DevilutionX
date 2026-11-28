@@ -268,6 +268,8 @@ private:
 	float back_ = 0;
 	/** @brief The heat trailing toward the viewer, at the heat's first mip level's size. */
 	std::vector<float> trailMap_;
+	/** @brief BuildTrail's: the trail between its two passes of mixing. */
+	std::vector<float> trailScratch_;
 	/** @brief The light from behind the letters: their feed map blurred, a quarter of the picture each way. */
 	std::vector<float> backMap_;
 	int backWidth_ = 0;

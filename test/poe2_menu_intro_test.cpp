@@ -108,6 +108,46 @@ TEST(MenuIntroTimelineTest, TheLensShakesOnTheHitsAndIsStillAtTheEnd)
 	EXPECT_FLOAT_EQ(end.dim, 1.F);
 }
 
+TEST(MenuIntroLensTest, TheRaysRunIntoOneAnother)
+{
+	// Curtis 2026-11-28: "the intro almost has a letter burnt in effect as it flies in on the left and right, like a
+	// ghost effect to it". The rays were six copies of the picture's bright light, each bigger about the logo's middle
+	// than the last: beside the D and the O they showed one by one, bars of the letters' fire.
+	// A letter's fire here: a bar of light a ninth as wide as it is far from the logo's middle (at 1). Out from the
+	// letter the rays' light must fall steadily away, never rise again into another bar.
+	const auto light = [](float x) {
+		float sum = 0;
+		for (int i = 0; i < RayTaps; i++) {
+			const RayTap tap = RayTapAt(i);
+			sum += tap.weight * std::max(0.F, 1.F - std::abs(x * tap.scale - 1.F) * 9.F);
+		}
+		return sum;
+	};
+	float before = light(1.2F);
+	EXPECT_GT(before, 0.F);
+	int rises = 0;
+	for (float x = 1.205F; x <= 2.2F; x += 0.005F) {
+		const float now = light(x);
+		rises += now > before * 1.005F + 0.000001F ? 1 : 0;
+		before = now;
+	}
+	EXPECT_EQ(rises, 0);
+	// Together they give the light they did (the reference's 22 samples of a ninth each, the nearer the brighter),
+	// from the picture's own size out to as far as before.
+	float total = 0;
+	for (int i = 0; i < RayTaps; i++) {
+		total += RayTapAt(i).weight;
+		if (i > 0) {
+			EXPECT_LT(RayTapAt(i).scale, RayTapAt(i - 1).scale);
+			EXPECT_LT(RayTapAt(i).weight, RayTapAt(i - 1).weight);
+		}
+	}
+	EXPECT_NEAR(total, 22.F / 9.F / 2.F, 0.0001F);
+	EXPECT_GT(RayTapAt(0).scale, 0.98F);
+	EXPECT_LT(RayTapAt(0).scale, 1.F);
+	EXPECT_NEAR(RayTapAt(RayTaps - 1).scale, 0.38F, 0.03F);
+}
+
 TEST(MenuIntroTimelineTest, SoundsStartAsTheReferenceHasThem)
 {
 	const auto &cues = SoundCues();

@@ -969,11 +969,15 @@ private:
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
 		SDL_RenderClear(renderer);
 		if (look > 0.F) {
-			constexpr int RayTaps = 6;
-			for (int i = 0; i < RayTaps; i++) {
-				const float f = (static_cast<float>(i) + 0.5F) / RayTaps;
-				const float s = 1.F - f * 0.62F;
-				const float w = (1.F - f) * 22.F / RayTaps / 9.F * lens.rays * look;
+			// Each copy's share is a whole number of 255ths (SDL's colour mod): what one loses in rounding goes to the
+			// next, so that together they give the light they should.
+			float owed = 0.F;
+			for (int i = 0; i < intro::RayTaps; i++) {
+				const intro::RayTap tap = intro::RayTapAt(i);
+				const float s = tap.scale;
+				const float want = tap.weight * lens.rays * look + owed;
+				const float w = static_cast<float>(Byte(want)) / 255.F;
+				owed = want - w;
 				AddCopy(renderer, targets.bright8, SceneRect(ctr, m * s, shiftX * s, shiftY * s, lw, lh), w, w, w);
 			}
 			AddCopy(renderer, targets.bright8, sceneRect, 0.35F * 0.8F * look, 0.35F * 0.8F * look, 0.35F * 0.8F * look);
